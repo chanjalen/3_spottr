@@ -37,7 +37,18 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "rest_framework",
+    # Core apps
     "core",
+    "core.accounts",
+    "core.workouts",
+    "core.feed",
+    "core.media",
+    "core.gyms",
+    "core.social",
+    "core.groups",
+    "core.messaging",
+    "core.notifications",
 ]
 
 MIDDLEWARE = [
