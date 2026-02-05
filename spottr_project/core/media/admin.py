@@ -4,8 +4,8 @@ from .models import MediaAsset, MediaLink
 
 @admin.register(MediaAsset)
 class MediaAssetAdmin(admin.ModelAdmin):
-    list_display = ['id', 'owner', 'kind', 'mime_type', 'status', 'created_at']
-    search_fields = ['owner__username', 'storage_key']
+    list_display = ['id', 'owner_user', 'kind', 'mime_type', 'status', 'created_at']
+    search_fields = ['owner_user__username', 'storage_key']
     list_filter = ['kind', 'status', 'mime_type']
 
 

@@ -11,7 +11,7 @@ class Message(BaseModel):
         on_delete=models.CASCADE,
         related_name='sent_messages'
     )
-    receiver = models.ForeignKey(
+    recipient = models.ForeignKey(
         'accounts.User',
         on_delete=models.CASCADE,
         null=True,
@@ -34,6 +34,6 @@ class Message(BaseModel):
         ordering = ['-created_at']
 
     def __str__(self):
-        if self.receiver:
-            return f"{self.sender.username} -> {self.receiver.username}"
+        if self.recipient:
+            return f"{self.sender.username} -> {self.recipient.username}"
         return f"{self.sender.username} -> {self.group.name}"

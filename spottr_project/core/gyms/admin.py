@@ -10,9 +10,9 @@ class GymAdmin(admin.ModelAdmin):
 
 @admin.register(GymActivity)
 class GymActivityAdmin(admin.ModelAdmin):
-    list_display = ['gym', 'timestamp', 'activity_count', 'busyness_level']
+    list_display = ['gym', 'timestamp', 'activity_count', 'busy_level']
     search_fields = ['gym__name']
-    list_filter = ['busyness_level']
+    list_filter = ['busy_level']
 
 
 @admin.register(WorkoutInvite)

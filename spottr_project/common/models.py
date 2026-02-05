@@ -2,12 +2,17 @@ from django.db import models
 import uuid
 
 
+def generate_uuid():
+    """Generate a UUID string for use as primary key."""
+    return str(uuid.uuid4())
+
+
 class BaseModel(models.Model):
     """
     Abstract base model with UUID primary key and timestamps.
     All models should inherit from this.
     """
-    id = models.CharField(primary_key=True, max_length=36, default=lambda: str(uuid.uuid4()))
+    id = models.CharField(primary_key=True, max_length=36, default=generate_uuid)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

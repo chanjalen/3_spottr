@@ -4,9 +4,9 @@ from common.models import BaseModel
 
 class MediaAsset(BaseModel):
     """
-    Represents a media file (image, video) uploaded by a user.
+    Represents an uploaded media file.
     """
-    owner = models.ForeignKey(
+    owner_user = models.ForeignKey(
         'accounts.User',
         on_delete=models.CASCADE,
         related_name='media_assets'

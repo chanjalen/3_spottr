@@ -22,13 +22,14 @@ class Gym(BaseModel):
     class Meta:
         ordering = ['name']
 
+
     def __str__(self):
         return self.name
 
 
 class GymActivity(BaseModel):
     """
-    Tracks user activity at a specific gym.
+    Stores time-series activity data for a gym.
     """
     gym = models.ForeignKey(
         Gym,
@@ -39,12 +40,13 @@ class GymActivity(BaseModel):
     timestamp = models.DateTimeField()
     activity_count = models.IntegerField(default=0)
 
+    arms_count = models.IntegerField(default=0)
     legs_count = models.IntegerField(default=0)
     cardio_count = models.IntegerField(default=0)
     workout_class_count = models.IntegerField(default=0)
     other_count = models.IntegerField(default=0)
 
-    busyness_level = models.CharField(max_length=20)
+    busy_level = models.CharField(max_length=20)
 
     class Meta:
         ordering = ['-timestamp']

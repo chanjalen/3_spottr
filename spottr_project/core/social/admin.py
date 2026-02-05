@@ -11,13 +11,13 @@ class FriendshipAdmin(admin.ModelAdmin):
 
 @admin.register(PersonalRecord)
 class PersonalRecordAdmin(admin.ModelAdmin):
-    list_display = ['user', 'exercise_name', 'weight', 'unit', 'achieved_date']
+    list_display = ['user', 'exercise_name', 'value', 'unit', 'achieved_date']
     search_fields = ['user__username', 'exercise_name']
     list_filter = ['exercise_name', 'achieved_date']
 
 
 @admin.register(LeaderboardEntry)
 class LeaderboardEntryAdmin(admin.ModelAdmin):
-    list_display = ['user', 'period', 'type', 'score', 'workout_count']
+    list_display = ['user', 'period', 'rank', 'score', 'workout_count']
     search_fields = ['user__username']
-    list_filter = ['period', 'type']
+    list_filter = ['period']

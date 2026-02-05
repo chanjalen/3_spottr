@@ -43,7 +43,7 @@ class GroupMember(BaseModel):
     joined_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
-        ordering = ['-joined_at']
+        ordering = ['-role', '-joined_at']
         constraints = [
             models.UniqueConstraint(
                 fields=['group', 'user'],

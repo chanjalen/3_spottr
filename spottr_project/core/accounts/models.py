@@ -17,7 +17,7 @@ class User(BaseModel):
     birthday = models.DateField(null=True, blank=True)
 
     avatar = models.CharField(max_length=255, null=True, blank=True)
-    bio = models.TextField(blank=True)
+    bio = models.TextField(max_length=500, blank=True)
 
     workout_frequency = models.IntegerField(default=0)
     member_since = models.DateTimeField(default=timezone.now)

@@ -84,12 +84,12 @@ class Exercise(BaseModel):
 
 class Streak(BaseModel):
     """
-    Tracks workout streaks for users.
+    Represents a user's workout streak.
     """
-    user = models.ForeignKey(
+    user = models.OneToOneField(
         'accounts.User',
         on_delete=models.CASCADE,
-        related_name='streaks'
+        related_name='streak'
     )
 
     current_streak = models.IntegerField(default=0)

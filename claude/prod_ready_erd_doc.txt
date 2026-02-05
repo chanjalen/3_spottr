@@ -1,0 +1,486 @@
+from django.db import models
+from django.utils import timezone
+import uuid
+
+
+# -----------------------------
+# USERS
+# -----------------------------
+
+class User(models.Model):
+    """
+    Represents a Spottr user profile.
+    Stores identity, profile, and activity metadata.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    email = models.EmailField(unique=True)
+    phone_number = models.CharField(max_length=20, unique=True)
+    password = models.CharField(max_length=128)
+
+    username = models.CharField(max_length=30, unique=True)
+    display_name = models.CharField(max_length=50)
+    birthday = models.DateField(null=True, blank=True)
+
+    avatar = models.CharField(max_length=255, null=True, blank=True)
+    bio = models.TextField(blank=True)
+
+    workout_frequency = models.IntegerField(default=0)
+    member_since = models.DateTimeField(default=timezone.now)
+
+    current_streak = models.IntegerField(default=0)
+    longest_streak = models.IntegerField(default=0)
+    total_workouts = models.IntegerField(default=0)
+
+    status = models.CharField(max_length=50, blank=True)
+    current_activity = models.CharField(max_length=100, blank=True)
+
+    current_gym = models.ForeignKey(
+        "Gym",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["username"]
+
+    def __str__(self):
+        return self.username
+
+
+# -----------------------------
+# GYMS
+# -----------------------------
+
+class Gym(models.Model):
+    """
+    Represents a physical gym location.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    name = models.CharField(max_length=100)
+    address = models.CharField(max_length=255)
+
+    latitude = models.DecimalField(max_digits=9, decimal_places=6)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+
+    max_capacity = models.IntegerField()
+    current_activity = models.IntegerField(default=0)
+
+    phone_number = models.CharField(max_length=20, blank=True)
+    hours = models.JSONField(default=dict)
+    amenities = models.JSONField(default=dict)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class GymActivity(models.Model):
+    """
+    Stores time-series activity data for a gym.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    gym = models.ForeignKey(Gym, on_delete=models.CASCADE)
+    timestamp = models.DateTimeField()
+
+    activity_count = models.IntegerField()
+    arms_count = models.IntegerField()
+    legs_count = models.IntegerField()
+    cardio_count = models.IntegerField()
+    workout_class_count = models.IntegerField()
+    other_count = models.IntegerField()
+
+    busy_level = models.CharField(max_length=20)
+
+    def __str__(self):
+        return f"{self.gym.name} @ {self.timestamp}"
+
+
+# -----------------------------
+# WORKOUTS & EXERCISES
+# -----------------------------
+
+class Workout(models.Model):
+    """
+    Represents a workout session completed by a user.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    gym = models.ForeignKey(Gym, on_delete=models.SET_NULL, null=True, blank=True)
+
+    name = models.CharField(max_length=100)
+    type = models.CharField(max_length=50)
+
+    duration = models.IntegerField()
+    total_exercises = models.IntegerField()
+    total_sets = models.IntegerField()
+
+    start_time = models.DateTimeField()
+    end_time = models.DateTimeField()
+    date = models.DateField()
+
+    is_template = models.BooleanField(default=False)
+    template_name = models.CharField(max_length=100, blank=True)
+
+    notes = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "date"],
+                name="unique_workout_per_user_per_day"
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} - {self.date}"
+
+
+class Exercise(models.Model):
+    """
+    Represents an exercise performed within a workout.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    workout = models.ForeignKey(Workout, on_delete=models.CASCADE)
+
+    name = models.CharField(max_length=100)
+    category = models.CharField(max_length=50)
+
+    sets = models.IntegerField()
+    reps = models.IntegerField()
+    weight = models.DecimalField(max_digits=6, decimal_places=2)
+    unit = models.CharField(max_length=10)
+
+    duration = models.IntegerField(null=True, blank=True)
+    distance = models.DecimalField(max_digits=6, decimal_places=2, null=True, blank=True)
+
+    order = models.IntegerField()
+    notes = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order"]
+
+    def __str__(self):
+        return self.name
+
+
+# -----------------------------
+# SOCIAL (POSTS, COMMENTS, REACTIONS)
+# -----------------------------
+
+class Post(models.Model):
+    """
+    Represents a feed post (workout, check-in, PR, streak).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    workout = models.ForeignKey(Workout, on_delete=models.SET_NULL, null=True, blank=True)
+    location = models.ForeignKey(Gym, on_delete=models.SET_NULL, null=True, blank=True)
+
+    type = models.CharField(max_length=50)
+    content = models.TextField()
+
+    pr_exercise = models.CharField(max_length=100, blank=True)
+    pr_weight = models.CharField(max_length=20, blank=True)
+    streak_days = models.IntegerField(null=True, blank=True)
+
+    visibility = models.CharField(max_length=20)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Post by {self.user.username}"
+
+
+class Reaction(models.Model):
+    """
+    Represents a reaction (like, fire, etc.) on a post.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    post = models.ForeignKey(Post, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    type = models.CharField(max_length=20)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Comment(models.Model):
+    """
+    Represents a comment on a post.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    post = models.ForeignKey(Post, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    content = models.TextField()
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+# -----------------------------
+# MEDIA
+# -----------------------------
+
+class MediaAsset(models.Model):
+    """
+    Represents an uploaded media file.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    owner_user = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    kind = models.CharField(max_length=20)
+    storage_key = models.CharField(max_length=255)
+    thumbnail_key = models.CharField(max_length=255, blank=True)
+
+    mime_type = models.CharField(max_length=50)
+    byte_size = models.BigIntegerField()
+
+    width = models.IntegerField(null=True, blank=True)
+    height = models.IntegerField(null=True, blank=True)
+    duration_ms = models.IntegerField(null=True, blank=True)
+
+    status = models.CharField(max_length=20)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class MediaLink(models.Model):
+    """
+    Represents a usage of a media asset within the app.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    asset = models.ForeignKey(MediaAsset, on_delete=models.CASCADE)
+
+    target_type = models.CharField(max_length=50)
+    target_id = models.UUIDField()
+
+    role = models.CharField(max_length=50, blank=True)
+    position = models.IntegerField(null=True, blank=True)
+    caption = models.TextField(blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+# -----------------------------
+# SOCIAL GRAPH & GROUPS
+# -----------------------------
+
+class Friendship(models.Model):
+    """
+    Represents a friendship relationship between two users.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="friendships")
+    friend = models.ForeignKey(User, on_delete=models.CASCADE, related_name="friends_of")
+
+    status = models.CharField(max_length=20)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class Group(models.Model):
+    """
+    Represents a workout group or community.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    name = models.CharField(max_length=100)
+    avatar = models.CharField(max_length=255, blank=True)
+    description = models.TextField()
+
+    created_by = models.ForeignKey(User, on_delete=models.CASCADE)
+    group_streak = models.IntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class GroupMember(models.Model):
+    """
+    Represents membership of a user in a group.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    group = models.ForeignKey(Group, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    role = models.CharField(max_length=50)
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+
+# -----------------------------
+# MESSAGING
+# -----------------------------
+
+class Message(models.Model):
+    """
+    Represents a direct or group message.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name="sent_messages")
+    recipient = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name="received_messages")
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, null=True, blank=True)
+
+    content = models.TextField()
+    type = models.CharField(max_length=20)
+    is_read = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+# -----------------------------
+# RECORDS, STREAKS, INVITES
+# -----------------------------
+
+class PersonalRecord(models.Model):
+    """
+    Represents a user's personal record.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    exercise_name = models.CharField(max_length=100)
+    value = models.CharField(max_length=50)
+    unit = models.CharField(max_length=20)
+
+    achieved_date = models.DateField()
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class Streak(models.Model):
+    """
+    Represents a user's workout streak.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+
+    current_streak = models.IntegerField()
+    longest_streak = models.IntegerField()
+
+    last_workout_date = models.DateField()
+    start_date = models.DateField()
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class WorkoutInvite(models.Model):
+    """
+    Represents a scheduled workout invite.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    gym = models.ForeignKey(Gym, on_delete=models.CASCADE)
+
+    workout_type = models.CharField(max_length=50)
+    scheduled_time = models.DateTimeField()
+
+    spots_available = models.IntegerField()
+    status = models.CharField(max_length=20)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+
+
+class InviteParticipant(models.Model):
+    """
+    Represents a user's participation in a workout invite.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    invite = models.ForeignKey(WorkoutInvite, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    status = models.CharField(max_length=20)
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+
+# -----------------------------
+# NOTIFICATIONS & LEADERBOARD
+# -----------------------------
+
+class Notification(models.Model):
+    """
+    Represents a notification delivered to a user.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
+    from_user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="sent_notifications")
+
+    type = models.CharField(max_length=50)
+    related_id = models.UUIDField()
+
+    content = models.TextField()
+    is_read = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class LeaderboardEntry(models.Model):
+    """
+    Represents a leaderboard ranking entry.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+
+    period = models.CharField(max_length=20)
+    rank = models.IntegerField()
+    score = models.IntegerField()
+
+    workout_count = models.IntegerField()
+    total_duration = models.IntegerField()
+
+    updated_at = models.DateTimeField(auto_now=True)

@@ -34,7 +34,7 @@ class Friendship(BaseModel):
 
 class PersonalRecord(BaseModel):
     """
-    Represents a personal record (PR) for a user on an exercise.
+    Represents a user's personal record.
     """
     user = models.ForeignKey(
         'accounts.User',
@@ -43,8 +43,8 @@ class PersonalRecord(BaseModel):
     )
 
     exercise_name = models.CharField(max_length=100)
-    weight = models.DecimalField(max_digits=7, decimal_places=2)
-    unit = models.CharField(max_length=10)
+    value = models.CharField(max_length=50)
+    unit = models.CharField(max_length=20)
     achieved_date = models.DateField()
 
     class Meta:
@@ -56,7 +56,7 @@ class PersonalRecord(BaseModel):
 
 class LeaderboardEntry(BaseModel):
     """
-    Represents a leaderboard entry for a user.
+    Represents a leaderboard ranking entry.
     """
     user = models.ForeignKey(
         'accounts.User',
@@ -65,7 +65,7 @@ class LeaderboardEntry(BaseModel):
     )
 
     period = models.CharField(max_length=20)
-    type = models.CharField(max_length=50)
+    rank = models.IntegerField()
     score = models.IntegerField()
     workout_count = models.IntegerField(default=0)
     total_duration = models.IntegerField(default=0)
