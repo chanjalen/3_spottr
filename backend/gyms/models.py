@@ -12,9 +12,7 @@ class Gym(BaseModel):
     latitude = models.DecimalField(max_digits=9, decimal_places=6)
     longitude = models.DecimalField(max_digits=9, decimal_places=6)
 
-    max_capacity = models.IntegerField()
-    current_activity = models.IntegerField(default=0)
-
+    website = models.URLField(max_length=255, null=True, blank=True)
     phone_number = models.CharField(max_length=20, blank=True)
     hours = models.JSONField(default=dict)
     amenities = models.JSONField(default=list)
@@ -22,31 +20,21 @@ class Gym(BaseModel):
     class Meta:
         ordering = ['name']
 
-
     def __str__(self):
         return self.name
 
 
-class GymActivity(BaseModel):
+class BusyLevel(BaseModel):
     """
-    Stores time-series activity data for a gym.
+    Stores crowd-sourced busy level survey responses for a gym.
     """
     gym = models.ForeignKey(
         Gym,
         on_delete=models.CASCADE,
-        related_name='activities'
+        related_name='busy_levels',
     )
-
     timestamp = models.DateTimeField()
-    activity_count = models.IntegerField(default=0)
-
-    arms_count = models.IntegerField(default=0)
-    legs_count = models.IntegerField(default=0)
-    cardio_count = models.IntegerField(default=0)
-    workout_class_count = models.IntegerField(default=0)
-    other_count = models.IntegerField(default=0)
-
-    busy_level = models.CharField(max_length=20)
+    survey_response = models.IntegerField()
 
     class Meta:
         ordering = ['-timestamp']
@@ -62,21 +50,26 @@ class WorkoutInvite(BaseModel):
     user = models.ForeignKey(
         'accounts.User',
         on_delete=models.CASCADE,
-        related_name='workout_invites'
+        related_name='workout_invites',
     )
     gym = models.ForeignKey(
         Gym,
-        on_delete=models.SET_NULL,
+        on_delete=models.CASCADE,
+        related_name='workout_invites',
+    )
+    group = models.ForeignKey(
+        'groups.Group',
+        on_delete=models.CASCADE,
         null=True,
         blank=True,
-        related_name='workout_invites'
+        related_name='workout_invites',
     )
 
+    description = models.CharField(max_length=255)
     workout_type = models.CharField(max_length=50)
     scheduled_time = models.DateTimeField()
     spots_available = models.IntegerField(default=1)
-
-    status = models.CharField(max_length=20, default='open')
+    type = models.CharField(max_length=50)  # gym invite, group/individual invite
     expires_at = models.DateTimeField()
 
     class Meta:
@@ -86,32 +79,37 @@ class WorkoutInvite(BaseModel):
         return f"{self.user.username} - {self.workout_type}"
 
 
-class InviteParticipant(BaseModel):
+class JoinRequest(BaseModel):
     """
-    Represents a participant in a workout invite.
+    Represents a request to join a workout invite.
     """
-    invite = models.ForeignKey(
+
+    class Status(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        ACCEPT = 'accept', 'Accept'
+        DENY = 'deny', 'Deny'
+
+    workout_invite = models.ForeignKey(
         WorkoutInvite,
         on_delete=models.CASCADE,
-        related_name='participants'
+        related_name='join_requests',
     )
     user = models.ForeignKey(
         'accounts.User',
         on_delete=models.CASCADE,
-        related_name='invite_participations'
+        related_name='join_requests',
     )
 
-    status = models.CharField(max_length=20, default='pending')
+    description = models.CharField(max_length=255)
+    status = models.CharField(
+        max_length=10,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
     joined_at = models.DateTimeField(null=True, blank=True)
 
     class Meta:
         ordering = ['-created_at']
-        constraints = [
-            models.UniqueConstraint(
-                fields=['invite', 'user'],
-                name='unique_participant_per_invite'
-            )
-        ]
 
     def __str__(self):
-        return f"{self.user.username} in {self.invite.id}"
+        return f"{self.user.username} - {self.workout_invite.id}"

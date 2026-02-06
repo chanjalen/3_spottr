@@ -1,29 +1,28 @@
 from django.contrib import admin
-from .models import Gym, GymActivity, WorkoutInvite, InviteParticipant
+from .models import Gym, BusyLevel, WorkoutInvite, JoinRequest
 
 
 @admin.register(Gym)
 class GymAdmin(admin.ModelAdmin):
-    list_display = ['name', 'address', 'current_activity', 'max_capacity']
+    list_display = ['name', 'address', 'phone_number']
     search_fields = ['name', 'address']
 
 
-@admin.register(GymActivity)
-class GymActivityAdmin(admin.ModelAdmin):
-    list_display = ['gym', 'timestamp', 'activity_count', 'busy_level']
+@admin.register(BusyLevel)
+class BusyLevelAdmin(admin.ModelAdmin):
+    list_display = ['gym', 'timestamp', 'survey_response']
     search_fields = ['gym__name']
-    list_filter = ['busy_level']
 
 
 @admin.register(WorkoutInvite)
 class WorkoutInviteAdmin(admin.ModelAdmin):
-    list_display = ['user', 'gym', 'workout_type', 'scheduled_time', 'status']
+    list_display = ['user', 'gym', 'workout_type', 'scheduled_time']
     search_fields = ['user__username', 'gym__name']
-    list_filter = ['status', 'workout_type']
+    list_filter = ['workout_type']
 
 
-@admin.register(InviteParticipant)
-class InviteParticipantAdmin(admin.ModelAdmin):
-    list_display = ['user', 'invite', 'status', 'joined_at']
+@admin.register(JoinRequest)
+class JoinRequestAdmin(admin.ModelAdmin):
+    list_display = ['user', 'workout_invite', 'status', 'joined_at']
     search_fields = ['user__username']
     list_filter = ['status']
