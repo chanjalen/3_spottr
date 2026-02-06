@@ -8,15 +8,21 @@ class User(BaseModel):
     Represents a Spottr user profile.
     Stores authentication and fitness-related metadata.
     """
+
+    class Status(models.TextChoices):
+        ONLINE = 'online', 'Online'
+        OFFLINE = 'offline', 'Offline'
+        WORKING_OUT = 'working_out', 'Working Out'
+        DEACTIVATED = 'deactivated', 'Deactivated'
+
     email = models.EmailField(unique=True)
     phone_number = models.CharField(max_length=20, unique=True)
     password = models.CharField(max_length=128)
 
     username = models.CharField(max_length=30, unique=True)
     display_name = models.CharField(max_length=50)
-    birthday = models.DateField(null=True, blank=True)
+    birthday = models.DateField()
 
-    avatar = models.CharField(max_length=255, null=True, blank=True)
     bio = models.TextField(max_length=500, blank=True)
 
     workout_frequency = models.IntegerField(default=0)
@@ -26,15 +32,18 @@ class User(BaseModel):
     longest_streak = models.IntegerField(default=0)
     total_workouts = models.IntegerField(default=0)
 
-    status = models.CharField(max_length=50, blank=True)
-    current_activity = models.CharField(max_length=100, blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=Status.choices,
+        default=Status.OFFLINE,
+    )
 
-    current_gym = models.ForeignKey(
+    enrolled_gym = models.ForeignKey(
         'gyms.Gym',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='current_users'
+        related_name='enrolled_users',
     )
 
     class Meta:
