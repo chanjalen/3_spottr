@@ -4,6 +4,6 @@ from .models import Notification
 
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
-    list_display = ['user', 'type', 'from_user', 'is_read', 'created_at']
-    search_fields = ['user__username', 'content']
-    list_filter = ['type', 'is_read']
+    list_display = ['recipient', 'type', 'triggered_by', 'target_type', 'read_at', 'created_at']
+    search_fields = ['recipient__username']
+    list_filter = ['type', 'target_type']
