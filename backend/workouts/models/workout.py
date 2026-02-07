@@ -10,62 +10,58 @@ class Workout(BaseModel):
     user = models.ForeignKey(
         'accounts.User',
         on_delete=models.CASCADE,
-        related_name='workouts'
+        related_name='workouts',
     )
     gym = models.ForeignKey(
         'gyms.Gym',
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name='workouts'
+        related_name='workouts',
+    )
+    template = models.ForeignKey(
+        'workouts.WorkoutTemplate',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='workouts',
     )
 
     name = models.CharField(max_length=100)
     type = models.CharField(max_length=50)
-
-    duration = models.IntegerField()
-    total_exercises = models.IntegerField()
-    total_sets = models.IntegerField()
-
+    duration = models.DurationField()
     start_time = models.DateTimeField()
     end_time = models.DateTimeField()
-    date = models.DateField()
-
-    is_template = models.BooleanField(default=False)
-    template_name = models.CharField(max_length=100, blank=True)
-
     notes = models.TextField(blank=True)
 
     class Meta:
-        ordering = ['-date']
+        ordering = ['-start_time']
+        indexes = [
+            models.Index(fields=['user', '-start_time'], name='idx_workout_user'),
+            models.Index(fields=['gym', '-start_time'], name='idx_workout_gym'),
+        ]
         constraints = [
-            models.UniqueConstraint(
-                fields=['user', 'date'],
-                name='unique_workout_per_user_per_day'
+            models.CheckConstraint(
+                condition=models.Q(end_time__gt=models.F('start_time')),
+                name='workout_end_after_start',
             )
         ]
 
     def __str__(self):
-        return f"{self.user.username} - {self.date}"
+        return f"{self.user.username} - {self.name}"
 
 
 class Streak(BaseModel):
     """
-    Represents a user's workout streak.
+    Tracks the last workout date for a user to calculate streaks.
+    current_streak and longest_streak live on the User model.
     """
     user = models.OneToOneField(
         'accounts.User',
         on_delete=models.CASCADE,
-        related_name='streak'
+        related_name='streak',
     )
-
-    current_streak = models.IntegerField(default=0)
-    longest_streak = models.IntegerField(default=0)
     last_workout_date = models.DateField(null=True, blank=True)
-    start_date = models.DateField(null=True, blank=True)
-
-    class Meta:
-        ordering = ['-current_streak']
 
     def __str__(self):
-        return f"{self.user.username} - {self.current_streak} day streak"
+        return f"{self.user.username} - last workout {self.last_workout_date}"

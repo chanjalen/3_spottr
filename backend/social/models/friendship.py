@@ -2,54 +2,39 @@ from django.db import models
 from common.models import BaseModel
 
 
-class Friendship(BaseModel):
+class LeaderboardEntry(BaseModel):
     """
-    Represents a friendship connection between two users.
+    Represents a leaderboard ranking entry for a user at a gym.
     """
     user = models.ForeignKey(
         'accounts.User',
         on_delete=models.CASCADE,
-        related_name='friendships'
+        related_name='leaderboard_entries',
     )
-    friend = models.ForeignKey(
-        'accounts.User',
+    streak = models.ForeignKey(
+        'workouts.Streak',
         on_delete=models.CASCADE,
-        related_name='friend_of'
+        related_name='leaderboard_entries',
+    )
+    gym = models.ForeignKey(
+        'gyms.Gym',
+        on_delete=models.CASCADE,
+        related_name='leaderboard_entries',
     )
 
-    status = models.CharField(max_length=20, default='pending')
+    rank = models.PositiveIntegerField()
 
     class Meta:
-        ordering = ['-created_at']
+        ordering = ['rank']
+        indexes = [
+            models.Index(fields=['gym', 'rank'], name='idx_leaderboard_gym_rank'),
+        ]
         constraints = [
             models.UniqueConstraint(
-                fields=['user', 'friend'],
-                name='unique_friendship'
+                fields=['user', 'gym'],
+                name='unique_leaderboard_entry_per_gym',
             )
         ]
 
     def __str__(self):
-        return f"{self.user.username} -> {self.friend.username}"
-
-
-class LeaderboardEntry(BaseModel):
-    """
-    Represents a leaderboard ranking entry.
-    """
-    user = models.ForeignKey(
-        'accounts.User',
-        on_delete=models.CASCADE,
-        related_name='leaderboard_entries'
-    )
-
-    period = models.CharField(max_length=20)
-    rank = models.IntegerField()
-    score = models.IntegerField()
-    workout_count = models.IntegerField(default=0)
-    total_duration = models.IntegerField(default=0)
-
-    class Meta:
-        ordering = ['-score']
-
-    def __str__(self):
-        return f"{self.user.username} - {self.period}: {self.score}"
+        return f"{self.user.username} - rank {self.rank}"

@@ -1,0 +1,70 @@
+What to Build (views.py)
+You must implement four kinds of views.
+
+In the notes/notes.txt, indicate name of view for each specific type and its purpose.
+
+You can have as many views as you want of these four kinds depending on your project needs.
+
+I will grade it based on implementation of atleast one.
+
+The one which you will mark for grading should be attached to a working URL.
+
+
+
+A) Function-Based Views (2)
+
+
+View 1: HttpResponse (Manual)
+
+Return raw HTML as a string OR
+
+Load a template manually using loader.get_template()
+
+Wrap result in HttpResponse
+
+
+
+View 2: render() (Shortcut)
+
+Query your model (e.g., Model.objects.all())
+
+Pass queryset into a context dictionary
+
+Return a rendered template using render()
+
+B) Class-Based Views (2)
+
+
+View 3: Base CBV (inherit from View)
+
+Inherit from django.views import View
+
+Implement get() (or post() if you prefer)
+
+Manually query your model (Model.objects.all() etc.)
+
+Return a rendered template with context
+
+
+
+View 4: Generic CBV (inherit from Django generic views)
+
+Implement as many as you want:
+
+ListView
+
+DetailView
+
+UpdateView
+Delete View
+or any other options of your preference
+
+
+Requirements:
+
+Use model = YourModel
+
+Either follow Django default template naming conventions or set template_name
+
+Optional but encouraged: set context_object_name
+

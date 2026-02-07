@@ -1,39 +1,92 @@
 from django.db import models
+from django.db.models import Q
 from common.models import BaseModel
 
 
 class Message(BaseModel):
     """
     Represents a direct message between users or in a group.
+    Either recipient (DM) or group (group chat) must be set, but not both.
     """
     sender = models.ForeignKey(
         'accounts.User',
         on_delete=models.CASCADE,
-        related_name='sent_messages'
+        related_name='sent_messages',
     )
     recipient = models.ForeignKey(
         'accounts.User',
         on_delete=models.CASCADE,
         null=True,
         blank=True,
-        related_name='received_messages'
+        related_name='received_messages',
     )
     group = models.ForeignKey(
         'groups.Group',
         on_delete=models.CASCADE,
         null=True,
         blank=True,
-        related_name='messages'
+        related_name='messages',
+    )
+    post = models.ForeignKey(
+        'social.Post',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='shared_messages',
     )
 
     content = models.TextField()
-    type = models.CharField(max_length=20, default='text')
-    is_read = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['recipient', '-created_at'], name='idx_message_recipient'),
+            models.Index(fields=['group', '-created_at'], name='idx_message_group'),
+            models.Index(fields=['sender', '-created_at'], name='idx_message_sender'),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    Q(recipient__isnull=False, group__isnull=True)
+                    | Q(recipient__isnull=True, group__isnull=False)
+                ),
+                name='message_recipient_or_group',
+            )
+        ]
 
     def __str__(self):
         if self.recipient:
             return f"{self.sender.username} -> {self.recipient.username}"
         return f"{self.sender.username} -> {self.group.name}"
+
+
+class MessageRead(BaseModel):
+    """
+    Tracks per-user read receipts for both DMs and group messages.
+    """
+    message = models.ForeignKey(
+        Message,
+        on_delete=models.CASCADE,
+        related_name='read_receipts',
+    )
+    user = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.CASCADE,
+        related_name='read_receipts',
+    )
+    read_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-read_at']
+        indexes = [
+            models.Index(fields=['user', '-read_at'], name='idx_read_receipt_user'),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['message', 'user'],
+                name='unique_read_receipt',
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} read message {self.message.id}"
