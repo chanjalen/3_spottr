@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{% block title %}Spottr{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background-color: #121212;
+            color: #ffffff;
+            min-height: 100vh;
+        }
+
+        /* Header */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            background-color: #1a1a1a;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #0ea5e9, #06b6d4);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        .logo-text {
+            font-size: 20px;
+            font-weight: 600;
+            color: #06b6d4;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .streak-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background-color: #2a2a2a;
+            padding: 8px 14px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        /* Navigation */
+        nav {
+            background-color: #1a1a1a;
+            padding: 12px 20px;
+            display: flex;
+            gap: 8px;
+            overflow-x: auto;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        nav a {
+            color: #888;
+            text-decoration: none;
+            padding: 10px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        nav a:hover, nav a.active {
+            background-color: #06b6d4;
+            color: #000;
+        }
+
+        /* Main Content */
+        .main-content {
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        /* Page Title */
+        .page-header {
+            margin-bottom: 20px;
+        }
+
+        .page-header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        /* View Info Badge */
+        .view-info {
+            background-color: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-left: 3px solid #06b6d4;
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 13px;
+            color: #888;
+        }
+
+        .view-info strong {
+            color: #06b6d4;
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        .view-info code {
+            background-color: #2a2a2a;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #f0f0f0;
+        }
+
+        /* Search Bar */
+        .search-bar {
+            background-color: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 12px;
+            padding: 14px 16px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .search-bar input {
+            background: none;
+            border: none;
+            color: #fff;
+            font-size: 15px;
+            width: 100%;
+            outline: none;
+        }
+
+        .search-bar input::placeholder {
+            color: #666;
+        }
+
+        .search-icon {
+            color: #666;
+        }
+
+        /* Gym Cards */
+        .gym-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .gym-card {
+            background-color: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 16px;
+            padding: 20px;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .gym-card:hover {
+            border-color: #06b6d4;
+            transform: translateY(-2px);
+        }
+
+        .gym-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .gym-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+
+        .gym-address {
+            font-size: 14px;
+            color: #888;
+            margin-bottom: 6px;
+        }
+
+        .gym-distance {
+            font-size: 13px;
+            color: #06b6d4;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .status-badge {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .status-enrolled {
+            background-color: rgba(6, 182, 212, 0.15);
+            color: #06b6d4;
+            border: 1px solid #06b6d4;
+        }
+
+        .status-enroll {
+            background-color: #06b6d4;
+            color: #000;
+        }
+
+        /* Stats Row */
+        .gym-stats {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .stat-box {
+            flex: 1;
+            background-color: #2a2a2a;
+            border-radius: 12px;
+            padding: 14px;
+        }
+
+        .stat-box.activity {
+            background: linear-gradient(135deg, #78350f, #92400e);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: #888;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .stat-box.activity .stat-label {
+            color: #d4a574;
+        }
+
+        .stat-value {
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .stat-sublabel {
+            font-size: 12px;
+            color: #06b6d4;
+            margin-top: 2px;
+        }
+
+        .stat-box.activity .stat-sublabel {
+            color: #fbbf24;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #666;
+        }
+
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 16px;
+        }
+
+        .empty-state p {
+            font-size: 15px;
+            max-width: 280px;
+            margin: 0 auto;
+        }
+
+        /* Detail Page */
+        .detail-section {
+            background-color: #1a1a1a;
+            border: 1px solid #2a2a2a;
+            border-radius: 16px;
+            padding: 20px;
+            margin-bottom: 16px;
+        }
+
+        .detail-section h2 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #06b6d4;
+            margin-bottom: 16px;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 12px 0;
+            border-bottom: 1px solid #2a2a2a;
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+        }
+
+        .detail-label {
+            color: #888;
+            font-size: 14px;
+        }
+
+        .detail-value {
+            color: #fff;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .detail-value a {
+            color: #06b6d4;
+            text-decoration: none;
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #06b6d4;
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            margin-top: 20px;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
+        /* Bottom Navigation */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: #1a1a1a;
+            border-top: 1px solid #2a2a2a;
+            padding: 12px 20px 24px;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+        }
+
+        .bottom-nav a {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            color: #666;
+            text-decoration: none;
+            font-size: 11px;
+            font-weight: 500;
+        }
+
+        .bottom-nav a.active {
+            color: #fff;
+        }
+
+        .bottom-nav .nav-icon {
+            font-size: 20px;
+        }
+
+        .fab-button {
+            width: 48px;
+            height: 48px;
+            background: linear-gradient(135deg, #0ea5e9, #06b6d4);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: #000;
+            box-shadow: 0 4px 20px rgba(6, 182, 212, 0.4);
+        }
+
+        /* Spacer for bottom nav */
+        .bottom-spacer {
+            height: 100px;
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <header class="header">
+        <div class="logo-container">
+            <div class="logo">S</div>
+            <span class="logo-text">Spottr</span>
+        </div>
+        <div class="header-right">
+            <div class="streak-badge">
+                <span>🔥</span>
+                <span>23</span>
+            </div>
+        </div>
+    </header>
+
+    <nav>
+        <a href="{% url 'gyms:gym_list_manual' %}" {% if request.resolver_match.url_name == 'gym_list_manual' %}class="active"{% endif %}>Manual</a>
+        <a href="{% url 'gyms:gym_list_render' %}" {% if request.resolver_match.url_name == 'gym_list_render' %}class="active"{% endif %}>Render</a>
+        <a href="{% url 'gyms:gym_list_cbv' %}" {% if request.resolver_match.url_name == 'gym_list_cbv' %}class="active"{% endif %}>Base CBV</a>
+        <a href="{% url 'gyms:gym_list_generic' %}" {% if request.resolver_match.url_name == 'gym_list_generic' or request.resolver_match.url_name == 'gym_detail' %}class="active"{% endif %}>Generic</a>
+    </nav>
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <div class="bottom-spacer"></div>
+
+    <nav class="bottom-nav">
+        <a href="/" {% if request.resolver_match.url_name == 'home' %}class="active"{% endif %}>
+            <span class="nav-icon">🏠</span>
+            <span>Feed</span>
+        </a>
+        <a href="{% url 'gyms:gym_list_generic' %}" {% if request.resolver_match.app_name == 'gyms' %}class="active"{% endif %}>
+            <span class="nav-icon">📍</span>
+            <span>Gyms</span>
+        </a>
+        <a href="#" class="fab-button">+</a>
+        <a href="#">
+            <span class="nav-icon">🏆</span>
+            <span>Ranks</span>
+        </a>
+        <a href="#">
+            <span class="nav-icon">👥</span>
+            <span>Groups</span>
+        </a>
+    </nav>
+
+    {% block extra_js %}{% endblock %}
+
+    <script>
+        // Search functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.querySelector('.search-bar input');
+            if (searchInput) {
+                searchInput.addEventListener('input', function() {
+                    const searchTerm = this.value.toLowerCase();
+                    const gymCards = document.querySelectorAll('.gym-card');
+                    const gymLinks = document.querySelectorAll('.gym-list > a, .gym-list > .gym-card');
+
+                    gymLinks.forEach(function(item) {
+                        const card = item.classList.contains('gym-card') ? item : item.querySelector('.gym-card');
+                        if (card) {
+                            const gymName = card.querySelector('.gym-name')?.textContent.toLowerCase() || '';
+                            const gymAddress = card.querySelector('.gym-address')?.textContent.toLowerCase() || '';
+
+                            if (gymName.includes(searchTerm) || gymAddress.includes(searchTerm)) {
+                                item.style.display = '';
+                            } else {
+                                item.style.display = 'none';
+                            }
+                        }
+                    });
+
+                    // Show "no results" message if all cards are hidden
+                    const visibleCards = document.querySelectorAll('.gym-list > a:not([style*="display: none"]), .gym-list > .gym-card:not([style*="display: none"])');
+                    let noResultsMsg = document.querySelector('.no-results-message');
+
+                    if (visibleCards.length === 0 && searchTerm !== '') {
+                        if (!noResultsMsg) {
+                            noResultsMsg = document.createElement('div');
+                            noResultsMsg.className = 'no-results-message empty-state';
+                            noResultsMsg.innerHTML = '<div class="empty-state-icon">🔍</div><p>No gyms found matching "' + searchTerm + '"</p>';
+                            document.querySelector('.gym-list')?.appendChild(noResultsMsg);
+                        } else {
+                            noResultsMsg.innerHTML = '<div class="empty-state-icon">🔍</div><p>No gyms found matching "' + searchTerm + '"</p>';
+                            noResultsMsg.style.display = '';
+                        }
+                    } else if (noResultsMsg) {
+                        noResultsMsg.style.display = 'none';
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>
