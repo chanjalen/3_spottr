@@ -1,0 +1,117 @@
+================================================================================
+SPOTTR - Views and Templates Documentation
+================================================================================
+
+NOTE: Our production app uses React Native for the mobile UI and Django as a
+REST API backend. These templates are for demonstration purposes to fulfill
+the assignment requirements.
+
+================================================================================
+SECTION 2: VIEWS
+================================================================================
+
+VIEW 1: HttpResponse (Manual)
+-----------------------------
+Name: gym_list_manual
+URL: /gyms/manual/
+File: gyms/views.py
+
+Purpose: Demonstrates the manual approach to rendering templates using
+loader.get_template() and wrapping the result in HttpResponse.
+
+When useful: When you need fine-grained control over the response, such as
+setting custom headers, or when working with non-HTML content types.
+
+
+VIEW 2: render() Shortcut
+-------------------------
+Name: gym_list_render
+URL: /gyms/render/
+File: gyms/views.py
+
+Purpose: Demonstrates the shortcut approach using Django's render() function
+which combines template loading and HttpResponse in one step.
+
+When useful: For most standard views - it's cleaner, more readable, and
+handles the common case of rendering a template with context data.
+
+
+VIEW 3: Base Class-Based View
+-----------------------------
+Name: GymListView
+URL: /gyms/cbv/
+File: gyms/views.py
+
+Purpose: Demonstrates inheriting from django.views.View and manually
+implementing the get() method to handle requests.
+
+When useful: When you need more control than generic views provide, or when
+your view logic doesn't fit the patterns of generic views (e.g., complex
+multi-model queries, custom business logic).
+
+
+VIEW 4: Generic Class-Based Views
+---------------------------------
+Names: GymGenericListView, GymDetailView
+URLs: /gyms/generic/, /gyms/<int:pk>/
+File: gyms/views.py
+
+Purpose: Demonstrates using Django's built-in generic views (ListView,
+DetailView) which handle common patterns automatically.
+
+When useful: For standard CRUD operations - less code, follows Django
+conventions, and provides built-in functionality like pagination.
+
+
+================================================================================
+EXPERIENCE NOTES (Bonus)
+================================================================================
+
+HttpResponse vs render():
+- render() is preferred for 99% of cases - it's cleaner and does the same thing
+- HttpResponse is useful when you need to set custom headers or return non-HTML
+
+Base CBV vs Generic CBV:
+- Generic CBVs (ListView, DetailView) are great for standard CRUD operations
+- Base CBV is better when you have complex logic that doesn't fit the generic pattern
+- We found Generic CBVs saved a lot of boilerplate code for simple list/detail views
+
+
+================================================================================
+SECTION 3: TEMPLATES
+================================================================================
+
+BASE TEMPLATE
+-------------
+File: gyms/templates/gyms/base.html
+
+Blocks defined:
+- {% block title %} - Page title
+- {% block content %} - Main page content
+- {% block extra_css %} - Additional CSS
+- {% block extra_js %} - Additional JavaScript
+
+Features:
+- Navigation bar with links to all views
+- Basic styling for consistent look
+
+
+FEATURE TEMPLATES
+-----------------
+All templates extend base.html and override the title and content blocks:
+
+- gym_list_manual.html - View 1 template
+- gym_list_render.html - View 2 template
+- gym_list_cbv.html - View 3 template
+- gym_list_generic.html - View 4 template
+- gym_detail.html - Detail view template
+
+Each template:
+- Uses {% extends 'gyms/base.html' %}
+- Overrides {% block title %} and {% block content %}
+- Uses {% for %} loop to iterate over gyms
+- Shows empty-state message when no gyms exist
+- Uses {% if %} for conditional display of optional fields
+
+
+================================================================================

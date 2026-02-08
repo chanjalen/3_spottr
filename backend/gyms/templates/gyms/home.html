@@ -1,0 +1,149 @@
+{% extends 'gyms/base.html' %}
+
+{% block title %}Spottr - Home{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Welcome to Spottr</h1>
+</div>
+
+<div class="home-hero">
+    <div class="hero-icon">💪</div>
+    <p class="hero-text">Find gyms, track workouts, and connect with your fitness community.</p>
+</div>
+
+<h2 class="section-title">Views Demo</h2>
+<p class="section-subtitle">Explore the different Django view implementations</p>
+
+<div class="demo-grid">
+    <a href="{% url 'gyms:gym_list_manual' %}" class="demo-card">
+        <div class="demo-card-icon">📄</div>
+        <div class="demo-card-content">
+            <div class="demo-card-title">View 1: HttpResponse</div>
+            <div class="demo-card-desc">Manual template loading with loader.get_template()</div>
+        </div>
+        <div class="demo-card-arrow">→</div>
+    </a>
+
+    <a href="{% url 'gyms:gym_list_render' %}" class="demo-card">
+        <div class="demo-card-icon">⚡</div>
+        <div class="demo-card-content">
+            <div class="demo-card-title">View 2: render()</div>
+            <div class="demo-card-desc">Shortcut function with context dictionary</div>
+        </div>
+        <div class="demo-card-arrow">→</div>
+    </a>
+
+    <a href="{% url 'gyms:gym_list_cbv' %}" class="demo-card">
+        <div class="demo-card-icon">🔧</div>
+        <div class="demo-card-content">
+            <div class="demo-card-title">View 3: Base CBV</div>
+            <div class="demo-card-desc">Inherit from View with manual get() method</div>
+        </div>
+        <div class="demo-card-arrow">→</div>
+    </a>
+
+    <a href="{% url 'gyms:gym_list_generic' %}" class="demo-card">
+        <div class="demo-card-icon">🚀</div>
+        <div class="demo-card-content">
+            <div class="demo-card-title">View 4: Generic CBV</div>
+            <div class="demo-card-desc">ListView and DetailView with model binding</div>
+        </div>
+        <div class="demo-card-arrow">→</div>
+    </a>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .home-hero {
+        text-align: center;
+        padding: 40px 20px;
+        background: linear-gradient(135deg, #1a1a1a, #2a2a2a);
+        border-radius: 20px;
+        margin-bottom: 30px;
+        border: 1px solid #333;
+    }
+
+    .hero-icon {
+        font-size: 64px;
+        margin-bottom: 16px;
+    }
+
+    .hero-text {
+        color: #888;
+        font-size: 16px;
+        max-width: 300px;
+        margin: 0 auto;
+        line-height: 1.5;
+    }
+
+    .section-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: #fff;
+        margin-bottom: 8px;
+    }
+
+    .section-subtitle {
+        font-size: 14px;
+        color: #666;
+        margin-bottom: 20px;
+    }
+
+    .demo-grid {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .demo-card {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        background-color: #1a1a1a;
+        border: 1px solid #2a2a2a;
+        border-radius: 16px;
+        padding: 20px;
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+
+    .demo-card:hover {
+        border-color: #06b6d4;
+        transform: translateX(4px);
+    }
+
+    .demo-card-icon {
+        font-size: 28px;
+        width: 50px;
+        height: 50px;
+        background-color: #2a2a2a;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .demo-card-content {
+        flex: 1;
+    }
+
+    .demo-card-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #fff;
+        margin-bottom: 4px;
+    }
+
+    .demo-card-desc {
+        font-size: 13px;
+        color: #666;
+    }
+
+    .demo-card-arrow {
+        font-size: 20px;
+        color: #06b6d4;
+    }
+</style>
+{% endblock %}
