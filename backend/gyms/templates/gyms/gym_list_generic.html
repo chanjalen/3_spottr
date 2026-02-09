@@ -20,7 +20,7 @@
 {% if gyms %}
 <div class="gym-list">
     {% for gym in gyms %}
-    <a href="{% url 'gyms:gym_detail' gym.pk %}" style="text-decoration: none;">
+    <a href="{% url 'gyms:gym_detail' gym.pk %}">
         <div class="gym-card">
             <div class="gym-card-header">
                 <div>
