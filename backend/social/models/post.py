@@ -32,6 +32,11 @@ class Post(BaseModel):
     )
 
     description = models.TextField()
+    photo = models.ImageField(
+        upload_to='posts/',
+        null=True,
+        blank=True,
+    )
     visibility = models.CharField(
         max_length=10,
         choices=Visibility.choices,

@@ -1016,6 +1016,120 @@
             height: 100px;
         }
 
+        /* ============ ACTIVE WORKOUT BAR ============ */
+        .active-workout-bar {
+            position: fixed;
+            bottom: 80px;
+            left: 16px;
+            right: 16px;
+            background: linear-gradient(135deg, #1a2e1a, #0f1f0f);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: var(--radius-xl);
+            padding: 12px 16px;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 99;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+            animation: slideUp 0.3s var(--ease-out);
+        }
+
+        .active-workout-bar.visible {
+            display: flex;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .active-workout-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .active-workout-pulse {
+            width: 10px;
+            height: 10px;
+            background: #22c55e;
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.6;
+                transform: scale(1.2);
+            }
+        }
+
+        .active-workout-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .active-workout-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #22c55e;
+        }
+
+        .active-workout-timer {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .active-workout-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .active-workout-return {
+            padding: 10px 20px;
+            background: #22c55e;
+            border: none;
+            border-radius: var(--radius-pill);
+            color: #000;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--duration) var(--ease-out);
+        }
+
+        .active-workout-clear {
+            padding: 10px 16px;
+            background: transparent;
+            border: 1px solid rgba(239, 68, 68, 0.5);
+            border-radius: var(--radius-pill);
+            color: #ef4444;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--duration) var(--ease-out);
+        }
+
+        .active-workout-clear:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: #ef4444;
+        }
+
+        .active-workout-return:hover {
+            background: #16a34a;
+            transform: scale(1.05);
+        }
+
         /* ============ UTILITY / ANIMATIONS ============ */
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(8px); }
@@ -1118,7 +1232,7 @@
             <div class="popup-option-icon purple">📝</div>
             <span class="popup-option-text">Post</span>
         </a>
-        <a href="#" class="popup-option">
+        <a href="{% url 'workouts:log_workout' %}" class="popup-option">
             <div class="popup-option-icon orange">🏋️</div>
             <span class="popup-option-text">Log Workout</span>
         </a>
@@ -1186,6 +1300,21 @@
                 <!-- Check-in Button -->
                 <button type="submit" class="checkin-btn" id="checkinSubmit">Check in</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Active Workout Bar -->
+    <div class="active-workout-bar" id="activeWorkoutBar">
+        <div class="active-workout-info">
+            <div class="active-workout-pulse"></div>
+            <div class="active-workout-text">
+                <span class="active-workout-title">Workout in progress</span>
+                <span class="active-workout-timer" id="activeWorkoutTimer">0:00</span>
+            </div>
+        </div>
+        <div class="active-workout-buttons">
+            <button class="active-workout-return" id="returnToWorkout">Return</button>
+            <button class="active-workout-clear" id="clearWorkoutBar">Clear</button>
         </div>
     </div>
 
@@ -1417,6 +1546,91 @@
                     document.getElementById('gymSelect').value = '';
                     document.getElementById('activitySelect').value = '';
                 }
+            }
+
+            // ============ ACTIVE WORKOUT BAR ============
+            const activeWorkoutBar = document.getElementById('activeWorkoutBar');
+            const activeWorkoutTimer = document.getElementById('activeWorkoutTimer');
+            const returnToWorkoutBtn = document.getElementById('returnToWorkout');
+
+            function checkActiveWorkout() {
+                const activeWorkout = localStorage.getItem('activeWorkout');
+                if (!activeWorkout) return;
+
+                const workout = JSON.parse(activeWorkout);
+                const currentPath = window.location.pathname;
+
+                // Don't show bar if we're on the active workout page
+                if (currentPath.includes('/workouts/' + workout.id)) {
+                    activeWorkoutBar.classList.remove('visible');
+                    return;
+                }
+
+                // Show the bar
+                activeWorkoutBar.classList.add('visible');
+
+                // Update timer
+                updateActiveWorkoutTimer(workout.startTime);
+            }
+
+            function updateActiveWorkoutTimer(startTimeStr) {
+                const startTime = new Date(startTimeStr);
+                const now = new Date();
+                const diff = Math.floor((now - startTime) / 1000);
+                const minutes = Math.floor(diff / 60);
+                const seconds = diff % 60;
+                activeWorkoutTimer.textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+            }
+
+            // Check for active workout on page load
+            checkActiveWorkout();
+
+            // Update timer every second if bar is visible
+            setInterval(function() {
+                const activeWorkout = localStorage.getItem('activeWorkout');
+                if (activeWorkout && activeWorkoutBar.classList.contains('visible')) {
+                    const workout = JSON.parse(activeWorkout);
+                    updateActiveWorkoutTimer(workout.startTime);
+                }
+            }, 1000);
+
+            // Return to workout button
+            if (returnToWorkoutBtn) {
+                returnToWorkoutBtn.addEventListener('click', function() {
+                    const activeWorkout = localStorage.getItem('activeWorkout');
+                    if (activeWorkout) {
+                        const workout = JSON.parse(activeWorkout);
+                        window.location.href = '/workouts/' + workout.id + '/';
+                    }
+                });
+            }
+
+            // Clear workout button
+            const clearWorkoutBarBtn = document.getElementById('clearWorkoutBar');
+            if (clearWorkoutBarBtn) {
+                clearWorkoutBarBtn.addEventListener('click', function() {
+                    if (confirm('Are you sure you want to clear this workout? All progress will be lost.')) {
+                        const activeWorkout = localStorage.getItem('activeWorkout');
+                        if (activeWorkout) {
+                            const workout = JSON.parse(activeWorkout);
+                            const csrfToken = document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
+
+                            // Delete the workout from backend
+                            fetch('/workouts/' + workout.id + '/delete/', {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRFToken': csrfToken,
+                                },
+                                credentials: 'same-origin'
+                            })
+                            .finally(() => {
+                                // Clear localStorage and hide bar
+                                localStorage.removeItem('activeWorkout');
+                                activeWorkoutBar.classList.remove('visible');
+                            });
+                        }
+                    }
+                });
             }
         });
     </script>

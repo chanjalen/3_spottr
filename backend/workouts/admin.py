@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Workout, Exercise, WorkoutTemplate, TemplateExercise, Streak, PersonalRecord
+from .models import Workout, Exercise, WorkoutTemplate, TemplateExercise, Streak, PersonalRecord, ExerciseCatalog, ExerciseSet
 
 
 @admin.register(Workout)
@@ -40,3 +40,18 @@ class PersonalRecordAdmin(admin.ModelAdmin):
     list_display = ['user', 'exercise_name', 'value', 'unit', 'achieved_date']
     search_fields = ['user__username', 'exercise_name']
     list_filter = ['exercise_name', 'achieved_date']
+
+
+@admin.register(ExerciseCatalog)
+class ExerciseCatalogAdmin(admin.ModelAdmin):
+    list_display = ['name', 'category', 'default_sets', 'default_reps', 'is_bodyweight', 'is_cardio']
+    search_fields = ['name']
+    list_filter = ['category', 'is_bodyweight', 'is_cardio']
+    ordering = ['category', 'name']
+
+
+@admin.register(ExerciseSet)
+class ExerciseSetAdmin(admin.ModelAdmin):
+    list_display = ['exercise', 'set_number', 'reps', 'weight', 'completed']
+    search_fields = ['exercise__name']
+    list_filter = ['completed']

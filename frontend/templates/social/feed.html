@@ -216,6 +216,74 @@
         line-height: 1.5;
     }
 
+    /* Workout Summary */
+    .feed-workout-summary {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: 16px;
+        margin-bottom: 12px;
+        cursor: pointer;
+        transition: all var(--duration) var(--ease-out);
+        text-decoration: none;
+        display: block;
+    }
+
+    .feed-workout-summary:hover {
+        border-color: var(--brand-cyan);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(6, 182, 212, 0.15);
+    }
+
+    .feed-workout-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+    }
+
+    .feed-workout-name {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .feed-workout-view-link {
+        font-size: 12px;
+        color: var(--brand-cyan);
+        font-weight: 500;
+    }
+
+    .feed-workout-stats {
+        display: flex;
+        justify-content: space-around;
+        margin-bottom: 12px;
+    }
+
+    .feed-workout-stat {
+        text-align: center;
+    }
+
+    .feed-workout-stat-value {
+        display: block;
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--brand-cyan);
+    }
+
+    .feed-workout-stat-label {
+        font-size: 11px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+    }
+
+    .feed-workout-exercises {
+        font-size: 13px;
+        color: var(--text-secondary);
+        padding-top: 12px;
+        border-top: 1px solid var(--border-subtle);
+    }
+
     /* ============ FEED CARD ACTIONS ============ */
     .feed-card-actions {
         display: flex;
@@ -235,15 +303,198 @@
         font-size: 14px;
         cursor: pointer;
         padding: 4px;
-        transition: color var(--duration) var(--ease-out);
+        transition: all var(--duration) var(--ease-out);
     }
 
     .feed-action:hover {
         color: var(--text-secondary);
     }
 
+    .feed-action.liked {
+        color: #ef4444;
+    }
+
+    .feed-action.liked .feed-action-icon {
+        transform: scale(1.1);
+    }
+
     .feed-action-icon {
         font-size: 18px;
+        transition: transform var(--duration) var(--ease-out);
+    }
+
+    /* ============ COMMENTS SECTION ============ */
+    .feed-comments-section {
+        display: none;
+        border-top: 1px solid var(--border-subtle);
+        padding: 16px;
+    }
+
+    .feed-comments-section.active {
+        display: block;
+    }
+
+    .comments-list {
+        max-height: 300px;
+        overflow-y: auto;
+        margin-bottom: 12px;
+    }
+
+    .comment-item {
+        display: flex;
+        gap: 12px;
+        padding: 12px 0;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .comment-item:last-child {
+        border-bottom: none;
+    }
+
+    .comment-avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--bg-elevated);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 14px;
+        font-weight: 600;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        color: #fff;
+    }
+
+    .comment-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 50%;
+    }
+
+    .comment-content {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .comment-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 4px;
+    }
+
+    .comment-username {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .comment-time {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+
+    .comment-text {
+        font-size: 14px;
+        color: var(--text-secondary);
+        line-height: 1.4;
+        margin-bottom: 8px;
+    }
+
+    .comment-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .comment-action {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        font-size: 12px;
+        cursor: pointer;
+        padding: 0;
+        transition: color var(--duration);
+    }
+
+    .comment-action:hover {
+        color: var(--text-secondary);
+    }
+
+    .comment-action.liked {
+        color: #ef4444;
+    }
+
+    .comment-action.delete:hover {
+        color: #ef4444;
+    }
+
+    .comment-input-container {
+        display: flex;
+        gap: 12px;
+        align-items: flex-start;
+    }
+
+    .comment-input {
+        flex: 1;
+        padding: 12px 16px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        color: var(--text-primary);
+        font-size: 14px;
+        resize: none;
+        min-height: 44px;
+        max-height: 120px;
+        font-family: inherit;
+    }
+
+    .comment-input:focus {
+        outline: none;
+        border-color: var(--brand-cyan);
+    }
+
+    .comment-input::placeholder {
+        color: var(--text-muted);
+    }
+
+    .comment-submit {
+        padding: 12px 20px;
+        background: var(--brand-cyan);
+        border: none;
+        border-radius: var(--radius-lg);
+        color: #000;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all var(--duration) var(--ease-out);
+    }
+
+    .comment-submit:hover {
+        background: #0891b2;
+    }
+
+    .comment-submit:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .comments-loading {
+        text-align: center;
+        padding: 20px;
+        color: var(--text-muted);
+    }
+
+    .no-comments {
+        text-align: center;
+        padding: 20px;
+        color: var(--text-muted);
+        font-size: 14px;
     }
 
     /* ============ EMPTY STATE ============ */
@@ -287,7 +538,7 @@
 <!-- Feed List -->
 <div class="feed-list">
     {% for item in feed_items %}
-    <div class="feed-card">
+    <div class="feed-card" data-item-id="{{ item.id }}" data-item-type="{{ item.type }}">
         <div class="feed-card-header">
             <div class="feed-avatar">
                 {% if item.user.avatar %}
@@ -323,23 +574,72 @@
                 💪 {{ item.workout_type }}
             </div>
             {% endif %}
+            {% if item.type == 'workout' and item.workout %}
+            <a href="/workouts/{{ item.workout.id }}/view/" class="feed-workout-summary">
+                <div class="feed-workout-header">
+                    <span class="feed-workout-name">{{ item.workout.name }}</span>
+                    <span class="feed-workout-view-link">View Workout &rarr;</span>
+                </div>
+                <div class="feed-workout-stats">
+                    <div class="feed-workout-stat">
+                        <span class="feed-workout-stat-value">{{ item.workout.exercise_count }}</span>
+                        <span class="feed-workout-stat-label">exercises</span>
+                    </div>
+                    <div class="feed-workout-stat">
+                        <span class="feed-workout-stat-value">{{ item.workout.total_sets }}</span>
+                        <span class="feed-workout-stat-label">sets</span>
+                    </div>
+                    <div class="feed-workout-stat">
+                        <span class="feed-workout-stat-value">{{ item.workout.duration }}</span>
+                        <span class="feed-workout-stat-label">duration</span>
+                    </div>
+                </div>
+                {% if item.workout.exercises %}
+                <div class="feed-workout-exercises">
+                    🏋️ {{ item.workout.exercises|join:", " }}
+                </div>
+                {% endif %}
+            </a>
+            {% endif %}
             {% if item.description %}
             <p class="feed-description">{{ item.description }}</p>
             {% endif %}
         </div>
 
         <div class="feed-card-actions">
-            <button class="feed-action">
-                <span class="feed-action-icon">❤️</span>
-                <span>0</span>
+            <button class="feed-action like-btn {% if item.user_liked %}liked{% endif %}"
+                    data-item-id="{{ item.id }}"
+                    data-item-type="{{ item.type }}"
+                    onclick="toggleLike(this)">
+                <span class="feed-action-icon">{% if item.user_liked %}❤️{% else %}🤍{% endif %}</span>
+                <span class="like-count">{{ item.like_count }}</span>
             </button>
-            <button class="feed-action">
+            <button class="feed-action comment-btn"
+                    data-item-id="{{ item.id }}"
+                    data-item-type="{{ item.type }}"
+                    onclick="toggleComments(this)">
                 <span class="feed-action-icon">💬</span>
-                <span>0</span>
+                <span class="comment-count">{{ item.comment_count }}</span>
             </button>
-            <button class="feed-action">
+            <button class="feed-action" onclick="sharePost('{{ item.id }}')">
                 <span class="feed-action-icon">🔗</span>
             </button>
+        </div>
+
+        <!-- Comments Section (hidden by default) -->
+        <div class="feed-comments-section" id="comments-{{ item.id }}">
+            <div class="comments-list" id="comments-list-{{ item.id }}">
+                <div class="comments-loading">Loading comments...</div>
+            </div>
+            <div class="comment-input-container">
+                <textarea class="comment-input"
+                          id="comment-input-{{ item.id }}"
+                          placeholder="Write a comment..."
+                          rows="1"
+                          maxlength="500"></textarea>
+                <button class="comment-submit"
+                        onclick="submitComment('{{ item.id }}', '{{ item.type }}')">Post</button>
+            </div>
         </div>
     </div>
     {% empty %}
@@ -350,4 +650,283 @@
     </div>
     {% endfor %}
 </div>
+
+<script>
+// CSRF token helper
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+const csrftoken = getCookie('csrftoken');
+
+// Toggle like on a post or checkin
+function toggleLike(button) {
+    const itemId = button.dataset.itemId;
+    const itemType = button.dataset.itemType;
+
+    let url;
+    if (itemType === 'checkin') {
+        url = `/social/checkin/${itemId}/like/`;
+    } else {
+        url = `/social/post/${itemId}/like/`;
+    }
+
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrftoken,
+        },
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const icon = button.querySelector('.feed-action-icon');
+            const count = button.querySelector('.like-count');
+
+            if (data.liked) {
+                button.classList.add('liked');
+                icon.textContent = '❤️';
+            } else {
+                button.classList.remove('liked');
+                icon.textContent = '🤍';
+            }
+            count.textContent = data.like_count;
+        }
+    })
+    .catch(error => console.error('Error:', error));
+}
+
+// Toggle comments section visibility
+function toggleComments(button) {
+    const itemId = button.dataset.itemId;
+    const itemType = button.dataset.itemType;
+    const commentsSection = document.getElementById(`comments-${itemId}`);
+
+    if (commentsSection.classList.contains('active')) {
+        commentsSection.classList.remove('active');
+    } else {
+        commentsSection.classList.add('active');
+        loadComments(itemId, itemType);
+    }
+}
+
+// Load comments for a post or checkin
+function loadComments(itemId, itemType) {
+    const commentsList = document.getElementById(`comments-list-${itemId}`);
+    commentsList.innerHTML = '<div class="comments-loading">Loading comments...</div>';
+
+    let url;
+    if (itemType === 'checkin') {
+        url = `/social/checkin/${itemId}/comments/`;
+    } else {
+        url = `/social/post/${itemId}/comments/`;
+    }
+
+    fetch(url, {
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            renderComments(itemId, data.comments);
+        } else {
+            commentsList.innerHTML = '<div class="comments-loading">Failed to load comments</div>';
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        commentsList.innerHTML = '<div class="comments-loading">Failed to load comments</div>';
+    });
+}
+
+// Render comments
+function renderComments(itemId, comments) {
+    const commentsList = document.getElementById(`comments-list-${itemId}`);
+
+    if (comments.length === 0) {
+        commentsList.innerHTML = '<div class="no-comments">No comments yet. Be the first to comment!</div>';
+        return;
+    }
+
+    let html = '';
+    for (const comment of comments) {
+        const avatarContent = comment.user.avatar_url
+            ? `<img src="${comment.user.avatar_url}" alt="${comment.user.display_name}">`
+            : comment.user.display_name.charAt(0).toUpperCase();
+
+        html += `
+            <div class="comment-item" data-comment-id="${comment.id}">
+                <div class="comment-avatar">${avatarContent}</div>
+                <div class="comment-content">
+                    <div class="comment-header">
+                        <span class="comment-username">${comment.user.display_name}</span>
+                        <span class="comment-time">${comment.time_ago}</span>
+                    </div>
+                    <div class="comment-text">${escapeHtml(comment.text)}</div>
+                    <div class="comment-actions">
+                        <button class="comment-action ${comment.user_liked ? 'liked' : ''}"
+                                onclick="toggleCommentLike('${comment.id}', this)">
+                            <span>${comment.user_liked ? '❤️' : '🤍'}</span>
+                            <span class="comment-like-count">${comment.like_count}</span>
+                        </button>
+                        ${comment.is_owner ? `<button class="comment-action delete" onclick="deleteComment('${comment.id}', '${itemId}')">Delete</button>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    commentsList.innerHTML = html;
+}
+
+// Escape HTML to prevent XSS
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Toggle like on a comment
+function toggleCommentLike(commentId, button) {
+    fetch(`/social/comment/${commentId}/like/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrftoken,
+        },
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const icon = button.querySelector('span:first-child');
+            const count = button.querySelector('.comment-like-count');
+
+            if (data.liked) {
+                button.classList.add('liked');
+                icon.textContent = '❤️';
+            } else {
+                button.classList.remove('liked');
+                icon.textContent = '🤍';
+            }
+            count.textContent = data.like_count;
+        }
+    })
+    .catch(error => console.error('Error:', error));
+}
+
+// Submit a new comment
+function submitComment(itemId, itemType) {
+    const input = document.getElementById(`comment-input-${itemId}`);
+    const text = input.value.trim();
+
+    if (!text) return;
+
+    let url;
+    if (itemType === 'checkin') {
+        url = `/social/checkin/${itemId}/comments/add/`;
+    } else {
+        url = `/social/post/${itemId}/comments/add/`;
+    }
+
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrftoken,
+            'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({ text: text })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            input.value = '';
+
+            // Reload comments to show the new one
+            loadComments(itemId, itemType);
+
+            // Update comment count
+            const card = document.querySelector(`[data-item-id="${itemId}"]`);
+            const countSpan = card.querySelector('.comment-count');
+            countSpan.textContent = parseInt(countSpan.textContent) + 1;
+        } else {
+            alert(data.error || 'Failed to post comment');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to post comment');
+    });
+}
+
+// Delete a comment
+function deleteComment(commentId, itemId) {
+    if (!confirm('Delete this comment?')) return;
+
+    fetch(`/social/comment/${commentId}/delete/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrftoken,
+        },
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Remove comment from DOM
+            const commentItem = document.querySelector(`[data-comment-id="${commentId}"]`);
+            if (commentItem) {
+                commentItem.remove();
+            }
+
+            // Update comment count
+            const card = document.querySelector(`[data-item-id="${itemId}"]`);
+            const countSpan = card.querySelector('.comment-count');
+            countSpan.textContent = Math.max(0, parseInt(countSpan.textContent) - 1);
+
+            // Check if no comments left
+            const commentsList = document.getElementById(`comments-list-${itemId}`);
+            if (commentsList.querySelectorAll('.comment-item').length === 0) {
+                commentsList.innerHTML = '<div class="no-comments">No comments yet. Be the first to comment!</div>';
+            }
+        }
+    })
+    .catch(error => console.error('Error:', error));
+}
+
+// Share post (copy link)
+function sharePost(itemId) {
+    const url = window.location.origin + '/social/post/' + itemId + '/';
+
+    if (navigator.clipboard) {
+        navigator.clipboard.writeText(url).then(() => {
+            alert('Link copied to clipboard!');
+        }).catch(() => {
+            alert('Failed to copy link');
+        });
+    } else {
+        alert('Link: ' + url);
+    }
+}
+
+// Auto-resize textarea
+document.querySelectorAll('.comment-input').forEach(textarea => {
+    textarea.addEventListener('input', function() {
+        this.style.height = 'auto';
+        this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+    });
+});
+</script>
 {% endblock %}
