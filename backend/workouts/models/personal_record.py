@@ -30,6 +30,7 @@ class PersonalRecord(BaseModel):
     value = models.CharField(max_length=50)
     unit = models.CharField(max_length=20)
     achieved_date = models.DateField()
+    video = models.FileField(upload_to='pr_videos/', blank=True, null=True)
 
     class Meta:
         ordering = ['-achieved_date']
