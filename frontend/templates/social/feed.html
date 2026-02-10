@@ -284,6 +284,123 @@
         border-top: 1px solid var(--border-subtle);
     }
 
+    /* Link Preview */
+    .feed-link-preview {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: 12px 16px;
+        margin-top: 12px;
+        text-decoration: none;
+        transition: all var(--duration) var(--ease-out);
+    }
+
+    .feed-link-preview:hover {
+        border-color: var(--brand-cyan);
+    }
+
+    .feed-link-icon {
+        font-size: 20px;
+        color: var(--brand-cyan);
+    }
+
+    .feed-link-url {
+        font-size: 14px;
+        color: var(--brand-cyan);
+        word-break: break-all;
+    }
+
+    /* Poll Styles */
+    .feed-poll {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: 16px;
+        margin-top: 12px;
+    }
+
+    .feed-poll-question {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 12px;
+    }
+
+    .feed-poll-options {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .feed-poll-option {
+        position: relative;
+        padding: 12px 16px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: all var(--duration) var(--ease-out);
+        overflow: hidden;
+    }
+
+    .feed-poll-option:hover {
+        border-color: var(--brand-cyan);
+    }
+
+    .feed-poll-option.voted {
+        cursor: default;
+    }
+
+    .feed-poll-option.selected {
+        border-color: var(--brand-cyan);
+    }
+
+    .feed-poll-option-bar {
+        position: absolute;
+        top: 0;
+        left: 0;
+        height: 100%;
+        background: rgba(6, 182, 212, 0.15);
+        transition: width 0.5s var(--ease-out);
+        z-index: 0;
+    }
+
+    .feed-poll-option-content {
+        position: relative;
+        z-index: 1;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .feed-poll-option-text {
+        font-size: 14px;
+        color: var(--text-primary);
+    }
+
+    .feed-poll-option-percent {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-secondary);
+    }
+
+    .feed-poll-meta {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 12px;
+        font-size: 13px;
+        color: var(--text-muted);
+    }
+
+    .feed-poll-ended {
+        color: var(--text-muted);
+        font-style: italic;
+    }
+
     /* ============ FEED CARD ACTIONS ============ */
     .feed-card-actions {
         display: flex;
@@ -497,6 +614,192 @@
         font-size: 14px;
     }
 
+    /* ============ REPLY STYLES ============ */
+    .comment-reply-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        font-size: 12px;
+        cursor: pointer;
+        padding: 0;
+        transition: color var(--duration);
+    }
+
+    .comment-reply-btn:hover {
+        color: var(--brand-cyan);
+    }
+
+    .comment-replies-toggle {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: none;
+        border: none;
+        color: var(--brand-cyan);
+        font-size: 12px;
+        cursor: pointer;
+        padding: 4px 0;
+        margin-top: 4px;
+    }
+
+    .comment-replies-toggle:hover {
+        text-decoration: underline;
+    }
+
+    .comment-replies {
+        margin-left: 44px;
+        margin-top: 8px;
+        display: none;
+    }
+
+    .comment-replies.active {
+        display: block;
+    }
+
+    .comment-replies .comment-item {
+        padding: 8px 0;
+    }
+
+    .comment-replies .comment-avatar {
+        width: 28px;
+        height: 28px;
+        font-size: 12px;
+    }
+
+    .reply-input-container {
+        display: none;
+        margin-left: 44px;
+        margin-top: 8px;
+        gap: 8px;
+        align-items: flex-start;
+    }
+
+    .reply-input-container.active {
+        display: flex;
+    }
+
+    .reply-input {
+        flex: 1;
+        padding: 10px 14px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        color: var(--text-primary);
+        font-size: 13px;
+        resize: none;
+        min-height: 36px;
+        font-family: inherit;
+    }
+
+    .reply-input:focus {
+        outline: none;
+        border-color: var(--brand-cyan);
+    }
+
+    .reply-submit {
+        padding: 10px 16px;
+        background: var(--brand-cyan);
+        border: none;
+        border-radius: var(--radius-lg);
+        color: #000;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all var(--duration);
+    }
+
+    .reply-submit:hover {
+        background: #0891b2;
+    }
+
+    .reply-cancel {
+        padding: 10px 14px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        color: var(--text-secondary);
+        font-size: 13px;
+        cursor: pointer;
+    }
+
+    /* Poll changeable vote styles */
+    .feed-poll-option.voted {
+        cursor: pointer;
+    }
+
+    .feed-poll-change-vote {
+        display: block;
+        text-align: center;
+        margin-top: 8px;
+        font-size: 12px;
+        color: var(--brand-cyan);
+        cursor: pointer;
+        background: none;
+        border: none;
+        width: 100%;
+        padding: 4px;
+    }
+
+    .feed-poll-change-vote:hover {
+        text-decoration: underline;
+    }
+
+    /* ============ PR CARD IN FEED ============ */
+    .feed-pr-card {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: linear-gradient(135deg, #0d2818, #1a3a2a);
+        border: 1px solid rgba(34, 197, 94, 0.3);
+        border-radius: var(--radius-lg);
+        padding: 16px 20px;
+        margin-bottom: 12px;
+    }
+
+    .feed-pr-left {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .feed-pr-label {
+        font-size: 12px;
+        color: rgba(255, 255, 255, 0.6);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .feed-pr-exercise {
+        font-size: 18px;
+        font-weight: 600;
+        color: #fff;
+    }
+
+    .feed-pr-right {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 4px;
+    }
+
+    .feed-pr-value {
+        font-size: 24px;
+        font-weight: 700;
+        color: #22c55e;
+    }
+
+    .feed-pr-badge {
+        font-size: 12px;
+        font-weight: 600;
+        color: #22c55e;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
     /* ============ EMPTY STATE ============ */
     .feed-empty {
         text-align: center;
@@ -569,6 +872,18 @@
         {% endif %}
 
         <div class="feed-card-body">
+            {% if item.personal_record %}
+            <div class="feed-pr-card">
+                <div class="feed-pr-left">
+                    <span class="feed-pr-label">Personal Record</span>
+                    <span class="feed-pr-exercise">{{ item.personal_record.exercise_name }}</span>
+                </div>
+                <div class="feed-pr-right">
+                    <span class="feed-pr-value">{{ item.personal_record.value }} {{ item.personal_record.unit }}</span>
+                    <span class="feed-pr-badge">&#8599; New PR</span>
+                </div>
+            </div>
+            {% endif %}
             {% if item.type == 'checkin' and item.workout_type %}
             <div class="feed-workout-tag">
                 💪 {{ item.workout_type }}
@@ -603,6 +918,42 @@
             {% endif %}
             {% if item.description %}
             <p class="feed-description">{{ item.description }}</p>
+            {% endif %}
+
+            {% if item.link_url %}
+            <a href="{{ item.link_url }}" target="_blank" rel="noopener" class="feed-link-preview">
+                <span class="feed-link-icon">&#128279;</span>
+                <span class="feed-link-url">{{ item.link_url }}</span>
+            </a>
+            {% endif %}
+
+            {% if item.poll %}
+            <div class="feed-poll" data-poll-id="{{ item.poll.id }}" data-user-voted="{{ item.poll.user_voted|yesno:'true,false' }}" data-user-vote-option="{{ item.poll.user_vote_option }}" data-is-active="{{ item.poll.is_active|yesno:'true,false' }}">
+                {% if item.poll.question != item.description %}
+                <div class="feed-poll-question">{{ item.poll.question }}</div>
+                {% endif %}
+                <div class="feed-poll-options">
+                    {% for option in item.poll.options %}
+                    <div class="feed-poll-option {% if item.poll.user_voted %}voted{% endif %} {% if item.poll.user_vote_option == option.id %}selected{% endif %}"
+                         data-option-id="{{ option.id }}"
+                         {% if item.poll.is_active %}onclick="votePoll('{{ item.poll.id }}', '{{ option.id }}', this)"{% endif %}>
+                        <div class="feed-poll-option-bar" style="width: {% if item.poll.user_voted %}{{ option.percentage }}%{% else %}0{% endif %}"></div>
+                        <div class="feed-poll-option-content">
+                            <span class="feed-poll-option-text">{{ option.text }}</span>
+                            {% if item.poll.user_voted %}
+                            <span class="feed-poll-option-percent">{{ option.percentage }}%</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="feed-poll-meta">
+                    <span>{{ item.poll.total_votes }} vote{{ item.poll.total_votes|pluralize }}</span>
+                    {% if not item.poll.is_active %}
+                    <span class="feed-poll-ended">&#8226; Poll ended</span>
+                    {% endif %}
+                </div>
+            </div>
             {% endif %}
         </div>
 
@@ -766,6 +1117,11 @@ function renderComments(itemId, comments) {
             ? `<img src="${comment.user.avatar_url}" alt="${comment.user.display_name}">`
             : comment.user.display_name.charAt(0).toUpperCase();
 
+        const replyCount = comment.reply_count || 0;
+        const repliesToggle = replyCount > 0
+            ? `<button class="comment-replies-toggle" onclick="toggleReplies('${comment.id}')">View ${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}</button>`
+            : '';
+
         html += `
             <div class="comment-item" data-comment-id="${comment.id}">
                 <div class="comment-avatar">${avatarContent}</div>
@@ -781,14 +1137,185 @@ function renderComments(itemId, comments) {
                             <span>${comment.user_liked ? '❤️' : '🤍'}</span>
                             <span class="comment-like-count">${comment.like_count}</span>
                         </button>
+                        <button class="comment-reply-btn" onclick="showReplyInput('${comment.id}')">
+                            <span>Reply</span>
+                        </button>
                         ${comment.is_owner ? `<button class="comment-action delete" onclick="deleteComment('${comment.id}', '${itemId}')">Delete</button>` : ''}
+                    </div>
+                    ${repliesToggle}
+                </div>
+            </div>
+            <div class="comment-replies" id="replies-${comment.id}"></div>
+            <div class="reply-input-container" id="reply-input-${comment.id}">
+                <textarea class="reply-input" id="reply-text-${comment.id}" placeholder="Write a reply..." rows="1" maxlength="500"></textarea>
+                <button class="reply-cancel" onclick="hideReplyInput('${comment.id}')">Cancel</button>
+                <button class="reply-submit" onclick="submitReply('${comment.id}')">Reply</button>
+            </div>
+        `;
+    }
+
+    commentsList.innerHTML = html;
+}
+
+// Show reply input for a comment
+function showReplyInput(commentId) {
+    const container = document.getElementById(`reply-input-${commentId}`);
+    if (container) {
+        container.classList.add('active');
+        document.getElementById(`reply-text-${commentId}`).focus();
+    }
+}
+
+// Hide reply input for a comment
+function hideReplyInput(commentId) {
+    const container = document.getElementById(`reply-input-${commentId}`);
+    if (container) {
+        container.classList.remove('active');
+        document.getElementById(`reply-text-${commentId}`).value = '';
+    }
+}
+
+// Toggle replies visibility and load them
+function toggleReplies(commentId) {
+    const repliesContainer = document.getElementById(`replies-${commentId}`);
+
+    if (repliesContainer.classList.contains('active')) {
+        repliesContainer.classList.remove('active');
+    } else {
+        repliesContainer.classList.add('active');
+        loadReplies(commentId);
+    }
+}
+
+// Load replies for a comment
+function loadReplies(commentId) {
+    const repliesContainer = document.getElementById(`replies-${commentId}`);
+    repliesContainer.innerHTML = '<div class="comments-loading" style="font-size: 12px; padding: 8px;">Loading replies...</div>';
+
+    fetch(`/social/comment/${commentId}/replies/`, {
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            renderReplies(commentId, data.replies);
+        } else {
+            repliesContainer.innerHTML = '<div class="comments-loading" style="font-size: 12px;">Failed to load replies</div>';
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        repliesContainer.innerHTML = '<div class="comments-loading" style="font-size: 12px;">Failed to load replies</div>';
+    });
+}
+
+// Render replies
+function renderReplies(parentCommentId, replies) {
+    const repliesContainer = document.getElementById(`replies-${parentCommentId}`);
+
+    if (replies.length === 0) {
+        repliesContainer.innerHTML = '';
+        return;
+    }
+
+    let html = '';
+    for (const reply of replies) {
+        const avatarContent = reply.user.avatar_url
+            ? `<img src="${reply.user.avatar_url}" alt="${reply.user.display_name}">`
+            : reply.user.display_name.charAt(0).toUpperCase();
+
+        html += `
+            <div class="comment-item" data-comment-id="${reply.id}">
+                <div class="comment-avatar">${avatarContent}</div>
+                <div class="comment-content">
+                    <div class="comment-header">
+                        <span class="comment-username">${reply.user.display_name}</span>
+                        <span class="comment-time">${reply.time_ago}</span>
+                    </div>
+                    <div class="comment-text">${escapeHtml(reply.text)}</div>
+                    <div class="comment-actions">
+                        <button class="comment-action ${reply.user_liked ? 'liked' : ''}"
+                                onclick="toggleCommentLike('${reply.id}', this)">
+                            <span>${reply.user_liked ? '❤️' : '🤍'}</span>
+                            <span class="comment-like-count">${reply.like_count}</span>
+                        </button>
+                        ${reply.is_owner ? `<button class="comment-action delete" onclick="deleteReply('${reply.id}', '${parentCommentId}')">Delete</button>` : ''}
                     </div>
                 </div>
             </div>
         `;
     }
 
-    commentsList.innerHTML = html;
+    repliesContainer.innerHTML = html;
+}
+
+// Submit a reply to a comment
+function submitReply(parentCommentId) {
+    const input = document.getElementById(`reply-text-${parentCommentId}`);
+    const text = input.value.trim();
+
+    if (!text) return;
+
+    fetch(`/social/comment/${parentCommentId}/replies/add/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrftoken,
+            'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({ text: text })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            input.value = '';
+            hideReplyInput(parentCommentId);
+
+            // Show and reload replies
+            const repliesContainer = document.getElementById(`replies-${parentCommentId}`);
+            repliesContainer.classList.add('active');
+            loadReplies(parentCommentId);
+
+            // Update the reply toggle button
+            const commentItem = document.querySelector(`[data-comment-id="${parentCommentId}"]`);
+            let toggleBtn = commentItem.querySelector('.comment-replies-toggle');
+            if (!toggleBtn) {
+                const contentDiv = commentItem.querySelector('.comment-content');
+                toggleBtn = document.createElement('button');
+                toggleBtn.className = 'comment-replies-toggle';
+                toggleBtn.onclick = () => toggleReplies(parentCommentId);
+                contentDiv.appendChild(toggleBtn);
+            }
+            // The count will be updated when replies reload
+        } else {
+            alert(data.error || 'Failed to post reply');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to post reply');
+    });
+}
+
+// Delete a reply
+function deleteReply(replyId, parentCommentId) {
+    if (!confirm('Delete this reply?')) return;
+
+    fetch(`/social/comment/${replyId}/delete/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrftoken,
+        },
+        credentials: 'same-origin'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Reload replies
+            loadReplies(parentCommentId);
+        }
+    })
+    .catch(error => console.error('Error:', error));
 }
 
 // Escape HTML to prevent XSS
@@ -928,5 +1455,91 @@ document.querySelectorAll('.comment-input').forEach(textarea => {
         this.style.height = Math.min(this.scrollHeight, 120) + 'px';
     });
 });
+
+// Vote on poll (supports changing votes)
+function votePoll(pollId, optionId, element) {
+    const pollContainer = element.closest('.feed-poll');
+    const options = pollContainer.querySelectorAll('.feed-poll-option');
+    const isActive = pollContainer.dataset.isActive === 'true';
+
+    if (!isActive) {
+        return; // Poll has ended, no voting
+    }
+
+    // Check if clicking the same option that's already selected
+    const currentSelection = pollContainer.querySelector('.feed-poll-option.selected');
+    if (currentSelection && currentSelection.dataset.optionId === optionId) {
+        return; // Already voted for this option
+    }
+
+    // Mark all as voted and update selection
+    options.forEach(opt => {
+        opt.classList.add('voted');
+        opt.classList.remove('selected');
+    });
+    element.classList.add('selected');
+
+    fetch(`/social/poll/${pollId}/vote/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrftoken,
+            'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({ option_id: optionId })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Update the UI with results
+            data.results.forEach(result => {
+                const optionEl = pollContainer.querySelector(`[data-option-id="${result.id}"]`);
+                if (optionEl) {
+                    const bar = optionEl.querySelector('.feed-poll-option-bar');
+                    const content = optionEl.querySelector('.feed-poll-option-content');
+
+                    bar.style.width = result.percentage + '%';
+
+                    // Add/update percentage display
+                    let percentSpan = content.querySelector('.feed-poll-option-percent');
+                    if (!percentSpan) {
+                        percentSpan = document.createElement('span');
+                        percentSpan.className = 'feed-poll-option-percent';
+                        content.appendChild(percentSpan);
+                    }
+                    percentSpan.textContent = result.percentage + '%';
+
+                    // Update selected state based on voted option
+                    if (result.id === data.voted_option) {
+                        optionEl.classList.add('selected');
+                    } else {
+                        optionEl.classList.remove('selected');
+                    }
+                }
+            });
+
+            // Update total votes
+            const metaSpan = pollContainer.querySelector('.feed-poll-meta span');
+            if (metaSpan) {
+                metaSpan.textContent = data.total_votes + ' vote' + (data.total_votes !== 1 ? 's' : '');
+            }
+
+            // Update data attributes
+            pollContainer.dataset.userVoted = 'true';
+            pollContainer.dataset.userVoteOption = data.voted_option;
+        } else {
+            alert(data.error || 'Failed to vote');
+            // Restore previous state if vote failed
+            if (currentSelection) {
+                currentSelection.classList.add('selected');
+            }
+            element.classList.remove('selected');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to vote');
+    });
+}
 </script>
 {% endblock %}

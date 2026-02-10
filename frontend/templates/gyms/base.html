@@ -1011,6 +1011,796 @@
             display: none;
         }
 
+        /* ============ CREATE POST MODAL ============ */
+        .post-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 299;
+            opacity: 0;
+            visibility: hidden;
+            transition: all var(--duration) var(--ease-out);
+        }
+
+        .post-modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .post-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.95);
+            width: calc(100% - 32px);
+            max-width: 580px;
+            max-height: calc(100vh - 100px);
+            background: var(--bg-surface);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-2xl);
+            z-index: 300;
+            opacity: 0;
+            visibility: hidden;
+            transition: all var(--duration) var(--ease-out);
+            overflow-y: auto;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .post-modal.active {
+            opacity: 1;
+            visibility: visible;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .post-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky;
+            top: 0;
+            background: var(--bg-surface);
+            border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+            z-index: 10;
+        }
+
+        .post-modal-close {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: none;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 24px;
+            color: var(--text-secondary);
+            transition: all var(--duration) var(--ease-out);
+        }
+
+        .post-modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .post-modal-drafts {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--brand-cyan);
+            cursor: pointer;
+        }
+
+        .post-modal-content {
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .post-compose-area {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .post-compose-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: var(--bg-elevated);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 18px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+            color: #fff;
+        }
+
+        .post-compose-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+
+        .post-compose-input {
+            flex: 1;
+        }
+
+        .post-compose-textarea {
+            width: 100%;
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            font-size: 18px;
+            font-family: inherit;
+            resize: none;
+            min-height: 120px;
+            outline: none;
+            line-height: 1.5;
+        }
+
+        .post-compose-textarea::placeholder {
+            color: var(--text-muted);
+        }
+
+        /* Reply Restriction */
+        .post-reply-restriction {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-subtle);
+            cursor: pointer;
+            transition: color var(--duration);
+        }
+
+        .post-reply-restriction:hover {
+            color: var(--brand-cyan);
+        }
+
+        .post-reply-icon {
+            font-size: 16px;
+            color: var(--brand-cyan);
+        }
+
+        .post-reply-text {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--brand-cyan);
+        }
+
+        /* Media Preview */
+        .post-media-preview {
+            display: none;
+            margin-top: 16px;
+            position: relative;
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+        }
+
+        .post-media-preview.has-media {
+            display: block;
+        }
+
+        .post-media-preview img,
+        .post-media-preview video {
+            width: 100%;
+            max-height: 300px;
+            object-fit: cover;
+            border-radius: var(--radius-xl);
+        }
+
+        .post-media-remove {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.7);
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Link Preview */
+        .post-link-preview {
+            display: none;
+            margin-top: 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            padding: 12px 16px;
+        }
+
+        .post-link-preview.has-link {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .post-link-url {
+            font-size: 14px;
+            color: var(--brand-cyan);
+            word-break: break-all;
+            flex: 1;
+        }
+
+        .post-link-remove {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 18px;
+            padding: 4px;
+        }
+
+        /* Poll Section */
+        .post-poll-section {
+            display: none;
+            margin-top: 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-xl);
+            padding: 16px;
+        }
+
+        .post-poll-section.active {
+            display: block;
+        }
+
+        .post-poll-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .post-poll-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .post-poll-remove {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 18px;
+        }
+
+        .post-poll-options {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .post-poll-option-input {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            color: var(--text-primary);
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .post-poll-option-input:focus {
+            outline: none;
+            border-color: var(--brand-cyan);
+        }
+
+        .post-poll-option-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .post-poll-add-option {
+            padding: 12px 16px;
+            background: none;
+            border: 1px dashed var(--border-default);
+            border-radius: var(--radius-lg);
+            color: var(--text-muted);
+            font-size: 14px;
+            cursor: pointer;
+            transition: all var(--duration);
+        }
+
+        .post-poll-add-option:hover {
+            border-color: var(--brand-cyan);
+            color: var(--brand-cyan);
+        }
+
+        .post-poll-duration {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .post-poll-duration-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .post-poll-duration-select {
+            padding: 8px 12px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-size: 13px;
+        }
+
+        /* Bottom Toolbar */
+        .post-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 0;
+            margin-top: 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .post-toolbar-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .post-toolbar-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: none;
+            border: none;
+            color: var(--brand-cyan);
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--duration);
+        }
+
+        .post-toolbar-btn:hover {
+            background: var(--bg-elevated);
+        }
+
+        .post-toolbar-btn.active {
+            background: rgba(6, 182, 212, 0.2);
+        }
+
+        .post-submit-btn {
+            padding: 12px 24px;
+            background: var(--bg-elevated);
+            border: none;
+            border-radius: var(--radius-pill);
+            color: var(--text-muted);
+            font-size: 15px;
+            font-weight: 600;
+            cursor: not-allowed;
+            transition: all var(--duration);
+        }
+
+        .post-submit-btn.enabled {
+            background: var(--brand-cyan);
+            color: #000;
+            cursor: pointer;
+        }
+
+        .post-submit-btn.enabled:hover {
+            background: #0891b2;
+        }
+
+        /* Hidden file input */
+        #postMediaInput {
+            display: none;
+        }
+
+        /* Link input modal */
+        .link-input-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 400;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .link-input-overlay.active {
+            display: flex;
+        }
+
+        .link-input-modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-xl);
+            padding: 24px;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .link-input-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+        }
+
+        .link-input-field {
+            width: 100%;
+            padding: 14px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            color: var(--text-primary);
+            font-size: 14px;
+            margin-bottom: 16px;
+        }
+
+        .link-input-field:focus {
+            outline: none;
+            border-color: var(--brand-cyan);
+        }
+
+        .link-input-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .link-input-cancel,
+        .link-input-add {
+            flex: 1;
+            padding: 12px;
+            border-radius: var(--radius-lg);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .link-input-cancel {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-default);
+            color: var(--text-secondary);
+        }
+
+        .link-input-add {
+            background: var(--brand-cyan);
+            border: none;
+            color: #000;
+        }
+
+        /* ============ PR MODAL ============ */
+        .pr-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            z-index: 400;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .pr-modal-overlay.active {
+            display: flex;
+        }
+
+        .pr-modal {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-2xl);
+            width: 100%;
+            max-width: 440px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .pr-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .pr-modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .pr-modal-close {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: none;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 24px;
+            color: var(--text-secondary);
+            transition: all var(--duration);
+        }
+
+        .pr-modal-close:hover {
+            color: var(--text-primary);
+            background: var(--bg-elevated);
+        }
+
+        .pr-modal-content {
+            padding: 20px;
+        }
+
+        .pr-form-group {
+            margin-bottom: 16px;
+        }
+
+        .pr-form-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .pr-form-row .pr-form-group {
+            flex: 1;
+        }
+
+        .pr-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .pr-input,
+        .pr-select {
+            width: 100%;
+            padding: 14px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            color: var(--text-primary);
+            font-size: 15px;
+            font-family: inherit;
+            transition: all var(--duration);
+        }
+
+        .pr-input:focus,
+        .pr-select:focus {
+            outline: none;
+            border-color: var(--brand-purple);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+        }
+
+        .pr-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .pr-select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%239898a8' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 16px center;
+        }
+
+        .pr-video-upload {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 32px;
+            background: var(--bg-card);
+            border: 2px dashed var(--border-default);
+            border-radius: var(--radius-xl);
+            cursor: pointer;
+            transition: all var(--duration);
+        }
+
+        .pr-video-upload:hover {
+            border-color: var(--brand-purple);
+            background: var(--bg-elevated);
+        }
+
+        .pr-video-icon {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+
+        .pr-video-text {
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        .pr-video-preview {
+            display: none;
+            position: relative;
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+        }
+
+        .pr-video-preview.has-video {
+            display: block;
+        }
+
+        .pr-video-preview video {
+            width: 100%;
+            max-height: 200px;
+            border-radius: var(--radius-xl);
+        }
+
+        .pr-video-remove {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.7);
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .pr-checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .pr-checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--brand-purple);
+            cursor: pointer;
+        }
+
+        .pr-checkbox-group label {
+            font-size: 14px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        .pr-submit-btn {
+            width: 100%;
+            padding: 16px 24px;
+            background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+            border: none;
+            border-radius: var(--radius-lg);
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--duration);
+            box-shadow: 0 4px 16px rgba(124, 58, 237, 0.3);
+        }
+
+        .pr-submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(124, 58, 237, 0.4);
+        }
+
+        .pr-submit-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* ============ POST PR PREVIEW ============ */
+        .post-pr-preview {
+            display: none;
+            position: relative;
+            margin-top: 16px;
+        }
+
+        .post-pr-preview.has-pr {
+            display: block;
+        }
+
+        .post-pr-card {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, #0d2818, #1a3a2a);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: var(--radius-lg);
+            padding: 16px 20px;
+        }
+
+        .post-pr-card-left {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .post-pr-label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .post-pr-exercise {
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .post-pr-card-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 4px;
+        }
+
+        .post-pr-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #22c55e;
+        }
+
+        .post-pr-badge {
+            font-size: 12px;
+            font-weight: 600;
+            color: #22c55e;
+        }
+
+        .post-pr-remove {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-default);
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--duration);
+        }
+
+        .post-pr-remove:hover {
+            background: #ef4444;
+            border-color: #ef4444;
+            color: #fff;
+        }
+
         /* ============ SPACER ============ */
         .bottom-spacer {
             height: 100px;
@@ -1228,7 +2018,7 @@
             <div class="popup-option-icon blue">📍</div>
             <span class="popup-option-text">Quick Check-in</span>
         </a>
-        <a href="#" class="popup-option">
+        <a href="#" class="popup-option" id="createPostBtn">
             <div class="popup-option-icon purple">📝</div>
             <span class="popup-option-text">Post</span>
         </a>
@@ -1300,6 +2090,168 @@
                 <!-- Check-in Button -->
                 <button type="submit" class="checkin-btn" id="checkinSubmit">Check in</button>
             </form>
+        </div>
+    </div>
+
+    <!-- Create Post Modal -->
+    <div class="post-modal-overlay" id="postModalOverlay"></div>
+    <div class="post-modal" id="postModal">
+        <div class="post-modal-header">
+            <button class="post-modal-close" id="postModalClose">&times;</button>
+            <span class="post-modal-drafts">Drafts</span>
+        </div>
+        <div class="post-modal-content">
+            <div class="post-compose-area">
+                <div class="post-compose-avatar">
+                    {% if user.is_authenticated and user.avatar %}
+                    <img src="{{ user.avatar.url }}" alt="{{ user.display_name }}">
+                    {% elif user.is_authenticated %}
+                    {{ user.display_name|make_list|first|upper }}
+                    {% else %}
+                    U
+                    {% endif %}
+                </div>
+                <div class="post-compose-input">
+                    <textarea class="post-compose-textarea" id="postTextarea" placeholder="What's happening?" maxlength="500"></textarea>
+                </div>
+            </div>
+
+            <!-- Reply Restriction -->
+            <div class="post-reply-restriction" id="replyRestrictionBtn">
+                <span class="post-reply-icon">&#9679;</span>
+                <span class="post-reply-text" id="replyRestrictionText">Everyone can reply</span>
+            </div>
+
+            <!-- Media Preview -->
+            <div class="post-media-preview" id="postMediaPreview">
+                <img id="postMediaImg" src="" alt="Media preview">
+                <button class="post-media-remove" id="postMediaRemove">&times;</button>
+            </div>
+
+            <!-- Link Preview -->
+            <div class="post-link-preview" id="postLinkPreview">
+                <span class="post-link-url" id="postLinkUrl"></span>
+                <button class="post-link-remove" id="postLinkRemove">&times;</button>
+            </div>
+
+            <!-- Poll Section -->
+            <div class="post-poll-section" id="postPollSection">
+                <div class="post-poll-header">
+                    <span class="post-poll-title">Create Poll</span>
+                    <button class="post-poll-remove" id="postPollRemove">&times;</button>
+                </div>
+                <div class="post-poll-options" id="postPollOptions">
+                    <input type="text" class="post-poll-option-input" placeholder="Option 1" maxlength="100">
+                    <input type="text" class="post-poll-option-input" placeholder="Option 2" maxlength="100">
+                </div>
+                <button class="post-poll-add-option" id="addPollOption">+ Add option</button>
+                <div class="post-poll-duration">
+                    <span class="post-poll-duration-label">Poll duration:</span>
+                    <select class="post-poll-duration-select" id="pollDuration">
+                        <option value="1">1 hour</option>
+                        <option value="6">6 hours</option>
+                        <option value="12">12 hours</option>
+                        <option value="24" selected>1 day</option>
+                        <option value="72">3 days</option>
+                        <option value="168">7 days</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- PR Preview Section -->
+            <div class="post-pr-preview" id="postPrPreview">
+                <div class="post-pr-card">
+                    <div class="post-pr-card-left">
+                        <span class="post-pr-label">Personal Record</span>
+                        <span class="post-pr-exercise" id="postPrExercise">Squat</span>
+                    </div>
+                    <div class="post-pr-card-right">
+                        <span class="post-pr-value" id="postPrValue">500 lbs</span>
+                        <span class="post-pr-badge">&#8599; New PR</span>
+                    </div>
+                </div>
+                <button class="post-pr-remove" id="postPrRemove">&times;</button>
+            </div>
+
+            <!-- Bottom Toolbar -->
+            <div class="post-toolbar">
+                <div class="post-toolbar-actions">
+                    <button class="post-toolbar-btn" id="addMediaBtn" title="Add photo">&#128247;</button>
+                    <button class="post-toolbar-btn" id="addPollBtn" title="Create poll">&#128202;</button>
+                    <button class="post-toolbar-btn" id="addLinkBtn" title="Add link">&#128279;</button>
+                    <button class="post-toolbar-btn" id="addTagBtn" title="Add hashtag">#</button>
+                    <button class="post-toolbar-btn" id="addPrBtn" title="Log Personal Record">&#128170;</button>
+                    <button class="post-toolbar-btn" id="addEmojiBtn" title="Add emoji">&#128578;</button>
+                </div>
+                <button class="post-submit-btn" id="postSubmitBtn">Post</button>
+            </div>
+        </div>
+        <input type="file" id="postMediaInput" accept="image/*">
+    </div>
+
+    <!-- Link Input Modal -->
+    <div class="link-input-overlay" id="linkInputOverlay">
+        <div class="link-input-modal">
+            <div class="link-input-title">Add Link</div>
+            <input type="url" class="link-input-field" id="linkInputField" placeholder="https://...">
+            <div class="link-input-buttons">
+                <button class="link-input-cancel" id="linkInputCancel">Cancel</button>
+                <button class="link-input-add" id="linkInputAdd">Add Link</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PR Modal -->
+    <div class="pr-modal-overlay" id="prModalOverlay">
+        <div class="pr-modal">
+            <div class="pr-modal-header">
+                <span class="pr-modal-title">&#128170; Log Personal Record</span>
+                <button class="pr-modal-close" id="prModalClose">&times;</button>
+            </div>
+            <div class="pr-modal-content">
+                <div class="pr-form-group">
+                    <label class="pr-label">Exercise</label>
+                    <select class="pr-select" id="prExerciseSelect">
+                        <option value="">Select exercise...</option>
+                        <option value="Bench Press">Bench Press</option>
+                        <option value="Squat">Squat</option>
+                        <option value="Deadlift">Deadlift</option>
+                        <option value="Overhead Press">Overhead Press</option>
+                        <option value="Barbell Row">Barbell Row</option>
+                        <option value="Pull-Up">Pull-Up (weighted)</option>
+                        <option value="Dip">Dip (weighted)</option>
+                        <option value="Clean & Jerk">Clean & Jerk</option>
+                        <option value="Snatch">Snatch</option>
+                        <option value="Mile Run">Mile Run</option>
+                        <option value="5K Run">5K Run</option>
+                        <option value="custom">Custom...</option>
+                    </select>
+                </div>
+                <div class="pr-form-group" id="prCustomNameGroup" style="display:none;">
+                    <label class="pr-label">Custom Exercise Name</label>
+                    <input type="text" class="pr-input" id="prCustomName" placeholder="e.g. Farmer's Walk">
+                </div>
+                <div class="pr-form-row">
+                    <div class="pr-form-group">
+                        <label class="pr-label" id="prValueLabel">Weight</label>
+                        <input type="text" class="pr-input" id="prValue" placeholder="e.g. 315">
+                    </div>
+                    <div class="pr-form-group">
+                        <label class="pr-label">Unit</label>
+                        <select class="pr-select" id="prUnit">
+                            <option value="lbs">lbs</option>
+                            <option value="kg">kg</option>
+                            <option value="min:sec">min:sec</option>
+                            <option value="reps">reps</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="pr-form-group">
+                    <label class="pr-label">Date Achieved</label>
+                    <input type="date" class="pr-input" id="prDate">
+                </div>
+                <button class="pr-submit-btn" id="prSubmitBtn">Attach to Post</button>
+            </div>
         </div>
     </div>
 
@@ -1631,6 +2583,448 @@
                         }
                     }
                 });
+            }
+
+            // ============ CREATE POST MODAL ============
+            const createPostBtn = document.getElementById('createPostBtn');
+            const postModal = document.getElementById('postModal');
+            const postModalOverlay = document.getElementById('postModalOverlay');
+            const postModalClose = document.getElementById('postModalClose');
+            const postTextarea = document.getElementById('postTextarea');
+            const postSubmitBtn = document.getElementById('postSubmitBtn');
+            const postMediaInput = document.getElementById('postMediaInput');
+            const postMediaPreview = document.getElementById('postMediaPreview');
+            const postMediaImg = document.getElementById('postMediaImg');
+            const postMediaRemove = document.getElementById('postMediaRemove');
+            const postLinkPreview = document.getElementById('postLinkPreview');
+            const postLinkUrl = document.getElementById('postLinkUrl');
+            const postLinkRemove = document.getElementById('postLinkRemove');
+            const postPollSection = document.getElementById('postPollSection');
+            const postPollOptions = document.getElementById('postPollOptions');
+            const postPollRemove = document.getElementById('postPollRemove');
+            const addPollOption = document.getElementById('addPollOption');
+            const linkInputOverlay = document.getElementById('linkInputOverlay');
+            const linkInputField = document.getElementById('linkInputField');
+            const linkInputCancel = document.getElementById('linkInputCancel');
+            const linkInputAdd = document.getElementById('linkInputAdd');
+
+            let postMediaFile = null;
+            let postLinkValue = '';
+            let replyRestriction = 'everyone';
+            let attachedPrData = null;
+
+            if (createPostBtn && postModal) {
+                // Open post modal
+                createPostBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    closeCreatePopup();
+                    postModal.classList.add('active');
+                    postModalOverlay.classList.add('active');
+                    postTextarea.focus();
+                });
+
+                // Close post modal
+                postModalClose.addEventListener('click', function() {
+                    closePostModal();
+                });
+
+                // Close on overlay click
+                postModalOverlay.addEventListener('click', function() {
+                    closePostModal();
+                });
+
+                function closePostModal() {
+                    postModal.classList.remove('active');
+                    postModalOverlay.classList.remove('active');
+                    resetPostForm();
+                }
+
+                function resetPostForm() {
+                    postTextarea.value = '';
+                    postMediaFile = null;
+                    postLinkValue = '';
+                    attachedPrData = null;
+                    postMediaPreview.classList.remove('has-media');
+                    postMediaImg.src = '';
+                    postLinkPreview.classList.remove('has-link');
+                    postLinkUrl.textContent = '';
+                    postPollSection.classList.remove('active');
+                    postPollOptions.innerHTML = `
+                        <input type="text" class="post-poll-option-input" placeholder="Option 1" maxlength="100">
+                        <input type="text" class="post-poll-option-input" placeholder="Option 2" maxlength="100">
+                    `;
+                    // Reset PR preview
+                    const prPreview = document.getElementById('postPrPreview');
+                    if (prPreview) prPreview.classList.remove('has-pr');
+                    const prBtn = document.getElementById('addPrBtn');
+                    if (prBtn) prBtn.classList.remove('active');
+                    updatePostButton();
+                }
+
+                // Update post button state
+                function updatePostButton() {
+                    const hasText = postTextarea.value.trim().length > 0;
+                    const hasMedia = postMediaFile !== null;
+                    const hasPoll = postPollSection.classList.contains('active');
+                    const hasPr = attachedPrData !== null;
+
+                    if (hasText || hasMedia || hasPoll || hasPr) {
+                        postSubmitBtn.classList.add('enabled');
+                    } else {
+                        postSubmitBtn.classList.remove('enabled');
+                    }
+                }
+
+                postTextarea.addEventListener('input', updatePostButton);
+
+                // Add media button
+                document.getElementById('addMediaBtn').addEventListener('click', function() {
+                    postMediaInput.click();
+                });
+
+                postMediaInput.addEventListener('change', function(e) {
+                    const file = e.target.files[0];
+                    if (file) {
+                        postMediaFile = file;
+                        const reader = new FileReader();
+                        reader.onload = function(event) {
+                            postMediaImg.src = event.target.result;
+                            postMediaPreview.classList.add('has-media');
+                            updatePostButton();
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                });
+
+                postMediaRemove.addEventListener('click', function() {
+                    postMediaFile = null;
+                    postMediaInput.value = '';
+                    postMediaPreview.classList.remove('has-media');
+                    postMediaImg.src = '';
+                    updatePostButton();
+                });
+
+                // Add link button
+                document.getElementById('addLinkBtn').addEventListener('click', function() {
+                    linkInputOverlay.classList.add('active');
+                    linkInputField.focus();
+                });
+
+                linkInputCancel.addEventListener('click', function() {
+                    linkInputOverlay.classList.remove('active');
+                    linkInputField.value = '';
+                });
+
+                linkInputAdd.addEventListener('click', function() {
+                    const url = linkInputField.value.trim();
+                    if (url) {
+                        postLinkValue = url;
+                        postLinkUrl.textContent = url;
+                        postLinkPreview.classList.add('has-link');
+                    }
+                    linkInputOverlay.classList.remove('active');
+                    linkInputField.value = '';
+                    updatePostButton();
+                });
+
+                linkInputField.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        linkInputAdd.click();
+                    }
+                });
+
+                postLinkRemove.addEventListener('click', function() {
+                    postLinkValue = '';
+                    postLinkUrl.textContent = '';
+                    postLinkPreview.classList.remove('has-link');
+                });
+
+                // Add poll button
+                document.getElementById('addPollBtn').addEventListener('click', function() {
+                    postPollSection.classList.toggle('active');
+                    this.classList.toggle('active');
+                    updatePostButton();
+                });
+
+                postPollRemove.addEventListener('click', function() {
+                    postPollSection.classList.remove('active');
+                    document.getElementById('addPollBtn').classList.remove('active');
+                    updatePostButton();
+                });
+
+                addPollOption.addEventListener('click', function() {
+                    const inputs = postPollOptions.querySelectorAll('input');
+                    if (inputs.length < 4) {
+                        const newInput = document.createElement('input');
+                        newInput.type = 'text';
+                        newInput.className = 'post-poll-option-input';
+                        newInput.placeholder = `Option ${inputs.length + 1}`;
+                        newInput.maxLength = 100;
+                        postPollOptions.appendChild(newInput);
+                    }
+                    if (postPollOptions.querySelectorAll('input').length >= 4) {
+                        addPollOption.style.display = 'none';
+                    }
+                });
+
+                // Reply restriction
+                const replyRestrictionBtn = document.getElementById('replyRestrictionBtn');
+                const replyRestrictionText = document.getElementById('replyRestrictionText');
+                const replyOptions = ['everyone', 'friends', 'mentions'];
+                const replyLabels = {
+                    'everyone': 'Everyone can reply',
+                    'friends': 'Only friends can reply',
+                    'mentions': 'Only people you mention can reply'
+                };
+
+                replyRestrictionBtn.addEventListener('click', function() {
+                    const currentIndex = replyOptions.indexOf(replyRestriction);
+                    const nextIndex = (currentIndex + 1) % replyOptions.length;
+                    replyRestriction = replyOptions[nextIndex];
+                    replyRestrictionText.textContent = replyLabels[replyRestriction];
+                });
+
+                // Submit post
+                postSubmitBtn.addEventListener('click', function() {
+                    if (!postSubmitBtn.classList.contains('enabled')) return;
+
+                    const text = postTextarea.value.trim();
+                    const hasPoll = postPollSection.classList.contains('active');
+
+                    // Get poll data
+                    let pollQuestion = '';
+                    let pollOptions = [];
+                    if (hasPoll) {
+                        pollQuestion = text; // Use post text as poll question
+                        const inputs = postPollOptions.querySelectorAll('input');
+                        inputs.forEach(input => {
+                            if (input.value.trim()) {
+                                pollOptions.push(input.value.trim());
+                            }
+                        });
+
+                        if (pollOptions.length < 2) {
+                            alert('Poll needs at least 2 options');
+                            return;
+                        }
+                    }
+
+                    postSubmitBtn.textContent = 'Posting...';
+                    postSubmitBtn.classList.remove('enabled');
+
+                    const formData = new FormData();
+                    formData.append('text', text);
+                    formData.append('visibility', 'main');
+                    formData.append('reply_restriction', replyRestriction);
+
+                    if (postLinkValue) {
+                        formData.append('link_url', postLinkValue);
+                    }
+
+                    if (postMediaFile) {
+                        formData.append('photo', postMediaFile);
+                    }
+
+                    if (hasPoll && pollQuestion) {
+                        formData.append('poll_question', pollQuestion);
+                        pollOptions.forEach(opt => {
+                            formData.append('poll_options[]', opt);
+                        });
+                        formData.append('poll_duration', document.getElementById('pollDuration').value);
+                    }
+
+                    // Add PR data if attached
+                    if (attachedPrData) {
+                        formData.append('pr_exercise_name', attachedPrData.exercise_name);
+                        formData.append('pr_value', attachedPrData.value);
+                        formData.append('pr_unit', attachedPrData.unit);
+                        formData.append('pr_achieved_date', attachedPrData.achieved_date);
+                    }
+
+                    const csrfToken = document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
+
+                    fetch('/social/post/create/', {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-CSRFToken': csrfToken
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            closePostModal();
+                            window.location.href = '/';
+                        } else {
+                            alert(data.error || 'Failed to create post');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Failed to create post. Please try again.');
+                    })
+                    .finally(() => {
+                        postSubmitBtn.textContent = 'Post';
+                        updatePostButton();
+                    });
+                });
+
+                // Emoji picker (simple implementation - just insert common emojis)
+                document.getElementById('addEmojiBtn').addEventListener('click', function() {
+                    const emojis = ['💪', '🔥', '🏋️', '🎯', '✨', '👏', '🙌', '💯'];
+                    const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+                    postTextarea.value += randomEmoji;
+                    postTextarea.focus();
+                    updatePostButton();
+                });
+
+                // Tag button - insert hashtag
+                document.getElementById('addTagBtn').addEventListener('click', function() {
+                    postTextarea.value += '#';
+                    postTextarea.focus();
+                    updatePostButton();
+                });
+
+                // ============ PR MODAL ============
+                const prModalOverlay = document.getElementById('prModalOverlay');
+                const prModalClose = document.getElementById('prModalClose');
+                const prSubmitBtn = document.getElementById('prSubmitBtn');
+                const addPrBtn = document.getElementById('addPrBtn');
+                const postPrPreview = document.getElementById('postPrPreview');
+                const postPrRemove = document.getElementById('postPrRemove');
+                const prExerciseSelect = document.getElementById('prExerciseSelect');
+                const prCustomNameGroup = document.getElementById('prCustomNameGroup');
+                const prValueLabel = document.getElementById('prValueLabel');
+
+                // Set default date to today
+                const prDateInput = document.getElementById('prDate');
+                if (prDateInput) {
+                    prDateInput.valueAsDate = new Date();
+                }
+
+                // Handle exercise select change
+                if (prExerciseSelect) {
+                    prExerciseSelect.addEventListener('change', function() {
+                        const val = this.value;
+                        // Show/hide custom name input
+                        if (val === 'custom') {
+                            prCustomNameGroup.style.display = 'block';
+                        } else {
+                            prCustomNameGroup.style.display = 'none';
+                        }
+                        // Update value label based on exercise type
+                        if (val === 'Mile Run' || val === '5K Run') {
+                            prValueLabel.textContent = 'Time';
+                            document.getElementById('prUnit').value = 'min:sec';
+                        } else if (val === 'Pull-Up' || val === 'Dip') {
+                            prValueLabel.textContent = 'Added Weight';
+                            document.getElementById('prUnit').value = 'lbs';
+                        } else {
+                            prValueLabel.textContent = 'Weight';
+                            document.getElementById('prUnit').value = 'lbs';
+                        }
+                    });
+                }
+
+                // Open PR modal
+                if (addPrBtn) {
+                    addPrBtn.addEventListener('click', function() {
+                        prModalOverlay.classList.add('active');
+                    });
+                }
+
+                // Close PR modal
+                if (prModalClose) {
+                    prModalClose.addEventListener('click', function() {
+                        closePrModal();
+                    });
+                }
+
+                // Close on overlay click
+                if (prModalOverlay) {
+                    prModalOverlay.addEventListener('click', function(e) {
+                        if (e.target === prModalOverlay) {
+                            closePrModal();
+                        }
+                    });
+                }
+
+                function closePrModal() {
+                    prModalOverlay.classList.remove('active');
+                }
+
+                function resetPrForm() {
+                    document.getElementById('prExerciseSelect').value = '';
+                    document.getElementById('prCustomName').value = '';
+                    document.getElementById('prCustomNameGroup').style.display = 'none';
+                    document.getElementById('prValue').value = '';
+                    document.getElementById('prUnit').value = 'lbs';
+                    document.getElementById('prValueLabel').textContent = 'Weight';
+                    document.getElementById('prDate').valueAsDate = new Date();
+                }
+
+                // Attach PR to post
+                if (prSubmitBtn) {
+                    prSubmitBtn.addEventListener('click', function() {
+                        const exerciseSelectValue = document.getElementById('prExerciseSelect').value;
+                        let exerciseName = exerciseSelectValue;
+
+                        // Handle custom exercise name
+                        if (exerciseSelectValue === 'custom') {
+                            exerciseName = document.getElementById('prCustomName').value.trim();
+                        }
+
+                        const prValue = document.getElementById('prValue').value.trim();
+                        const prUnit = document.getElementById('prUnit').value;
+                        const prDate = document.getElementById('prDate').value;
+
+                        if (!exerciseName) {
+                            alert('Please select or enter an exercise name');
+                            return;
+                        }
+
+                        if (!prValue) {
+                            alert('Please enter a value');
+                            return;
+                        }
+
+                        if (!prDate) {
+                            alert('Please select a date');
+                            return;
+                        }
+
+                        // Store PR data
+                        attachedPrData = {
+                            exercise_name: exerciseName,
+                            value: prValue,
+                            unit: prUnit,
+                            achieved_date: prDate
+                        };
+
+                        // Update preview
+                        document.getElementById('postPrExercise').textContent = exerciseName;
+                        document.getElementById('postPrValue').textContent = `${prValue} ${prUnit}`;
+                        postPrPreview.classList.add('has-pr');
+
+                        // Close modal and update post button
+                        closePrModal();
+                        resetPrForm();
+                        updatePostButton();
+
+                        // Mark PR button as active
+                        addPrBtn.classList.add('active');
+                    });
+                }
+
+                // Remove PR from post
+                if (postPrRemove) {
+                    postPrRemove.addEventListener('click', function() {
+                        attachedPrData = null;
+                        postPrPreview.classList.remove('has-pr');
+                        addPrBtn.classList.remove('active');
+                        updatePostButton();
+                    });
+                }
             }
         });
     </script>

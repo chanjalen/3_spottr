@@ -44,4 +44,7 @@ urlpatterns = [
 
     # Add workout to templates
     path('<str:workout_id>/add-to-templates/', views.add_workout_to_templates_view, name='add_to_templates'),
+
+    # Personal records
+    path('personal-record/create/', views.create_personal_record_view, name='create_personal_record'),
 ]

@@ -1,12 +1,12 @@
 import json
-from datetime import timedelta
+from datetime import timedelta, date
 from django.shortcuts import render, get_object_or_404
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST, require_GET
 from django.utils import timezone
 
-from .models import Workout, Exercise, ExerciseCatalog, ExerciseSet
+from .models import Workout, Exercise, ExerciseCatalog, ExerciseSet, PersonalRecord
 from social.models import Post
 
 
@@ -653,4 +653,75 @@ def add_workout_to_templates_view(request, workout_id):
         'success': True,
         'template_id': str(template.id),
         'template_name': template.name,
+    })
+
+
+@login_required
+@require_POST
+def create_personal_record_view(request):
+    """
+    Create a new personal record.
+    Optionally creates a post to share to the feed.
+    """
+    # Handle form data (for file uploads)
+    exercise_name = request.POST.get('exercise_name', '').strip()
+    value = request.POST.get('value', '').strip()
+    unit = request.POST.get('unit', 'lbs')
+    achieved_date_str = request.POST.get('achieved_date', '')
+    post_to_feed = request.POST.get('post_to_feed', 'true').lower() == 'true'
+    video = request.FILES.get('video')
+
+    # Validation
+    if not exercise_name:
+        return JsonResponse({
+            'success': False,
+            'error': 'Exercise name is required'
+        }, status=400)
+
+    if not value:
+        return JsonResponse({
+            'success': False,
+            'error': 'Value is required'
+        }, status=400)
+
+    # Parse date
+    if achieved_date_str:
+        try:
+            achieved_date = date.fromisoformat(achieved_date_str)
+        except ValueError:
+            achieved_date = date.today()
+    else:
+        achieved_date = date.today()
+
+    post = None
+
+    # Create post first if sharing to feed
+    if post_to_feed:
+        description = f"New PR! {exercise_name}: {value} {unit}"
+        post = Post.objects.create(
+            user=request.user,
+            description=description,
+            visibility='main',
+        )
+
+    # Create the personal record
+    pr = PersonalRecord.objects.create(
+        user=request.user,
+        post=post,
+        exercise_name=exercise_name,
+        value=value,
+        unit=unit,
+        achieved_date=achieved_date,
+    )
+
+    # Save video if provided
+    if video:
+        pr.video = video
+        pr.save()
+
+    return JsonResponse({
+        'success': True,
+        'pr_id': str(pr.id),
+        'post_id': str(post.id) if post else None,
+        'message': 'Personal Record saved!'
     })

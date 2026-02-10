@@ -7,8 +7,11 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST, require_GET
 from django.conf import settings
 
-from .models import QuickWorkout, Post, Comment, Reaction
+from .models import QuickWorkout, Post, Comment, Reaction, Poll, PollOption, PollVote
 from gyms.models import Gym
+from workouts.models import PersonalRecord
+from django.utils import timezone
+from datetime import timedelta, date
 
 
 def feed_view(request):
@@ -65,10 +68,45 @@ def feed_view(request):
             'description': post.description,
             'created_at': post.created_at,
             'photo_url': post.photo.url if post.photo else None,
+            'link_url': post.link_url,
             'like_count': like_count,
             'comment_count': comment_count,
             'user_liked': user_liked,
         }
+
+        # Check for poll
+        try:
+            poll = post.poll
+            user_voted = False
+            user_vote_option = None
+            if request.user.is_authenticated:
+                vote = PollVote.objects.filter(poll=poll, user=request.user).first()
+                if vote:
+                    user_voted = True
+                    user_vote_option = str(vote.option.id)
+
+            total_votes = poll.get_total_votes()
+            poll_options = []
+            for opt in poll.options.all():
+                percentage = round((opt.votes / total_votes * 100) if total_votes > 0 else 0)
+                poll_options.append({
+                    'id': str(opt.id),
+                    'text': opt.text,
+                    'votes': opt.votes,
+                    'percentage': percentage,
+                })
+
+            post_data['poll'] = {
+                'id': str(poll.id),
+                'question': poll.question,
+                'options': poll_options,
+                'total_votes': total_votes,
+                'is_active': poll.is_active,
+                'user_voted': user_voted,
+                'user_vote_option': user_vote_option,
+            }
+        except Poll.DoesNotExist:
+            post_data['poll'] = None
 
         # Add workout details if this is a workout post
         if post.workout:
@@ -98,6 +136,16 @@ def feed_view(request):
                 'exercise_count': exercise_count,
                 'total_sets': total_sets,
                 'exercises': [e.name for e in exercises[:3]],
+            }
+
+        # Check for personal records attached to this post
+        pr = PersonalRecord.objects.filter(post=post).first()
+        if pr:
+            post_data['personal_record'] = {
+                'id': str(pr.id),
+                'exercise_name': pr.exercise_name,
+                'value': pr.value,
+                'unit': pr.unit,
             }
 
         feed_items.append(post_data)
@@ -346,11 +394,12 @@ def toggle_like_comment_view(request, comment_id):
 @require_GET
 def get_comments_view(request, post_id):
     """
-    Get all comments for a post.
+    Get all top-level comments for a post (excluding replies).
     """
     post = get_object_or_404(Post, id=post_id)
 
-    comments = Comment.objects.filter(post=post).select_related('user').order_by('created_at')
+    # Only get top-level comments (not replies)
+    comments = Comment.objects.filter(post=post, parent_comment__isnull=True).select_related('user').order_by('created_at')
 
     comments_data = []
     for comment in comments:
@@ -371,6 +420,7 @@ def get_comments_view(request, post_id):
             'like_count': like_count,
             'user_liked': user_liked,
             'is_owner': comment.user == request.user,
+            'reply_count': comment.reply_count,
         })
 
     return JsonResponse({
@@ -384,11 +434,12 @@ def get_comments_view(request, post_id):
 @require_GET
 def get_checkin_comments_view(request, checkin_id):
     """
-    Get all comments for a check-in (quick workout).
+    Get all top-level comments for a check-in (quick workout).
     """
     checkin = get_object_or_404(QuickWorkout, id=checkin_id)
 
-    comments = Comment.objects.filter(quick_workout=checkin).select_related('user').order_by('created_at')
+    # Only get top-level comments (not replies)
+    comments = Comment.objects.filter(quick_workout=checkin, parent_comment__isnull=True).select_related('user').order_by('created_at')
 
     comments_data = []
     for comment in comments:
@@ -409,6 +460,7 @@ def get_checkin_comments_view(request, checkin_id):
             'like_count': like_count,
             'user_liked': user_liked,
             'is_owner': comment.user == request.user,
+            'reply_count': comment.reply_count,
         })
 
     return JsonResponse({
@@ -492,6 +544,7 @@ def add_comment_view(request, post_id):
             'like_count': 0,
             'user_liked': False,
             'is_owner': True,
+            'reply_count': 0,
         }
     })
 
@@ -548,6 +601,7 @@ def add_checkin_comment_view(request, checkin_id):
             'like_count': 0,
             'user_liked': False,
             'is_owner': True,
+            'reply_count': 0,
         }
     })
 
@@ -569,3 +623,313 @@ def delete_comment_view(request, comment_id):
     comment.delete()
 
     return JsonResponse({'success': True})
+
+
+@login_required
+@require_GET
+def get_comment_replies_view(request, comment_id):
+    """
+    Get all replies to a comment.
+    """
+    comment = get_object_or_404(Comment, id=comment_id)
+
+    replies = Comment.objects.filter(parent_comment=comment).select_related('user').order_by('created_at')
+
+    replies_data = []
+    for reply in replies:
+        like_count = Reaction.objects.filter(comment=reply).count()
+        user_liked = Reaction.objects.filter(comment=reply, user=request.user).exists()
+
+        replies_data.append({
+            'id': str(reply.id),
+            'user': {
+                'id': str(reply.user.id),
+                'display_name': reply.user.display_name,
+                'username': reply.user.username,
+                'avatar_url': reply.user.avatar.url if reply.user.avatar else None,
+            },
+            'text': reply.description,
+            'created_at': reply.created_at.isoformat(),
+            'time_ago': get_time_ago(reply.created_at),
+            'like_count': like_count,
+            'user_liked': user_liked,
+            'is_owner': reply.user == request.user,
+            'reply_count': reply.reply_count,
+        })
+
+    return JsonResponse({
+        'success': True,
+        'replies': replies_data,
+        'count': len(replies_data),
+    })
+
+
+@login_required
+@require_POST
+def add_comment_reply_view(request, comment_id):
+    """
+    Add a reply to a comment. Max 15 replies per user per parent comment.
+    """
+    parent_comment = get_object_or_404(Comment, id=comment_id)
+
+    data = json.loads(request.body)
+    text = data.get('text', '').strip()
+
+    if not text:
+        return JsonResponse({
+            'success': False,
+            'error': 'Reply text is required'
+        }, status=400)
+
+    if len(text) > 500:
+        return JsonResponse({
+            'success': False,
+            'error': 'Reply is too long (max 500 characters)'
+        }, status=400)
+
+    # Check user's reply count on this comment
+    user_reply_count = Comment.objects.filter(parent_comment=parent_comment, user=request.user).count()
+    if user_reply_count >= 15:
+        return JsonResponse({
+            'success': False,
+            'error': 'You have reached the maximum number of replies (15) on this comment'
+        }, status=400)
+
+    # Create the reply
+    reply = Comment.objects.create(
+        parent_comment=parent_comment,
+        user=request.user,
+        description=text,
+    )
+
+    return JsonResponse({
+        'success': True,
+        'reply': {
+            'id': str(reply.id),
+            'user': {
+                'id': str(request.user.id),
+                'display_name': request.user.display_name,
+                'username': request.user.username,
+                'avatar_url': request.user.avatar.url if request.user.avatar else None,
+            },
+            'text': reply.description,
+            'created_at': reply.created_at.isoformat(),
+            'time_ago': 'just now',
+            'like_count': 0,
+            'user_liked': False,
+            'is_owner': True,
+            'reply_count': 0,
+        }
+    })
+
+
+@login_required
+@require_POST
+def create_post_view(request):
+    """
+    Create a new text/media post.
+    Supports text, photo, link URL, tags (via hashtags in text), polls, and PRs.
+    """
+    # Handle both JSON and form data (for file uploads)
+    content_type = request.content_type or ''
+
+    if 'multipart/form-data' in content_type:
+        text = request.POST.get('text', '').strip()
+        link_url = request.POST.get('link_url', '').strip() or None
+        visibility = request.POST.get('visibility', 'main')
+        reply_restriction = request.POST.get('reply_restriction', 'everyone')
+        photo = request.FILES.get('photo')
+
+        # Poll data
+        poll_question = request.POST.get('poll_question', '').strip()
+        poll_options = request.POST.getlist('poll_options[]')
+        poll_duration = int(request.POST.get('poll_duration', 24))
+
+        # PR data
+        pr_exercise_name = request.POST.get('pr_exercise_name', '').strip()
+        pr_value = request.POST.get('pr_value', '').strip()
+        pr_unit = request.POST.get('pr_unit', 'lbs')
+        pr_achieved_date = request.POST.get('pr_achieved_date', '')
+    else:
+        data = json.loads(request.body) if request.body else {}
+        text = data.get('text', '').strip()
+        link_url = data.get('link_url', '').strip() or None
+        visibility = data.get('visibility', 'main')
+        reply_restriction = data.get('reply_restriction', 'everyone')
+        photo = None
+
+        # Poll data
+        poll_question = data.get('poll_question', '').strip()
+        poll_options = data.get('poll_options', [])
+        poll_duration = int(data.get('poll_duration', 24))
+
+        # PR data
+        pr_exercise_name = data.get('pr_exercise_name', '').strip()
+        pr_value = data.get('pr_value', '').strip()
+        pr_unit = data.get('pr_unit', 'lbs')
+        pr_achieved_date = data.get('pr_achieved_date', '')
+
+    # Check if has PR
+    has_pr = bool(pr_exercise_name and pr_value)
+
+    # Validation
+    if not text and not photo and not poll_question and not has_pr:
+        return JsonResponse({
+            'success': False,
+            'error': 'Post must have text, photo, poll, or a personal record'
+        }, status=400)
+
+    if len(text) > 500:
+        return JsonResponse({
+            'success': False,
+            'error': 'Post text cannot exceed 500 characters'
+        }, status=400)
+
+    # Create the post
+    post = Post.objects.create(
+        user=request.user,
+        description=text,
+        link_url=link_url,
+        visibility=visibility,
+        reply_restriction=reply_restriction,
+    )
+
+    # Save photo if provided
+    if photo:
+        post.photo = photo
+        post.save()
+
+    # Create poll if provided
+    if poll_question and len(poll_options) >= 2:
+        poll = Poll.objects.create(
+            post=post,
+            question=poll_question,
+            duration_hours=poll_duration,
+            ends_at=timezone.now() + timedelta(hours=poll_duration),
+        )
+
+        for idx, option_text in enumerate(poll_options):
+            if option_text.strip():
+                PollOption.objects.create(
+                    poll=poll,
+                    text=option_text.strip(),
+                    order=idx,
+                )
+
+    # Create PR if provided
+    if has_pr:
+        # Parse date
+        if pr_achieved_date:
+            try:
+                achieved_date = date.fromisoformat(pr_achieved_date)
+            except ValueError:
+                achieved_date = date.today()
+        else:
+            achieved_date = date.today()
+
+        # Check if there's an existing PR for this exercise
+        existing_pr = PersonalRecord.objects.filter(
+            user=request.user,
+            exercise_name__iexact=pr_exercise_name
+        ).first()
+
+        if existing_pr:
+            # Compare and only update if new value is better
+            from accounts.views import is_new_pr_better
+            if is_new_pr_better(pr_value, pr_unit, existing_pr.value, existing_pr.unit):
+                # Update existing PR with new value and link to this post
+                existing_pr.value = pr_value
+                existing_pr.unit = pr_unit
+                existing_pr.achieved_date = achieved_date
+                existing_pr.post = post
+                existing_pr.save()
+        else:
+            # Create new PR
+            PersonalRecord.objects.create(
+                user=request.user,
+                post=post,
+                exercise_name=pr_exercise_name,
+                value=pr_value,
+                unit=pr_unit,
+                achieved_date=achieved_date,
+            )
+
+    return JsonResponse({
+        'success': True,
+        'post_id': str(post.id),
+        'message': 'Post created successfully!'
+    })
+
+
+@login_required
+@require_POST
+def vote_poll_view(request, poll_id):
+    """
+    Vote on a poll option.
+    If user has already voted, allows changing their vote.
+    """
+    poll = get_object_or_404(Poll, id=poll_id)
+
+    # Check if poll is still active
+    if not poll.is_active:
+        return JsonResponse({
+            'success': False,
+            'error': 'This poll has ended'
+        }, status=400)
+
+    data = json.loads(request.body)
+    option_id = data.get('option_id')
+
+    option = get_object_or_404(PollOption, id=option_id, poll=poll)
+
+    # Check if user already voted
+    existing_vote = PollVote.objects.filter(poll=poll, user=request.user).first()
+
+    if existing_vote:
+        # User is changing their vote
+        if str(existing_vote.option.id) == str(option_id):
+            # Same option selected - no change needed
+            pass
+        else:
+            # Different option - decrement old, increment new
+            old_option = existing_vote.option
+            old_option.votes = max(0, old_option.votes - 1)
+            old_option.save()
+
+            # Update vote to new option
+            existing_vote.option = option
+            existing_vote.save()
+
+            # Increment new option
+            option.votes += 1
+            option.save()
+    else:
+        # New vote
+        PollVote.objects.create(
+            poll=poll,
+            user=request.user,
+            option=option,
+        )
+
+        # Increment vote count
+        option.votes += 1
+        option.save()
+
+    # Get updated results
+    total_votes = poll.get_total_votes()
+    results = []
+    for opt in poll.options.all():
+        percentage = round((opt.votes / total_votes * 100) if total_votes > 0 else 0)
+        results.append({
+            'id': str(opt.id),
+            'text': opt.text,
+            'votes': opt.votes,
+            'percentage': percentage,
+        })
+
+    return JsonResponse({
+        'success': True,
+        'total_votes': total_votes,
+        'results': results,
+        'voted_option': str(option.id),
+    })
