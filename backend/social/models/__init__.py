@@ -1,4 +1,4 @@
-from .post import Post
+from .post import Post, Poll, PollOption, PollVote
 from .quick_workout import QuickWorkout
 from .comment import Comment
 from .reaction import Reaction

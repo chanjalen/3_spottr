@@ -27,4 +27,14 @@ urlpatterns = [
 
     # Delete comment
     path('comment/<str:comment_id>/delete/', views.delete_comment_view, name='delete_comment'),
+
+    # Comment replies
+    path('comment/<str:comment_id>/replies/', views.get_comment_replies_view, name='get_comment_replies'),
+    path('comment/<str:comment_id>/replies/add/', views.add_comment_reply_view, name='add_comment_reply'),
+
+    # Create post
+    path('post/create/', views.create_post_view, name='create_post'),
+
+    # Poll voting
+    path('poll/<str:poll_id>/vote/', views.vote_poll_view, name='vote_poll'),
 ]
