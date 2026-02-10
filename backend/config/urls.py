@@ -4,16 +4,15 @@ from django.contrib import admin
 from django.shortcuts import render
 from django.urls import include, path
 
-
-def home(request):
-    return render(request, 'gyms/home.html')
+from social.views import feed_view
 
 
 urlpatterns = [
-    path("", home, name="home"),
+    path("", feed_view, name="home"),
     path("admin/", admin.site.urls),
     path("accounts/", include("accounts.urls")),
     path("gyms/", include("gyms.urls")),
+    path("social/", include("social.urls")),
 ]
 
 # Serve media files in development
