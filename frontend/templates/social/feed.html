@@ -1,0 +1,353 @@
+{% extends 'gyms/base.html' %}
+
+{% block title %}Spottr - Feed{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* ============ FEED TABS ============ */
+    .feed-tabs {
+        display: flex;
+        justify-content: center;
+        gap: 24px;
+        padding: 16px 0;
+        border-bottom: 1px solid var(--border-subtle);
+        margin-bottom: 20px;
+    }
+
+    .feed-tab {
+        font-size: 15px;
+        font-weight: 500;
+        color: var(--text-muted);
+        text-decoration: none;
+        padding: 8px 4px;
+        position: relative;
+        transition: color var(--duration) var(--ease-out);
+    }
+
+    .feed-tab:hover {
+        color: var(--text-secondary);
+    }
+
+    .feed-tab.active {
+        color: var(--text-primary);
+        font-weight: 600;
+    }
+
+    .feed-tab.active::after {
+        content: '';
+        position: absolute;
+        bottom: -1px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: linear-gradient(90deg, var(--brand-purple), var(--brand-blue));
+        border-radius: 1px;
+    }
+
+    .feed-search {
+        display: flex;
+        justify-content: flex-end;
+        margin-bottom: 16px;
+    }
+
+    .feed-search-btn {
+        width: 40px;
+        height: 40px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all var(--duration) var(--ease-out);
+    }
+
+    .feed-search-btn:hover {
+        border-color: var(--border-hover);
+        box-shadow: var(--shadow-glow);
+    }
+
+    /* ============ FEED CARDS ============ */
+    .feed-list {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .feed-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+        animation: fadeIn 0.4s var(--ease-out) both;
+    }
+
+    .feed-card-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px;
+    }
+
+    .feed-avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        overflow: hidden;
+        background: var(--bg-elevated);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .feed-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .feed-avatar-letter {
+        font-size: 18px;
+        font-weight: 700;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .feed-user-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .feed-user-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 2px;
+    }
+
+    .feed-username {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .feed-streak {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        background: var(--bg-elevated);
+        padding: 2px 8px;
+        border-radius: var(--radius-pill);
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+
+    .feed-meta {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--text-muted);
+    }
+
+    .feed-meta-dot {
+        width: 3px;
+        height: 3px;
+        background: var(--text-muted);
+        border-radius: 50%;
+    }
+
+    .feed-location {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    /* ============ FEED CARD IMAGE ============ */
+    .feed-card-image {
+        width: 100%;
+        aspect-ratio: 4/3;
+        background: var(--bg-elevated);
+        position: relative;
+    }
+
+    .feed-card-image img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .feed-card-image-placeholder {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 48px;
+        opacity: 0.3;
+    }
+
+    /* ============ FEED CARD BODY ============ */
+    .feed-card-body {
+        padding: 16px;
+    }
+
+    .feed-workout-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: var(--brand-purple-muted);
+        color: var(--text-brand);
+        padding: 6px 12px;
+        border-radius: var(--radius-pill);
+        font-size: 13px;
+        font-weight: 500;
+        margin-bottom: 8px;
+    }
+
+    .feed-description {
+        font-size: 14px;
+        color: var(--text-secondary);
+        line-height: 1.5;
+    }
+
+    /* ============ FEED CARD ACTIONS ============ */
+    .feed-card-actions {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 12px 16px;
+        border-top: 1px solid var(--border-subtle);
+    }
+
+    .feed-action {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        font-size: 14px;
+        cursor: pointer;
+        padding: 4px;
+        transition: color var(--duration) var(--ease-out);
+    }
+
+    .feed-action:hover {
+        color: var(--text-secondary);
+    }
+
+    .feed-action-icon {
+        font-size: 18px;
+    }
+
+    /* ============ EMPTY STATE ============ */
+    .feed-empty {
+        text-align: center;
+        padding: 64px 24px;
+        color: var(--text-muted);
+    }
+
+    .feed-empty-icon {
+        font-size: 64px;
+        margin-bottom: 16px;
+        opacity: 0.5;
+    }
+
+    .feed-empty-text {
+        font-size: 16px;
+        margin-bottom: 8px;
+        color: var(--text-secondary);
+    }
+
+    .feed-empty-subtext {
+        font-size: 14px;
+        color: var(--text-muted);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Feed Tabs -->
+<div class="feed-tabs">
+    <a href="#" class="feed-tab active">Main</a>
+    <a href="#" class="feed-tab">Friends</a>
+</div>
+
+<!-- Search -->
+<div class="feed-search">
+    <button class="feed-search-btn">🔍</button>
+</div>
+
+<!-- Feed List -->
+<div class="feed-list">
+    {% for item in feed_items %}
+    <div class="feed-card">
+        <div class="feed-card-header">
+            <div class="feed-avatar">
+                {% if item.user.avatar %}
+                <img src="{{ item.user.avatar.url }}" alt="{{ item.user.display_name }}">
+                {% else %}
+                <span class="feed-avatar-letter">{{ item.user.display_name|make_list|first|upper }}</span>
+                {% endif %}
+            </div>
+            <div class="feed-user-info">
+                <div class="feed-user-row">
+                    <span class="feed-username">{{ item.user.display_name }}</span>
+                    <span class="feed-streak">🔥 {{ item.user.current_streak }}</span>
+                </div>
+                <div class="feed-meta">
+                    <span>{{ item.created_at|timesince }} ago</span>
+                    {% if item.location_name %}
+                    <span class="feed-meta-dot"></span>
+                    <span class="feed-location">📍 {{ item.location_name }}</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% if item.photo_url %}
+        <div class="feed-card-image">
+            <img src="{{ item.photo_url }}" alt="Workout photo">
+        </div>
+        {% endif %}
+
+        <div class="feed-card-body">
+            {% if item.type == 'checkin' and item.workout_type %}
+            <div class="feed-workout-tag">
+                💪 {{ item.workout_type }}
+            </div>
+            {% endif %}
+            {% if item.description %}
+            <p class="feed-description">{{ item.description }}</p>
+            {% endif %}
+        </div>
+
+        <div class="feed-card-actions">
+            <button class="feed-action">
+                <span class="feed-action-icon">❤️</span>
+                <span>0</span>
+            </button>
+            <button class="feed-action">
+                <span class="feed-action-icon">💬</span>
+                <span>0</span>
+            </button>
+            <button class="feed-action">
+                <span class="feed-action-icon">🔗</span>
+            </button>
+        </div>
+    </div>
+    {% empty %}
+    <div class="feed-empty">
+        <div class="feed-empty-icon">📱</div>
+        <p class="feed-empty-text">No posts yet</p>
+        <p class="feed-empty-subtext">Be the first to share your workout!</p>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

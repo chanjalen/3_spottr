@@ -700,6 +700,317 @@
             transform: scale(0.95);
         }
 
+        /* ============ CREATE POST POPUP ============ */
+        .popup-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            z-index: 200;
+            opacity: 0;
+            visibility: hidden;
+            transition: all var(--duration) var(--ease-out);
+        }
+
+        .popup-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .create-popup {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: #ffffff;
+            border-radius: var(--radius-2xl);
+            padding: 8px;
+            min-width: 200px;
+            z-index: 201;
+            opacity: 0;
+            visibility: hidden;
+            transition: all var(--duration) var(--ease-out);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .create-popup.active {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .popup-option {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 18px;
+            border-radius: var(--radius-lg);
+            text-decoration: none;
+            transition: all var(--duration) var(--ease-out);
+            cursor: pointer;
+        }
+
+        .popup-option:hover {
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        .popup-option-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: #fff;
+            flex-shrink: 0;
+        }
+
+        .popup-option-icon.blue {
+            background: linear-gradient(135deg, #3b82f6, #06b6d4);
+        }
+
+        .popup-option-icon.purple {
+            background: linear-gradient(135deg, #7c3aed, #a855f7);
+        }
+
+        .popup-option-icon.orange {
+            background: linear-gradient(135deg, #f97316, #fb923c);
+        }
+
+        .popup-option-text {
+            font-size: 15px;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+
+        .fab-button.active {
+            transform: rotate(45deg);
+        }
+
+        /* ============ QUICK CHECK-IN MODAL ============ */
+        .checkin-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--bg-surface);
+            z-index: 300;
+            opacity: 0;
+            visibility: hidden;
+            transition: all var(--duration) var(--ease-out);
+            overflow-y: auto;
+        }
+
+        .checkin-modal.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .checkin-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky;
+            top: 0;
+            background: var(--bg-surface);
+            z-index: 10;
+        }
+
+        .checkin-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .checkin-close {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 20px;
+            color: var(--text-secondary);
+            transition: all var(--duration) var(--ease-out);
+        }
+
+        .checkin-close:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .checkin-content {
+            padding: 20px;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .camera-container {
+            aspect-ratio: 4/5;
+            background: var(--bg-card);
+            border: 2px dashed var(--border-default);
+            border-radius: var(--radius-xl);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all var(--duration) var(--ease-out);
+            overflow: hidden;
+            position: relative;
+            margin-bottom: 24px;
+        }
+
+        .camera-container:hover {
+            border-color: var(--border-hover);
+            background: var(--bg-elevated);
+        }
+
+        .camera-container.has-photo {
+            border-style: solid;
+            border-color: var(--brand-purple);
+        }
+
+        .camera-icon {
+            font-size: 48px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .camera-text {
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        .camera-container img,
+        .camera-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .camera-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .camera-container.has-photo .camera-placeholder {
+            display: none;
+        }
+
+        .retake-btn {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            padding: 8px 16px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            border: none;
+            border-radius: var(--radius-pill);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            display: none;
+        }
+
+        .camera-container.has-photo .retake-btn {
+            display: block;
+        }
+
+        .checkin-form-group {
+            margin-bottom: 20px;
+        }
+
+        .checkin-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 10px;
+        }
+
+        .checkin-label-icon {
+            font-size: 16px;
+        }
+
+        .checkin-select {
+            width: 100%;
+            padding: 14px 18px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 15px;
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%239898a8' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 16px center;
+            transition: all var(--duration) var(--ease-out);
+        }
+
+        .checkin-select:focus {
+            outline: none;
+            border-color: var(--brand-purple);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+        }
+
+        .checkin-select option {
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+
+        .checkin-btn {
+            width: 100%;
+            padding: 16px 24px;
+            background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+            border: none;
+            border-radius: var(--radius-lg);
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--duration) var(--ease-out);
+            box-shadow: 0 4px 16px rgba(124, 58, 237, 0.3);
+            margin-top: 8px;
+        }
+
+        .checkin-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(124, 58, 237, 0.4);
+        }
+
+        .checkin-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Hidden file input */
+        #cameraInput {
+            display: none;
+        }
+
         /* ============ SPACER ============ */
         .bottom-spacer {
             height: 100px;
@@ -781,18 +1092,102 @@
         </div>
     </header>
 
+    {% if request.resolver_match.app_name == 'gyms' %}
     <nav>
         <a href="{% url 'gyms:gym_list_manual' %}" {% if request.resolver_match.url_name == 'gym_list_manual' %}class="active"{% endif %}>Manual</a>
         <a href="{% url 'gyms:gym_list_render' %}" {% if request.resolver_match.url_name == 'gym_list_render' %}class="active"{% endif %}>Render</a>
         <a href="{% url 'gyms:gym_list_cbv' %}" {% if request.resolver_match.url_name == 'gym_list_cbv' %}class="active"{% endif %}>Base CBV</a>
         <a href="{% url 'gyms:gym_list_generic' %}" {% if request.resolver_match.url_name == 'gym_list_generic' or request.resolver_match.url_name == 'gym_detail' %}class="active"{% endif %}>Generic</a>
     </nav>
+    {% endif %}
 
     <main class="main-content">
         {% block content %}{% endblock %}
     </main>
 
     <div class="bottom-spacer"></div>
+
+    <!-- Create Post Popup -->
+    <div class="popup-overlay" id="popupOverlay"></div>
+    <div class="create-popup" id="createPopup">
+        <a href="#" class="popup-option" id="quickCheckinBtn">
+            <div class="popup-option-icon blue">📍</div>
+            <span class="popup-option-text">Quick Check-in</span>
+        </a>
+        <a href="#" class="popup-option">
+            <div class="popup-option-icon purple">📝</div>
+            <span class="popup-option-text">Post</span>
+        </a>
+        <a href="#" class="popup-option">
+            <div class="popup-option-icon orange">🏋️</div>
+            <span class="popup-option-text">Log Workout</span>
+        </a>
+    </div>
+
+    <!-- Quick Check-in Modal -->
+    <div class="checkin-modal" id="checkinModal">
+        <div class="checkin-header">
+            <span class="checkin-title">Quick Check-in</span>
+            <button class="checkin-close" id="checkinClose">&times;</button>
+        </div>
+        <div class="checkin-content">
+            <form id="checkinForm">
+                {% csrf_token %}
+                <!-- Camera Area -->
+                <div class="camera-container" id="cameraContainer">
+                    <div class="camera-placeholder">
+                        <span class="camera-icon">📷</span>
+                        <span class="camera-text">Tap to take photo</span>
+                    </div>
+                    <img id="capturedPhoto" src="" alt="Captured photo">
+                    <button type="button" class="retake-btn" id="retakeBtn">Retake</button>
+                </div>
+                <input type="file" id="cameraInput" accept="image/*" capture="environment">
+
+                <!-- Gym Selection -->
+                <div class="checkin-form-group">
+                    <label class="checkin-label">
+                        <span class="checkin-label-icon">📍</span>
+                        Where are you working out?
+                    </label>
+                    <select class="checkin-select" id="gymSelect" name="gym" required>
+                        <option value="">Select gym...</option>
+                        {% for gym in all_gyms %}
+                        <option value="{{ gym.id }}">{{ gym.name }}</option>
+                        {% empty %}
+                        <option value="" disabled>No gyms available</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Activity Selection -->
+                <div class="checkin-form-group">
+                    <label class="checkin-label">
+                        <span class="checkin-label-icon">🏋️</span>
+                        What workout are you hitting?
+                    </label>
+                    <select class="checkin-select" id="activitySelect" name="activity" required>
+                        <option value="">Select activities...</option>
+                        <option value="chest">Chest</option>
+                        <option value="back">Back</option>
+                        <option value="shoulders">Shoulders</option>
+                        <option value="arms">Arms</option>
+                        <option value="legs">Legs</option>
+                        <option value="core">Core</option>
+                        <option value="cardio">Cardio</option>
+                        <option value="full_body">Full Body</option>
+                        <option value="push">Push</option>
+                        <option value="pull">Pull</option>
+                        <option value="upper_body">Upper Body</option>
+                        <option value="lower_body">Lower Body</option>
+                    </select>
+                </div>
+
+                <!-- Check-in Button -->
+                <button type="submit" class="checkin-btn" id="checkinSubmit">Check in</button>
+            </form>
+        </div>
+    </div>
 
     <nav class="bottom-nav">
         <a href="/" {% if request.resolver_match.url_name == 'home' %}class="active"{% endif %}>
@@ -803,15 +1198,22 @@
             <span class="nav-icon">📍</span>
             <span>Gyms</span>
         </a>
-        <a href="#" class="fab-button">+</a>
-        <a href="#">
-            <span class="nav-icon">🏆</span>
-            <span>Ranks</span>
-        </a>
+        <a href="#" class="fab-button" id="fabButton">+</a>
         <a href="#">
             <span class="nav-icon">👥</span>
-            <span>Groups</span>
+            <span>Social</span>
         </a>
+        {% if user.is_authenticated %}
+        <a href="{% url 'accounts:profile' %}" {% if request.resolver_match.app_name == 'accounts' %}class="active"{% endif %}>
+            <span class="nav-icon">👤</span>
+            <span>Profile</span>
+        </a>
+        {% else %}
+        <a href="{% url 'accounts:login' %}">
+            <span class="nav-icon">👤</span>
+            <span>Login</span>
+        </a>
+        {% endif %}
     </nav>
 
     {% block extra_js %}{% endblock %}
@@ -858,6 +1260,163 @@
                         noResultsMsg.style.display = 'none';
                     }
                 });
+            }
+
+            // FAB Button Popup Toggle
+            const fabButton = document.getElementById('fabButton');
+            const createPopup = document.getElementById('createPopup');
+            const popupOverlay = document.getElementById('popupOverlay');
+
+            function closeCreatePopup() {
+                fabButton.classList.remove('active');
+                createPopup.classList.remove('active');
+                popupOverlay.classList.remove('active');
+            }
+
+            if (fabButton && createPopup && popupOverlay) {
+                fabButton.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    fabButton.classList.toggle('active');
+                    createPopup.classList.toggle('active');
+                    popupOverlay.classList.toggle('active');
+                });
+
+                popupOverlay.addEventListener('click', closeCreatePopup);
+            }
+
+            // Quick Check-in Modal
+            const quickCheckinBtn = document.getElementById('quickCheckinBtn');
+            const checkinModal = document.getElementById('checkinModal');
+            const checkinClose = document.getElementById('checkinClose');
+            const cameraContainer = document.getElementById('cameraContainer');
+            const cameraInput = document.getElementById('cameraInput');
+            const capturedPhoto = document.getElementById('capturedPhoto');
+            const retakeBtn = document.getElementById('retakeBtn');
+            const checkinForm = document.getElementById('checkinForm');
+
+            if (quickCheckinBtn && checkinModal) {
+                // Open Quick Check-in modal
+                quickCheckinBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    closeCreatePopup();
+                    checkinModal.classList.add('active');
+                    // Directly open camera
+                    setTimeout(() => {
+                        cameraInput.click();
+                    }, 300);
+                });
+
+                // Close modal
+                checkinClose.addEventListener('click', function() {
+                    checkinModal.classList.remove('active');
+                    resetCheckinForm();
+                });
+
+                // Camera container click
+                cameraContainer.addEventListener('click', function() {
+                    if (!cameraContainer.classList.contains('has-photo')) {
+                        cameraInput.click();
+                    }
+                });
+
+                // Handle camera input change
+                cameraInput.addEventListener('change', function(e) {
+                    const file = e.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = function(event) {
+                            capturedPhoto.src = event.target.result;
+                            cameraContainer.classList.add('has-photo');
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                });
+
+                // Retake photo
+                retakeBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    cameraContainer.classList.remove('has-photo');
+                    capturedPhoto.src = '';
+                    cameraInput.value = '';
+                    cameraInput.click();
+                });
+
+                // Form submission
+                checkinForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+
+                    const gymSelect = document.getElementById('gymSelect');
+                    const activitySelect = document.getElementById('activitySelect');
+                    const hasPhoto = cameraContainer.classList.contains('has-photo');
+                    const submitBtn = document.getElementById('checkinSubmit');
+
+                    if (!hasPhoto) {
+                        alert('Please take a photo first!');
+                        return;
+                    }
+
+                    if (!gymSelect.value) {
+                        alert('Please select a gym!');
+                        return;
+                    }
+
+                    if (!activitySelect.value) {
+                        alert('Please select an activity!');
+                        return;
+                    }
+
+                    // Disable button while submitting
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'Posting...';
+
+                    // Get form data
+                    const formData = new FormData();
+                    formData.append('gym', gymSelect.value);
+                    formData.append('activity', activitySelect.value);
+                    if (cameraInput.files[0]) {
+                        formData.append('photo', cameraInput.files[0]);
+                    }
+
+                    // Get CSRF token
+                    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+                                      document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
+
+                    // Send to backend API
+                    fetch('/social/checkin/create/', {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-CSRFToken': csrfToken
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            checkinModal.classList.remove('active');
+                            resetCheckinForm();
+                            // Redirect to feed to see the new post
+                            window.location.href = '/';
+                        } else {
+                            alert(data.error || 'Failed to post check-in');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Failed to post check-in. Please try again.');
+                    })
+                    .finally(() => {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Check in';
+                    });
+                });
+
+                function resetCheckinForm() {
+                    cameraContainer.classList.remove('has-photo');
+                    capturedPhoto.src = '';
+                    cameraInput.value = '';
+                    document.getElementById('gymSelect').value = '';
+                    document.getElementById('activitySelect').value = '';
+                }
             }
         });
     </script>

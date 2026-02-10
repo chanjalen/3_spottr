@@ -262,6 +262,32 @@
         font-size: 32px;
         height: 100%;
         opacity: 0.3;
+        background: var(--bg-elevated);
+    }
+
+    .post-thumb {
+        position: relative;
+        cursor: pointer;
+        transition: all var(--duration) var(--ease-out);
+    }
+
+    .post-thumb:hover {
+        transform: scale(1.02);
+        box-shadow: var(--shadow-glow);
+    }
+
+    .post-thumb::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: linear-gradient(to top, rgba(0,0,0,0.4) 0%, transparent 50%);
+        opacity: 0;
+        transition: opacity var(--duration) var(--ease-out);
+        border-radius: var(--radius-md);
+    }
+
+    .post-thumb:hover::after {
+        opacity: 1;
     }
 
     .posts-empty {
@@ -532,9 +558,29 @@
 <!-- Posts Tab -->
 <div class="tab-content active" id="tab-posts">
     <div class="posts-header">&#128247; My Posts</div>
+    {% if user_posts %}
+    <div class="posts-grid">
+        {% for post in user_posts %}
+        <div class="post-thumb">
+            {% if post.photo_url %}
+            <img src="{{ post.photo_url }}" alt="Post photo">
+            {% else %}
+            <div class="post-placeholder">
+                {% if post.type == 'checkin' %}
+                💪
+                {% else %}
+                📝
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
     <div class="posts-empty">
         No posts yet. Start sharing your workouts!
     </div>
+    {% endif %}
 </div>
 
 <!-- Calendar Tab -->

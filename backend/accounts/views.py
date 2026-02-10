@@ -8,6 +8,7 @@ from .forms import (
     PreferencesForm, PrivacyForm, NotificationsForm,
 )
 from .models import User
+from social.views import get_user_posts
 
 
 def signup_view(request):
@@ -57,15 +58,22 @@ def logout_view(request):
 
 @login_required
 def profile_view(request):
-    return render(request, 'accounts/profile.html', {'profile_user': request.user, 'is_own_profile': True})
+    user_posts = get_user_posts(request.user)
+    return render(request, 'accounts/profile.html', {
+        'profile_user': request.user,
+        'is_own_profile': True,
+        'user_posts': user_posts,
+    })
 
 
 def user_profile_view(request, username):
     profile_user = get_object_or_404(User, username=username)
     is_own_profile = request.user.is_authenticated and request.user.pk == profile_user.pk
+    user_posts = get_user_posts(profile_user)
     return render(request, 'accounts/profile.html', {
         'profile_user': profile_user,
         'is_own_profile': is_own_profile,
+        'user_posts': user_posts,
     })
 
 
