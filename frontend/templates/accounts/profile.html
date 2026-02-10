@@ -781,6 +781,82 @@
         color: var(--text-muted);
     }
 
+    /* ============ BLOCKED USER OVERLAY ============ */
+    .blocked-profile-wrapper {
+        position: relative;
+    }
+
+    .blocked-profile-wrapper .blocked-blur-content {
+        filter: blur(12px);
+        pointer-events: none;
+        user-select: none;
+    }
+
+    .blocked-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+        background: rgba(0, 0, 0, 0.3);
+        border-radius: var(--radius-2xl);
+    }
+
+    .blocked-overlay-icon {
+        width: 64px;
+        height: 64px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 16px;
+        box-shadow: var(--shadow-md);
+    }
+
+    .blocked-overlay-icon svg {
+        width: 28px;
+        height: 28px;
+        color: #ef4444;
+    }
+
+    .blocked-overlay-text {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 6px;
+        text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    }
+
+    .blocked-overlay-sub {
+        font-size: 13px;
+        color: var(--text-muted);
+        margin-bottom: 20px;
+        text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    }
+
+    .blocked-unblock-btn {
+        padding: 10px 28px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        cursor: pointer;
+        font-family: 'Inter', sans-serif;
+        transition: all 0.2s;
+        box-shadow: var(--shadow-md);
+    }
+
+    .blocked-unblock-btn:hover {
+        border-color: var(--brand-cyan);
+        color: var(--brand-cyan);
+    }
+
     /* ============ CLICKABLE STATS ============ */
     .social-stat-clickable {
         cursor: pointer;
@@ -1451,10 +1527,255 @@
     .user-preview-full-link:hover {
         color: #fff;
     }
+
+    /* ============ PR ADD BUTTON ============ */
+    .pr-add-card {
+        background: var(--bg-elevated);
+        border: 2px dashed var(--border-subtle);
+        border-radius: var(--radius-lg);
+        padding: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all var(--duration) var(--ease-out);
+        min-height: 110px;
+    }
+
+    .pr-add-card:hover {
+        border-color: var(--brand-cyan);
+        background: rgba(6, 182, 212, 0.05);
+    }
+
+    .pr-add-card svg {
+        width: 28px;
+        height: 28px;
+        color: var(--text-muted);
+    }
+
+    .pr-add-card:hover svg {
+        color: var(--brand-cyan);
+    }
+
+    /* ============ PR EDIT MODAL ============ */
+    .pr-modal-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.7);
+        z-index: 1100;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .pr-modal-backdrop.open {
+        display: flex;
+    }
+
+    .pr-modal {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+        width: 100%;
+        max-width: 420px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        overflow: hidden;
+    }
+
+    .pr-modal-header {
+        padding: 20px 20px 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .pr-modal-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .pr-modal-close {
+        width: 32px;
+        height: 32px;
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        font-size: 18px;
+    }
+
+    .pr-modal-close:hover {
+        background: var(--bg-elevated);
+        color: var(--text-primary);
+    }
+
+    .pr-modal-body {
+        padding: 20px;
+    }
+
+    .pr-form-group {
+        margin-bottom: 16px;
+    }
+
+    .pr-form-label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .pr-form-select,
+    .pr-form-input {
+        width: 100%;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        padding: 10px 12px;
+        font-size: 14px;
+        color: var(--text-primary);
+        outline: none;
+        font-family: 'Inter', sans-serif;
+        transition: border-color 0.2s;
+        -webkit-appearance: none;
+    }
+
+    .pr-form-select:focus,
+    .pr-form-input:focus {
+        border-color: var(--brand-cyan);
+    }
+
+    .pr-form-row {
+        display: flex;
+        gap: 10px;
+    }
+
+    .pr-form-row .pr-form-group {
+        flex: 1;
+    }
+
+    .pr-form-file-wrap {
+        position: relative;
+    }
+
+    .pr-form-file-btn {
+        width: 100%;
+        padding: 12px;
+        background: var(--bg-elevated);
+        border: 1px dashed var(--border-subtle);
+        border-radius: var(--radius-md);
+        color: var(--text-muted);
+        font-size: 13px;
+        cursor: pointer;
+        text-align: center;
+        font-family: 'Inter', sans-serif;
+        transition: all 0.2s;
+    }
+
+    .pr-form-file-btn:hover {
+        border-color: var(--brand-cyan);
+        color: var(--text-secondary);
+    }
+
+    .pr-form-file-btn.has-file {
+        border-color: var(--brand-cyan);
+        color: var(--brand-cyan);
+        border-style: solid;
+    }
+
+    .pr-form-file-input {
+        display: none;
+    }
+
+    .pr-form-current-video {
+        font-size: 12px;
+        color: var(--brand-cyan);
+        margin-top: 6px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .pr-modal-actions {
+        display: flex;
+        gap: 8px;
+        margin-top: 8px;
+    }
+
+    .pr-save-btn {
+        flex: 1;
+        padding: 12px;
+        background: var(--brand-cyan);
+        border: none;
+        border-radius: var(--radius-lg);
+        font-size: 14px;
+        font-weight: 600;
+        color: #000;
+        cursor: pointer;
+        font-family: 'Inter', sans-serif;
+        transition: box-shadow 0.2s;
+    }
+
+    .pr-save-btn:hover {
+        box-shadow: 0 4px 15px rgba(6, 182, 212, 0.4);
+    }
+
+    .pr-delete-btn {
+        padding: 12px 16px;
+        background: none;
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-family: 'Inter', sans-serif;
+        transition: all 0.2s;
+    }
+
+    .pr-delete-btn:hover {
+        border-color: #ef4444;
+        color: #ef4444;
+    }
+
+    .pr-card-video-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        cursor: pointer;
+    }
+
+    .pr-card-video-badge:hover {
+        text-decoration: underline;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
+{% if is_blocked %}
+<!-- Blocked user overlay -->
+<div class="blocked-profile-wrapper">
+    <div class="blocked-overlay">
+        <div class="blocked-overlay-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+            </svg>
+        </div>
+        <div class="blocked-overlay-text">This user is blocked</div>
+        <div class="blocked-overlay-sub">You won't see their posts or activity</div>
+        <button class="blocked-unblock-btn" id="blockedUnblockBtn" data-user-id="{{ profile_user.pk }}" onclick="unblockFromOverlay()">Unblock @{{ profile_user.username }}</button>
+    </div>
+    <div class="blocked-blur-content">
+{% endif %}
+
 <!-- Profile Top Card -->
 <div class="profile-top-card">
     <div class="profile-banner"></div>
@@ -1608,41 +1929,109 @@
 <!-- Personal Records Tab -->
 <div class="tab-content" id="tab-records">
     <div class="pr-section-title">&#127942; Personal Records</div>
-    <div class="pr-grid">
-        <div class="pr-card">
+    <div class="pr-grid" id="prGrid">
+        {% for pr in personal_records %}
+        <div class="pr-card" id="pr-card-{{ pr.pk }}" data-pr-id="{{ pr.pk }}" data-exercise="{{ pr.exercise_name }}" data-value="{{ pr.value }}" data-unit="{{ pr.unit }}" data-has-video="{% if pr.video %}1{% else %}0{% endif %}" data-video-url="{% if pr.video %}{{ pr.video.url }}{% endif %}">
             <div class="pr-card-header">
-                <span class="pr-card-name">Bench Press</span>
-                <div class="pr-card-edit">&#9998;</div>
+                <span class="pr-card-name">{{ pr.exercise_name }}</span>
+                {% if is_own_profile %}
+                <div class="pr-card-edit" onclick="openPrModal('{{ pr.pk }}')">&#9998;</div>
+                {% endif %}
             </div>
-            <div class="pr-card-value">-- lbs</div>
-            <div class="pr-card-status unverified">Unrecorded Lift</div>
+            <div class="pr-card-value">{{ pr.value }} {{ pr.unit }}</div>
+            {% if pr.video %}
+            <div class="pr-card-status verified pr-card-video-badge" onclick="window.open('{{ pr.video.url }}', '_blank')">&#9989; Verified Lift</div>
+            {% else %}
+            <div class="pr-card-status unverified">Unverified Lift</div>
+            {% endif %}
         </div>
-        <div class="pr-card">
-            <div class="pr-card-header">
-                <span class="pr-card-name">Squat</span>
-                <div class="pr-card-edit">&#9998;</div>
-            </div>
-            <div class="pr-card-value">-- lbs</div>
-            <div class="pr-card-status unverified">Unrecorded Lift</div>
+        {% endfor %}
+        {% if is_own_profile %}
+        <div class="pr-add-card" onclick="openPrModal('')" title="Add Personal Record">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
         </div>
-        <div class="pr-card">
-            <div class="pr-card-header">
-                <span class="pr-card-name">Deadlift</span>
-                <div class="pr-card-edit">&#9998;</div>
-            </div>
-            <div class="pr-card-value">-- lbs</div>
-            <div class="pr-card-status unverified">Unrecorded Lift</div>
+        {% endif %}
+    </div>
+    {% if not personal_records and not is_own_profile %}
+    <div class="posts-empty">No personal records yet.</div>
+    {% endif %}
+</div>
+
+<!-- PR Edit Modal -->
+<div class="pr-modal-backdrop" id="prModal">
+    <div class="pr-modal">
+        <div class="pr-modal-header">
+            <span class="pr-modal-title" id="prModalTitle">Add Personal Record</span>
+            <button class="pr-modal-close" onclick="closePrModal()">&times;</button>
         </div>
-        <div class="pr-card">
-            <div class="pr-card-header">
-                <span class="pr-card-name">Mile Time</span>
-                <div class="pr-card-edit">&#9998;</div>
+        <div class="pr-modal-body">
+            <input type="hidden" id="prEditId" value="">
+
+            <div class="pr-form-group">
+                <label class="pr-form-label">Exercise</label>
+                <select class="pr-form-select" id="prExerciseSelect" onchange="onPrExerciseChange()">
+                    <option value="">Select exercise...</option>
+                    <option value="Bench Press">Bench Press</option>
+                    <option value="Squat">Squat</option>
+                    <option value="Deadlift">Deadlift</option>
+                    <option value="Overhead Press">Overhead Press</option>
+                    <option value="Barbell Row">Barbell Row</option>
+                    <option value="Pull-Up">Pull-Up (weighted)</option>
+                    <option value="Dip">Dip (weighted)</option>
+                    <option value="Clean & Jerk">Clean &amp; Jerk</option>
+                    <option value="Snatch">Snatch</option>
+                    <option value="Mile Run">Mile Run</option>
+                    <option value="5K Run">5K Run</option>
+                    <option value="custom">Custom...</option>
+                </select>
             </div>
-            <div class="pr-card-value">--:--</div>
-            <div class="pr-card-status unverified">Unrecorded Lift</div>
+
+            <div class="pr-form-group" id="prCustomNameGroup" style="display:none;">
+                <label class="pr-form-label">Custom Exercise Name</label>
+                <input type="text" class="pr-form-input" id="prCustomName" placeholder="e.g. Farmer's Walk">
+            </div>
+
+            <div class="pr-form-row">
+                <div class="pr-form-group">
+                    <label class="pr-form-label" id="prValueLabel">Weight</label>
+                    <input type="text" class="pr-form-input" id="prValue" placeholder="e.g. 315">
+                </div>
+                <div class="pr-form-group">
+                    <label class="pr-form-label">Unit</label>
+                    <select class="pr-form-select" id="prUnit">
+                        <option value="lbs">lbs</option>
+                        <option value="kg">kg</option>
+                        <option value="min:sec">min:sec</option>
+                        <option value="reps">reps</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="pr-form-group">
+                <label class="pr-form-label">Proof Video (optional)</label>
+                <div class="pr-form-file-wrap">
+                    <div class="pr-form-file-btn" id="prFileBtn" onclick="document.getElementById('prVideoInput').click()">
+                        Click to upload video
+                    </div>
+                    <input type="file" class="pr-form-file-input" id="prVideoInput" accept="video/*" onchange="onPrFileSelected()">
+                </div>
+                <div class="pr-form-current-video" id="prCurrentVideo" style="display:none;">
+                    &#127909; Video uploaded
+                </div>
+            </div>
+
+            <div class="pr-modal-actions">
+                <button class="pr-save-btn" onclick="savePr()">Save Record</button>
+                <button class="pr-delete-btn" id="prDeleteBtn" style="display:none;" onclick="deletePr()">Delete</button>
+            </div>
         </div>
     </div>
 </div>
+
+{% if is_blocked %}
+    </div><!-- /.blocked-blur-content -->
+</div><!-- /.blocked-profile-wrapper -->
+{% endif %}
 
 <!-- Search Friends Modal -->
 <div class="search-modal-backdrop" id="searchModal">
@@ -1950,6 +2339,7 @@
             closeSearchModal();
             closeUserPreview();
             closeFollowList();
+            closePrModal();
         }
     });
 
@@ -2083,13 +2473,13 @@
             btn.disabled = false;
             var isNowFollowing = data.action === 'followed';
             currentPreviewUser.is_following = isNowFollowing;
-            currentPreviewUser.followers_count = data.followers_count;
+            currentPreviewUser.followers_count = data.target_followers_count;
             updateFollowButton(isNowFollowing);
-            document.getElementById('previewFollowers').textContent = data.followers_count;
+            document.getElementById('previewFollowers').textContent = data.target_followers_count;
 
-            // Update own profile counts if on own profile
-            var followingEl = document.getElementById('followingCount');
-            if (followingEl) followingEl.textContent = data.following_count;
+            // Update own profile counts
+            document.getElementById('followingCount').textContent = data.my_following_count;
+            document.getElementById('followersCount').textContent = data.my_followers_count;
         })
         .catch(function() {
             btn.disabled = false;
@@ -2194,12 +2584,10 @@
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            // Remove the item from the list
             var el = document.getElementById('fli-' + userId);
             if (el) el.remove();
-            // Update counts
-            document.getElementById('followingCount').textContent = data.following_count;
-            // Check if list is now empty
+            document.getElementById('followingCount').textContent = data.my_following_count;
+            document.getElementById('followersCount').textContent = data.my_followers_count;
             var body = document.getElementById('followListBody');
             if (!body.querySelector('.follow-list-item')) {
                 body.innerHTML = '<div class="follow-list-empty">Not following anyone yet</div>';
@@ -2208,9 +2596,6 @@
     };
 
     window.followListRemoveFollower = function(userId) {
-        // To remove a follower, we delete the Follow where follower=them, following=us
-        // We'll use the follow-toggle from *their* perspective — but we need a dedicated endpoint
-        // Instead, just block and unblock to remove the follow
         var formData = new FormData();
         formData.append('user_id', userId);
         formData.append('action', 'remove_follower');
@@ -2223,7 +2608,8 @@
         .then(function(data) {
             var el = document.getElementById('fli-' + userId);
             if (el) el.remove();
-            document.getElementById('followersCount').textContent = data.followers_count;
+            document.getElementById('followersCount').textContent = data.my_followers_count;
+            document.getElementById('followingCount').textContent = data.my_following_count;
             var body = document.getElementById('followListBody');
             if (!body.querySelector('.follow-list-item')) {
                 body.innerHTML = '<div class="follow-list-empty">No followers yet</div>';
@@ -2244,7 +2630,6 @@
             if (data.action === 'blocked') {
                 btn.textContent = 'Blocked';
                 btn.className = 'follow-list-btn blocked-btn';
-                // If they were being followed, remove from list
                 if (currentFollowTab === 'following') {
                     var el = document.getElementById('fli-' + userId);
                     if (el) el.remove();
@@ -2253,14 +2638,253 @@
                 btn.textContent = 'Block';
                 btn.className = 'follow-list-btn block-btn';
             }
-            document.getElementById('followingCount').textContent = data.following_count;
-            document.getElementById('followersCount').textContent = data.followers_count;
+            document.getElementById('followingCount').textContent = data.my_following_count;
+            document.getElementById('followersCount').textContent = data.my_followers_count;
             var body = document.getElementById('followListBody');
             if (!body.querySelector('.follow-list-item')) {
                 body.innerHTML = '<div class="follow-list-empty">' +
                     (currentFollowTab === 'followers' ? 'No followers yet' : 'Not following anyone yet') +
                     '</div>';
             }
+        });
+    };
+
+    // ============ PERSONAL RECORDS MODAL ============
+    var timeExercises = ['Mile Run', '5K Run'];
+
+    window.openPrModal = function(prId) {
+        var modal = document.getElementById('prModal');
+        var titleEl = document.getElementById('prModalTitle');
+        var editIdEl = document.getElementById('prEditId');
+        var selectEl = document.getElementById('prExerciseSelect');
+        var customGroup = document.getElementById('prCustomNameGroup');
+        var customNameEl = document.getElementById('prCustomName');
+        var valueEl = document.getElementById('prValue');
+        var unitEl = document.getElementById('prUnit');
+        var deleteBtn = document.getElementById('prDeleteBtn');
+        var fileBtn = document.getElementById('prFileBtn');
+        var fileInput = document.getElementById('prVideoInput');
+        var currentVid = document.getElementById('prCurrentVideo');
+
+        // Reset
+        fileInput.value = '';
+        fileBtn.textContent = 'Click to upload video';
+        fileBtn.classList.remove('has-file');
+        currentVid.style.display = 'none';
+        customGroup.style.display = 'none';
+        customNameEl.value = '';
+
+        if (prId) {
+            // Editing existing PR
+            titleEl.textContent = 'Edit Personal Record';
+            editIdEl.value = prId;
+            deleteBtn.style.display = 'block';
+
+            var card = document.getElementById('pr-card-' + prId);
+            var exercise = card.getAttribute('data-exercise');
+            var value = card.getAttribute('data-value');
+            var unit = card.getAttribute('data-unit');
+            var hasVideo = card.getAttribute('data-has-video') === '1';
+
+            // Try to match exercise in dropdown
+            var matched = false;
+            for (var i = 0; i < selectEl.options.length; i++) {
+                if (selectEl.options[i].value === exercise) {
+                    selectEl.value = exercise;
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched) {
+                selectEl.value = 'custom';
+                customGroup.style.display = 'block';
+                customNameEl.value = exercise;
+            }
+
+            valueEl.value = value;
+            unitEl.value = unit;
+
+            if (hasVideo) {
+                currentVid.style.display = 'flex';
+            }
+
+            onPrExerciseChange();
+        } else {
+            // New PR
+            titleEl.textContent = 'Add Personal Record';
+            editIdEl.value = '';
+            deleteBtn.style.display = 'none';
+            selectEl.value = '';
+            valueEl.value = '';
+            unitEl.value = 'lbs';
+        }
+
+        modal.classList.add('open');
+    };
+
+    window.closePrModal = function() {
+        document.getElementById('prModal').classList.remove('open');
+    };
+
+    document.getElementById('prModal').addEventListener('click', function(e) {
+        if (e.target === this) closePrModal();
+    });
+
+    window.onPrExerciseChange = function() {
+        var val = document.getElementById('prExerciseSelect').value;
+        var customGroup = document.getElementById('prCustomNameGroup');
+        var valueLabel = document.getElementById('prValueLabel');
+        var unitEl = document.getElementById('prUnit');
+
+        customGroup.style.display = val === 'custom' ? 'block' : 'none';
+
+        if (timeExercises.indexOf(val) !== -1) {
+            valueLabel.textContent = 'Time';
+            unitEl.value = 'min:sec';
+        } else {
+            valueLabel.textContent = 'Weight';
+            if (unitEl.value === 'min:sec') unitEl.value = 'lbs';
+        }
+    };
+
+    window.onPrFileSelected = function() {
+        var fileInput = document.getElementById('prVideoInput');
+        var fileBtn = document.getElementById('prFileBtn');
+        if (fileInput.files.length > 0) {
+            fileBtn.textContent = fileInput.files[0].name;
+            fileBtn.classList.add('has-file');
+        } else {
+            fileBtn.textContent = 'Click to upload video';
+            fileBtn.classList.remove('has-file');
+        }
+    };
+
+    window.savePr = function() {
+        var prId = document.getElementById('prEditId').value;
+        var selectVal = document.getElementById('prExerciseSelect').value;
+        var exerciseName = selectVal === 'custom'
+            ? document.getElementById('prCustomName').value.trim()
+            : selectVal;
+        var value = document.getElementById('prValue').value.trim();
+        var unit = document.getElementById('prUnit').value;
+        var videoFile = document.getElementById('prVideoInput').files[0];
+
+        if (!exerciseName || !value || !unit) {
+            alert('Please fill in all fields.');
+            return;
+        }
+
+        var formData = new FormData();
+        if (prId) formData.append('pr_id', prId);
+        formData.append('exercise_name', exerciseName);
+        formData.append('value', value);
+        formData.append('unit', unit);
+        if (videoFile) formData.append('video', videoFile);
+
+        fetch('/accounts/api/pr/save/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            body: formData,
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) {
+                alert(data.error);
+                return;
+            }
+            // Update or create card in grid
+            var grid = document.getElementById('prGrid');
+            var existingCard = document.getElementById('pr-card-' + data.id);
+
+            var cardHtml = buildPrCardHtml(data);
+
+            if (existingCard) {
+                existingCard.outerHTML = cardHtml;
+            } else {
+                // Insert before the add button
+                var addCard = grid.querySelector('.pr-add-card');
+                if (addCard) {
+                    addCard.insertAdjacentHTML('beforebegin', cardHtml);
+                } else {
+                    grid.insertAdjacentHTML('beforeend', cardHtml);
+                }
+            }
+
+            closePrModal();
+        });
+    };
+
+    function buildPrCardHtml(data) {
+        var html = '<div class="pr-card" id="pr-card-' + data.id + '"'
+            + ' data-pr-id="' + data.id + '"'
+            + ' data-exercise="' + escapeHtml(data.exercise_name) + '"'
+            + ' data-value="' + escapeHtml(data.value) + '"'
+            + ' data-unit="' + escapeHtml(data.unit) + '"'
+            + ' data-has-video="' + (data.has_video ? '1' : '0') + '"'
+            + ' data-video-url="' + (data.video_url || '') + '">';
+        html += '<div class="pr-card-header">';
+        html += '<span class="pr-card-name">' + escapeHtml(data.exercise_name) + '</span>';
+        html += '<div class="pr-card-edit" onclick="openPrModal(\'' + data.id + '\')">&#9998;</div>';
+        html += '</div>';
+        html += '<div class="pr-card-value">' + escapeHtml(data.value) + ' ' + escapeHtml(data.unit) + '</div>';
+        if (data.has_video) {
+            html += '<div class="pr-card-status verified pr-card-video-badge" onclick="window.open(\'' + data.video_url + '\', \'_blank\')">&#9989; Verified Lift</div>';
+        } else {
+            html += '<div class="pr-card-status unverified">Unverified Lift</div>';
+        }
+        html += '</div>';
+        return html;
+    }
+
+    window.deletePr = function() {
+        var prId = document.getElementById('prEditId').value;
+        if (!prId) return;
+        if (!confirm('Delete this personal record?')) return;
+
+        var formData = new FormData();
+        formData.append('pr_id', prId);
+
+        fetch('/accounts/api/pr/delete/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            body: formData,
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                var card = document.getElementById('pr-card-' + prId);
+                if (card) card.remove();
+                closePrModal();
+            }
+        });
+    };
+
+    // ============ UNBLOCK FROM OVERLAY ============
+    window.unblockFromOverlay = function() {
+        var btn = document.getElementById('blockedUnblockBtn');
+        if (!btn) return;
+        var userId = btn.getAttribute('data-user-id');
+        btn.disabled = true;
+        btn.textContent = 'Unblocking...';
+
+        var formData = new FormData();
+        formData.append('user_id', userId);
+
+        fetch('/accounts/api/block-toggle/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+            body: formData,
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.action === 'unblocked') {
+                // Reload the page to show the full profile
+                window.location.reload();
+            }
+        })
+        .catch(function() {
+            btn.disabled = false;
+            btn.textContent = 'Unblock';
         });
     };
 
@@ -2290,7 +2914,9 @@
                 btn.textContent = 'Follow';
                 btn.className = 'profile-follow-btn follow';
             }
-            document.getElementById('followersCount').textContent = data.followers_count;
+            // On another user's profile, counts shown are the target's
+            document.getElementById('followersCount').textContent = data.target_followers_count;
+            document.getElementById('followingCount').textContent = data.target_following_count;
         })
         .catch(function() { btn.disabled = false; });
     };
@@ -2315,7 +2941,6 @@
             if (data.action === 'blocked') {
                 btn.textContent = 'Blocked';
                 btn.className = 'profile-block-btn blocked';
-                // Blocking also unfollows
                 var followBtn = document.getElementById('profileFollowBtn');
                 if (followBtn && !data.is_following) {
                     followBtn.textContent = 'Follow';
@@ -2325,7 +2950,8 @@
                 btn.textContent = 'Block';
                 btn.className = 'profile-block-btn';
             }
-            document.getElementById('followersCount').textContent = data.followers_count;
+            document.getElementById('followersCount').textContent = data.target_followers_count;
+            document.getElementById('followingCount').textContent = data.target_following_count;
         })
         .catch(function() { btn.disabled = false; });
     };

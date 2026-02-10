@@ -13,6 +13,7 @@ from .forms import (
 from .models import User
 from social.models import Follow, Block
 from social.views import get_user_posts
+from workouts.models import PersonalRecord
 
 
 def signup_view(request):
@@ -66,32 +67,46 @@ def profile_view(request):
     user_posts = get_user_posts(user)
     following_count = Follow.objects.filter(follower=user).count()
     followers_count = Follow.objects.filter(following=user).count()
+    personal_records = PersonalRecord.objects.filter(user=user)
     return render(request, 'accounts/profile.html', {
         'profile_user': user,
         'is_own_profile': True,
         'user_posts': user_posts,
         'following_count': following_count,
         'followers_count': followers_count,
+        'personal_records': personal_records,
     })
 
 
 def user_profile_view(request, username):
     profile_user = get_object_or_404(User, username=username)
     is_own_profile = request.user.is_authenticated and request.user.pk == profile_user.pk
-    user_posts = get_user_posts(profile_user)
-    following_count = Follow.objects.filter(follower=profile_user).count()
-    followers_count = Follow.objects.filter(following=profile_user).count()
     is_following = False
     is_blocked = False
+    blocked_by_them = False
+
     if request.user.is_authenticated and not is_own_profile:
         is_following = Follow.objects.filter(follower=request.user, following=profile_user).exists()
         is_blocked = Block.objects.filter(blocker=request.user, blocked=profile_user).exists()
+        blocked_by_them = Block.objects.filter(blocker=profile_user, blocked=request.user).exists()
+
+    # If they blocked you, show unavailable page
+    if blocked_by_them:
+        return render(request, 'accounts/profile_unavailable.html', {
+            'profile_user': profile_user,
+        })
+
+    user_posts = get_user_posts(profile_user)
+    following_count = Follow.objects.filter(follower=profile_user).count()
+    followers_count = Follow.objects.filter(following=profile_user).count()
+    personal_records = PersonalRecord.objects.filter(user=profile_user)
     return render(request, 'accounts/profile.html', {
         'profile_user': profile_user,
         'is_own_profile': is_own_profile,
         'user_posts': user_posts,
         'following_count': following_count,
         'followers_count': followers_count,
+        'personal_records': personal_records,
         'is_following': is_following,
         'is_blocked': is_blocked,
     })
@@ -244,8 +259,12 @@ def follow_toggle_view(request):
 
     return JsonResponse({
         'action': action,
-        'followers_count': Follow.objects.filter(following=request.user).count(),
-        'following_count': Follow.objects.filter(follower=request.user).count(),
+        # Target user's counts
+        'target_followers_count': Follow.objects.filter(following=target).count(),
+        'target_following_count': Follow.objects.filter(follower=target).count(),
+        # Current (logged-in) user's counts
+        'my_followers_count': Follow.objects.filter(following=request.user).count(),
+        'my_following_count': Follow.objects.filter(follower=request.user).count(),
     })
 
 
@@ -275,8 +294,12 @@ def block_toggle_view(request):
     return JsonResponse({
         'action': action,
         'is_following': Follow.objects.filter(follower=request.user, following=target).exists(),
-        'followers_count': Follow.objects.filter(following=target).count(),
-        'following_count': Follow.objects.filter(follower=request.user).count(),
+        # Target user's counts
+        'target_followers_count': Follow.objects.filter(following=target).count(),
+        'target_following_count': Follow.objects.filter(follower=target).count(),
+        # Current (logged-in) user's counts
+        'my_followers_count': Follow.objects.filter(following=request.user).count(),
+        'my_following_count': Follow.objects.filter(follower=request.user).count(),
     })
 
 
@@ -326,3 +349,59 @@ def following_list_view(request):
             'is_blocked': u.pk in blocked_ids,
         })
     return JsonResponse({'results': results})
+
+
+@login_required
+@require_POST
+def save_pr_view(request):
+    """AJAX endpoint: create or update a personal record."""
+    from django.utils import timezone
+
+    pr_id = request.POST.get('pr_id', '').strip()
+    exercise_name = request.POST.get('exercise_name', '').strip()
+    value = request.POST.get('value', '').strip()
+    unit = request.POST.get('unit', '').strip()
+    video = request.FILES.get('video')
+
+    if not exercise_name or not value or not unit:
+        return JsonResponse({'error': 'Exercise name, value, and unit are required.'}, status=400)
+
+    if pr_id:
+        pr = get_object_or_404(PersonalRecord, pk=pr_id, user=request.user)
+        pr.exercise_name = exercise_name
+        pr.value = value
+        pr.unit = unit
+        pr.achieved_date = timezone.now().date()
+        if video:
+            pr.video = video
+        pr.save()
+    else:
+        pr = PersonalRecord.objects.create(
+            user=request.user,
+            exercise_name=exercise_name,
+            value=value,
+            unit=unit,
+            achieved_date=timezone.now().date(),
+            video=video,
+        )
+
+    return JsonResponse({
+        'id': pr.pk,
+        'exercise_name': pr.exercise_name,
+        'value': pr.value,
+        'unit': pr.unit,
+        'has_video': bool(pr.video),
+        'video_url': pr.video.url if pr.video else '',
+    })
+
+
+@login_required
+@require_POST
+def delete_pr_view(request):
+    """AJAX endpoint: delete a personal record."""
+    pr_id = request.POST.get('pr_id', '').strip()
+    if not pr_id:
+        return JsonResponse({'error': 'pr_id required'}, status=400)
+    pr = get_object_or_404(PersonalRecord, pk=pr_id, user=request.user)
+    pr.delete()
+    return JsonResponse({'success': True})

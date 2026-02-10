@@ -16,4 +16,6 @@ urlpatterns = [
     path('api/block-toggle/', views.block_toggle_view, name='block_toggle'),
     path('api/followers/', views.followers_list_view, name='followers_list'),
     path('api/following/', views.following_list_view, name='following_list'),
+    path('api/pr/save/', views.save_pr_view, name='save_pr'),
+    path('api/pr/delete/', views.delete_pr_view, name='delete_pr'),
 ]
