@@ -1,0 +1,675 @@
+{% extends 'gyms/base.html' %}
+
+{% block title %}{{ profile_user.display_name }} - Spottr{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* ============ BANNER + AVATAR ============ */
+    .profile-banner {
+        height: 120px;
+        background: linear-gradient(135deg, #1a0533, #7c3aed 40%, #3b82f6 70%, #06b6d4);
+        border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+        position: relative;
+    }
+
+    .profile-top-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-2xl);
+        overflow: hidden;
+        margin-bottom: 16px;
+        box-shadow: var(--shadow-md);
+    }
+
+    .profile-identity {
+        padding: 0 24px 24px;
+        position: relative;
+    }
+
+    .profile-avatar-wrap {
+        margin-top: -48px;
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        margin-bottom: 16px;
+    }
+
+    .profile-avatar {
+        width: 96px;
+        height: 96px;
+        border-radius: 50%;
+        border: 4px solid var(--bg-card);
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+        overflow: hidden;
+        background: var(--bg-elevated);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .profile-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .profile-avatar-placeholder {
+        font-size: 36px;
+        font-weight: 700;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .profile-settings-btn {
+        width: 40px;
+        height: 40px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all var(--duration) var(--ease-out);
+        text-decoration: none;
+        color: var(--text-secondary);
+    }
+
+    .profile-settings-btn svg {
+        width: 20px;
+        height: 20px;
+    }
+
+    .profile-settings-btn:hover {
+        border-color: var(--border-hover);
+        color: var(--text-primary);
+        box-shadow: var(--shadow-glow);
+    }
+
+    .profile-display-name {
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 2px;
+    }
+
+    .profile-username {
+        font-size: 14px;
+        color: var(--text-muted);
+        margin-bottom: 12px;
+    }
+
+    .profile-bio {
+        font-size: 14px;
+        color: var(--text-secondary);
+        line-height: 1.5;
+        margin-bottom: 20px;
+    }
+
+    /* ============ SOCIAL STATS ROW ============ */
+    .social-stats {
+        display: flex;
+        justify-content: center;
+        gap: 32px;
+        padding: 16px 0;
+        border-top: 1px solid var(--border-subtle);
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .social-stat {
+        text-align: center;
+    }
+
+    .social-stat-value {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .social-stat-label {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+
+    /* ============ METRIC CARDS ============ */
+    .metric-cards {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 10px;
+        padding: 16px 0 0;
+    }
+
+    .metric-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        padding: 14px 12px;
+        transition: all var(--duration) var(--ease-out);
+    }
+
+    .metric-card:hover {
+        border-color: var(--border-hover);
+    }
+
+    .metric-card-label {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .metric-card-value {
+        font-size: 24px;
+        font-weight: 700;
+        color: var(--brand-cyan);
+        letter-spacing: -0.5px;
+    }
+
+    .metric-card:nth-child(2) .metric-card-value {
+        color: #fb923c;
+    }
+
+    .metric-card:nth-child(3) .metric-card-value {
+        color: var(--text-brand);
+    }
+
+    /* ============ TAB BAR ============ */
+    .profile-tabs {
+        display: flex;
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        padding: 4px;
+        margin-bottom: 16px;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .profile-tab {
+        flex: 1;
+        padding: 12px 8px;
+        text-align: center;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-muted);
+        cursor: pointer;
+        border-radius: var(--radius-md);
+        transition: all var(--duration) var(--ease-out);
+        border: none;
+        background: none;
+        font-family: 'Inter', sans-serif;
+    }
+
+    .profile-tab:hover {
+        color: var(--text-secondary);
+    }
+
+    .profile-tab.active {
+        background: var(--brand-cyan);
+        color: #000;
+        font-weight: 600;
+        box-shadow: 0 2px 8px rgba(6, 182, 212, 0.3);
+    }
+
+    .tab-content {
+        display: none;
+    }
+
+    .tab-content.active {
+        display: block;
+    }
+
+    /* ============ POSTS TAB ============ */
+    .posts-header {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .posts-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8px;
+    }
+
+    .post-thumb {
+        aspect-ratio: 1;
+        background: var(--bg-elevated);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        border: 1px solid var(--border-subtle);
+    }
+
+    .post-thumb img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .post-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 32px;
+        height: 100%;
+        opacity: 0.3;
+    }
+
+    .posts-empty {
+        text-align: center;
+        padding: 40px 20px;
+        color: var(--text-muted);
+        font-size: 14px;
+    }
+
+    /* ============ CALENDAR TAB ============ */
+    .calendar-section-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .calendar-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+        padding: 20px;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .calendar-nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+    }
+
+    .calendar-nav-btn {
+        width: 36px;
+        height: 36px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-sm);
+        color: var(--text-secondary);
+        font-size: 16px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all var(--duration) var(--ease-out);
+        font-family: 'Inter', sans-serif;
+    }
+
+    .calendar-nav-btn:hover {
+        border-color: var(--border-hover);
+        color: var(--text-primary);
+    }
+
+    .calendar-month-label {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .calendar-weekdays {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        margin-bottom: 8px;
+    }
+
+    .calendar-weekday {
+        text-align: center;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-muted);
+        padding: 8px 0;
+    }
+
+    .calendar-days {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 4px;
+    }
+
+    .calendar-day {
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        border-radius: var(--radius-sm);
+        transition: all var(--duration) var(--ease-out);
+    }
+
+    .calendar-day.empty {
+        color: transparent;
+    }
+
+    .calendar-day.workout {
+        background: rgba(6, 182, 212, 0.15);
+        color: var(--brand-cyan);
+        font-weight: 600;
+    }
+
+    .calendar-day.today {
+        border: 1px solid var(--brand-cyan);
+    }
+
+    /* ============ PERSONAL RECORDS TAB ============ */
+    .pr-section-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .pr-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+    }
+
+    .pr-card {
+        background: var(--bg-card);
+        border: 1px solid rgba(6, 182, 212, 0.15);
+        border-left: 3px solid var(--brand-cyan);
+        border-radius: var(--radius-lg);
+        padding: 18px;
+        position: relative;
+        transition: all var(--duration) var(--ease-out);
+    }
+
+    .pr-card:hover {
+        border-color: rgba(6, 182, 212, 0.3);
+        border-left-color: var(--brand-cyan);
+        box-shadow: 0 0 20px rgba(6, 182, 212, 0.08);
+    }
+
+    .pr-card-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+    }
+
+    .pr-card-name {
+        font-size: 13px;
+        color: var(--text-secondary);
+        font-weight: 500;
+    }
+
+    .pr-card-edit {
+        width: 28px;
+        height: 28px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-muted);
+        font-size: 12px;
+        cursor: pointer;
+        transition: all var(--duration) var(--ease-out);
+    }
+
+    .pr-card-edit:hover {
+        border-color: var(--border-hover);
+        color: var(--text-brand);
+    }
+
+    .pr-card-value {
+        font-size: 28px;
+        font-weight: 700;
+        color: var(--brand-cyan);
+        margin-bottom: 6px;
+        letter-spacing: -0.5px;
+    }
+
+    .pr-card-status {
+        font-size: 11px;
+        font-weight: 500;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .pr-card-status.verified {
+        color: var(--brand-cyan);
+    }
+
+    .pr-card-status.unverified {
+        color: var(--text-muted);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Profile Top Card -->
+<div class="profile-top-card">
+    <div class="profile-banner"></div>
+    <div class="profile-identity">
+        <div class="profile-avatar-wrap">
+            <div class="profile-avatar">
+                {% if profile_user.avatar %}
+                <img src="{{ profile_user.avatar.url }}" alt="{{ profile_user.display_name }}">
+                {% else %}
+                <span class="profile-avatar-placeholder">{{ profile_user.display_name|make_list|first|upper }}</span>
+                {% endif %}
+            </div>
+            {% if is_own_profile %}
+            <a href="{% url 'accounts:edit_profile' %}" class="profile-settings-btn" title="Settings">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </a>
+            {% endif %}
+        </div>
+
+        <div class="profile-display-name">{{ profile_user.display_name }}</div>
+        <div class="profile-username">@{{ profile_user.username }}</div>
+        {% if profile_user.bio %}
+        <div class="profile-bio">{{ profile_user.bio }}</div>
+        {% endif %}
+
+        <!-- Social Stats -->
+        <div class="social-stats">
+            <div class="social-stat">
+                <div class="social-stat-value">{{ profile_user.workout_frequency }}</div>
+                <div class="social-stat-label">Friends</div>
+            </div>
+            <div class="social-stat">
+                <div class="social-stat-value">0</div>
+                <div class="social-stat-label">Following</div>
+            </div>
+            <div class="social-stat">
+                <div class="social-stat-value">0</div>
+                <div class="social-stat-label">Followers</div>
+            </div>
+        </div>
+
+        <!-- Metric Cards -->
+        <div class="metric-cards">
+            <div class="metric-card">
+                <div class="metric-card-label">&#128170; Total Workouts</div>
+                <div class="metric-card-value">{{ profile_user.total_workouts }}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-card-label">&#128293; Current Streak</div>
+                <div class="metric-card-value">{{ profile_user.current_streak }}</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-card-label">&#128101; Friends</div>
+                <div class="metric-card-value">{{ profile_user.workout_frequency }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tab Bar -->
+<div class="profile-tabs">
+    <button class="profile-tab active" data-tab="posts">Posts</button>
+    <button class="profile-tab" data-tab="calendar">Calendar</button>
+    <button class="profile-tab" data-tab="records">Personal Records</button>
+</div>
+
+<!-- Posts Tab -->
+<div class="tab-content active" id="tab-posts">
+    <div class="posts-header">&#128247; My Posts</div>
+    <div class="posts-empty">
+        No posts yet. Start sharing your workouts!
+    </div>
+</div>
+
+<!-- Calendar Tab -->
+<div class="tab-content" id="tab-calendar">
+    <div class="calendar-section-title">&#128197; Workout Calendar</div>
+    <div class="calendar-card">
+        <div class="calendar-nav">
+            <button class="calendar-nav-btn" id="calPrev">&#8592;</button>
+            <div class="calendar-month-label" id="calMonthLabel"></div>
+            <button class="calendar-nav-btn" id="calNext">&#8594;</button>
+        </div>
+        <div class="calendar-weekdays">
+            <div class="calendar-weekday">S</div>
+            <div class="calendar-weekday">M</div>
+            <div class="calendar-weekday">T</div>
+            <div class="calendar-weekday">W</div>
+            <div class="calendar-weekday">T</div>
+            <div class="calendar-weekday">F</div>
+            <div class="calendar-weekday">S</div>
+        </div>
+        <div class="calendar-days" id="calDays"></div>
+    </div>
+</div>
+
+<!-- Personal Records Tab -->
+<div class="tab-content" id="tab-records">
+    <div class="pr-section-title">&#127942; Personal Records</div>
+    <div class="pr-grid">
+        <div class="pr-card">
+            <div class="pr-card-header">
+                <span class="pr-card-name">Bench Press</span>
+                <div class="pr-card-edit">&#9998;</div>
+            </div>
+            <div class="pr-card-value">-- lbs</div>
+            <div class="pr-card-status unverified">Unrecorded Lift</div>
+        </div>
+        <div class="pr-card">
+            <div class="pr-card-header">
+                <span class="pr-card-name">Squat</span>
+                <div class="pr-card-edit">&#9998;</div>
+            </div>
+            <div class="pr-card-value">-- lbs</div>
+            <div class="pr-card-status unverified">Unrecorded Lift</div>
+        </div>
+        <div class="pr-card">
+            <div class="pr-card-header">
+                <span class="pr-card-name">Deadlift</span>
+                <div class="pr-card-edit">&#9998;</div>
+            </div>
+            <div class="pr-card-value">-- lbs</div>
+            <div class="pr-card-status unverified">Unrecorded Lift</div>
+        </div>
+        <div class="pr-card">
+            <div class="pr-card-header">
+                <span class="pr-card-name">Mile Time</span>
+                <div class="pr-card-edit">&#9998;</div>
+            </div>
+            <div class="pr-card-value">--:--</div>
+            <div class="pr-card-status unverified">Unrecorded Lift</div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    // Tab switching
+    var tabs = document.querySelectorAll('.profile-tab');
+    tabs.forEach(function(tab) {
+        tab.addEventListener('click', function() {
+            tabs.forEach(function(t) { t.classList.remove('active'); });
+            document.querySelectorAll('.tab-content').forEach(function(c) { c.classList.remove('active'); });
+            tab.classList.add('active');
+            document.getElementById('tab-' + tab.getAttribute('data-tab')).classList.add('active');
+        });
+    });
+
+    // Calendar
+    var currentDate = new Date();
+    var calMonth = currentDate.getMonth();
+    var calYear = currentDate.getFullYear();
+    var monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    // Placeholder workout days (simulate some workout dates)
+    function getWorkoutDays(year, month) {
+        var days = [];
+        var daysInMonth = new Date(year, month + 1, 0).getDate();
+        for (var d = 1; d <= daysInMonth; d++) {
+            var dayOfWeek = new Date(year, month, d).getDay();
+            // Simulate workouts on Mon, Wed, Fri, Sun
+            if (dayOfWeek === 0 || dayOfWeek === 1 || dayOfWeek === 3 || dayOfWeek === 5) {
+                days.push(d);
+            }
+        }
+        return days;
+    }
+
+    function renderCalendar() {
+        var label = document.getElementById('calMonthLabel');
+        var container = document.getElementById('calDays');
+        label.textContent = monthNames[calMonth] + ' ' + calYear;
+
+        var firstDay = new Date(calYear, calMonth, 1).getDay();
+        var daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+        var workoutDays = getWorkoutDays(calYear, calMonth);
+        var today = new Date();
+
+        var html = '';
+        // Empty cells before first day
+        for (var i = 0; i < firstDay; i++) {
+            html += '<div class="calendar-day empty"></div>';
+        }
+        for (var d = 1; d <= daysInMonth; d++) {
+            var classes = 'calendar-day';
+            if (workoutDays.indexOf(d) !== -1) classes += ' workout';
+            if (d === today.getDate() && calMonth === today.getMonth() && calYear === today.getFullYear()) classes += ' today';
+            html += '<div class="' + classes + '">' + d + '</div>';
+        }
+        container.innerHTML = html;
+    }
+
+    document.getElementById('calPrev').addEventListener('click', function() {
+        calMonth--;
+        if (calMonth < 0) { calMonth = 11; calYear--; }
+        renderCalendar();
+    });
+
+    document.getElementById('calNext').addEventListener('click', function() {
+        calMonth++;
+        if (calMonth > 11) { calMonth = 0; calYear++; }
+        renderCalendar();
+    });
+
+    renderCalendar();
+})();
+</script>
+{% endblock %}
