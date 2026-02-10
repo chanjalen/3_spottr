@@ -16,6 +16,13 @@ from social.views import get_user_posts
 from workouts.models import PersonalRecord
 
 
+def get_friends_count(user):
+    """Count mutual follows (both users follow each other)."""
+    following_ids = set(Follow.objects.filter(follower=user).values_list('following_id', flat=True))
+    follower_ids = set(Follow.objects.filter(following=user).values_list('follower_id', flat=True))
+    return len(following_ids & follower_ids)
+
+
 def signup_view(request):
     if request.user.is_authenticated:
         return redirect('accounts:profile')
@@ -64,9 +71,10 @@ def logout_view(request):
 @login_required
 def profile_view(request):
     user = request.user
-    user_posts = get_user_posts(user)
+    user_posts = get_user_posts(user, viewer=request.user)
     following_count = Follow.objects.filter(follower=user).count()
     followers_count = Follow.objects.filter(following=user).count()
+    friends_count = get_friends_count(user)
     personal_records = PersonalRecord.objects.filter(user=user)
     return render(request, 'accounts/profile.html', {
         'profile_user': user,
@@ -74,6 +82,7 @@ def profile_view(request):
         'user_posts': user_posts,
         'following_count': following_count,
         'followers_count': followers_count,
+        'friends_count': friends_count,
         'personal_records': personal_records,
     })
 
@@ -96,9 +105,10 @@ def user_profile_view(request, username):
             'profile_user': profile_user,
         })
 
-    user_posts = get_user_posts(profile_user)
+    user_posts = get_user_posts(profile_user, viewer=request.user)
     following_count = Follow.objects.filter(follower=profile_user).count()
     followers_count = Follow.objects.filter(following=profile_user).count()
+    friends_count = get_friends_count(profile_user)
     personal_records = PersonalRecord.objects.filter(user=profile_user)
     return render(request, 'accounts/profile.html', {
         'profile_user': profile_user,
@@ -106,6 +116,7 @@ def user_profile_view(request, username):
         'user_posts': user_posts,
         'following_count': following_count,
         'followers_count': followers_count,
+        'friends_count': friends_count,
         'personal_records': personal_records,
         'is_following': is_following,
         'is_blocked': is_blocked,
@@ -262,9 +273,11 @@ def follow_toggle_view(request):
         # Target user's counts
         'target_followers_count': Follow.objects.filter(following=target).count(),
         'target_following_count': Follow.objects.filter(follower=target).count(),
+        'target_friends_count': get_friends_count(target),
         # Current (logged-in) user's counts
         'my_followers_count': Follow.objects.filter(following=request.user).count(),
         'my_following_count': Follow.objects.filter(follower=request.user).count(),
+        'my_friends_count': get_friends_count(request.user),
     })
 
 
@@ -297,9 +310,11 @@ def block_toggle_view(request):
         # Target user's counts
         'target_followers_count': Follow.objects.filter(following=target).count(),
         'target_following_count': Follow.objects.filter(follower=target).count(),
+        'target_friends_count': get_friends_count(target),
         # Current (logged-in) user's counts
         'my_followers_count': Follow.objects.filter(following=request.user).count(),
         'my_following_count': Follow.objects.filter(follower=request.user).count(),
+        'my_friends_count': get_friends_count(request.user),
     })
 
 
