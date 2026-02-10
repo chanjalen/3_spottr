@@ -4,7 +4,7 @@ A fitness social networking application that helps users find gyms, track workou
 
 ## Team Information
 
-- **Team Number:** [Your Team Number]
+- **Team Number:** 3
 - **Project Name:** Spottr
 
 ## Features
