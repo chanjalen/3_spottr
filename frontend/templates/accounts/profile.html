@@ -272,6 +272,39 @@
         background: var(--bg-elevated);
     }
 
+    .post-thumb-content {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        height: 100%;
+        padding: 8px;
+        text-align: center;
+        background: linear-gradient(135deg, rgba(124, 58, 237, 0.15), rgba(6, 182, 212, 0.15));
+    }
+
+    .post-thumb-content .thumb-icon {
+        font-size: 22px;
+        margin-bottom: 4px;
+    }
+
+    .post-thumb-content .thumb-name {
+        font-size: 10px;
+        font-weight: 700;
+        color: var(--text-primary);
+        line-height: 1.2;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .post-thumb-content .thumb-detail {
+        font-size: 9px;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+
     .posts-empty {
         text-align: center;
         padding: 40px 20px;
@@ -395,6 +428,65 @@
         background: var(--bg-elevated);
     }
 
+    .post-card-workout-summary {
+        width: 100%;
+        padding: 24px 20px;
+        background: linear-gradient(135deg, rgba(124, 58, 237, 0.12), rgba(6, 182, 212, 0.12));
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        text-align: center;
+    }
+
+    .post-card-workout-summary .workout-icon {
+        font-size: 36px;
+    }
+
+    .post-card-workout-summary .workout-name {
+        font-size: 16px;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .post-card-workout-summary .workout-stats {
+        display: flex;
+        gap: 16px;
+    }
+
+    .post-card-workout-summary .workout-stat {
+        font-size: 13px;
+        color: var(--text-secondary);
+    }
+
+    .post-card-workout-summary .workout-stat strong {
+        color: var(--brand-cyan);
+        font-weight: 700;
+    }
+
+    .post-card-text-summary {
+        width: 100%;
+        padding: 24px 20px;
+        background: linear-gradient(135deg, rgba(124, 58, 237, 0.08), rgba(59, 130, 246, 0.08));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 120px;
+    }
+
+    .post-card-text-summary p {
+        font-size: 15px;
+        color: var(--text-secondary);
+        line-height: 1.5;
+        text-align: center;
+        max-width: 300px;
+        display: -webkit-box;
+        -webkit-line-clamp: 4;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
     .post-card-body {
         padding: 14px 16px;
     }
@@ -447,6 +539,48 @@
         margin-bottom: 12px;
     }
 
+    .post-card-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px 16px;
+    }
+
+    .post-card-header-left {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .post-card-header-left strong {
+        color: var(--text-primary);
+        font-size: 14px;
+        font-weight: 600;
+    }
+
+    .post-delete-btn {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 4px;
+        border-radius: var(--radius-md);
+        transition: all 0.2s;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .post-delete-btn:hover {
+        color: #ef4444;
+        background: rgba(239, 68, 68, 0.1);
+    }
+
+    .post-delete-btn svg {
+        width: 18px;
+        height: 18px;
+    }
+
     .post-card-comments {
         border-top: 1px solid var(--border-subtle);
         padding-top: 10px;
@@ -470,6 +604,72 @@
         color: var(--text-muted);
         cursor: pointer;
         margin-top: 4px;
+    }
+
+    .post-reaction-btn.liked {
+        color: #ef4444;
+    }
+
+    .post-card-like-count {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 8px;
+    }
+
+    .post-comment-input-wrap {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: 10px;
+        border-top: 1px solid var(--border-subtle);
+        padding-top: 10px;
+    }
+
+    .post-comment-input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: var(--text-primary);
+        font-size: 13px;
+        outline: none;
+        padding: 4px 0;
+    }
+
+    .post-comment-input::placeholder {
+        color: var(--text-muted);
+    }
+
+    .post-comment-submit {
+        background: none;
+        border: none;
+        color: var(--brand-cyan);
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 4px 8px;
+        opacity: 0.5;
+        transition: opacity 0.2s;
+    }
+
+    .post-comment-submit:hover {
+        opacity: 1;
+    }
+
+    .post-comments-list {
+        max-height: 200px;
+        overflow-y: auto;
+    }
+
+    .post-view-all-comments {
+        font-size: 12px;
+        color: var(--text-muted);
+        cursor: pointer;
+        margin-bottom: 6px;
+    }
+
+    .post-view-all-comments:hover {
+        color: var(--text-secondary);
     }
 
     .post-viewer-counter {
@@ -635,6 +835,53 @@
         background: var(--bg-card);
     }
 
+    .calendar-post-workout-summary {
+        padding: 16px;
+        background: linear-gradient(135deg, rgba(124, 58, 237, 0.12), rgba(6, 182, 212, 0.12));
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        text-align: center;
+    }
+
+    .calendar-post-workout-summary .cal-workout-icon {
+        font-size: 28px;
+    }
+
+    .calendar-post-workout-summary .cal-workout-name {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .calendar-post-workout-summary .cal-workout-stats {
+        display: flex;
+        gap: 12px;
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+
+    .calendar-post-workout-summary .cal-workout-stats strong {
+        color: var(--brand-cyan);
+    }
+
+    .calendar-post-text-summary {
+        padding: 16px;
+        background: linear-gradient(135deg, rgba(124, 58, 237, 0.08), rgba(59, 130, 246, 0.08));
+        text-align: center;
+    }
+
+    .calendar-post-text-summary p {
+        font-size: 13px;
+        color: var(--text-secondary);
+        line-height: 1.4;
+        display: -webkit-box;
+        -webkit-line-clamp: 3;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
     .calendar-post-card-body {
         padding: 12px 14px;
     }
@@ -678,6 +925,77 @@
     .calendar-post-reactions button .cnt {
         font-size: 12px;
         font-weight: 600;
+    }
+
+    .calendar-post-reactions button.liked {
+        color: #ef4444;
+    }
+
+    .calendar-post-like-count {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 6px;
+    }
+
+    .calendar-post-comments {
+        border-top: 1px solid var(--border-subtle);
+        padding-top: 8px;
+        margin-top: 8px;
+    }
+
+    .calendar-post-view-comments {
+        font-size: 11px;
+        color: var(--text-muted);
+        cursor: pointer;
+        margin-bottom: 4px;
+    }
+
+    .calendar-post-view-comments:hover {
+        color: var(--text-secondary);
+    }
+
+    .calendar-post-comments-list .post-comment {
+        font-size: 12px;
+        margin-bottom: 4px;
+    }
+
+    .calendar-post-comment-input-wrap {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 8px;
+        border-top: 1px solid var(--border-subtle);
+        padding-top: 8px;
+    }
+
+    .calendar-post-comment-input-wrap input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: var(--text-primary);
+        font-size: 12px;
+        outline: none;
+        padding: 2px 0;
+    }
+
+    .calendar-post-comment-input-wrap input::placeholder {
+        color: var(--text-muted);
+    }
+
+    .calendar-post-comment-input-wrap button {
+        background: none;
+        border: none;
+        color: var(--brand-cyan);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 2px 6px;
+        opacity: 0.5;
+    }
+
+    .calendar-post-comment-input-wrap button:hover {
+        opacity: 1;
     }
 
     .calendar-no-posts {
@@ -1809,7 +2127,7 @@
         <!-- Social Stats -->
         <div class="social-stats">
             <div class="social-stat">
-                <div class="social-stat-value">{{ profile_user.total_workouts }}</div>
+                <div class="social-stat-value" id="workoutsStat">{{ profile_user.total_workouts }}</div>
                 <div class="social-stat-label">Workouts</div>
             </div>
             <div class="social-stat{% if is_own_profile %} social-stat-clickable{% endif %}" {% if is_own_profile %}onclick="openFollowList('following')"{% endif %}>
@@ -1837,7 +2155,7 @@
         <div class="metric-cards">
             <div class="metric-card">
                 <div class="metric-card-label">&#128170; Total Workouts</div>
-                <div class="metric-card-value">{{ profile_user.total_workouts }}</div>
+                <div class="metric-card-value" id="totalWorkouts">{{ profile_user.total_workouts }}</div>
             </div>
             <div class="metric-card">
                 <div class="metric-card-label">&#128293; Current Streak</div>
@@ -1845,7 +2163,7 @@
             </div>
             <div class="metric-card">
                 <div class="metric-card-label">&#128101; Friends</div>
-                <div class="metric-card-value">{{ profile_user.workout_frequency }}</div>
+                <div class="metric-card-value" id="friendsCount">{{ friends_count }}</div>
             </div>
         </div>
     </div>
@@ -1864,12 +2182,21 @@
     {% if user_posts %}
     <div class="posts-grid">
         {% for post in user_posts %}
-        <div class="post-thumb" data-index="{{ forloop.counter0 }}" data-description="{{ post.description }}" data-time="{{ post.created_at|timesince }} ago" data-date="{{ post.created_at|date:'Y-n-j' }}" data-location="{% if post.location_name %}{{ post.location_name }}{% elif post.location %}{{ post.location.name }}{% endif %}" onclick="openPostViewer({{ forloop.counter0 }})">
+        <div class="post-thumb" data-index="{{ forloop.counter0 }}" data-post-id="{{ post.id }}" data-post-type="{{ post.type }}" data-description="{{ post.description }}" data-time="{{ post.created_at|timesince }} ago" data-date="{{ post.created_at|date:'Y-n-j' }}" data-location="{% if post.location_name %}{{ post.location_name }}{% elif post.location %}{{ post.location.name }}{% endif %}" data-like-count="{{ post.like_count }}" data-comment-count="{{ post.comment_count }}" data-user-liked="{% if post.user_liked %}true{% else %}false{% endif %}" {% if post.workout %}data-workout-name="{{ post.workout.name }}" data-workout-exercises="{{ post.workout.exercise_count }}" data-workout-sets="{{ post.workout.total_sets }}"{% endif %} onclick="openPostViewer({{ forloop.counter0 }})">
             {% if post.photo_url %}
             <img src="{{ post.photo_url }}" alt="Post photo">
+            {% elif post.workout %}
+            <div class="post-thumb-content">
+                <div class="thumb-icon">&#127947;</div>
+                <div class="thumb-name">{{ post.workout.name }}</div>
+                <div class="thumb-detail">{{ post.workout.exercise_count }} exercises</div>
+            </div>
+            {% elif post.type == 'checkin' %}
+            <div class="post-placeholder">&#128170;</div>
             {% else %}
-            <div class="post-placeholder">
-                {% if post.type == 'checkin' %}&#128170;{% else %}&#128221;{% endif %}
+            <div class="post-thumb-content">
+                <div class="thumb-icon">&#128172;</div>
+                <div class="thumb-name">{{ post.description|truncatewords:8 }}</div>
             </div>
             {% endif %}
         </div>
@@ -2186,32 +2513,170 @@
         html += '<button class="calendar-day-posts-close" onclick="document.getElementById(\'calDayPosts\').innerHTML=\'\'">Close</button></div>';
 
         for (var i = 0; i < indices.length; i++) {
-            var p = posts[indices[i]];
-            html += '<div class="calendar-post-card">';
+            var idx = indices[i];
+            var p = posts[idx];
+            var likedCls = p.userLiked ? ' liked' : '';
+            html += '<div class="calendar-post-card" data-post-id="' + p.postId + '" data-post-type="' + p.postType + '" data-post-index="' + idx + '">';
             if (p.imageUrl) {
                 html += '<img class="calendar-post-card-image" src="' + p.imageUrl + '" alt="Post">';
+            } else if (p.workoutName) {
+                html += '<div class="calendar-post-workout-summary">';
+                html += '<div class="cal-workout-icon">\u{1F3CB}</div>';
+                html += '<div class="cal-workout-name">' + escapeHtml(p.workoutName) + '</div>';
+                html += '<div class="cal-workout-stats">';
+                if (p.workoutExercises) html += '<span><strong>' + p.workoutExercises + '</strong> exercises</span>';
+                if (p.workoutSets) html += '<span><strong>' + p.workoutSets + '</strong> sets</span>';
+                html += '</div></div>';
+            } else if (p.description && p.postType !== 'checkin') {
+                html += '<div class="calendar-post-text-summary"><p>' + escapeHtml(p.description) + '</p></div>';
             } else {
-                html += '<div class="calendar-post-card-emoji">' + (p.emoji || '\u{1F4DD}') + '</div>';
+                html += '<div class="calendar-post-card-emoji">' + (p.emoji || '\u{1F4AA}') + '</div>';
             }
             html += '<div class="calendar-post-card-body">';
+
+            // Like + comment buttons
             html += '<div class="calendar-post-reactions">';
-            html += '<button>\u{1F44D} <span class="cnt">0</span></button>';
-            html += '<button>\u{2764}\u{FE0F} <span class="cnt">0</span></button>';
-            html += '<button>\u{1F525} <span class="cnt">0</span></button>';
-            html += '<button>\u{1F4AC} <span class="cnt">0</span></button>';
+            html += '<button class="' + likedCls + '" onclick="toggleLikeCalendar(this, \'' + p.postId + '\', \'' + p.postType + '\', ' + idx + ')">' + (p.userLiked ? '\u{2764}\u{FE0F}' : '\u{1F90D}') + '</button>';
+            html += '<button onclick="focusCalendarCommentInput(this)">\u{1F4AC}</button>';
             html += '</div>';
+
+            // Like count
+            html += '<div class="calendar-post-like-count">' + p.likeCount + (p.likeCount === 1 ? ' like' : ' likes') + '</div>';
+
             if (p.description) {
                 html += '<div class="calendar-post-card-desc"><strong>' + username + '</strong>' + escapeHtml(p.description) + '</div>';
             }
             var meta = '';
             if (p.location) meta += p.location;
             if (meta) html += '<div class="calendar-post-card-meta">' + meta + '</div>';
+
+            // Comments
+            html += '<div class="calendar-post-comments">';
+            if (p.commentCount > 0) {
+                html += '<div class="calendar-post-view-comments" onclick="loadCalendarComments(this, \'' + p.postId + '\', \'' + p.postType + '\')">View all ' + p.commentCount + ' comment' + (p.commentCount !== 1 ? 's' : '') + '</div>';
+            }
+            html += '<div class="calendar-post-comments-list post-comments-list"></div>';
+            html += '</div>';
+
+            // Comment input
+            html += '<div class="calendar-post-comment-input-wrap">';
+            html += '<input type="text" placeholder="Add a comment..." maxlength="500" onkeydown="if(event.key===\'Enter\')submitCalendarComment(this, \'' + p.postId + '\', \'' + p.postType + '\', ' + idx + ')">';
+            html += '<button onclick="submitCalendarComment(this.previousElementSibling, \'' + p.postId + '\', \'' + p.postType + '\', ' + idx + ')">Post</button>';
+            html += '</div>';
+
             html += '</div></div>';
         }
 
         html += '</div>';
         container.innerHTML = html;
         container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+
+    // ============ CALENDAR LIKE TOGGLE ============
+    window.toggleLikeCalendar = function(btn, postId, postType, postIndex) {
+        var url = postType === 'checkin'
+            ? '/social/checkin/' + postId + '/like/'
+            : '/social/post/' + postId + '/like/';
+
+        fetch(url, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.success) {
+                var card = btn.closest('.calendar-post-card');
+                var countEl = card.querySelector('.calendar-post-like-count');
+
+                if (data.liked) {
+                    btn.classList.add('liked');
+                    btn.innerHTML = '\u{2764}\u{FE0F}';
+                } else {
+                    btn.classList.remove('liked');
+                    btn.innerHTML = '\u{1F90D}';
+                }
+
+                countEl.textContent = data.like_count + (data.like_count === 1 ? ' like' : ' likes');
+
+                if (posts[postIndex]) {
+                    posts[postIndex].likeCount = data.like_count;
+                    posts[postIndex].userLiked = data.liked;
+                }
+            }
+        });
+    };
+
+    // ============ CALENDAR LOAD COMMENTS ============
+    window.loadCalendarComments = function(trigger, postId, postType) {
+        var card = trigger.closest('.calendar-post-card');
+        var listEl = card.querySelector('.calendar-post-comments-list');
+
+        var url = postType === 'checkin'
+            ? '/social/checkin/' + postId + '/comments/'
+            : '/social/post/' + postId + '/comments/';
+
+        fetch(url, {
+            headers: { 'X-CSRFToken': csrfToken },
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.success) {
+                trigger.style.display = 'none';
+                var html = '';
+                data.comments.forEach(function(c) {
+                    html += '<div class="post-comment"><strong>' + escapeHtml(c.user.username) + '</strong>' + escapeHtml(c.text) + '</div>';
+                });
+                if (data.comments.length === 0) {
+                    html = '<div style="font-size:11px;color:var(--text-muted)">No comments yet</div>';
+                }
+                listEl.innerHTML = html;
+            }
+        });
+    };
+
+    // ============ CALENDAR SUBMIT COMMENT ============
+    window.submitCalendarComment = function(input, postId, postType, postIndex) {
+        var text = input.value.trim();
+        if (!text) return;
+
+        var url = postType === 'checkin'
+            ? '/social/checkin/' + postId + '/comments/add/'
+            : '/social/post/' + postId + '/comments/add/';
+
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ text: text }),
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.success) {
+                input.value = '';
+                var card = input.closest('.calendar-post-card');
+                var listEl = card.querySelector('.calendar-post-comments-list');
+                var c = data.comment;
+                listEl.innerHTML += '<div class="post-comment"><strong>' + escapeHtml(c.user.username) + '</strong>' + escapeHtml(c.text) + '</div>';
+
+                if (posts[postIndex]) {
+                    posts[postIndex].commentCount += 1;
+                }
+
+                var viewAll = card.querySelector('.calendar-post-view-comments');
+                if (viewAll) viewAll.style.display = 'none';
+            } else {
+                alert(data.error || 'Failed to add comment');
+            }
+        });
+    };
+
+    // ============ CALENDAR FOCUS COMMENT INPUT ============
+    window.focusCalendarCommentInput = function(btn) {
+        var card = btn.closest('.calendar-post-card');
+        var input = card.querySelector('.calendar-post-comment-input-wrap input');
+        if (input) input.focus();
     };
 
     document.getElementById('calPrev').addEventListener('click', function() {
@@ -2235,37 +2700,74 @@
     postThumbs.forEach(function(thumb) {
         var img = thumb.querySelector('img');
         var placeholder = thumb.querySelector('.post-placeholder');
+        var workoutName = thumb.getAttribute('data-workout-name') || '';
+        var workoutExercises = thumb.getAttribute('data-workout-exercises') || '';
+        var workoutSets = thumb.getAttribute('data-workout-sets') || '';
         posts.push({
             imageUrl: img ? img.src : null,
             emoji: placeholder ? placeholder.textContent.trim() : null,
             description: thumb.getAttribute('data-description') || '',
             time: thumb.getAttribute('data-time') || '',
             location: thumb.getAttribute('data-location') || '',
+            postId: thumb.getAttribute('data-post-id') || '',
+            postType: thumb.getAttribute('data-post-type') || '',
+            likeCount: parseInt(thumb.getAttribute('data-like-count') || '0'),
+            commentCount: parseInt(thumb.getAttribute('data-comment-count') || '0'),
+            userLiked: thumb.getAttribute('data-user-liked') === 'true',
+            workoutName: workoutName,
+            workoutExercises: workoutExercises,
+            workoutSets: workoutSets,
         });
     });
 
     var displayName = '{{ profile_user.display_name|escapejs }}';
     var username = '{{ profile_user.username|escapejs }}';
 
-    function buildPostCard(post) {
-        var html = '<div class="post-viewer-item"><div class="post-card">';
+    var isOwnProfile = {{ is_own_profile|yesno:"true,false" }};
 
-        // Image or emoji
+    function buildPostCard(post, index) {
+        var html = '<div class="post-viewer-item" data-post-index="' + index + '" data-post-id="' + post.postId + '" data-post-type="' + post.postType + '">';
+        html += '<div class="post-card">';
+
+        // Header with username and delete button
+        html += '<div class="post-card-header">';
+        html += '<div class="post-card-header-left"><strong>' + displayName + '</strong></div>';
+        if (isOwnProfile && post.postId) {
+            html += '<button class="post-delete-btn" onclick="deletePost(\'' + post.postId + '\', \'' + post.postType + '\', ' + index + ')" title="Delete post">';
+            html += '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>';
+            html += '</button>';
+        }
+        html += '</div>';
+
+        // Post visual content
         if (post.imageUrl) {
             html += '<img class="post-card-image" src="' + post.imageUrl + '" alt="Post">';
+        } else if (post.workoutName) {
+            html += '<div class="post-card-workout-summary">';
+            html += '<div class="workout-icon">\u{1F3CB}</div>';
+            html += '<div class="workout-name">' + escapeHtml(post.workoutName) + '</div>';
+            html += '<div class="workout-stats">';
+            if (post.workoutExercises) html += '<div class="workout-stat"><strong>' + post.workoutExercises + '</strong> exercises</div>';
+            if (post.workoutSets) html += '<div class="workout-stat"><strong>' + post.workoutSets + '</strong> sets</div>';
+            html += '</div></div>';
+        } else if (post.description && post.postType !== 'checkin') {
+            html += '<div class="post-card-text-summary"><p>' + escapeHtml(post.description) + '</p></div>';
         } else {
-            html += '<div class="post-card-emoji">' + (post.emoji || '\u{1F4DD}') + '</div>';
+            html += '<div class="post-card-emoji">' + (post.emoji || '\u{1F4AA}') + '</div>';
         }
 
         html += '<div class="post-card-body">';
 
-        // Reaction buttons (placeholder counts)
+        // Like button
+        var likedClass = post.userLiked ? ' liked' : '';
         html += '<div class="post-card-reactions">';
-        html += '<button class="post-reaction-btn">\u{1F44D} <span class="count">0</span></button>';
-        html += '<button class="post-reaction-btn">\u{2764}\u{FE0F} <span class="count">0</span></button>';
-        html += '<button class="post-reaction-btn">\u{1F525} <span class="count">0</span></button>';
-        html += '<button class="post-reaction-btn">\u{1F4AC} <span class="count">0</span></button>';
+        html += '<button class="post-reaction-btn' + likedClass + '" onclick="toggleLikePost(this, \'' + post.postId + '\', \'' + post.postType + '\')">';
+        html += (post.userLiked ? '\u{2764}\u{FE0F}' : '\u{1F90D}') + '</button>';
+        html += '<button class="post-reaction-btn" onclick="focusCommentInput(this)">\u{1F4AC}</button>';
         html += '</div>';
+
+        // Like count
+        html += '<div class="post-card-like-count">' + post.likeCount + (post.likeCount === 1 ? ' like' : ' likes') + '</div>';
 
         // Description
         if (post.description) {
@@ -2280,9 +2782,18 @@
             html += '<div class="post-card-time">' + meta + '</div>';
         }
 
-        // Placeholder comments
+        // Comments section
         html += '<div class="post-card-comments">';
-        html += '<div class="post-comment-muted">No comments yet</div>';
+        if (post.commentCount > 0) {
+            html += '<div class="post-view-all-comments" onclick="loadComments(this, \'' + post.postId + '\', \'' + post.postType + '\')">View all ' + post.commentCount + ' comment' + (post.commentCount !== 1 ? 's' : '') + '</div>';
+        }
+        html += '<div class="post-comments-list"></div>';
+        html += '</div>';
+
+        // Comment input
+        html += '<div class="post-comment-input-wrap">';
+        html += '<input class="post-comment-input" type="text" placeholder="Add a comment..." maxlength="500" onkeydown="if(event.key===\'Enter\')submitComment(this, \'' + post.postId + '\', \'' + post.postType + '\')">';
+        html += '<button class="post-comment-submit" onclick="submitComment(this.previousElementSibling, \'' + post.postId + '\', \'' + post.postType + '\')">Post</button>';
         html += '</div>';
 
         html += '</div></div></div>';
@@ -2304,7 +2815,7 @@
         // Build all post slides
         var html = '';
         for (var i = 0; i < posts.length; i++) {
-            html += buildPostCard(posts[i]);
+            html += buildPostCard(posts[i], i);
         }
         scroll.innerHTML = html;
         counter.textContent = (index + 1) + ' / ' + posts.length;
@@ -2330,6 +2841,185 @@
     window.closePostViewer = function() {
         document.getElementById('postViewer').classList.remove('open');
         document.body.style.overflow = '';
+    };
+
+    window.deletePost = function(postId, postType, index) {
+        if (!confirm('Are you sure you want to delete this post?')) return;
+
+        var url;
+        if (postType === 'checkin') {
+            url = '/social/checkin/' + postId + '/delete/';
+        } else {
+            url = '/social/post/' + postId + '/delete/';
+        }
+
+        fetch(url, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.success) {
+                // Remove from viewer
+                var viewerItem = document.querySelector('.post-viewer-item[data-post-index="' + index + '"]');
+                if (viewerItem) viewerItem.remove();
+
+                // Remove from grid
+                var thumb = document.querySelector('.post-thumb[data-post-id="' + postId + '"]');
+                if (thumb) thumb.remove();
+
+                // Update posts array
+                posts.splice(index, 1);
+
+                // Update total workouts count
+                if (data.total_workouts !== undefined) {
+                    var twEl = document.getElementById('totalWorkouts');
+                    var wsEl = document.getElementById('workoutsStat');
+                    if (twEl) twEl.textContent = data.total_workouts;
+                    if (wsEl) wsEl.textContent = data.total_workouts;
+                }
+
+                // Close viewer if no posts left, otherwise update counter
+                if (posts.length === 0) {
+                    closePostViewer();
+                } else {
+                    var counter = document.getElementById('postViewerCounter');
+                    var scroll = document.getElementById('postViewerScroll');
+                    var scrollTop = scroll.scrollTop;
+                    var itemHeight = scroll.clientHeight;
+                    var current = Math.min(Math.round(scrollTop / itemHeight) + 1, posts.length);
+                    counter.textContent = current + ' / ' + posts.length;
+                }
+            } else {
+                alert(data.error || 'Failed to delete post');
+            }
+        })
+        .catch(function() {
+            alert('Failed to delete post');
+        });
+    };
+
+    // ============ LIKE TOGGLE ============
+    window.toggleLikePost = function(btn, postId, postType) {
+        var url;
+        if (postType === 'checkin') {
+            url = '/social/checkin/' + postId + '/like/';
+        } else {
+            url = '/social/post/' + postId + '/like/';
+        }
+
+        fetch(url, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrfToken },
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.success) {
+                var card = btn.closest('.post-card');
+                var countEl = card.querySelector('.post-card-like-count');
+
+                if (data.liked) {
+                    btn.classList.add('liked');
+                    btn.innerHTML = '\u{2764}\u{FE0F}';
+                } else {
+                    btn.classList.remove('liked');
+                    btn.innerHTML = '\u{1F90D}';
+                }
+
+                countEl.textContent = data.like_count + (data.like_count === 1 ? ' like' : ' likes');
+
+                // Update the posts array too
+                var item = btn.closest('.post-viewer-item');
+                var idx = parseInt(item.getAttribute('data-post-index'));
+                if (posts[idx]) {
+                    posts[idx].likeCount = data.like_count;
+                    posts[idx].userLiked = data.liked;
+                }
+            }
+        });
+    };
+
+    // ============ LOAD COMMENTS ============
+    window.loadComments = function(trigger, postId, postType) {
+        var card = trigger.closest('.post-card');
+        var listEl = card.querySelector('.post-comments-list');
+
+        var url;
+        if (postType === 'checkin') {
+            url = '/social/checkin/' + postId + '/comments/';
+        } else {
+            url = '/social/post/' + postId + '/comments/';
+        }
+
+        fetch(url, {
+            headers: { 'X-CSRFToken': csrfToken },
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.success) {
+                trigger.style.display = 'none';
+                var html = '';
+                data.comments.forEach(function(c) {
+                    html += '<div class="post-comment"><strong>' + escapeHtml(c.user.username) + '</strong>' + escapeHtml(c.text) + '</div>';
+                });
+                if (data.comments.length === 0) {
+                    html = '<div class="post-comment-muted">No comments yet</div>';
+                }
+                listEl.innerHTML = html;
+            }
+        });
+    };
+
+    // ============ SUBMIT COMMENT ============
+    window.submitComment = function(input, postId, postType) {
+        var text = input.value.trim();
+        if (!text) return;
+
+        var url;
+        if (postType === 'checkin') {
+            url = '/social/checkin/' + postId + '/comments/add/';
+        } else {
+            url = '/social/post/' + postId + '/comments/add/';
+        }
+
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': csrfToken,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ text: text }),
+        })
+        .then(function(res) { return res.json(); })
+        .then(function(data) {
+            if (data.success) {
+                input.value = '';
+                var card = input.closest('.post-card');
+                var listEl = card.querySelector('.post-comments-list');
+                var c = data.comment;
+                listEl.innerHTML += '<div class="post-comment"><strong>' + escapeHtml(c.user.username) + '</strong>' + escapeHtml(c.text) + '</div>';
+
+                // Update comment count in posts array
+                var item = input.closest('.post-viewer-item');
+                var idx = parseInt(item.getAttribute('data-post-index'));
+                if (posts[idx]) {
+                    posts[idx].commentCount += 1;
+                }
+
+                // Hide "View all" if visible, update count
+                var viewAll = card.querySelector('.post-view-all-comments');
+                if (viewAll) viewAll.style.display = 'none';
+            } else {
+                alert(data.error || 'Failed to add comment');
+            }
+        });
+    };
+
+    // ============ FOCUS COMMENT INPUT ============
+    window.focusCommentInput = function(btn) {
+        var card = btn.closest('.post-card');
+        var input = card.querySelector('.post-comment-input');
+        if (input) input.focus();
     };
 
     // Close on Escape key
@@ -2480,6 +3170,7 @@
             // Update own profile counts
             document.getElementById('followingCount').textContent = data.my_following_count;
             document.getElementById('followersCount').textContent = data.my_followers_count;
+            document.getElementById('friendsCount').textContent = data.my_friends_count;
         })
         .catch(function() {
             btn.disabled = false;
@@ -2588,6 +3279,7 @@
             if (el) el.remove();
             document.getElementById('followingCount').textContent = data.my_following_count;
             document.getElementById('followersCount').textContent = data.my_followers_count;
+            document.getElementById('friendsCount').textContent = data.my_friends_count;
             var body = document.getElementById('followListBody');
             if (!body.querySelector('.follow-list-item')) {
                 body.innerHTML = '<div class="follow-list-empty">Not following anyone yet</div>';
@@ -2610,6 +3302,7 @@
             if (el) el.remove();
             document.getElementById('followersCount').textContent = data.my_followers_count;
             document.getElementById('followingCount').textContent = data.my_following_count;
+            document.getElementById('friendsCount').textContent = data.my_friends_count;
             var body = document.getElementById('followListBody');
             if (!body.querySelector('.follow-list-item')) {
                 body.innerHTML = '<div class="follow-list-empty">No followers yet</div>';
@@ -2640,6 +3333,7 @@
             }
             document.getElementById('followingCount').textContent = data.my_following_count;
             document.getElementById('followersCount').textContent = data.my_followers_count;
+            document.getElementById('friendsCount').textContent = data.my_friends_count;
             var body = document.getElementById('followListBody');
             if (!body.querySelector('.follow-list-item')) {
                 body.innerHTML = '<div class="follow-list-empty">' +
@@ -2917,6 +3611,7 @@
             // On another user's profile, counts shown are the target's
             document.getElementById('followersCount').textContent = data.target_followers_count;
             document.getElementById('followingCount').textContent = data.target_following_count;
+            document.getElementById('friendsCount').textContent = data.target_friends_count;
         })
         .catch(function() { btn.disabled = false; });
     };
@@ -2952,6 +3647,7 @@
             }
             document.getElementById('followersCount').textContent = data.target_followers_count;
             document.getElementById('followingCount').textContent = data.target_following_count;
+            document.getElementById('friendsCount').textContent = data.target_friends_count;
         })
         .catch(function() { btn.disabled = false; });
     };

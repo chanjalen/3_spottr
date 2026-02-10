@@ -5,6 +5,7 @@ from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST, require_GET
 from django.utils import timezone
+from django.db.models import F
 
 from .models import Workout, Exercise, ExerciseCatalog, ExerciseSet, PersonalRecord
 from social.models import Post
@@ -447,6 +448,10 @@ def finish_workout_view(request, workout_id):
         if photo:
             post.photo = photo
             post.save()
+
+        # Increment total workouts
+        request.user.total_workouts = F('total_workouts') + 1
+        request.user.save(update_fields=['total_workouts'])
 
     return JsonResponse({
         'success': True,

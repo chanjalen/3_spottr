@@ -6,6 +6,7 @@ from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST, require_GET
 from django.conf import settings
+from django.db.models import F
 
 from .models import QuickWorkout, Post, Comment, Reaction, Poll, PollOption, PollVote
 from gyms.models import Gym
@@ -204,6 +205,10 @@ def create_checkin_view(request):
             visibility='main',
         )
 
+        # Increment total workouts
+        request.user.total_workouts = F('total_workouts') + 1
+        request.user.save(update_fields=['total_workouts'])
+
         # Save the photo if provided
         if photo:
             checkins_dir = os.path.join(settings.MEDIA_ROOT, 'checkins')
@@ -227,9 +232,10 @@ def create_checkin_view(request):
         }, status=500)
 
 
-def get_user_posts(user):
+def get_user_posts(user, viewer=None):
     """
     Get all posts and check-ins for a user.
+    viewer is the logged-in user (for user_liked checks).
     """
     quick_workouts = QuickWorkout.objects.filter(
         user=user
@@ -242,6 +248,12 @@ def get_user_posts(user):
     user_posts = []
 
     for qw in quick_workouts:
+        like_count = Reaction.objects.filter(quick_workout=qw).count()
+        comment_count = Comment.objects.filter(quick_workout=qw).count()
+        user_liked = False
+        if viewer and viewer.is_authenticated:
+            user_liked = Reaction.objects.filter(quick_workout=qw, user=viewer).exists()
+
         user_posts.append({
             'type': 'checkin',
             'id': qw.id,
@@ -251,9 +263,18 @@ def get_user_posts(user):
             'description': qw.description,
             'created_at': qw.created_at,
             'photo_url': get_checkin_photo(qw.id),
+            'like_count': like_count,
+            'comment_count': comment_count,
+            'user_liked': user_liked,
         })
 
     for post in posts:
+        like_count = Reaction.objects.filter(post=post).count()
+        comment_count = Comment.objects.filter(post=post).count()
+        user_liked = False
+        if viewer and viewer.is_authenticated:
+            user_liked = Reaction.objects.filter(post=post, user=viewer).exists()
+
         post_data = {
             'type': 'workout' if post.workout else 'post',
             'id': post.id,
@@ -261,6 +282,9 @@ def get_user_posts(user):
             'description': post.description,
             'created_at': post.created_at,
             'photo_url': post.photo.url if post.photo else None,
+            'like_count': like_count,
+            'comment_count': comment_count,
+            'user_liked': user_liked,
         }
 
         # Add workout details if this is a workout post
@@ -604,6 +628,40 @@ def add_checkin_comment_view(request, checkin_id):
             'reply_count': 0,
         }
     })
+
+
+@login_required
+@require_POST
+def delete_post_view(request, post_id):
+    """Delete a post. Only the post owner can delete it."""
+    post = get_object_or_404(Post, id=post_id)
+    if post.user != request.user:
+        return JsonResponse({'success': False, 'error': 'You can only delete your own posts'}, status=403)
+    post.delete()
+    # Decrement total workouts (floor at 0)
+    from accounts.models import User
+    User.objects.filter(pk=request.user.pk, total_workouts__gt=0).update(total_workouts=F('total_workouts') - 1)
+    request.user.refresh_from_db()
+    return JsonResponse({'success': True, 'total_workouts': request.user.total_workouts})
+
+
+@login_required
+@require_POST
+def delete_checkin_view(request, checkin_id):
+    """Delete a check-in. Only the owner can delete it."""
+    checkin = get_object_or_404(QuickWorkout, id=checkin_id)
+    if checkin.user != request.user:
+        return JsonResponse({'success': False, 'error': 'You can only delete your own check-ins'}, status=403)
+    # Also remove the photo file if it exists
+    photo_path = os.path.join(settings.MEDIA_ROOT, 'checkins', f'{checkin.id}.jpg')
+    if os.path.exists(photo_path):
+        os.remove(photo_path)
+    checkin.delete()
+    # Decrement total workouts (floor at 0)
+    from accounts.models import User
+    User.objects.filter(pk=request.user.pk, total_workouts__gt=0).update(total_workouts=F('total_workouts') - 1)
+    request.user.refresh_from_db()
+    return JsonResponse({'success': True, 'total_workouts': request.user.total_workouts})
 
 
 @login_required

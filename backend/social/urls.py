@@ -25,6 +25,10 @@ urlpatterns = [
     path('checkin/<str:checkin_id>/comments/', views.get_checkin_comments_view, name='get_checkin_comments'),
     path('checkin/<str:checkin_id>/comments/add/', views.add_checkin_comment_view, name='add_checkin_comment'),
 
+    # Delete post / check-in
+    path('post/<str:post_id>/delete/', views.delete_post_view, name='delete_post'),
+    path('checkin/<str:checkin_id>/delete/', views.delete_checkin_view, name='delete_checkin'),
+
     # Delete comment
     path('comment/<str:comment_id>/delete/', views.delete_comment_view, name='delete_comment'),
 
