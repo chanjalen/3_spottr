@@ -5,8 +5,8 @@ from common.models import BaseModel
 
 class Comment(BaseModel):
     """
-    Represents a comment on a post or quick workout.
-    Either post or quick_workout must be set, but not both.
+    Represents a comment on a post, quick workout, or another comment (reply).
+    Either post, quick_workout, or parent_comment must be set.
     """
     post = models.ForeignKey(
         'social.Post',
@@ -22,13 +22,20 @@ class Comment(BaseModel):
         blank=True,
         related_name='comments',
     )
+    parent_comment = models.ForeignKey(
+        'self',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='replies',
+    )
     user = models.ForeignKey(
         'accounts.User',
         on_delete=models.CASCADE,
         related_name='comments',
     )
 
-    description = models.TextField(blank= True)
+    description = models.TextField(blank=True)
 
     class Meta:
         ordering = ['created_at']
@@ -36,16 +43,14 @@ class Comment(BaseModel):
             models.Index(fields=['post', 'created_at'], name='idx_comment_post'),
             models.Index(fields=['quick_workout', 'created_at'], name='idx_comment_quick_workout'),
             models.Index(fields=['user', 'created_at'], name='idx_comment_user'),
-        ]
-        constraints = [
-            models.CheckConstraint(
-                condition=(
-                    Q(post__isnull=False, quick_workout__isnull=True)
-                    | Q(post__isnull=True, quick_workout__isnull=False)
-                ),
-                name='comment_on_post_or_quick_workout',
-            )
+            models.Index(fields=['parent_comment', 'created_at'], name='idx_comment_parent'),
         ]
 
     def __str__(self):
+        if self.parent_comment:
+            return f"Reply by {self.user.username}"
         return f"Comment by {self.user.username}"
+
+    @property
+    def reply_count(self):
+        return self.replies.count()

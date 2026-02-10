@@ -366,10 +366,39 @@ def following_list_view(request):
     return JsonResponse({'results': results})
 
 
+def parse_pr_value(value, unit):
+    """Parse PR value to a comparable number for comparison."""
+    try:
+        if unit == 'min:sec':
+            # Convert time format to total seconds
+            parts = value.replace(':', '.').split('.')
+            if len(parts) == 2:
+                return int(parts[0]) * 60 + int(parts[1])
+            return float(value) * 60
+        return float(value)
+    except (ValueError, TypeError):
+        return 0
+
+
+def is_new_pr_better(new_value, new_unit, old_value, old_unit):
+    """Check if new PR is better than old PR. For time-based, lower is better. For weight/reps, higher is better."""
+    new_num = parse_pr_value(new_value, new_unit)
+    old_num = parse_pr_value(old_value, old_unit)
+
+    # For time-based exercises, lower is better
+    if new_unit == 'min:sec' or old_unit == 'min:sec':
+        return new_num < old_num
+
+    # For weight/reps, higher is better
+    return new_num > old_num
+
+
 @login_required
 @require_POST
 def save_pr_view(request):
-    """AJAX endpoint: create or update a personal record."""
+    """AJAX endpoint: create or update a personal record.
+    If an existing PR for the same exercise exists, only update if new value is better.
+    """
     from django.utils import timezone
 
     pr_id = request.POST.get('pr_id', '').strip()
@@ -382,6 +411,7 @@ def save_pr_view(request):
         return JsonResponse({'error': 'Exercise name, value, and unit are required.'}, status=400)
 
     if pr_id:
+        # Editing an existing PR
         pr = get_object_or_404(PersonalRecord, pk=pr_id, user=request.user)
         pr.exercise_name = exercise_name
         pr.value = value
@@ -391,14 +421,43 @@ def save_pr_view(request):
             pr.video = video
         pr.save()
     else:
-        pr = PersonalRecord.objects.create(
+        # Check if there's an existing PR for this exercise
+        existing_pr = PersonalRecord.objects.filter(
             user=request.user,
-            exercise_name=exercise_name,
-            value=value,
-            unit=unit,
-            achieved_date=timezone.now().date(),
-            video=video,
-        )
+            exercise_name__iexact=exercise_name
+        ).first()
+
+        if existing_pr:
+            # Compare and only update if new value is better
+            if is_new_pr_better(value, unit, existing_pr.value, existing_pr.unit):
+                existing_pr.value = value
+                existing_pr.unit = unit
+                existing_pr.achieved_date = timezone.now().date()
+                if video:
+                    existing_pr.video = video
+                existing_pr.save()
+                pr = existing_pr
+            else:
+                # New value is not better, return info about existing PR
+                return JsonResponse({
+                    'id': existing_pr.pk,
+                    'exercise_name': existing_pr.exercise_name,
+                    'value': existing_pr.value,
+                    'unit': existing_pr.unit,
+                    'has_video': bool(existing_pr.video),
+                    'video_url': existing_pr.video.url if existing_pr.video else '',
+                    'not_updated': True,
+                    'message': f'Your existing PR of {existing_pr.value} {existing_pr.unit} is better!'
+                })
+        else:
+            pr = PersonalRecord.objects.create(
+                user=request.user,
+                exercise_name=exercise_name,
+                value=value,
+                unit=unit,
+                achieved_date=timezone.now().date(),
+                video=video,
+            )
 
     return JsonResponse({
         'id': pr.pk,
