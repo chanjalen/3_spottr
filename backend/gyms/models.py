@@ -1,4 +1,5 @@
 from django.db import models
+from django.core.validators import MinValueValidator, MaxValueValidator
 from common.models import BaseModel
 
 
@@ -7,15 +8,22 @@ class Gym(BaseModel):
     Represents a physical gym location where users can work out.
     """
     name = models.CharField(max_length=100)
-    address = models.CharField(max_length=255)
+    address = models.CharField(max_length=255, null=True, blank=True)
 
-    latitude = models.DecimalField(max_digits=9, decimal_places=6)
-    longitude = models.DecimalField(max_digits=9, decimal_places=6)
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
 
     website = models.URLField(max_length=255, null=True, blank=True)
-    phone_number = models.CharField(max_length=20, blank=True)
-    hours = models.JSONField(default=dict)
-    amenities = models.JSONField(default=list)
+    phone_number = models.CharField(max_length=20, null=True, blank=True)
+    hours = models.JSONField(default=dict, null=True, blank=True)
+    amenities = models.JSONField(default=list, null=True, blank=True)
+
+    # Google Places integration (for future API use)
+    google_place_id = models.CharField(max_length=255, unique=True, null=True, blank=True)
+
+    # Ratings from Google Places
+    rating = models.DecimalField(max_digits=3, decimal_places=1, null=True, blank=True)
+    rating_count = models.PositiveIntegerField(null=True, blank=True)
 
     class Meta:
         ordering = ['name']
@@ -27,14 +35,22 @@ class Gym(BaseModel):
 class BusyLevel(BaseModel):
     """
     Stores crowd-sourced busy level survey responses for a gym.
+    Scale: 1=Empty, 2=Not busy, 3=Moderate, 4=Busy, 5=Packed
     """
     gym = models.ForeignKey(
         Gym,
         on_delete=models.CASCADE,
         related_name='busy_levels',
     )
+    user = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.CASCADE,
+        related_name='busy_level_responses',
+    )
     timestamp = models.DateTimeField()
-    survey_response = models.IntegerField()
+    survey_response = models.IntegerField(
+        validators=[MinValueValidator(1), MaxValueValidator(5)],
+    )
 
     class Meta:
         ordering = ['-timestamp']
@@ -63,6 +79,13 @@ class WorkoutInvite(BaseModel):
         null=True,
         blank=True,
         related_name='workout_invites',
+    )
+    invited_user = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='received_workout_invites',
     )
 
     description = models.CharField(max_length=255)
