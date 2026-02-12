@@ -17,13 +17,8 @@ INSTALLED_APPS += [
     # 'debug_toolbar',
 ]
 
-# Development database (using SQLite for simplicity)
-DATABASES = {
-    "default": {
-        "ENGINE": "django.db.backends.sqlite3",
-        "NAME": BASE_DIR / "db.sqlite3",
-    }
-}
+# Development database (using SQLite for simplicity) DELETED
+
 
 # Email backend for development (prints to console)
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
