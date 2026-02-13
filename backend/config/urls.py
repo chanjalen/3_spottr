@@ -15,6 +15,9 @@ urlpatterns = [
     path("social/", include("social.urls")),
     path("workouts/", include("workouts.urls")),
     path("api/gyms/", include("gyms.api.urls")),
+    path("api/groups/", include("groups.api.urls")),
+    path("api/messaging/", include("messaging.api.urls")),
+    path("api/social/", include("social.api.urls")),
 ]
 
 # Serve media files in development
