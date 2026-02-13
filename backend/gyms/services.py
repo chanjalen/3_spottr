@@ -415,3 +415,86 @@ def get_gym_leaderboard(gym_id):
     return LeaderboardEntry.objects.filter(
         gym_id=gym_id
     ).select_related('user').order_by('rank')
+
+
+# ---- Top Lifters services ----
+
+LIFT_MAP = {
+    'bench': 'Bench Press',
+    'squat': 'Squat',
+    'deadlift': 'Deadlift',
+}
+
+
+def get_top_lifters(gym_id, lift='bench'):
+    """
+    Get top lifters at a gym for a given lift category.
+    lift: 'bench', 'squat', 'deadlift', or 'total'
+    Returns list of dicts: [{rank, username, display_name, value, unit}, ...]
+    """
+    from accounts.models import User
+    from workouts.models import PersonalRecord
+
+    if lift in LIFT_MAP:
+        exercise_name = LIFT_MAP[lift]
+        prs = PersonalRecord.objects.filter(
+            user__enrolled_gym_id=gym_id,
+            exercise_name__iexact=exercise_name,
+            unit__in=['lbs', 'kg'],
+        ).select_related('user')
+
+        # Keep only the best PR per user
+        best_by_user = {}
+        for pr in prs:
+            try:
+                val = float(pr.value)
+            except (ValueError, TypeError):
+                continue
+            uid = pr.user_id
+            if uid not in best_by_user or val > best_by_user[uid]['value']:
+                best_by_user[uid] = {
+                    'username': pr.user.username,
+                    'display_name': pr.user.display_name or pr.user.username,
+                    'value': val,
+                    'unit': pr.unit,
+                }
+
+        results = sorted(best_by_user.values(), key=lambda x: x['value'], reverse=True)[:5]
+        for i, r in enumerate(results, 1):
+            r['rank'] = i
+        return results
+
+    elif lift == 'total':
+        enrolled_users = User.objects.filter(enrolled_gym_id=gym_id)
+        results = []
+        for user in enrolled_users:
+            total = 0
+            unit = None
+            for name in LIFT_MAP.values():
+                pr = PersonalRecord.objects.filter(
+                    user=user,
+                    exercise_name__iexact=name,
+                    unit__in=['lbs', 'kg'],
+                ).order_by().first()
+                if pr:
+                    try:
+                        val = float(pr.value)
+                        total += val
+                        unit = pr.unit
+                    except (ValueError, TypeError):
+                        pass
+            if total > 0:
+                results.append({
+                    'username': user.username,
+                    'display_name': user.display_name or user.username,
+                    'value': total,
+                    'unit': unit or 'lbs',
+                })
+
+        results.sort(key=lambda x: x['value'], reverse=True)
+        results = results[:5]
+        for i, r in enumerate(results, 1):
+            r['rank'] = i
+        return results
+
+    return []

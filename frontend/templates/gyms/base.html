@@ -1611,6 +1611,98 @@
             background-position: right 16px center;
         }
 
+        .pr-exercise-search {
+            width: 100%;
+            padding: 14px 16px 14px 42px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            color: var(--text-primary);
+            font-size: 15px;
+            font-family: inherit;
+            outline: none;
+            transition: all var(--duration);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='%235a5a6e' viewBox='0 0 24 24'%3E%3Cpath d='M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z' stroke='%235a5a6e' stroke-width='2' fill='none'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: 14px center;
+            box-sizing: border-box;
+        }
+
+        .pr-exercise-search:focus {
+            border-color: var(--brand-purple);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+        }
+
+        .pr-exercise-search::placeholder {
+            color: var(--text-muted);
+        }
+
+        .pr-exercise-results {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            background: var(--bg-card);
+            margin-top: 4px;
+            display: none;
+        }
+
+        .pr-exercise-results.open {
+            display: block;
+        }
+
+        .pr-exercise-category {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 10px 16px 4px;
+        }
+
+        .pr-exercise-option {
+            padding: 10px 16px;
+            font-size: 15px;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .pr-exercise-option:hover {
+            background: var(--bg-elevated);
+            color: var(--brand-purple);
+        }
+
+        .pr-exercise-selected {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 14px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--brand-purple);
+            border-radius: var(--radius-lg);
+            font-size: 15px;
+            color: var(--text-primary);
+        }
+
+        .pr-exercise-selected span {
+            flex: 1;
+        }
+
+        .pr-exercise-selected-clear {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0 4px;
+            line-height: 1;
+        }
+
+        .pr-exercise-selected-clear:hover {
+            color: var(--text-primary);
+        }
+
         .pr-video-upload {
             display: flex;
             flex-direction: column;
@@ -2211,25 +2303,15 @@
             <div class="pr-modal-content">
                 <div class="pr-form-group">
                     <label class="pr-label">Exercise</label>
-                    <select class="pr-select" id="prExerciseSelect">
-                        <option value="">Select exercise...</option>
-                        <option value="Bench Press">Bench Press</option>
-                        <option value="Squat">Squat</option>
-                        <option value="Deadlift">Deadlift</option>
-                        <option value="Overhead Press">Overhead Press</option>
-                        <option value="Barbell Row">Barbell Row</option>
-                        <option value="Pull-Up">Pull-Up (weighted)</option>
-                        <option value="Dip">Dip (weighted)</option>
-                        <option value="Clean & Jerk">Clean & Jerk</option>
-                        <option value="Snatch">Snatch</option>
-                        <option value="Mile Run">Mile Run</option>
-                        <option value="5K Run">5K Run</option>
-                        <option value="custom">Custom...</option>
-                    </select>
-                </div>
-                <div class="pr-form-group" id="prCustomNameGroup" style="display:none;">
-                    <label class="pr-label">Custom Exercise Name</label>
-                    <input type="text" class="pr-input" id="prCustomName" placeholder="e.g. Farmer's Walk">
+                    <input type="hidden" id="prExerciseSelectedName" value="">
+                    <div class="pr-exercise-selected" id="prExerciseSelectedChip" style="display:none;">
+                        <span id="prExerciseSelectedLabel"></span>
+                        <button type="button" class="pr-exercise-selected-clear" onclick="clearPostPrExercise()">&times;</button>
+                    </div>
+                    <div id="prExerciseSearchWrap">
+                        <input type="text" class="pr-exercise-search" id="prExerciseSearch" placeholder="Search exercises..." oninput="onPostPrSearchInput()">
+                        <div class="pr-exercise-results" id="prExerciseResults"></div>
+                    </div>
                 </div>
                 <div class="pr-form-row">
                     <div class="pr-form-group">
@@ -2892,9 +2974,85 @@
                 const addPrBtn = document.getElementById('addPrBtn');
                 const postPrPreview = document.getElementById('postPrPreview');
                 const postPrRemove = document.getElementById('postPrRemove');
-                const prExerciseSelect = document.getElementById('prExerciseSelect');
-                const prCustomNameGroup = document.getElementById('prCustomNameGroup');
                 const prValueLabel = document.getElementById('prValueLabel');
+
+                // Catalog for PR exercise search
+                let postPrCatalog = null;
+
+                function loadPostPrCatalog() {
+                    if (postPrCatalog) return Promise.resolve();
+                    return fetch('/workouts/api/catalog/')
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.success) {
+                                postPrCatalog = data.catalog;
+                            }
+                        });
+                }
+
+                function renderPostPrResults(catalog) {
+                    const container = document.getElementById('prExerciseResults');
+                    let html = '';
+                    let hasResults = false;
+                    for (const category in catalog) {
+                        const exercises = catalog[category];
+                        if (exercises.length === 0) continue;
+                        hasResults = true;
+                        html += '<div class="pr-exercise-category">' + category + '</div>';
+                        for (const ex of exercises) {
+                            html += '<div class="pr-exercise-option" onclick="selectPostPrExercise(\'' +
+                                ex.name.replace(/'/g, "\\'") + '\', ' + (ex.is_cardio ? 'true' : 'false') + ')">' +
+                                ex.name + '</div>';
+                        }
+                    }
+                    container.innerHTML = hasResults ? html : '<div class="pr-exercise-option" style="color:var(--text-muted)">No exercises found</div>';
+                }
+
+                window.onPostPrSearchInput = function() {
+                    const query = document.getElementById('prExerciseSearch').value.toLowerCase();
+                    const results = document.getElementById('prExerciseResults');
+                    if (!query) {
+                        results.classList.remove('open');
+                        return;
+                    }
+                    if (!postPrCatalog) return;
+                    const filtered = {};
+                    for (const category in postPrCatalog) {
+                        const matches = postPrCatalog[category].filter(e =>
+                            e.name.toLowerCase().indexOf(query) !== -1
+                        );
+                        if (matches.length > 0) {
+                            filtered[category] = matches;
+                        }
+                    }
+                    renderPostPrResults(filtered);
+                    results.classList.add('open');
+                };
+
+                window.selectPostPrExercise = function(name, isCardio) {
+                    document.getElementById('prExerciseSelectedName').value = name;
+                    document.getElementById('prExerciseSelectedLabel').textContent = name;
+                    document.getElementById('prExerciseSelectedChip').style.display = 'flex';
+                    document.getElementById('prExerciseSearchWrap').style.display = 'none';
+                    document.getElementById('prExerciseResults').classList.remove('open');
+
+                    const unitEl = document.getElementById('prUnit');
+                    if (isCardio) {
+                        prValueLabel.textContent = 'Time';
+                        unitEl.value = 'min:sec';
+                    } else {
+                        prValueLabel.textContent = 'Weight';
+                        if (unitEl.value === 'min:sec') unitEl.value = 'lbs';
+                    }
+                };
+
+                window.clearPostPrExercise = function() {
+                    document.getElementById('prExerciseSelectedName').value = '';
+                    document.getElementById('prExerciseSelectedChip').style.display = 'none';
+                    document.getElementById('prExerciseSearchWrap').style.display = 'block';
+                    document.getElementById('prExerciseSearch').value = '';
+                    document.getElementById('prExerciseResults').classList.remove('open');
+                };
 
                 // Set default date to today
                 const prDateInput = document.getElementById('prDate');
@@ -2902,33 +3060,10 @@
                     prDateInput.valueAsDate = new Date();
                 }
 
-                // Handle exercise select change
-                if (prExerciseSelect) {
-                    prExerciseSelect.addEventListener('change', function() {
-                        const val = this.value;
-                        // Show/hide custom name input
-                        if (val === 'custom') {
-                            prCustomNameGroup.style.display = 'block';
-                        } else {
-                            prCustomNameGroup.style.display = 'none';
-                        }
-                        // Update value label based on exercise type
-                        if (val === 'Mile Run' || val === '5K Run') {
-                            prValueLabel.textContent = 'Time';
-                            document.getElementById('prUnit').value = 'min:sec';
-                        } else if (val === 'Pull-Up' || val === 'Dip') {
-                            prValueLabel.textContent = 'Added Weight';
-                            document.getElementById('prUnit').value = 'lbs';
-                        } else {
-                            prValueLabel.textContent = 'Weight';
-                            document.getElementById('prUnit').value = 'lbs';
-                        }
-                    });
-                }
-
                 // Open PR modal
                 if (addPrBtn) {
                     addPrBtn.addEventListener('click', function() {
+                        loadPostPrCatalog();
                         prModalOverlay.classList.add('active');
                     });
                 }
@@ -2954,9 +3089,7 @@
                 }
 
                 function resetPrForm() {
-                    document.getElementById('prExerciseSelect').value = '';
-                    document.getElementById('prCustomName').value = '';
-                    document.getElementById('prCustomNameGroup').style.display = 'none';
+                    clearPostPrExercise();
                     document.getElementById('prValue').value = '';
                     document.getElementById('prUnit').value = 'lbs';
                     document.getElementById('prValueLabel').textContent = 'Weight';
@@ -2966,20 +3099,13 @@
                 // Attach PR to post
                 if (prSubmitBtn) {
                     prSubmitBtn.addEventListener('click', function() {
-                        const exerciseSelectValue = document.getElementById('prExerciseSelect').value;
-                        let exerciseName = exerciseSelectValue;
-
-                        // Handle custom exercise name
-                        if (exerciseSelectValue === 'custom') {
-                            exerciseName = document.getElementById('prCustomName').value.trim();
-                        }
-
+                        const exerciseName = document.getElementById('prExerciseSelectedName').value.trim();
                         const prValue = document.getElementById('prValue').value.trim();
                         const prUnit = document.getElementById('prUnit').value;
                         const prDate = document.getElementById('prDate').value;
 
                         if (!exerciseName) {
-                            alert('Please select or enter an exercise name');
+                            alert('Please select an exercise');
                             return;
                         }
 
