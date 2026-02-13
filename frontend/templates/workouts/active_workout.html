@@ -207,6 +207,7 @@
         gap: 8px;
         padding: 8px 0;
         align-items: center;
+        position: relative;
     }
 
     .set-checkbox {
@@ -224,6 +225,27 @@
     .set-checkbox.completed {
         background: var(--brand-cyan);
         border-color: var(--brand-cyan);
+    }
+
+    .set-row.pr-row {
+        background: rgba(245, 158, 11, 0.06);
+        border-radius: var(--radius-md);
+        margin: 0 -4px;
+        padding: 8px 4px;
+    }
+
+    .set-row.pr-row::after {
+        content: 'PR';
+        position: absolute;
+        right: -4px;
+        top: 2px;
+        background: #f59e0b;
+        color: #000;
+        font-size: 9px;
+        font-weight: 800;
+        padding: 2px 5px;
+        border-radius: 4px;
+        letter-spacing: 0.5px;
     }
 
     .set-input {
@@ -725,6 +747,99 @@
         transform: translateX(20px);
     }
 
+    .finish-pr-section {
+        background: var(--bg-card);
+        border: 1px solid #f59e0b;
+        border-radius: var(--radius-xl);
+        padding: 16px;
+        margin-bottom: 20px;
+    }
+
+    .finish-pr-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 12px;
+    }
+
+    .finish-pr-trophy {
+        font-size: 20px;
+    }
+
+    .finish-pr-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 12px;
+        background: var(--bg-elevated);
+        border-radius: var(--radius-md);
+        margin-bottom: 8px;
+    }
+
+    .finish-pr-item:last-child {
+        margin-bottom: 0;
+    }
+
+    .finish-pr-info {
+        flex: 1;
+    }
+
+    .finish-pr-name {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .finish-pr-detail {
+        font-size: 13px;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+
+    .finish-pr-toggle {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .finish-pr-toggle-label {
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+
+    .finish-pr-switch {
+        width: 40px;
+        height: 22px;
+        background: var(--border-default);
+        border-radius: 11px;
+        position: relative;
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .finish-pr-switch.active {
+        background: #f59e0b;
+    }
+
+    .finish-pr-switch::after {
+        content: '';
+        position: absolute;
+        width: 18px;
+        height: 18px;
+        background: #fff;
+        border-radius: 50%;
+        top: 2px;
+        left: 2px;
+        transition: transform 0.2s;
+    }
+
+    .finish-pr-switch.active::after {
+        transform: translateX(18px);
+    }
+
     .finish-post-btn {
         width: 100%;
         padding: 18px;
@@ -761,7 +876,7 @@
     <!-- Exercise List -->
     <div class="exercise-list" id="exerciseList">
         {% for exercise in exercises %}
-        <div class="exercise-card" data-exercise-id="{{ exercise.id }}">
+        <div class="exercise-card" data-exercise-id="{{ exercise.id }}" data-exercise-name="{{ exercise.name }}">
             <div class="exercise-card-header">
                 <div class="exercise-card-info">
                     <div class="exercise-number">{{ forloop.counter }}</div>
@@ -872,6 +987,14 @@
             </div>
         </div>
 
+        <div class="finish-pr-section" id="finishPrSection" style="display:none;">
+            <div class="finish-pr-header">
+                <span class="finish-pr-trophy">&#127942;</span>
+                <span>New Personal Records!</span>
+            </div>
+            <div class="finish-pr-list" id="finishPrList"></div>
+        </div>
+
         <div class="finish-form-group">
             <label class="finish-label">Add a note <span>(optional)</span></label>
             <textarea class="finish-textarea" id="workoutNotes" placeholder="How did the workout feel? Any PRs or notes..."></textarea>
@@ -910,6 +1033,8 @@ const workoutId = '{{ workout.id }}';
 const startTime = new Date('{{ workout.start_time|date:"c" }}');
 let exerciseCatalog = {};
 let currentCategoryFilter = 'all';
+// Track new PRs detected during this workout {exerciseName: {value, unit, oldValue}}
+const detectedPrs = {};
 
 // Function to get CSRF token from cookies
 function getCookie(name) {
@@ -1108,6 +1233,24 @@ function addSet(exerciseId) {
     .catch(error => console.error('Error:', error));
 }
 
+function handlePrResponse(data, setRow) {
+    if (data.is_new_pr) {
+        setRow.classList.add('pr-row');
+        // Track the PR (keep the highest value per exercise)
+        const name = data.pr_exercise;
+        const val = parseFloat(data.pr_value);
+        if (!detectedPrs[name] || val > parseFloat(detectedPrs[name].value)) {
+            detectedPrs[name] = {
+                value: data.pr_value,
+                unit: data.pr_unit,
+                oldValue: data.old_pr_value
+            };
+        }
+    } else {
+        setRow.classList.remove('pr-row');
+    }
+}
+
 function updateSet(setId, field, value) {
     // Ensure non-negative values
     const numValue = Math.max(0, parseFloat(value) || 0);
@@ -1123,6 +1266,13 @@ function updateSet(setId, field, value) {
         },
         credentials: 'same-origin',
         body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(respData => {
+        if (respData.success && field === 'weight') {
+            const setRow = document.querySelector(`.set-row[data-set-id="${setId}"]`);
+            if (setRow) handlePrResponse(respData, setRow);
+        }
     })
     .catch(error => console.error('Error:', error));
 }
@@ -1144,6 +1294,10 @@ function toggleSetComplete(setId, element) {
         if (data.success) {
             element.classList.toggle('completed');
             element.innerHTML = data.set.completed ? '&#10003;' : '';
+
+            // Also check PR status on completion toggle
+            const setRow = element.closest('.set-row');
+            handlePrResponse(data, setRow);
         }
     })
     .catch(error => console.error('Error:', error));
@@ -1185,6 +1339,36 @@ document.getElementById('finishWorkoutBtn').addEventListener('click', function()
     document.getElementById('finishExercises').textContent = exercises;
     document.getElementById('finishSets').textContent = sets;
     document.getElementById('finishDuration').textContent = timerText;
+
+    // Populate PR section if any PRs were detected
+    const prNames = Object.keys(detectedPrs);
+    const prSection = document.getElementById('finishPrSection');
+    const prList = document.getElementById('finishPrList');
+
+    if (prNames.length > 0) {
+        let html = '';
+        prNames.forEach(name => {
+            const pr = detectedPrs[name];
+            const detail = pr.oldValue
+                ? `${pr.oldValue} ${pr.unit} → ${pr.value} ${pr.unit}`
+                : `${pr.value} ${pr.unit} (first PR!)`;
+            html += `
+                <div class="finish-pr-item" data-pr-name="${name}">
+                    <div class="finish-pr-info">
+                        <div class="finish-pr-name">${name}</div>
+                        <div class="finish-pr-detail">${detail}</div>
+                    </div>
+                    <div class="finish-pr-toggle">
+                        <span class="finish-pr-toggle-label">Add to profile</span>
+                        <div class="finish-pr-switch active" onclick="this.classList.toggle('active')"></div>
+                    </div>
+                </div>`;
+        });
+        prList.innerHTML = html;
+        prSection.style.display = 'block';
+    } else {
+        prSection.style.display = 'none';
+    }
 });
 
 function closeFinishModal() {
@@ -1226,6 +1410,27 @@ function postWorkout() {
     // Add photo if selected
     if (selectedMedia) {
         formData.append('photo', selectedMedia);
+    }
+
+    // Collect toggled-on PRs to save
+    const prItems = document.querySelectorAll('.finish-pr-item');
+    const prsToSave = [];
+    prItems.forEach(item => {
+        const toggle = item.querySelector('.finish-pr-switch');
+        if (toggle && toggle.classList.contains('active')) {
+            const name = item.getAttribute('data-pr-name');
+            const pr = detectedPrs[name];
+            if (pr) {
+                prsToSave.push({
+                    exercise_name: name,
+                    value: pr.value,
+                    unit: pr.unit
+                });
+            }
+        }
+    });
+    if (prsToSave.length > 0) {
+        formData.append('pr_data', JSON.stringify(prsToSave));
     }
 
     fetch(`/workouts/${workoutId}/finish/`, {

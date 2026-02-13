@@ -172,6 +172,22 @@
         {% endfor %}
     </div>
 </div>
+
+<!-- Top Lifters -->
+<div class="section-block">
+    <div class="section-header">
+        <h2 class="section-title">Top Lifters at {{ gym.name }}</h2>
+        <select class="lifters-select" id="liftersSelect">
+            <option value="bench">Bench Press</option>
+            <option value="squat">Squat</option>
+            <option value="deadlift">Deadlift</option>
+            <option value="total">Total</option>
+        </select>
+    </div>
+    <div class="lifters-list" id="liftersList">
+        <div class="invite-empty">Loading...</div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_css %}
@@ -797,6 +813,32 @@
         border-color: rgba(124,58,237,0.3);
         cursor: default;
     }
+
+    /* ============ TOP LIFTERS SELECT ============ */
+    .lifters-select {
+        padding: 8px 14px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-size: 13px;
+        font-weight: 600;
+        font-family: inherit;
+        cursor: pointer;
+        outline: none;
+        transition: border-color var(--duration) var(--ease-out);
+        -webkit-appearance: none;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+        padding-right: 30px;
+    }
+
+    .lifters-select:hover,
+    .lifters-select:focus {
+        border-color: var(--border-hover);
+    }
 </style>
 {% endblock %}
 
@@ -1049,6 +1091,49 @@
             activeJoinBtn = null;
         });
     }
+
+    // ---- Top Lifters ----
+    const liftersSelect = document.getElementById('liftersSelect');
+    const liftersList = document.getElementById('liftersList');
+
+    async function loadTopLifters(lift) {
+        liftersList.innerHTML = '<div class="invite-empty">Loading...</div>';
+        try {
+            const res = await fetch(`/gyms/${gymId}/api/top-lifters/?lift=${encodeURIComponent(lift)}`, {
+                headers: { 'X-CSRFToken': csrfToken },
+            });
+            if (!res.ok) {
+                liftersList.innerHTML = '<div class="invite-empty">Could not load lifters.</div>';
+                return;
+            }
+            const data = await res.json();
+            const lifters = data.lifters || [];
+            if (lifters.length === 0) {
+                liftersList.innerHTML = '<div class="invite-empty">No records yet</div>';
+                return;
+            }
+            liftersList.innerHTML = lifters.map(l => `
+                <div class="leaderboard-row">
+                    <span class="leaderboard-rank">#${l.rank}</span>
+                    <div class="leaderboard-avatar">
+                        <span class="leaderboard-avatar-letter">${(l.username[0] || '?').toUpperCase()}</span>
+                    </div>
+                    <div class="leaderboard-info">
+                        <div class="leaderboard-name">${l.display_name}</div>
+                        <div class="leaderboard-streak">@${l.username}</div>
+                    </div>
+                    <div class="leaderboard-stat">${l.value} ${l.unit}</div>
+                </div>
+            `).join('');
+        } catch {
+            liftersList.innerHTML = '<div class="invite-empty">Network error.</div>';
+        }
+    }
+
+    if (liftersSelect) {
+        liftersSelect.addEventListener('change', () => loadTopLifters(liftersSelect.value));
+    }
+    loadTopLifters('bench');
 })();
 </script>
 {% endblock %}

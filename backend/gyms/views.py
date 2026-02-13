@@ -1,5 +1,6 @@
+from django.contrib.auth.decorators import login_required
+from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
-from django.http import HttpResponse
 from django.template import loader
 from django.views import View
 from django.views.generic import ListView, DetailView
@@ -113,3 +114,11 @@ class GymDetailView(DetailView):
             context['leaderboard'] = []
 
         return context
+
+
+@login_required
+def top_lifters_view(request, pk):
+    """GET: top lifters at a gym for a given lift category."""
+    lift = request.GET.get('lift', 'bench')
+    lifters = services.get_top_lifters(str(pk), lift)
+    return JsonResponse({'success': True, 'lifters': lifters})

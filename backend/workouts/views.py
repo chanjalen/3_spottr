@@ -280,7 +280,7 @@ def update_set_view(request, set_id):
 
     exercise_set.save()
 
-    return JsonResponse({
+    response_data = {
         'success': True,
         'set': {
             'id': exercise_set.id,
@@ -289,7 +289,38 @@ def update_set_view(request, set_id):
             'weight': float(exercise_set.weight),
             'completed': exercise_set.completed,
         }
-    })
+    }
+
+    # Check for PR whenever the set has weight > 0
+    if exercise_set.weight > 0:
+        exercise_name = exercise_set.exercise.name
+        existing_pr = PersonalRecord.objects.filter(
+            user=request.user,
+            exercise_name__iexact=exercise_name,
+        ).first()
+
+        set_weight = float(exercise_set.weight)
+
+        if existing_pr and existing_pr.unit in ('lbs', 'kg'):
+            try:
+                pr_value = float(existing_pr.value)
+                if set_weight > pr_value:
+                    response_data['is_new_pr'] = True
+                    response_data['pr_exercise'] = exercise_name
+                    response_data['pr_value'] = str(int(set_weight) if set_weight == int(set_weight) else set_weight)
+                    response_data['pr_unit'] = existing_pr.unit
+                    response_data['old_pr_value'] = existing_pr.value
+            except (ValueError, TypeError):
+                pass
+        elif not existing_pr:
+            # No PR exists yet — this is their first recorded weight for this exercise
+            response_data['is_new_pr'] = True
+            response_data['pr_exercise'] = exercise_name
+            response_data['pr_value'] = str(int(set_weight) if set_weight == int(set_weight) else set_weight)
+            response_data['pr_unit'] = 'lbs'
+            response_data['old_pr_value'] = None
+
+    return JsonResponse(response_data)
 
 
 @login_required
@@ -448,6 +479,40 @@ def finish_workout_view(request, workout_id):
         if photo:
             post.photo = photo
             post.save()
+
+        # Save PR data if attached
+        pr_data_raw = request.POST.get('pr_data') if 'multipart/form-data' in content_type else data.get('pr_data')
+        if pr_data_raw:
+            from accounts.views import is_new_pr_better
+            pr_list = json.loads(pr_data_raw) if isinstance(pr_data_raw, str) else pr_data_raw
+            for pr_item in pr_list:
+                ex_name = pr_item.get('exercise_name', '').strip()
+                pr_val = pr_item.get('value', '').strip()
+                pr_unit = pr_item.get('unit', 'lbs')
+                if not ex_name or not pr_val:
+                    continue
+
+                existing_pr = PersonalRecord.objects.filter(
+                    user=request.user,
+                    exercise_name__iexact=ex_name,
+                ).first()
+
+                if existing_pr:
+                    if is_new_pr_better(pr_val, pr_unit, existing_pr.value, existing_pr.unit):
+                        existing_pr.value = pr_val
+                        existing_pr.unit = pr_unit
+                        existing_pr.achieved_date = timezone.now().date()
+                        existing_pr.post = post
+                        existing_pr.save()
+                else:
+                    PersonalRecord.objects.create(
+                        user=request.user,
+                        post=post,
+                        exercise_name=ex_name,
+                        value=pr_val,
+                        unit=pr_unit,
+                        achieved_date=timezone.now().date(),
+                    )
 
         # Increment total workouts
         request.user.total_workouts = F('total_workouts') + 1
