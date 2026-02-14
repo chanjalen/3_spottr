@@ -1,5 +1,6 @@
 from django.db import models
 from django.core.validators import MinValueValidator, MaxValueValidator
+from django.urls import reverse
 from common.models import BaseModel
 
 
@@ -30,6 +31,9 @@ class Gym(BaseModel):
 
     def __str__(self):
         return self.name
+
+    def get_absolute_url(self):
+        return reverse('gyms:gym_detail', kwargs={'pk': self.pk})
 
 
 class BusyLevel(BaseModel):

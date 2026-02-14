@@ -5,7 +5,10 @@
       "WebFetch(domain:api.github.com)",
       "Bash(cmd.exe /c \"cd /d C:\\\\Users\\\\jalen\\\\PycharmProjects\\\\Spottr\\\\backend && python manage.py check\")",
       "Bash(powershell.exe -Command \"conda activate myenv-django; cd 'C:\\\\Users\\\\jalen\\\\PycharmProjects\\\\Spottr\\\\backend'; python manage.py check 2>&1\":*)",
-      "Bash(powershell.exe:*)"
+      "Bash(powershell.exe:*)",
+      "Bash(find:*)",
+      "Bash(grep:*)",
+      "Bash(python:*)"
     ]
   }
 }
