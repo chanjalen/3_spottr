@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Spottr",
+    "slug": "spottr",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "backgroundColor": "#08080F"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.spottr.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#08080F"
+      },
+      "package": "com.spottr.app"
+    },
+    "plugins": [
+      "expo-font",
+      "expo-secure-store"
+    ]
+  }
+}

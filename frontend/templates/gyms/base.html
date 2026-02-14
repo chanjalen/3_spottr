@@ -2362,7 +2362,7 @@
             <span>Gyms</span>
         </a>
         <a href="#" class="fab-button" id="fabButton">+</a>
-        <a href="#">
+        <a href="{% url 'social:social' %}" {% if request.resolver_match.app_name == 'social' and request.resolver_match.url_name == 'social' %}class="active"{% endif %}>
             <span class="nav-icon">👥</span>
             <span>Social</span>
         </a>

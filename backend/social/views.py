@@ -6,13 +6,201 @@ from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST, require_GET
 from django.conf import settings
-from django.db.models import F
+from django.db.models import F, Q, Max, Subquery, OuterRef, Exists, Count
 
-from .models import QuickWorkout, Post, Comment, Reaction, Poll, PollOption, PollVote
-from gyms.models import Gym
+from .models import QuickWorkout, Post, Comment, Reaction, Poll, PollOption, PollVote, Follow
+from gyms.models import Gym, WorkoutInvite
 from workouts.models import PersonalRecord
+from messaging.models import Message, MessageRead
+from groups.models import Group, GroupMember, GroupJoinRequest
 from django.utils import timezone
 from datetime import timedelta, date
+
+
+@login_required
+def social_view(request):
+    """
+    Display the social page with pending invitations, DM conversations,
+    and group conversations.
+    """
+    user = request.user
+
+    # === PENDING: New followers (people who follow me but I don't follow back) ===
+    my_following_ids = Follow.objects.filter(follower=user).values_list('following_id', flat=True)
+    new_followers = Follow.objects.filter(
+        following=user
+    ).exclude(
+        follower_id__in=my_following_ids
+    ).select_related('follower').order_by('-created_at')[:10]
+
+    new_followers_data = []
+    for f in new_followers:
+        new_followers_data.append({
+            'id': str(f.id),
+            'user': f.follower,
+            'created_at': f.created_at,
+            'time_ago': get_time_ago(f.created_at),
+        })
+
+    # === PENDING: Workout invites (invites where I'm the invited user or in a group) ===
+    workout_invites = WorkoutInvite.objects.filter(
+        Q(invited_user=user) |
+        Q(type='gym', group__members__user=user)
+    ).exclude(
+        user=user
+    ).distinct().select_related('user', 'gym').order_by('-created_at')[:10]
+
+    workout_invites_data = []
+    for invite in workout_invites:
+        workout_invites_data.append({
+            'id': str(invite.id),
+            'from_user': invite.user,
+            'gym_name': invite.gym.name if invite.gym else '',
+            'workout_type': invite.workout_type,
+            'scheduled_time': invite.scheduled_time,
+            'description': invite.description,
+            'created_at': invite.created_at,
+            'time_ago': get_time_ago(invite.created_at),
+        })
+
+    # === PENDING: Group join requests (for groups where I'm admin/creator) ===
+    admin_group_ids = GroupMember.objects.filter(
+        user=user, role__in=['admin', 'creator']
+    ).values_list('group_id', flat=True)
+
+    group_join_requests = GroupJoinRequest.objects.filter(
+        group_id__in=admin_group_ids,
+        status='pending',
+    ).select_related('user', 'group').order_by('-created_at')[:10]
+
+    group_join_requests_data = []
+    for jr in group_join_requests:
+        group_join_requests_data.append({
+            'id': str(jr.id),
+            'user': jr.user,
+            'group': jr.group,
+            'group_name': jr.group.name,
+            'message': jr.message,
+            'created_at': jr.created_at,
+            'time_ago': get_time_ago(jr.created_at),
+        })
+
+    # === DM CONVERSATIONS ===
+    # Get latest message per conversation partner
+    dm_conversations = []
+    # Get all DM partners (users I've sent to or received from)
+    sent_partners = Message.objects.filter(
+        sender=user, recipient__isnull=False
+    ).values_list('recipient_id', flat=True).distinct()
+    received_partners = Message.objects.filter(
+        recipient=user
+    ).values_list('sender_id', flat=True).distinct()
+    partner_ids = set(list(sent_partners) + list(received_partners))
+
+    from accounts.models import User as UserModel
+    for partner_id in partner_ids:
+        partner = UserModel.objects.filter(id=partner_id).first()
+        if not partner:
+            continue
+
+        # Get last message between me and this partner
+        last_msg = Message.objects.filter(
+            Q(sender=user, recipient=partner) |
+            Q(sender=partner, recipient=user)
+        ).order_by('-created_at').first()
+
+        if not last_msg:
+            continue
+
+        # Count unread messages from this partner
+        unread_count = Message.objects.filter(
+            sender=partner, recipient=user
+        ).exclude(
+            read_receipts__user=user
+        ).count()
+
+        dm_conversations.append({
+            'partner': partner,
+            'last_message': last_msg.content[:80],
+            'last_message_time': last_msg.created_at,
+            'time_ago': get_time_ago(last_msg.created_at),
+            'unread_count': unread_count,
+            'is_zap': last_msg.content == 'ZAP',
+        })
+
+    # Sort DM conversations by last message time
+    dm_conversations.sort(key=lambda x: x['last_message_time'], reverse=True)
+
+    # === GROUP CONVERSATIONS ===
+    group_conversations = []
+    my_groups = GroupMember.objects.filter(user=user).select_related('group')
+
+    for membership in my_groups:
+        group = membership.group
+        member_count = GroupMember.objects.filter(group=group).count()
+
+        # Get last message in this group
+        last_msg = Message.objects.filter(group=group).order_by('-created_at').first()
+
+        # Count unread group messages
+        unread_count = 0
+        if last_msg:
+            unread_count = Message.objects.filter(
+                group=group
+            ).exclude(
+                sender=user
+            ).exclude(
+                read_receipts__user=user
+            ).count()
+
+        group_conversations.append({
+            'group': group,
+            'member_count': member_count,
+            'role': membership.role,
+            'last_message': last_msg.content[:80] if last_msg else None,
+            'last_message_sender': last_msg.sender.display_name if last_msg else None,
+            'last_message_time': last_msg.created_at if last_msg else group.created_at,
+            'time_ago': get_time_ago(last_msg.created_at) if last_msg else '',
+            'unread_count': unread_count,
+        })
+
+    # Sort group conversations by last message time
+    group_conversations.sort(key=lambda x: x['last_message_time'], reverse=True)
+
+    # === MY GROUPS (for create/join modal) ===
+    # Search results for public groups I'm not in
+    my_group_ids = my_groups.values_list('group_id', flat=True)
+    public_groups = Group.objects.filter(
+        privacy='public'
+    ).exclude(
+        id__in=my_group_ids
+    ).annotate(
+        member_count=Count('members')
+    ).order_by('-created_at')[:20]
+
+    # Total unread count
+    total_unread = sum(c['unread_count'] for c in dm_conversations) + \
+                   sum(c['unread_count'] for c in group_conversations)
+
+    # === FRIENDS (mutual follows) for new chat modal ===
+    my_follower_ids = Follow.objects.filter(following=user).values_list('follower_id', flat=True)
+    friends = UserModel.objects.filter(
+        id__in=my_following_ids
+    ).filter(
+        id__in=my_follower_ids
+    ).order_by('display_name')
+
+    return render(request, 'social/social.html', {
+        'new_followers': new_followers_data,
+        'workout_invites': workout_invites_data,
+        'group_join_requests': group_join_requests_data,
+        'dm_conversations': dm_conversations,
+        'group_conversations': group_conversations,
+        'public_groups': public_groups,
+        'total_unread': total_unread,
+        'pending_count': len(new_followers_data) + len(workout_invites_data) + len(group_join_requests_data),
+        'friends': friends,
+    })
 
 
 def feed_view(request):
