@@ -1,0 +1,69 @@
+{% extends 'gyms/base.html' %}
+
+{% block title %}Busy Level Chart - Spottr{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex;align-items:center;gap:12px;">
+    <a href="{% url 'gyms:gym_list_generic' %}" class="back-arrow">&larr;</a>
+    <h1>Busy Level Chart</h1>
+</div>
+
+<div class="chart-container">
+    <h2 class="chart-heading">Average Busy Levels Across All Gyms</h2>
+    <p class="chart-caption">
+        This chart shows the average crowd-sourced busy level for each gym,
+        aggregated from user survey responses over the past hour.
+        Scale: 1 (Empty) to 5 (Packed).
+    </p>
+    <img
+        src="{% url 'gyms:busy_chart_image' %}"
+        alt="Bar chart showing average busy levels for each gym. Green bars indicate low activity, yellow moderate, orange high, and red very high."
+        class="chart-image"
+    >
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .chart-container {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+    .chart-heading {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 8px;
+    }
+    .chart-caption {
+        font-size: 14px;
+        color: var(--text-secondary);
+        line-height: 1.6;
+        margin-bottom: 20px;
+    }
+    .chart-image {
+        width: 100%;
+        border-radius: var(--radius-md);
+        display: block;
+    }
+    .back-arrow {
+        color: var(--text-primary);
+        text-decoration: none;
+        font-size: 22px;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        transition: all var(--duration) var(--ease-out);
+        flex-shrink: 0;
+    }
+    .back-arrow:hover {
+        background: var(--bg-elevated);
+    }
+</style>
+{% endblock %}

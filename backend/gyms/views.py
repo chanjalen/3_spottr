@@ -1,11 +1,18 @@
+import io
+
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
 from django.contrib.auth.decorators import login_required
+from django.db.models import Avg, Count
 from django.http import HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.template import loader
 from django.views import View
 from django.views.generic import ListView, DetailView
 
-from .models import Gym
+from .models import Gym, BusyLevel
 from . import services
 
 
@@ -51,10 +58,27 @@ class GymGenericListView(ListView):
     """
     Generic ListView for displaying all gyms.
     Enriches each gym with busy level and enrollment data.
+    Handles both GET (default list) and POST (server-side search/filter).
     """
     model = Gym
     template_name = 'gyms/gym_list_generic.html'
     context_object_name = 'gyms'
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        # Handle POST search query
+        if self.request.method == 'POST':
+            query = self.request.POST.get('search_query', '').strip()
+            if query:
+                qs = qs.filter(name__icontains=query)
+                self.search_query = query
+                return qs
+        # Handle GET search query
+        query = self.request.GET.get('q', '').strip()
+        if query:
+            qs = qs.filter(name__icontains=query)
+        self.search_query = query
+        return qs
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
@@ -70,7 +94,19 @@ class GymGenericListView(ListView):
             if self.request.user.is_authenticated:
                 gym.is_enrolled = self.request.user.enrolled_gym_id == gym.id
         context['gyms'] = gyms
+        context['search_query'] = getattr(self, 'search_query', '')
+        # Aggregations: total gym count and per-gym busy response counts
+        context['total_gym_count'] = Gym.objects.count()
+        context['gyms_with_data'] = BusyLevel.objects.values('gym__name').annotate(
+            response_count=Count('id')
+        ).order_by('-response_count')
         return context
+
+    def post(self, request, *args, **kwargs):
+        """Handle POST requests for server-side search."""
+        self.object_list = self.get_queryset()
+        context = self.get_context_data()
+        return self.render_to_response(context)
 
 
 class GymDetailView(DetailView):
@@ -122,3 +158,77 @@ def top_lifters_view(request, pk):
     lift = request.GET.get('lift', 'bench')
     lifters = services.get_top_lifters(str(pk), lift)
     return JsonResponse({'success': True, 'lifters': lifters})
+
+
+# ---- Section 4: Matplotlib Chart Views ----
+
+def busy_level_chart_view(request):
+    """
+    Generates a bar chart of average busy levels per gym using Matplotlib.
+    Returns the chart as a PNG image via HttpResponse.
+    Uses BytesIO to write the image to memory (avoids disk I/O).
+    """
+    # ORM aggregation: average busy level per gym
+    data = (
+        BusyLevel.objects
+        .values('gym__name')
+        .annotate(avg_busy=Avg('survey_response'), total=Count('id'))
+        .order_by('gym__name')
+    )
+
+    gym_names = [d['gym__name'] for d in data]
+    avg_levels = [float(d['avg_busy']) for d in data]
+
+    # Color bars by busy level
+    colors = []
+    for level in avg_levels:
+        if level <= 2:
+            colors.append('#22c55e')   # green (low)
+        elif level <= 3:
+            colors.append('#eab308')   # yellow (moderate)
+        elif level <= 4:
+            colors.append('#f97316')   # orange (high)
+        else:
+            colors.append('#ef4444')   # red (very high)
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    fig.patch.set_facecolor('#16161f')
+    ax.set_facecolor('#1e1e28')
+
+    if gym_names:
+        bars = ax.bar(gym_names, avg_levels, color=colors, edgecolor='#2a2a3a', linewidth=0.8)
+        ax.set_ylim(0, 5.5)
+        ax.set_yticks([1, 2, 3, 4, 5])
+        ax.set_yticklabels(['Empty', 'Not Busy', 'Moderate', 'Busy', 'Packed'],
+                           color='#9898a8', fontsize=10)
+        plt.xticks(rotation=30, ha='right', color='#9898a8', fontsize=10)
+    else:
+        ax.text(0.5, 0.5, 'No busy level data available',
+                ha='center', va='center', transform=ax.transAxes,
+                color='#9898a8', fontsize=14)
+
+    ax.set_title('Average Gym Busy Levels', color='#f0f0f5', fontsize=16, fontweight='bold', pad=15)
+    ax.set_ylabel('Busy Level', color='#9898a8', fontsize=12)
+    ax.tick_params(colors='#5a5a6e')
+    ax.spines['top'].set_visible(False)
+    ax.spines['right'].set_visible(False)
+    ax.spines['bottom'].set_color('#2a2a3a')
+    ax.spines['left'].set_color('#2a2a3a')
+    ax.yaxis.grid(True, color='#2a2a3a', linestyle='--', alpha=0.5)
+    ax.set_axisbelow(True)
+
+    plt.tight_layout()
+
+    # Write chart to memory using BytesIO (efficient, no disk writes)
+    buf = io.BytesIO()
+    fig.savefig(buf, format='png', dpi=150, bbox_inches='tight',
+                facecolor=fig.get_facecolor(), edgecolor='none')
+    plt.close(fig)
+    buf.seek(0)
+
+    return HttpResponse(buf.getvalue(), content_type='image/png')
+
+
+def chart_page_view(request):
+    """Renders the page that displays the busy level chart."""
+    return render(request, 'gyms/busy_chart.html')

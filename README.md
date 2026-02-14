@@ -116,6 +116,28 @@ This project demonstrates different Django view patterns:
 | View 3 | Base CBV | `/gyms/cbv/` |
 | View 4 | Generic ListView | `/gyms/generic/` |
 
+## UI & Static Files
+
+The Django templates use a custom dark theme design system with CSS custom properties for consistent styling. Core design tokens (colors, spacing, shadows, border radius) are defined in `frontend/static/css/spottr.css` and loaded via Django's `{% static %}` template tag. Page-specific styles are kept in `{% block extra_css %}` blocks within each template.
+
+## API Endpoints
+
+Spottr serves project data via JSON APIs for the React Native mobile app:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/gyms/gyms/` | GET | List/search gyms (`?q=`, `?limit=`, `?offset=`) |
+| `/api/gyms/gyms/<id>/` | GET | Gym detail |
+| `/api/gyms/gyms/<id>/enroll/` | POST | Enroll at a gym |
+| `/api/gyms/gyms/<id>/busy/` | GET/POST | Get or submit busy level |
+| `/api/groups/` | GET/POST | List or create groups |
+| `/accounts/search-users/` | GET | Search users (`?q=`) |
+| `/accounts/follow-toggle/` | POST | Follow/unfollow a user |
+| `/workouts/api/catalog/` | GET | Exercise catalog (`?search=`) |
+| `/gyms/<pk>/api/top-lifters/` | GET | Top lifters (`?lift=bench`) |
+
+All API endpoints return JSON via `JsonResponse` or DRF's `Response`. The chart endpoint (`/gyms/chart/busy-levels.png`) demonstrates `HttpResponse` with `content_type='image/png'` for non-JSON responses.
+
 ## Contributing
 
 1. Create a feature branch from `dev`

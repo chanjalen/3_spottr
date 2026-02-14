@@ -8,11 +8,43 @@
     <h1>Nearby Gyms</h1>
 </div>
 
-<!-- Search -->
+<!-- GET Search (filters via URL query param, same page reloads with filtered results) -->
 <div class="search-bar">
     <span class="search-icon">&#128269;</span>
-    <input type="text" id="gymSearchInput" placeholder="Search gyms..." autocomplete="off">
+    <input type="text" id="gymSearchInput" placeholder="Quick filter gyms..." autocomplete="off">
 </div>
+
+<!-- POST Search Form (server-side filter, hides non-matching results) -->
+<form method="POST" action="{% url 'gyms:gym_list_generic' %}" class="post-search-form">
+    {% csrf_token %}
+    <div class="search-bar">
+        <span class="search-icon">&#128269;</span>
+        <input type="text" name="search_query" placeholder="Search gyms (server-side)..." value="{{ search_query }}" autocomplete="off">
+        <button type="submit" class="search-submit-btn">Search</button>
+    </div>
+</form>
+{% if search_query %}
+<div class="search-results-info">
+    Showing results for "<strong>{{ search_query }}</strong>" &mdash; <a href="{% url 'gyms:gym_list_generic' %}">Clear</a>
+</div>
+{% endif %}
+
+<!-- Aggregation Summary -->
+<div class="aggregation-summary">
+    <div class="agg-item">
+        <span class="agg-label">Total Gyms</span>
+        <span class="agg-value">{{ total_gym_count }}</span>
+    </div>
+    <div class="agg-item">
+        <span class="agg-label">Showing</span>
+        <span class="agg-value">{{ gyms|length }}</span>
+    </div>
+</div>
+
+<!-- Chart Link -->
+<a href="{% url 'gyms:busy_chart_page' %}" class="chart-link-btn">
+    &#128202; View Busy Level Chart
+</a>
 
 <!-- Map -->
 <div class="map-container">
@@ -27,7 +59,7 @@
 <!-- Gym cards -->
 <div class="gym-list" id="gymList">
     {% for gym in gyms %}
-    <a href="{% url 'gyms:gym_detail' gym.pk %}" class="gym-card-link" data-name="{{ gym.name|lower }}">
+    <a href="{{ gym.get_absolute_url }}" class="gym-card-link" data-name="{{ gym.name|lower }}">
         <div class="gym-card">
             <div class="gym-card-header">
                 <div>
@@ -218,6 +250,87 @@
     .busy-moderate { color: #eab308 !important; }
     .busy-high { color: #f97316 !important; }
     .busy-very-high { color: #ef4444 !important; }
+
+    /* POST search form */
+    .post-search-form { margin-bottom: 16px; }
+    .post-search-form .search-bar { margin-bottom: 0; }
+    .search-submit-btn {
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        color: #fff;
+        border: none;
+        padding: 8px 20px;
+        border-radius: var(--radius-pill);
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+        transition: all var(--duration) var(--ease-out);
+    }
+    .search-submit-btn:hover {
+        box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4);
+    }
+    .search-results-info {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        padding: 12px 18px;
+        margin-bottom: 16px;
+        font-size: 14px;
+        color: var(--text-secondary);
+    }
+    .search-results-info a {
+        color: var(--text-brand);
+        text-decoration: none;
+    }
+
+    /* Aggregation summary */
+    .aggregation-summary {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+    .agg-item {
+        flex: 1;
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        padding: 14px 16px;
+        text-align: center;
+    }
+    .agg-label {
+        display: block;
+        font-size: 12px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 4px;
+    }
+    .agg-value {
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    /* Chart link button */
+    .chart-link-btn {
+        display: inline-block;
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-pill);
+        padding: 10px 20px;
+        color: var(--text-brand);
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 20px;
+        transition: all var(--duration) var(--ease-out);
+    }
+    .chart-link-btn:hover {
+        border-color: var(--brand-purple);
+        box-shadow: var(--shadow-glow);
+        transform: translateY(-1px);
+    }
 </style>
 {% endblock %}
 
