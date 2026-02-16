@@ -1556,8 +1556,8 @@
         {% for follower in new_followers %}
         <div class="pending-card fade-in" data-follower-id="{{ follower.id }}">
             <div class="pending-avatar">
-                {% if follower.user.avatar %}
-                <img src="{{ follower.user.avatar.url }}" alt="{{ follower.user.display_name }}">
+                {% if follower.user.avatar_url %}
+                <img src="{{ follower.user.avatar_url }}" alt="{{ follower.user.display_name }}">
                 {% else %}
                 <span class="pending-avatar-letter">{{ follower.user.display_name|make_list|first|upper }}</span>
                 {% endif %}
@@ -1575,8 +1575,8 @@
         {% for invite in workout_invites %}
         <div class="pending-card fade-in" data-invite-id="{{ invite.id }}">
             <div class="pending-avatar">
-                {% if invite.from_user.avatar %}
-                <img src="{{ invite.from_user.avatar.url }}" alt="{{ invite.from_user.display_name }}">
+                {% if invite.from_user.avatar_url %}
+                <img src="{{ invite.from_user.avatar_url }}" alt="{{ invite.from_user.display_name }}">
                 {% else %}
                 <span class="pending-avatar-letter">{{ invite.from_user.display_name|make_list|first|upper }}</span>
                 {% endif %}
@@ -1601,8 +1601,8 @@
         {% for jr in group_join_requests %}
         <div class="pending-card fade-in" data-join-request-id="{{ jr.id }}">
             <div class="pending-avatar">
-                {% if jr.user.avatar %}
-                <img src="{{ jr.user.avatar.url }}" alt="{{ jr.user.display_name }}">
+                {% if jr.user.avatar_url %}
+                <img src="{{ jr.user.avatar_url }}" alt="{{ jr.user.display_name }}">
                 {% else %}
                 <span class="pending-avatar-letter">{{ jr.user.display_name|make_list|first|upper }}</span>
                 {% endif %}
@@ -1621,8 +1621,8 @@
         {% for wjr in workout_join_requests %}
         <div class="pending-card fade-in" data-workout-join-request-id="{{ wjr.id }}">
             <div class="pending-avatar">
-                {% if wjr.user.avatar %}
-                <img src="{{ wjr.user.avatar.url }}" alt="{{ wjr.user.display_name }}">
+                {% if wjr.user.avatar_url %}
+                <img src="{{ wjr.user.avatar_url }}" alt="{{ wjr.user.display_name }}">
                 {% else %}
                 <span class="pending-avatar-letter">{{ wjr.user.display_name|make_list|first|upper }}</span>
                 {% endif %}
@@ -1667,8 +1667,8 @@
     <div class="conversation-row fade-in" style="animation-delay: {{ forloop.counter0 }}00ms"
          onclick="openChat('dm', '{{ conv.partner.id }}', '{{ conv.partner.display_name }}', '{{ conv.partner.username }}')">
         <div class="conversation-avatar">
-            {% if conv.partner.avatar %}
-            <img src="{{ conv.partner.avatar.url }}" alt="{{ conv.partner.display_name }}">
+            {% if conv.partner.avatar_url %}
+            <img src="{{ conv.partner.avatar_url }}" alt="{{ conv.partner.display_name }}">
             {% else %}
             <span class="conversation-avatar-letter">{{ conv.partner.display_name|make_list|first|upper }}</span>
             {% endif %}
@@ -1909,8 +1909,8 @@
             {% for friend in friends %}
             <div class="friend-row" data-friend-name="{{ friend.display_name|lower }}" onclick="startNewChat('{{ friend.id }}', '{{ friend.display_name|escapejs }}')">
                 <div class="friend-avatar">
-                    {% if friend.avatar %}
-                    <img src="{{ friend.avatar.url }}" alt="{{ friend.display_name }}">
+                    {% if friend.avatar_url %}
+                    <img src="{{ friend.avatar_url }}" alt="{{ friend.display_name }}">
                     {% else %}
                     <span class="friend-avatar-letter">{{ friend.display_name|make_list|first|upper }}</span>
                     {% endif %}

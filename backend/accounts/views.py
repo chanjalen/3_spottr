@@ -146,6 +146,26 @@ def edit_profile_view(request):
             profile_form = EditProfileForm(request.POST, request.FILES, instance=user)
             if profile_form.is_valid():
                 profile_form.save()
+                # If avatar was uploaded, track in MediaAsset/MediaLink
+                if 'avatar' in request.FILES and user.avatar:
+                    from media.utils import create_media_asset
+                    from media.models import MediaLink, MediaAsset
+                    # Remove old avatar MediaLink/MediaAsset
+                    old_links = MediaLink.objects.filter(
+                        destination_type='user',
+                        destination_id=str(user.pk),
+                        type='avatar',
+                    ).select_related('asset')
+                    for ml in old_links:
+                        ml.asset.delete()
+                    # Create new ones
+                    asset = create_media_asset(user, request.FILES['avatar'], user.avatar.name, 'image', already_saved=True)
+                    MediaLink.objects.create(
+                        asset=asset,
+                        destination_type='user',
+                        destination_id=str(user.pk),
+                        type='avatar',
+                    )
                 return redirect('/accounts/edit/?tab=profile')
 
         elif submitted_tab == 'account':
@@ -230,7 +250,7 @@ def search_users_view(request):
             'username': u.username,
             'display_name': u.display_name,
             'bio': u.bio or '',
-            'avatar_url': u.avatar.url if u.avatar else '',
+            'avatar_url': u.avatar_url,
             'total_workouts': u.total_workouts,
             'current_streak': u.current_streak,
             'is_following': u.pk in following_ids,
@@ -336,7 +356,7 @@ def followers_list_view(request):
             'id': u.pk,
             'username': u.username,
             'display_name': u.display_name,
-            'avatar_url': u.avatar.url if u.avatar else '',
+            'avatar_url': u.avatar_url,
             'is_blocked': u.pk in blocked_ids,
         })
     return JsonResponse({'results': results})
@@ -360,7 +380,7 @@ def following_list_view(request):
             'id': u.pk,
             'username': u.username,
             'display_name': u.display_name,
-            'avatar_url': u.avatar.url if u.avatar else '',
+            'avatar_url': u.avatar_url,
             'is_blocked': u.pk in blocked_ids,
         })
     return JsonResponse({'results': results})

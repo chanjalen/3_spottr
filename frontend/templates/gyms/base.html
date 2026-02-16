@@ -2076,8 +2076,8 @@
             </div>
             <a href="{% url 'accounts:profile' %}" class="header-user">
                 <div class="header-avatar">
-                    {% if user.avatar %}
-                    <img src="{{ user.avatar.url }}" alt="{{ user.username }}">
+                    {% if user.avatar_url %}
+                    <img src="{{ user.avatar_url }}" alt="{{ user.username }}">
                     {% else %}
                     <span class="header-avatar-letter">{{ user.display_name|make_list|first|upper }}</span>
                     {% endif %}
@@ -2197,8 +2197,8 @@
         <div class="post-modal-content">
             <div class="post-compose-area">
                 <div class="post-compose-avatar">
-                    {% if user.is_authenticated and user.avatar %}
-                    <img src="{{ user.avatar.url }}" alt="{{ user.display_name }}">
+                    {% if user.is_authenticated and user.avatar_url %}
+                    <img src="{{ user.avatar_url }}" alt="{{ user.display_name }}">
                     {% elif user.is_authenticated %}
                     {{ user.display_name|make_list|first|upper }}
                     {% else %}

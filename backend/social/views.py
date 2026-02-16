@@ -6,9 +6,12 @@ from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST, require_GET
 from django.conf import settings
+from django.core.files.storage import default_storage
 from django.db.models import F, Q, Max, Subquery, OuterRef, Exists, Count
 
 from .models import QuickWorkout, Post, Comment, Reaction, Poll, PollOption, PollVote, Follow
+from media.models import MediaLink
+from media.utils import create_media_asset, get_media_url, build_media_url
 from gyms.models import Gym, WorkoutInvite, JoinRequest
 from workouts.models import PersonalRecord
 from messaging.models import Message, MessageRead
@@ -277,7 +280,7 @@ def feed_view(request):
             'location': post.location,
             'description': post.description,
             'created_at': post.created_at,
-            'photo_url': post.photo.url if post.photo else None,
+            'photo_url': get_media_url('post', str(post.id)) or (build_media_url(post.photo.name) if post.photo else None),
             'link_url': post.link_url,
             'like_count': like_count,
             'comment_count': comment_count,
@@ -372,9 +375,16 @@ def get_checkin_photo(checkin_id):
     """
     Get the photo URL for a check-in if it exists.
     """
-    photo_path = os.path.join(settings.MEDIA_ROOT, 'checkins', f'{checkin_id}.jpg')
-    if os.path.exists(photo_path):
-        return f'{settings.MEDIA_URL}checkins/{checkin_id}.jpg'
+    url = get_media_url('quick_workout', str(checkin_id))
+    if url:
+        return url
+    # Fallback for legacy uploads without MediaAsset rows
+    path = f'checkins/{checkin_id}.jpg'
+    try:
+        if default_storage.exists(path):
+            return build_media_url(path)
+    except Exception:
+        pass
     return None
 
 
@@ -420,13 +430,14 @@ def create_checkin_view(request):
 
         # Save the photo if provided
         if photo:
-            checkins_dir = os.path.join(settings.MEDIA_ROOT, 'checkins')
-            os.makedirs(checkins_dir, exist_ok=True)
-
-            photo_path = os.path.join(checkins_dir, f'{checkin.id}.jpg')
-            with open(photo_path, 'wb+') as destination:
-                for chunk in photo.chunks():
-                    destination.write(chunk)
+            path = f'checkins/{checkin.id}.jpg'
+            asset = create_media_asset(request.user, photo, path, 'image')
+            MediaLink.objects.create(
+                asset=asset,
+                destination_type='quick_workout',
+                destination_id=str(checkin.id),
+                type='inline',
+            )
 
         return JsonResponse({
             'success': True,
@@ -490,7 +501,7 @@ def get_user_posts(user, viewer=None):
             'location': post.location,
             'description': post.description,
             'created_at': post.created_at,
-            'photo_url': post.photo.url if post.photo else None,
+            'photo_url': get_media_url('post', str(post.id)) or (build_media_url(post.photo.name) if post.photo else None),
             'like_count': like_count,
             'comment_count': comment_count,
             'user_liked': user_liked,
@@ -645,7 +656,7 @@ def get_comments_view(request, post_id):
                 'id': str(comment.user.id),
                 'display_name': comment.user.display_name,
                 'username': comment.user.username,
-                'avatar_url': comment.user.avatar.url if comment.user.avatar else None,
+                'avatar_url': comment.user.avatar_url or None,
             },
             'text': comment.description,
             'created_at': comment.created_at.isoformat(),
@@ -685,7 +696,7 @@ def get_checkin_comments_view(request, checkin_id):
                 'id': str(comment.user.id),
                 'display_name': comment.user.display_name,
                 'username': comment.user.username,
-                'avatar_url': comment.user.avatar.url if comment.user.avatar else None,
+                'avatar_url': comment.user.avatar_url or None,
             },
             'text': comment.description,
             'created_at': comment.created_at.isoformat(),
@@ -769,7 +780,7 @@ def add_comment_view(request, post_id):
                 'id': str(request.user.id),
                 'display_name': request.user.display_name,
                 'username': request.user.username,
-                'avatar_url': request.user.avatar.url if request.user.avatar else None,
+                'avatar_url': request.user.avatar_url or None,
             },
             'text': comment.description,
             'created_at': comment.created_at.isoformat(),
@@ -826,7 +837,7 @@ def add_checkin_comment_view(request, checkin_id):
                 'id': str(request.user.id),
                 'display_name': request.user.display_name,
                 'username': request.user.username,
-                'avatar_url': request.user.avatar.url if request.user.avatar else None,
+                'avatar_url': request.user.avatar_url or None,
             },
             'text': comment.description,
             'created_at': comment.created_at.isoformat(),
@@ -861,10 +872,17 @@ def delete_checkin_view(request, checkin_id):
     checkin = get_object_or_404(QuickWorkout, id=checkin_id)
     if checkin.user != request.user:
         return JsonResponse({'success': False, 'error': 'You can only delete your own check-ins'}, status=403)
-    # Also remove the photo file if it exists
-    photo_path = os.path.join(settings.MEDIA_ROOT, 'checkins', f'{checkin.id}.jpg')
-    if os.path.exists(photo_path):
-        os.remove(photo_path)
+    # Also remove the photo file and MediaAsset/MediaLink if they exist
+    photo_path = f'checkins/{checkin.id}.jpg'
+    if default_storage.exists(photo_path):
+        default_storage.delete(photo_path)
+    # Clean up MediaLink/MediaAsset rows
+    media_links = MediaLink.objects.filter(
+        destination_type='quick_workout',
+        destination_id=str(checkin.id),
+    ).select_related('asset')
+    for ml in media_links:
+        ml.asset.delete()  # cascades to delete the MediaLink too
     checkin.delete()
     # Decrement total workouts (floor at 0)
     from accounts.models import User
@@ -913,7 +931,7 @@ def get_comment_replies_view(request, comment_id):
                 'id': str(reply.user.id),
                 'display_name': reply.user.display_name,
                 'username': reply.user.username,
-                'avatar_url': reply.user.avatar.url if reply.user.avatar else None,
+                'avatar_url': reply.user.avatar_url or None,
             },
             'text': reply.description,
             'created_at': reply.created_at.isoformat(),
@@ -977,7 +995,7 @@ def add_comment_reply_view(request, comment_id):
                 'id': str(request.user.id),
                 'display_name': request.user.display_name,
                 'username': request.user.username,
-                'avatar_url': request.user.avatar.url if request.user.avatar else None,
+                'avatar_url': request.user.avatar_url or None,
             },
             'text': reply.description,
             'created_at': reply.created_at.isoformat(),
@@ -1065,6 +1083,14 @@ def create_post_view(request):
     if photo:
         post.photo = photo
         post.save()
+        # Track in MediaAsset/MediaLink (already_saved=True because ImageField saved it)
+        asset = create_media_asset(request.user, photo, post.photo.name, 'image', already_saved=True)
+        MediaLink.objects.create(
+            asset=asset,
+            destination_type='post',
+            destination_id=str(post.id),
+            type='inline',
+        )
 
     # Create poll if provided
     if poll_question and len(poll_options) >= 2:

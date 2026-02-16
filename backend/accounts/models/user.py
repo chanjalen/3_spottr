@@ -111,5 +111,16 @@ class User(AbstractBaseUser, PermissionsMixin):
     class Meta:
         ordering = ['username']
 
+    @property
+    def avatar_url(self):
+        from media.utils import get_media_url, build_media_url
+        url = get_media_url('user', self.pk, 'avatar')
+        if url:
+            return url
+        # Fallback to the ImageField for legacy avatars
+        if self.avatar:
+            return build_media_url(self.avatar.name)
+        return ''
+
     def __str__(self):
         return self.username

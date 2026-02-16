@@ -2191,8 +2191,8 @@
     <div class="profile-identity">
         <div class="profile-avatar-wrap">
             <div class="profile-avatar">
-                {% if profile_user.avatar %}
-                <img src="{{ profile_user.avatar.url }}" alt="{{ profile_user.display_name }}">
+                {% if profile_user.avatar_url %}
+                <img src="{{ profile_user.avatar_url }}" alt="{{ profile_user.display_name }}">
                 {% else %}
                 <span class="profile-avatar-placeholder">{{ profile_user.display_name|make_list|first|upper }}</span>
                 {% endif %}
@@ -2305,8 +2305,8 @@
     <div class="post-viewer-header">
         <div class="post-viewer-user">
             <div class="post-viewer-avatar">
-                {% if profile_user.avatar %}
-                <img src="{{ profile_user.avatar.url }}" alt="">
+                {% if profile_user.avatar_url %}
+                <img src="{{ profile_user.avatar_url }}" alt="">
                 {% else %}
                 <span class="post-viewer-avatar-placeholder">{{ profile_user.display_name|make_list|first|upper }}</span>
                 {% endif %}
