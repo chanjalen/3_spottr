@@ -337,6 +337,27 @@ def accept_join_request(user, request_id):
     invite.spots_available -= 1
     invite.save(update_fields=['spots_available', 'updated_at'])
 
+    # Create mutual follow (become friends) if not already following each other
+    from social.models import Follow
+    creator = invite.user
+    requester = join_request.user
+    Follow.objects.get_or_create(follower=creator, following=requester)
+    Follow.objects.get_or_create(follower=requester, following=creator)
+
+    # Send a DM with workout details
+    from messaging.models import Message
+    scheduled = invite.scheduled_time.strftime('%b %d at %I:%M %p') if invite.scheduled_time else 'TBD'
+    gym_name = invite.gym.name if invite.gym else 'the gym'
+    msg_content = (
+        f"{creator.display_name} and {requester.display_name} have a "
+        f"{invite.workout_type} workout at {gym_name} - {scheduled}"
+    )
+    Message.objects.create(
+        sender=creator,
+        recipient=requester,
+        content=msg_content,
+    )
+
     return join_request
 
 

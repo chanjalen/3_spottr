@@ -8,11 +8,18 @@ from .models import Group, GroupMember, GroupInviteCode, GroupJoinRequest
 
 class GroupMemberSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
+    display_name = serializers.CharField(source='user.display_name', read_only=True)
+    avatar_url = serializers.SerializerMethodField()
 
     class Meta:
         model = GroupMember
-        fields = ['id', 'user', 'username', 'role', 'joined_at']
-        read_only_fields = ['id', 'user', 'username', 'role', 'joined_at']
+        fields = ['id', 'user', 'username', 'display_name', 'role', 'joined_at', 'avatar_url']
+        read_only_fields = ['id', 'user', 'username', 'display_name', 'role', 'joined_at', 'avatar_url']
+
+    def get_avatar_url(self, obj):
+        if obj.user.avatar:
+            return obj.user.avatar.url
+        return None
 
 
 class GroupListSerializer(serializers.ModelSerializer):
@@ -33,13 +40,14 @@ class GroupDetailSerializer(serializers.ModelSerializer):
     member_count = serializers.SerializerMethodField()
     is_member = serializers.SerializerMethodField()
     user_role = serializers.SerializerMethodField()
+    invite_code = serializers.SerializerMethodField()
 
     class Meta:
         model = Group
         fields = [
             'id', 'created_by', 'name', 'description', 'avatar', 'privacy',
             'group_streak', 'members', 'member_count', 'is_member', 'user_role',
-            'created_at', 'updated_at',
+            'invite_code', 'created_at', 'updated_at',
         ]
 
     def get_member_count(self, obj):
@@ -56,6 +64,14 @@ class GroupDetailSerializer(serializers.ModelSerializer):
         if request and request.user.is_authenticated:
             membership = obj.members.filter(user=request.user).first()
             return membership.role if membership else None
+        return None
+
+    def get_invite_code(self, obj):
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            if obj.members.filter(user=request.user).exists():
+                code = obj.invite_codes.filter(is_active=True).first()
+                return code.code if code else None
         return None
 
 
