@@ -61,6 +61,11 @@ def create_group(user, name, description='', privacy=Group.Privacy.PUBLIC, avata
         user=user,
         role=GroupMember.Role.CREATOR,
     )
+    # Auto-generate an invite code for the group
+    GroupInviteCode.objects.create(
+        group=group,
+        created_by=user,
+    )
     return group
 
 

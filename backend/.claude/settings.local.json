@@ -4,7 +4,9 @@
       "Bash(python manage.py runserver:*)",
       "Bash(python:*)",
       "Bash(find:*)",
-      "Bash(powershell.exe -Command \"conda activate myenv-django; cd ''C:\\\\Users\\\\jalen\\\\PycharmProjects\\\\Spottr\\\\backend''; python manage.py check 2>&1\")"
+      "Bash(powershell.exe -Command \"conda activate myenv-django; cd ''C:\\\\Users\\\\jalen\\\\PycharmProjects\\\\Spottr\\\\backend''; python manage.py check 2>&1\")",
+      "Bash(powershell.exe -Command \"conda activate myenv-django; cd ''C:\\\\Users\\\\jalen\\\\PycharmProjects\\\\Spottr\\\\backend''; python manage.py shell -c \"\"from groups.models import Group, GroupInviteCode; groups = Group.objects.all\\(\\); print\\(''Groups:'', [\\(g.id, g.name\\) for g in groups]\\); codes = GroupInviteCode.objects.all\\(\\); print\\(''Invite codes:'', [\\(c.group_id, c.code, c.is_active\\) for c in codes]\\)\"\" 2>&1\")",
+      "Bash(powershell.exe -Command \"conda activate myenv-django; cd ''C:\\\\Users\\\\jalen\\\\PycharmProjects\\\\Spottr\\\\backend''; python manage.py shell -c \"\"from groups.models import Group, GroupInviteCode; from accounts.models import User; group = Group.objects.first\\(\\); code = GroupInviteCode.objects.create\\(group=group, created_by=group.created_by\\); print\\(''Created invite code:'', code.code, ''for group:'', group.name\\)\"\" 2>&1\")"
     ]
   }
 }

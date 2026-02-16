@@ -345,6 +345,15 @@
         margin-bottom: 2px;
     }
 
+    .pending-name a {
+        color: inherit;
+        text-decoration: none;
+    }
+
+    .pending-name a:hover {
+        text-decoration: underline;
+    }
+
     .pending-meta {
         font-size: 13px;
         color: var(--text-muted);
@@ -1002,6 +1011,16 @@
         color: rgba(0,0,0,0.5);
     }
 
+    .chat-username-link {
+        color: inherit;
+        text-decoration: none;
+        font-weight: 600;
+    }
+
+    .chat-username-link:hover {
+        text-decoration: underline;
+    }
+
     .chat-input-container {
         display: flex;
         gap: 10px;
@@ -1088,6 +1107,411 @@
         color: var(--text-muted);
     }
 
+    /* ============ GROUP PROFILE SLIDE-OVER ============ */
+    .group-profile-container {
+        display: none;
+    }
+
+    .group-profile-container.active {
+        display: block;
+    }
+
+    .group-profile-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 0;
+        margin-bottom: 16px;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .group-profile-back {
+        background: none;
+        border: none;
+        color: var(--text-secondary);
+        font-size: 20px;
+        cursor: pointer;
+        padding: 4px;
+        transition: color var(--duration);
+    }
+
+    .group-profile-back:hover {
+        color: var(--text-primary);
+    }
+
+    .group-profile-header-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary);
+        flex: 1;
+    }
+
+    .group-profile-edit-btn {
+        background: none;
+        border: 1px solid var(--border-default);
+        color: var(--text-secondary);
+        padding: 6px 14px;
+        border-radius: var(--radius-md);
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all var(--duration);
+        font-family: inherit;
+    }
+
+    .group-profile-edit-btn:hover {
+        border-color: var(--brand-purple);
+        color: var(--text-primary);
+    }
+
+    .group-profile-info {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+        padding: 24px;
+        margin-bottom: 16px;
+        text-align: center;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .group-profile-avatar {
+        width: 72px;
+        height: 72px;
+        border-radius: var(--radius-lg);
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 16px;
+        overflow: hidden;
+    }
+
+    .group-profile-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .group-profile-avatar span {
+        font-size: 28px;
+        font-weight: 700;
+        color: #fff;
+    }
+
+    .group-profile-name {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 6px;
+    }
+
+    .group-profile-description {
+        font-size: 14px;
+        color: var(--text-secondary);
+        margin-bottom: 12px;
+        line-height: 1.5;
+    }
+
+    .group-profile-meta {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        font-size: 13px;
+        color: var(--text-muted);
+    }
+
+    .group-profile-meta-item {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .group-profile-privacy-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: var(--bg-elevated);
+        padding: 4px 10px;
+        border-radius: var(--radius-pill);
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-secondary);
+    }
+
+    .group-profile-streak {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: var(--bg-elevated);
+        padding: 4px 10px;
+        border-radius: var(--radius-pill);
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-secondary);
+    }
+
+    /* Edit form */
+    .group-edit-form {
+        display: none;
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+        padding: 20px;
+        margin-bottom: 16px;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .group-edit-form.active {
+        display: block;
+    }
+
+    .group-edit-form .form-group:last-of-type {
+        margin-bottom: 12px;
+    }
+
+    .group-edit-actions {
+        display: flex;
+        gap: 10px;
+    }
+
+    .group-edit-save {
+        flex: 1;
+        padding: 10px 18px;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        border: none;
+        border-radius: var(--radius-lg);
+        color: #fff;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all var(--duration);
+    }
+
+    .group-edit-save:hover {
+        transform: translateY(-1px);
+    }
+
+    .group-edit-cancel {
+        padding: 10px 18px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        color: var(--text-secondary);
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all var(--duration);
+    }
+
+    .group-edit-cancel:hover {
+        color: var(--text-primary);
+    }
+
+    /* Inline invite code in group profile info */
+    .group-profile-invite-inline {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        margin: 14px 0 4px;
+        padding: 10px 14px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+    }
+
+    .invite-inline-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .invite-inline-code {
+        font-family: 'Courier New', monospace;
+        font-size: 16px;
+        font-weight: 700;
+        letter-spacing: 3px;
+        color: var(--text-brand);
+    }
+
+    .invite-inline-copy {
+        padding: 4px 12px;
+        background: var(--brand-cyan);
+        border: none;
+        border-radius: var(--radius-md);
+        color: #000;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all var(--duration);
+        font-family: inherit;
+    }
+
+    .invite-inline-copy:hover {
+        background: #0891b2;
+    }
+
+    .invite-inline-copy.copied {
+        background: #22c55e;
+    }
+
+    /* Members section */
+    .group-profile-members {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .group-profile-members-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-brand);
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        padding: 16px 16px 12px;
+    }
+
+    .member-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        cursor: pointer;
+        transition: background var(--duration);
+    }
+
+    .member-row:hover {
+        background: var(--bg-hover);
+    }
+
+    .member-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        overflow: hidden;
+        background: var(--bg-elevated);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .member-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .member-avatar-letter {
+        font-size: 16px;
+        font-weight: 700;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .member-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .member-name {
+        font-size: 15px;
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+
+    .member-username {
+        font-size: 13px;
+        color: var(--text-muted);
+    }
+
+    .role-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 3px 10px;
+        border-radius: var(--radius-pill);
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        flex-shrink: 0;
+    }
+
+    .role-badge.creator {
+        background: rgba(234, 179, 8, 0.15);
+        color: #eab308;
+    }
+
+    .role-badge.admin {
+        background: rgba(168, 85, 247, 0.15);
+        color: #a855f7;
+    }
+
+    .role-badge.member {
+        background: var(--bg-elevated);
+        color: var(--text-muted);
+    }
+
+    .admin-actions {
+        display: flex;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+
+    .admin-action-btn {
+        padding: 4px 10px;
+        border-radius: var(--radius-md);
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        border: 1px solid var(--border-default);
+        background: var(--bg-elevated);
+        color: var(--text-secondary);
+        font-family: inherit;
+        transition: all var(--duration);
+    }
+
+    .admin-action-btn:hover {
+        border-color: var(--border-hover);
+        color: var(--text-primary);
+    }
+
+    .admin-action-btn.promote {
+        border-color: rgba(168, 85, 247, 0.3);
+        color: #a855f7;
+    }
+
+    .admin-action-btn.promote:hover {
+        background: rgba(168, 85, 247, 0.1);
+    }
+
+    .admin-action-btn.demote {
+        border-color: rgba(234, 179, 8, 0.3);
+        color: #eab308;
+    }
+
+    .admin-action-btn.demote:hover {
+        background: rgba(234, 179, 8, 0.1);
+    }
+
+    .admin-action-btn.remove {
+        border-color: rgba(239, 68, 68, 0.3);
+        color: #ef4444;
+    }
+
+    .admin-action-btn.remove:hover {
+        background: rgba(239, 68, 68, 0.1);
+    }
+
     /* ============ ANIMATIONS ============ */
     @keyframes fadeIn {
         from { opacity: 0; transform: translateY(8px); }
@@ -1117,8 +1541,7 @@
 <!-- ==================== MESSAGES TAB ==================== -->
 <div class="tab-panel active" id="tab-messages">
 
-    <!-- PENDING INVITATIONS (Collapsible) -->
-    {% if new_followers or workout_invites or group_join_requests %}
+    <!-- PENDING INVITATIONS (Collapsible - always visible) -->
     <div class="pending-header" onclick="togglePending()">
         <div class="pending-header-left">
             <span class="pending-header-title">Pending Invitations</span>
@@ -1140,7 +1563,7 @@
                 {% endif %}
             </div>
             <div class="pending-info">
-                <div class="pending-name">{{ follower.user.display_name }}</div>
+                <div class="pending-name"><a href="/accounts/profile/{{ follower.user.username }}/">{{ follower.user.display_name }}</a></div>
                 <div class="pending-meta">Started following you &middot; {{ follower.time_ago }}</div>
             </div>
             <div class="pending-actions">
@@ -1159,7 +1582,7 @@
                 {% endif %}
             </div>
             <div class="pending-info">
-                <div class="pending-name">{{ invite.from_user.display_name }}</div>
+                <div class="pending-name"><a href="/accounts/profile/{{ invite.from_user.username }}/">{{ invite.from_user.display_name }}</a></div>
                 <div class="pending-meta">Invited you to work out &middot; {{ invite.time_ago }}</div>
                 <div class="invite-details">
                     <span class="invite-tag">💪 {{ invite.workout_type }}</span>
@@ -1185,7 +1608,7 @@
                 {% endif %}
             </div>
             <div class="pending-info">
-                <div class="pending-name">{{ jr.user.display_name }}</div>
+                <div class="pending-name"><a href="/accounts/profile/{{ jr.user.username }}/">{{ jr.user.display_name }}</a></div>
                 <div class="pending-meta">Wants to join {{ jr.group_name }} &middot; {{ jr.time_ago }}</div>
             </div>
             <div class="pending-actions">
@@ -1194,8 +1617,41 @@
             </div>
         </div>
         {% endfor %}
+
+        {% for wjr in workout_join_requests %}
+        <div class="pending-card fade-in" data-workout-join-request-id="{{ wjr.id }}">
+            <div class="pending-avatar">
+                {% if wjr.user.avatar %}
+                <img src="{{ wjr.user.avatar.url }}" alt="{{ wjr.user.display_name }}">
+                {% else %}
+                <span class="pending-avatar-letter">{{ wjr.user.display_name|make_list|first|upper }}</span>
+                {% endif %}
+            </div>
+            <div class="pending-info">
+                <div class="pending-name"><a href="/accounts/profile/{{ wjr.user.username }}/">{{ wjr.user.display_name }}</a></div>
+                <div class="pending-meta">Requested to join {{ wjr.workout_type }} &middot; {{ wjr.time_ago }}</div>
+                <div class="invite-details">
+                    {% if wjr.gym_name %}
+                    <span>📍 {{ wjr.gym_name }}</span>
+                    {% endif %}
+                    {% if wjr.scheduled_time %}
+                    <span>🕐 {{ wjr.scheduled_time|date:"M d, g:i A" }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="pending-actions">
+                <button class="pending-btn accept" onclick="acceptWorkoutJoinRequest('{{ wjr.id }}', this)">Accept</button>
+                <button class="pending-btn dismiss" onclick="denyWorkoutJoinRequest('{{ wjr.id }}', this)">&#10005;</button>
+            </div>
+        </div>
+        {% endfor %}
+
+        {% if not new_followers and not workout_invites and not group_join_requests and not workout_join_requests %}
+        <div class="social-empty" style="padding: 20px 16px;">
+            <p class="social-empty-subtext">No pending invitations</p>
+        </div>
+        {% endif %}
     </div>
-    {% endif %}
 
     <!-- DM CONVERSATIONS -->
     <div class="section-header">
@@ -1209,7 +1665,7 @@
 
     {% for conv in dm_conversations %}
     <div class="conversation-row fade-in" style="animation-delay: {{ forloop.counter0 }}00ms"
-         onclick="openChat('dm', '{{ conv.partner.id }}', '{{ conv.partner.display_name }}')">
+         onclick="openChat('dm', '{{ conv.partner.id }}', '{{ conv.partner.display_name }}', '{{ conv.partner.username }}')">
         <div class="conversation-avatar">
             {% if conv.partner.avatar %}
             <img src="{{ conv.partner.avatar.url }}" alt="{{ conv.partner.display_name }}">
@@ -1356,6 +1812,60 @@
     </div>
 </div>
 
+<!-- ==================== GROUP PROFILE SLIDE-OVER ==================== -->
+<div class="group-profile-container" id="groupProfileContainer">
+    <div class="group-profile-header">
+        <button class="group-profile-back" onclick="closeGroupProfile()">&#8592;</button>
+        <span class="group-profile-header-title" id="groupProfileHeaderTitle">Group Profile</span>
+        <button class="group-profile-edit-btn" id="groupProfileEditBtn" style="display:none;" onclick="toggleGroupEdit()">Edit</button>
+    </div>
+
+    <div class="group-profile-info" id="groupProfileInfo">
+        <div class="group-profile-avatar" id="groupProfileAvatar">
+            <span id="groupProfileAvatarLetter"></span>
+        </div>
+        <div class="group-profile-name" id="groupProfileName"></div>
+        <div class="group-profile-description" id="groupProfileDescription"></div>
+        <div class="group-profile-invite-inline" id="groupProfileInviteInline" style="display:none;">
+            <span class="invite-inline-label">Join Code:</span>
+            <span class="invite-inline-code" id="groupProfileInviteInlineCode"></span>
+            <button class="invite-inline-copy" id="groupProfileInlineCopyBtn" onclick="copyInviteCode()">Copy</button>
+        </div>
+        <div class="group-profile-meta">
+            <span class="group-profile-privacy-badge" id="groupProfilePrivacy"></span>
+            <span class="group-profile-meta-item" id="groupProfileMemberCount"></span>
+            <span class="group-profile-streak" id="groupProfileStreak" style="display:none;"></span>
+        </div>
+    </div>
+
+    <div class="group-edit-form" id="groupEditForm">
+        <div class="form-group">
+            <label class="form-label">Group Name</label>
+            <input type="text" class="form-input" id="editGroupName" maxlength="100">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Description</label>
+            <textarea class="form-input form-textarea" id="editGroupDescription" maxlength="500"></textarea>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Privacy</label>
+            <select class="form-input form-select" id="editGroupPrivacy">
+                <option value="public">Public</option>
+                <option value="private">Private</option>
+            </select>
+        </div>
+        <div class="group-edit-actions">
+            <button class="group-edit-save" onclick="saveGroupEdit()">Save Changes</button>
+            <button class="group-edit-cancel" onclick="toggleGroupEdit()">Cancel</button>
+        </div>
+    </div>
+
+    <div class="group-profile-members">
+        <div class="group-profile-members-title">Members</div>
+        <div id="groupProfileMembersList"></div>
+    </div>
+</div>
+
 <!-- ==================== CREATE GROUP MODAL ==================== -->
 <div class="modal-overlay" id="createGroupOverlay" onclick="closeCreateGroup()"></div>
 <div class="modal-content" id="createGroupModal">
@@ -1451,13 +1961,26 @@ function switchTab(tabName) {
 // ============ CHAT ============
 let currentChatType = null;
 let currentChatId = null;
+let currentChatPartnerUsername = null;
 
-function openChat(type, id, name) {
+function openChat(type, id, name, username) {
     currentChatType = type;
     currentChatId = id;
+    currentChatPartnerUsername = username || null;
 
     // Update header
-    document.getElementById('chatPartnerName').textContent = name;
+    const partnerNameEl = document.getElementById('chatPartnerName');
+    partnerNameEl.textContent = name;
+    if (type === 'dm' && username) {
+        partnerNameEl.style.cursor = 'pointer';
+        partnerNameEl.onclick = () => window.location.href = '/accounts/profile/' + username + '/';
+    } else if (type === 'group') {
+        partnerNameEl.style.cursor = 'pointer';
+        partnerNameEl.onclick = () => openGroupProfile(currentChatId);
+    } else {
+        partnerNameEl.style.cursor = 'default';
+        partnerNameEl.onclick = null;
+    }
     document.getElementById('chatAvatarLetter').textContent = name.charAt(0).toUpperCase();
 
     // Show/hide zap button (DM only)
@@ -1519,18 +2042,21 @@ function loadMessages(type, id) {
             return;
         }
 
-        // Messages come newest first, reverse for display
-        const sorted = [...messages].reverse();
+        // Messages are returned oldest-first from the API
         let html = '';
-        for (const msg of sorted) {
+        for (const msg of messages) {
             const isSent = msg.sender_username === '{{ user.username }}';
             const isZap = msg.content === 'ZAP';
             const bubbleClass = isZap ? 'zap' : (isSent ? 'sent' : 'received');
 
+            const usernameHtml = (!isSent && currentChatType === 'dm' && currentChatPartnerUsername)
+                ? `<a href="/accounts/profile/${currentChatPartnerUsername}/" class="chat-username-link">${msg.sender_username}</a>`
+                : msg.sender_username;
+
             html += `
                 <div class="chat-bubble ${bubbleClass}">
                     ${isZap ? '⚡' : escapeHtml(msg.content)}
-                    <div class="chat-bubble-time">${msg.sender_username}${msg.created_at ? ' · ' + formatTime(msg.created_at) : ''}</div>
+                    <div class="chat-bubble-time">${usernameHtml}${msg.created_at ? ' · ' + formatTime(msg.created_at) : ''}</div>
                 </div>
             `;
         }
@@ -1644,19 +2170,24 @@ function joinViaCode() {
     const code = document.getElementById('joinCodeInput').value.trim().toUpperCase();
     if (!code) return;
 
+    if (!confirm(`Join the group with invite code "${code}"?`)) return;
+
     fetch('/api/groups/join-via-code/', {
         method: 'POST',
         headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/json' },
         credentials: 'same-origin',
         body: JSON.stringify({ code: code })
     })
-    .then(r => r.json())
-    .then(data => {
-        if (data.id || data.group) {
+    .then(r => {
+        if (r.ok) return r.json().then(data => ({ ok: true, data }));
+        return r.json().then(data => ({ ok: false, data }));
+    })
+    .then(({ ok, data }) => {
+        if (ok) {
             alert('Successfully joined the group!');
             location.reload();
         } else {
-            alert(data.detail || data.error || 'Invalid code');
+            alert(data.error || data.detail || 'Invalid or expired invite code');
         }
     })
     .catch(err => {
@@ -1824,6 +2355,282 @@ function denyJoinRequest(groupId, requestId, btn) {
         setTimeout(() => card.remove(), 300);
     })
     .catch(err => console.error('Error denying join request:', err));
+}
+
+// ============ WORKOUT JOIN REQUEST ACTIONS ============
+function acceptWorkoutJoinRequest(requestId, btn) {
+    fetch(`/api/gyms/invites/requests/${requestId}/accept/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrftoken },
+        credentials: 'same-origin',
+    })
+    .then(r => r.json())
+    .then(data => {
+        const card = btn.closest('.pending-card');
+        card.style.opacity = '0.5';
+        btn.textContent = 'Accepted';
+        btn.disabled = true;
+        // Hide the deny button
+        const denyBtn = card.querySelector('.pending-btn.dismiss');
+        if (denyBtn) denyBtn.style.display = 'none';
+    })
+    .catch(err => console.error('Error accepting workout join request:', err));
+}
+
+function denyWorkoutJoinRequest(requestId, btn) {
+    fetch(`/api/gyms/invites/requests/${requestId}/deny/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrftoken },
+        credentials: 'same-origin',
+    })
+    .then(r => r.json())
+    .then(data => {
+        const card = btn.closest('.pending-card');
+        card.style.transition = 'all 0.3s ease';
+        card.style.opacity = '0';
+        card.style.height = '0';
+        card.style.overflow = 'hidden';
+        card.style.marginBottom = '0';
+        card.style.padding = '0';
+        setTimeout(() => card.remove(), 300);
+    })
+    .catch(err => console.error('Error denying workout join request:', err));
+}
+
+// ============ GROUP PROFILE ============
+let currentGroupProfileId = null;
+let currentGroupProfileData = null;
+
+function openGroupProfile(groupId) {
+    currentGroupProfileId = groupId;
+
+    // Hide chat, show group profile
+    document.getElementById('chatContainer').classList.remove('active');
+    document.getElementById('groupProfileContainer').classList.add('active');
+
+    // Fetch group details
+    fetch(`/api/groups/${groupId}/`, { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(data => {
+        currentGroupProfileData = data;
+        renderGroupProfile(data);
+    })
+    .catch(err => {
+        console.error('Error loading group profile:', err);
+    });
+}
+
+function renderGroupProfile(data) {
+    // Header
+    document.getElementById('groupProfileHeaderTitle').textContent = data.name;
+
+    // Avatar
+    const avatarEl = document.getElementById('groupProfileAvatar');
+    if (data.avatar) {
+        avatarEl.innerHTML = `<img src="${data.avatar}" alt="${escapeHtml(data.name)}">`;
+    } else {
+        avatarEl.innerHTML = `<span>${data.name.charAt(0).toUpperCase()}</span>`;
+    }
+
+    // Info
+    document.getElementById('groupProfileName').textContent = data.name;
+    document.getElementById('groupProfileDescription').textContent = data.description || 'No description';
+
+    // Privacy badge
+    const privacyEl = document.getElementById('groupProfilePrivacy');
+    if (data.privacy === 'private') {
+        privacyEl.textContent = '🔒 Private';
+    } else {
+        privacyEl.textContent = '🌐 Public';
+    }
+
+    // Member count
+    document.getElementById('groupProfileMemberCount').textContent = `👥 ${data.member_count} members`;
+
+    // Streak
+    const streakEl = document.getElementById('groupProfileStreak');
+    if (data.group_streak > 0) {
+        streakEl.textContent = `🔥 ${data.group_streak} day streak`;
+        streakEl.style.display = 'inline-flex';
+    } else {
+        streakEl.style.display = 'none';
+    }
+
+    // Show edit button for admin/creator
+    const editBtn = document.getElementById('groupProfileEditBtn');
+    if (data.user_role === 'creator' || data.user_role === 'admin') {
+        editBtn.style.display = 'inline-block';
+    } else {
+        editBtn.style.display = 'none';
+    }
+
+    // Invite code (visible to all members, inline under description)
+    const inviteInline = document.getElementById('groupProfileInviteInline');
+    if (data.invite_code && data.user_role) {
+        document.getElementById('groupProfileInviteInlineCode').textContent = data.invite_code;
+        inviteInline.style.display = 'flex';
+    } else {
+        inviteInline.style.display = 'none';
+    }
+
+    // Render members
+    renderGroupMembers(data.members, data.user_role);
+}
+
+function renderGroupMembers(members, userRole) {
+    const listEl = document.getElementById('groupProfileMembersList');
+    const canManage = (userRole === 'creator' || userRole === 'admin');
+
+    let html = '';
+    for (const member of members) {
+        const displayName = member.display_name || member.username;
+        const initial = displayName.charAt(0).toUpperCase();
+        const avatarHtml = member.avatar_url
+            ? `<img src="${member.avatar_url}" alt="${escapeHtml(displayName)}">`
+            : `<span class="member-avatar-letter">${initial}</span>`;
+
+        // Role badge
+        let badgeHtml = '';
+        if (member.role === 'creator') {
+            badgeHtml = '<span class="role-badge creator">Creator</span>';
+        } else if (member.role === 'admin') {
+            badgeHtml = '<span class="role-badge admin">Admin</span>';
+        } else {
+            badgeHtml = '<span class="role-badge member">Member</span>';
+        }
+
+        // Admin action buttons
+        let actionsHtml = '';
+        if (canManage && member.role !== 'creator') {
+            // Don't show actions for yourself
+            const currentUserId = '{{ user.id }}';
+            if (String(member.user) !== currentUserId) {
+                if (userRole === 'creator') {
+                    if (member.role === 'member') {
+                        actionsHtml += `<button class="admin-action-btn promote" onclick="event.stopPropagation(); promoteMember('${currentGroupProfileId}', '${member.user}')">Promote</button>`;
+                    } else if (member.role === 'admin') {
+                        actionsHtml += `<button class="admin-action-btn demote" onclick="event.stopPropagation(); demoteMember('${currentGroupProfileId}', '${member.user}')">Demote</button>`;
+                    }
+                }
+                actionsHtml += `<button class="admin-action-btn remove" onclick="event.stopPropagation(); removeMember('${currentGroupProfileId}', '${member.user}')">Remove</button>`;
+            }
+        }
+
+        html += `
+            <div class="member-row" onclick="window.location.href='/accounts/profile/${member.username}/'">
+                <div class="member-avatar">${avatarHtml}</div>
+                <div class="member-info">
+                    <div class="member-name">${escapeHtml(displayName)}</div>
+                    <div class="member-username">@${escapeHtml(member.username)}</div>
+                </div>
+                ${badgeHtml}
+                ${actionsHtml ? `<div class="admin-actions">${actionsHtml}</div>` : ''}
+            </div>
+        `;
+    }
+    listEl.innerHTML = html;
+}
+
+function copyInviteCode() {
+    const code = document.getElementById('groupProfileInviteInlineCode').textContent;
+    navigator.clipboard.writeText(code).then(() => {
+        const btn = document.getElementById('groupProfileInlineCopyBtn');
+        btn.textContent = 'Copied!';
+        btn.classList.add('copied');
+        setTimeout(() => {
+            btn.textContent = 'Copy';
+            btn.classList.remove('copied');
+        }, 2000);
+    });
+}
+
+function closeGroupProfile() {
+    document.getElementById('groupProfileContainer').classList.remove('active');
+    // Hide edit form if open
+    document.getElementById('groupEditForm').classList.remove('active');
+    // Show chat again
+    document.getElementById('chatContainer').classList.add('active');
+}
+
+function toggleGroupEdit() {
+    const form = document.getElementById('groupEditForm');
+    const isVisible = form.classList.contains('active');
+
+    if (!isVisible && currentGroupProfileData) {
+        // Populate form
+        document.getElementById('editGroupName').value = currentGroupProfileData.name || '';
+        document.getElementById('editGroupDescription').value = currentGroupProfileData.description || '';
+        document.getElementById('editGroupPrivacy').value = currentGroupProfileData.privacy || 'public';
+    }
+
+    form.classList.toggle('active');
+}
+
+function saveGroupEdit() {
+    const name = document.getElementById('editGroupName').value.trim();
+    const description = document.getElementById('editGroupDescription').value.trim();
+    const privacy = document.getElementById('editGroupPrivacy').value;
+
+    if (!name) return;
+
+    fetch(`/api/groups/${currentGroupProfileId}/update/`, {
+        method: 'PATCH',
+        headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ name, description, privacy })
+    })
+    .then(r => r.json())
+    .then(data => {
+        // Hide edit form
+        document.getElementById('groupEditForm').classList.remove('active');
+        // Refresh profile
+        openGroupProfile(currentGroupProfileId);
+    })
+    .catch(err => console.error('Error saving group edit:', err));
+}
+
+function promoteMember(groupId, userId) {
+    fetch(`/api/groups/${groupId}/members/${userId}/promote/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrftoken },
+        credentials: 'same-origin',
+    })
+    .then(r => r.json())
+    .then(data => {
+        openGroupProfile(groupId);
+    })
+    .catch(err => console.error('Error promoting member:', err));
+}
+
+function demoteMember(groupId, userId) {
+    fetch(`/api/groups/${groupId}/members/${userId}/demote/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrftoken },
+        credentials: 'same-origin',
+    })
+    .then(r => r.json())
+    .then(data => {
+        openGroupProfile(groupId);
+    })
+    .catch(err => console.error('Error demoting member:', err));
+}
+
+function removeMember(groupId, userId) {
+    if (!confirm('Remove this member from the group?')) return;
+
+    fetch(`/api/groups/${groupId}/members/${userId}/remove/`, {
+        method: 'DELETE',
+        headers: { 'X-CSRFToken': csrftoken },
+        credentials: 'same-origin',
+    })
+    .then(r => {
+        if (r.ok) {
+            openGroupProfile(groupId);
+        } else {
+            return r.json().then(d => { throw new Error(d.detail || 'Failed to remove'); });
+        }
+    })
+    .catch(err => console.error('Error removing member:', err));
 }
 
 // ============ HELPERS ============

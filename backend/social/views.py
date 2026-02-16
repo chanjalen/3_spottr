@@ -9,7 +9,7 @@ from django.conf import settings
 from django.db.models import F, Q, Max, Subquery, OuterRef, Exists, Count
 
 from .models import QuickWorkout, Post, Comment, Reaction, Poll, PollOption, PollVote, Follow
-from gyms.models import Gym, WorkoutInvite
+from gyms.models import Gym, WorkoutInvite, JoinRequest
 from workouts.models import PersonalRecord
 from messaging.models import Message, MessageRead
 from groups.models import Group, GroupMember, GroupJoinRequest
@@ -81,6 +81,26 @@ def social_view(request):
             'group': jr.group,
             'group_name': jr.group.name,
             'message': jr.message,
+            'created_at': jr.created_at,
+            'time_ago': get_time_ago(jr.created_at),
+        })
+
+    # === PENDING: Workout join requests (people requesting to join MY workout invites) ===
+    workout_join_requests = JoinRequest.objects.filter(
+        workout_invite__user=user,
+        status='pending',
+    ).select_related('user', 'workout_invite', 'workout_invite__gym').order_by('-created_at')[:10]
+
+    workout_join_requests_data = []
+    for jr in workout_join_requests:
+        invite = jr.workout_invite
+        workout_join_requests_data.append({
+            'id': str(jr.id),
+            'user': jr.user,
+            'workout_type': invite.workout_type,
+            'gym_name': invite.gym.name if invite.gym else '',
+            'scheduled_time': invite.scheduled_time,
+            'description': jr.description,
             'created_at': jr.created_at,
             'time_ago': get_time_ago(jr.created_at),
         })
@@ -194,11 +214,12 @@ def social_view(request):
         'new_followers': new_followers_data,
         'workout_invites': workout_invites_data,
         'group_join_requests': group_join_requests_data,
+        'workout_join_requests': workout_join_requests_data,
         'dm_conversations': dm_conversations,
         'group_conversations': group_conversations,
         'public_groups': public_groups,
         'total_unread': total_unread,
-        'pending_count': len(new_followers_data) + len(workout_invites_data) + len(group_join_requests_data),
+        'pending_count': len(new_followers_data) + len(workout_invites_data) + len(group_join_requests_data) + len(workout_join_requests_data),
         'friends': friends,
     })
 
