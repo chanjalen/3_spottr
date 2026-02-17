@@ -490,6 +490,50 @@
             object-fit: cover;
         }
 
+        .notif-actions {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+            margin-left: 8px;
+            align-items: center;
+        }
+
+        .notif-action-btn {
+            padding: 5px 12px;
+            border-radius: var(--radius-pill);
+            border: none;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--duration) var(--ease-out);
+            white-space: nowrap;
+        }
+
+        .notif-action-accept {
+            background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+            color: #fff;
+        }
+
+        .notif-action-accept:hover {
+            opacity: 0.85;
+        }
+
+        .notif-action-dismiss {
+            background: var(--bg-elevated);
+            color: var(--text-muted);
+        }
+
+        .notif-action-dismiss:hover {
+            background: var(--bg-hover);
+            color: var(--text-secondary);
+        }
+
+        .notif-action-done {
+            background: var(--bg-elevated);
+            color: var(--text-muted);
+            cursor: default;
+        }
+
         .header-login-btn {
             padding: 8px 18px;
             background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
@@ -3051,6 +3095,26 @@
                     ).join('')}</div>`;
                 }
 
+                function renderActions(n) {
+                    const type = n.type;
+                    const targetType = n.target_type || '';
+                    const actors = n.actors || [];
+                    if (type === 'follow' && actors.length > 0) {
+                        const uid = actors[0].id;
+                        return `<div class="notif-actions"><button class="notif-action-btn notif-action-accept" onclick="event.stopPropagation();notifFollowBack('${uid}',this)">Follow Back</button></div>`;
+                    }
+                    if (type === 'workout_invite') {
+                        return `<div class="notif-actions"><button class="notif-action-btn notif-action-accept" onclick="event.stopPropagation();notifAcceptWorkoutInvite('${n.target_id}',this)">Accept</button><button class="notif-action-btn notif-action-dismiss" onclick="event.stopPropagation();notifDismissNotif('${n.id}',this)">&#10005;</button></div>`;
+                    }
+                    if (type === 'join_request' && targetType === 'group') {
+                        return `<div class="notif-actions"><button class="notif-action-btn notif-action-accept" onclick="event.stopPropagation();notifAcceptGroupJoin('${n.target_id}','${n.context_id}',this)">Accept</button><button class="notif-action-btn notif-action-dismiss" onclick="event.stopPropagation();notifDenyGroupJoin('${n.target_id}','${n.context_id}',this)">&#10005;</button></div>`;
+                    }
+                    if (type === 'join_request' && targetType === 'workout_invite') {
+                        return `<div class="notif-actions"><button class="notif-action-btn notif-action-accept" onclick="event.stopPropagation();notifAcceptWorkoutJoin('${n.context_id}',this)">Accept</button><button class="notif-action-btn notif-action-dismiss" onclick="event.stopPropagation();notifDenyWorkoutJoin('${n.context_id}',this)">&#10005;</button></div>`;
+                    }
+                    return '';
+                }
+
                 function renderRow(n) {
                     const unreadCls = n.is_read ? '' : ' unread';
                     const actors = n.actors || [];
@@ -3066,16 +3130,18 @@
                     const ids = n.ids ? n.ids.join(',') : n.id;
                     const actorId = (actors.length > 0 && actors[0].id) ? actors[0].id : '';
                     const actorUsername = (actors.length > 0 && actors[0].username) ? actors[0].username : '';
+                    const contextId = n.context_id || '';
 
                     // Escape HTML in message
                     const msg = (n.message || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-                    return `<div class="notif-row${unreadCls}" data-ids="${ids}" data-type="${n.type}" data-target-type="${n.target_type || ''}" data-target-id="${n.target_id || ''}" data-actor-id="${actorId}" data-actor-username="${actorUsername}">
+                    return `<div class="notif-row${unreadCls}" data-ids="${ids}" data-type="${n.type}" data-target-type="${n.target_type || ''}" data-target-id="${n.target_id || ''}" data-context-id="${contextId}" data-actor-id="${actorId}" data-actor-username="${actorUsername}">
                         ${avatarHtml}
                         <div class="notif-content">
                             <div class="notif-message">${msg}</div>
                             <div class="notif-time">${n.time_ago || ''}</div>
                         </div>
+                        ${renderActions(n)}
                         ${thumbHtml}
                     </div>`;
                 }
@@ -3164,6 +3230,84 @@
                         }
                     } catch {}
                 }
+
+                async function notifFollowBack(userId, btn) {
+                    btn.disabled = true;
+                    const fd = new FormData();
+                    fd.append('user_id', userId);
+                    try {
+                        const res = await fetch('/accounts/api/follow-toggle/', { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, credentials: 'same-origin', body: fd });
+                        const data = await res.json();
+                        if (data.action === 'followed') { btn.textContent = 'Following'; btn.className = 'notif-action-btn notif-action-done'; }
+                        else { btn.disabled = false; }
+                    } catch { btn.disabled = false; }
+                }
+
+                async function notifAcceptWorkoutInvite(inviteId, btn) {
+                    btn.disabled = true;
+                    try {
+                        await fetch(`/api/gyms/workout-invites/${inviteId}/join/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, credentials: 'same-origin' });
+                        btn.textContent = 'Accepted'; btn.className = 'notif-action-btn notif-action-done';
+                        const row = btn.closest('.notif-row');
+                        if (row) { row.classList.remove('unread'); markRead(row.dataset.ids.split(',')); fetchUnreadCount(); }
+                    } catch { btn.disabled = false; }
+                }
+
+                function notifDismissNotif(notifId, btn) {
+                    const row = btn.closest('.notif-row');
+                    if (row) { row.style.transition = 'opacity 0.3s'; row.style.opacity = '0'; setTimeout(() => row.remove(), 300); markRead([notifId]); fetchUnreadCount(); }
+                }
+
+                async function notifAcceptGroupJoin(groupId, requestId, btn) {
+                    btn.disabled = true;
+                    try {
+                        await fetch(`/api/groups/${groupId}/join-requests/${requestId}/accept/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, credentials: 'same-origin' });
+                        btn.textContent = 'Accepted'; btn.className = 'notif-action-btn notif-action-done';
+                        const deny = btn.parentElement.querySelector('.notif-action-dismiss');
+                        if (deny) deny.style.display = 'none';
+                        const row = btn.closest('.notif-row');
+                        if (row) { row.classList.remove('unread'); markRead(row.dataset.ids.split(',')); fetchUnreadCount(); }
+                    } catch { btn.disabled = false; }
+                }
+
+                async function notifDenyGroupJoin(groupId, requestId, btn) {
+                    btn.disabled = true;
+                    try {
+                        await fetch(`/api/groups/${groupId}/join-requests/${requestId}/deny/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, credentials: 'same-origin' });
+                        const row = btn.closest('.notif-row');
+                        if (row) { row.style.transition = 'opacity 0.3s'; row.style.opacity = '0'; setTimeout(() => row.remove(), 300); markRead(row.dataset.ids.split(',')); fetchUnreadCount(); }
+                    } catch { btn.disabled = false; }
+                }
+
+                async function notifAcceptWorkoutJoin(requestId, btn) {
+                    btn.disabled = true;
+                    try {
+                        await fetch(`/api/gyms/invites/requests/${requestId}/accept/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, credentials: 'same-origin' });
+                        btn.textContent = 'Accepted'; btn.className = 'notif-action-btn notif-action-done';
+                        const deny = btn.parentElement.querySelector('.notif-action-dismiss');
+                        if (deny) deny.style.display = 'none';
+                        const row = btn.closest('.notif-row');
+                        if (row) { row.classList.remove('unread'); markRead(row.dataset.ids.split(',')); fetchUnreadCount(); }
+                    } catch { btn.disabled = false; }
+                }
+
+                async function notifDenyWorkoutJoin(requestId, btn) {
+                    btn.disabled = true;
+                    try {
+                        await fetch(`/api/gyms/invites/requests/${requestId}/deny/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, credentials: 'same-origin' });
+                        const row = btn.closest('.notif-row');
+                        if (row) { row.style.transition = 'opacity 0.3s'; row.style.opacity = '0'; setTimeout(() => row.remove(), 300); markRead(row.dataset.ids.split(',')); fetchUnreadCount(); }
+                    } catch { btn.disabled = false; }
+                }
+
+                // Expose action handlers globally for onclick attributes
+                window.notifFollowBack = notifFollowBack;
+                window.notifAcceptWorkoutInvite = notifAcceptWorkoutInvite;
+                window.notifDismissNotif = notifDismissNotif;
+                window.notifAcceptGroupJoin = notifAcceptGroupJoin;
+                window.notifDenyGroupJoin = notifDenyGroupJoin;
+                window.notifAcceptWorkoutJoin = notifAcceptWorkoutJoin;
+                window.notifDenyWorkoutJoin = notifDenyWorkoutJoin;
 
                 // Poll for unread count
                 fetchUnreadCount();

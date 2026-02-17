@@ -415,19 +415,28 @@ def deny_join_request(admin_user, request_id):
 
 def recalculate_group_streak(group_id):
     """
-    Recalculate the group streak.
-    If ALL members have current_streak > 0, increment group_streak by 1.
-    If any member has current_streak == 0, reset group_streak to 0.
-    Returns the updated group.
+    Recalculate the group streak for a single day.
+    Uses the 3 AM grace period via get_streak_date().
+    Skips if already processed for today's streak date.
+    Returns a tuple of (group, action) where action is 'incremented', 'reset', or 'skipped'.
     """
-    group = _get_group(group_id)
+    from workouts.services.streak_service import get_streak_date
 
-    member_user_ids = GroupMember.objects.filter(group=group).values_list('user_id', flat=True)
+    group = _get_group(group_id)
+    today = get_streak_date()
+
+    if group.last_streak_date == today:
+        return group, 'skipped'
+
+    member_user_ids = list(
+        GroupMember.objects.filter(group=group).values_list('user_id', flat=True)
+    )
 
     if not member_user_ids:
         group.group_streak = 0
-        group.save(update_fields=['group_streak', 'updated_at'])
-        return group
+        group.last_streak_date = today
+        group.save(update_fields=['group_streak', 'last_streak_date', 'updated_at'])
+        return group, 'reset'
 
     from accounts.models import User
     any_broken = User.objects.filter(
@@ -436,8 +445,65 @@ def recalculate_group_streak(group_id):
 
     if any_broken:
         group.group_streak = 0
+        action = 'reset'
     else:
         group.group_streak += 1
+        action = 'incremented'
 
-    group.save(update_fields=['group_streak', 'updated_at'])
-    return group
+    if group.group_streak > group.longest_group_streak:
+        group.longest_group_streak = group.group_streak
+
+    group.last_streak_date = today
+    group.save(update_fields=[
+        'group_streak', 'longest_group_streak', 'last_streak_date', 'updated_at',
+    ])
+    return group, action
+
+
+def get_group_streak_details(group_id, requesting_user):
+    """
+    Return streak details for a group, including per-member streak info.
+    Access: members only for private groups, anyone for public.
+    """
+    from workouts.services.streak_service import get_streak_date
+    from workouts.models import Streak
+
+    group = _get_group(group_id)
+
+    # Access check (same pattern as list_members)
+    if group.privacy == Group.Privacy.PRIVATE:
+        if requesting_user is None or not GroupMember.objects.filter(
+            group=group, user=requesting_user
+        ).exists():
+            raise NotGroupMemberError("You must be a member to view this group's streak details.")
+
+    today = get_streak_date()
+
+    members_qs = GroupMember.objects.filter(group=group).select_related('user')
+
+    member_user_ids = [m.user_id for m in members_qs]
+    streak_map = {}
+    if member_user_ids:
+        for s in Streak.objects.filter(user_id__in=member_user_ids):
+            streak_map[s.user_id] = s
+
+    members_data = []
+    for m in members_qs:
+        streak_obj = streak_map.get(m.user_id)
+        has_activity_today = (
+            streak_obj is not None and streak_obj.last_streak_date == today
+        )
+        members_data.append({
+            'user_id': str(m.user_id),
+            'username': m.user.username,
+            'display_name': m.user.display_name,
+            'avatar_url': m.user.avatar_url or None,
+            'current_streak': m.user.current_streak,
+            'has_activity_today': has_activity_today,
+        })
+
+    return {
+        'group_streak': group.group_streak,
+        'longest_group_streak': group.longest_group_streak,
+        'members': members_data,
+    }

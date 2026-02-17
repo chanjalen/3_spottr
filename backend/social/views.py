@@ -12,12 +12,12 @@ from django.db.models import F, Q, Max, Subquery, OuterRef, Exists, Count
 from .models import QuickWorkout, Post, Comment, Reaction, Poll, PollOption, PollVote, Follow
 from media.models import MediaLink
 from media.utils import create_media_asset, get_media_url, build_media_url
-from gyms.models import Gym, WorkoutInvite, JoinRequest
+from gyms.models import Gym
 from workouts.models import PersonalRecord
 from messaging.models import Message, MessageRead
 from messaging.services import send_dm, send_group_message
 from messaging.exceptions import NotMutualFollowError, UserBlockedError, NotGroupMemberError, PostNotFoundError
-from groups.models import Group, GroupMember, GroupJoinRequest
+from groups.models import Group, GroupMember
 from django.utils import timezone
 from datetime import timedelta, date
 
@@ -25,90 +25,9 @@ from datetime import timedelta, date
 @login_required
 def social_view(request):
     """
-    Display the social page with pending invitations, DM conversations,
-    and group conversations.
+    Display the social page with DM conversations and group conversations.
     """
     user = request.user
-
-    # === PENDING: New followers (people who follow me but I don't follow back) ===
-    my_following_ids = Follow.objects.filter(follower=user).values_list('following_id', flat=True)
-    new_followers = Follow.objects.filter(
-        following=user
-    ).exclude(
-        follower_id__in=my_following_ids
-    ).select_related('follower').order_by('-created_at')[:10]
-
-    new_followers_data = []
-    for f in new_followers:
-        new_followers_data.append({
-            'id': str(f.id),
-            'user': f.follower,
-            'created_at': f.created_at,
-            'time_ago': get_time_ago(f.created_at),
-        })
-
-    # === PENDING: Workout invites (invites where I'm the invited user or in a group) ===
-    workout_invites = WorkoutInvite.objects.filter(
-        Q(invited_user=user) |
-        Q(type='gym', group__members__user=user)
-    ).exclude(
-        user=user
-    ).distinct().select_related('user', 'gym').order_by('-created_at')[:10]
-
-    workout_invites_data = []
-    for invite in workout_invites:
-        workout_invites_data.append({
-            'id': str(invite.id),
-            'from_user': invite.user,
-            'gym_name': invite.gym.name if invite.gym else '',
-            'workout_type': invite.workout_type,
-            'scheduled_time': invite.scheduled_time,
-            'description': invite.description,
-            'created_at': invite.created_at,
-            'time_ago': get_time_ago(invite.created_at),
-        })
-
-    # === PENDING: Group join requests (for groups where I'm admin/creator) ===
-    admin_group_ids = GroupMember.objects.filter(
-        user=user, role__in=['admin', 'creator']
-    ).values_list('group_id', flat=True)
-
-    group_join_requests = GroupJoinRequest.objects.filter(
-        group_id__in=admin_group_ids,
-        status='pending',
-    ).select_related('user', 'group').order_by('-created_at')[:10]
-
-    group_join_requests_data = []
-    for jr in group_join_requests:
-        group_join_requests_data.append({
-            'id': str(jr.id),
-            'user': jr.user,
-            'group': jr.group,
-            'group_name': jr.group.name,
-            'message': jr.message,
-            'created_at': jr.created_at,
-            'time_ago': get_time_ago(jr.created_at),
-        })
-
-    # === PENDING: Workout join requests (people requesting to join MY workout invites) ===
-    workout_join_requests = JoinRequest.objects.filter(
-        workout_invite__user=user,
-        status='pending',
-    ).select_related('user', 'workout_invite', 'workout_invite__gym').order_by('-created_at')[:10]
-
-    workout_join_requests_data = []
-    for jr in workout_join_requests:
-        invite = jr.workout_invite
-        workout_join_requests_data.append({
-            'id': str(jr.id),
-            'user': jr.user,
-            'workout_type': invite.workout_type,
-            'gym_name': invite.gym.name if invite.gym else '',
-            'scheduled_time': invite.scheduled_time,
-            'description': jr.description,
-            'created_at': jr.created_at,
-            'time_ago': get_time_ago(jr.created_at),
-        })
 
     # === DM CONVERSATIONS ===
     # Get latest message per conversation partner
@@ -208,6 +127,7 @@ def social_view(request):
                    sum(c['unread_count'] for c in group_conversations)
 
     # === FRIENDS (mutual follows) for new chat modal ===
+    my_following_ids = Follow.objects.filter(follower=user).values_list('following_id', flat=True)
     my_follower_ids = Follow.objects.filter(following=user).values_list('follower_id', flat=True)
     friends = UserModel.objects.filter(
         id__in=my_following_ids
@@ -216,15 +136,10 @@ def social_view(request):
     ).order_by('display_name')
 
     return render(request, 'social/social.html', {
-        'new_followers': new_followers_data,
-        'workout_invites': workout_invites_data,
-        'group_join_requests': group_join_requests_data,
-        'workout_join_requests': workout_join_requests_data,
         'dm_conversations': dm_conversations,
         'group_conversations': group_conversations,
         'public_groups': public_groups,
         'total_unread': total_unread,
-        'pending_count': len(new_followers_data) + len(workout_invites_data) + len(group_join_requests_data) + len(workout_join_requests_data),
         'friends': friends,
     })
 

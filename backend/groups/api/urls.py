@@ -12,6 +12,9 @@ urlpatterns = [
     path('<str:group_id>/update/', views.group_update, name='group-update'),
     path('<str:group_id>/delete/', views.group_delete, name='group-delete'),
 
+    # Streak
+    path('<str:group_id>/streak/', views.group_streak_detail, name='group-streak-detail'),
+
     # Membership
     path('<str:group_id>/members/', views.member_list, name='member-list'),
     path('<str:group_id>/join/', views.group_join, name='group-join'),

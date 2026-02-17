@@ -142,6 +142,10 @@ def invite_list_create(request):
     except WorkoutInviteNotFoundError as e:
         return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
 
+    if invite.invited_user_id:
+        from notifications.dispatcher import notify_workout_invite
+        notify_workout_invite(request.user, invite.invited_user, invite)
+
     return Response(
         WorkoutInviteDetailSerializer(invite, context={'request': request}).data,
         status=status.HTTP_201_CREATED,
@@ -192,6 +196,9 @@ def join_request_create(request, invite_id):
         return Response({"error": str(e)}, status=status.HTTP_409_CONFLICT)
     except DuplicateJoinRequestError as e:
         return Response({"error": str(e)}, status=status.HTTP_409_CONFLICT)
+
+    from notifications.dispatcher import notify_workout_join_request
+    notify_workout_join_request(request.user, join_request.workout_invite, join_request)
 
     return Response(JoinRequestSerializer(join_request).data, status=status.HTTP_201_CREATED)
 
