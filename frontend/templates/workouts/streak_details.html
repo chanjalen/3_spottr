@@ -1,0 +1,210 @@
+{% extends "gyms/base.html" %}
+{% block title %}Streak Details{% endblock %}
+
+{% block extra_css %}
+<style>
+    .streak-page {
+        max-width: 480px;
+        margin: 0 auto;
+        padding: 20px 16px 100px;
+    }
+
+    .streak-hero {
+        text-align: center;
+        padding: 32px 0 24px;
+    }
+
+    .streak-hero-emoji {
+        font-size: 56px;
+        display: block;
+        margin-bottom: 8px;
+    }
+
+    .streak-hero-count {
+        font-size: 48px;
+        font-weight: 800;
+        color: var(--text-primary);
+        line-height: 1;
+    }
+
+    .streak-hero-label {
+        font-size: 16px;
+        color: var(--text-secondary);
+        margin-top: 4px;
+    }
+
+    .streak-hero-status {
+        display: inline-block;
+        margin-top: 12px;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .streak-hero-status.active {
+        background: rgba(34, 197, 94, 0.15);
+        color: #22c55e;
+    }
+
+    .streak-hero-status.pending {
+        background: rgba(251, 191, 36, 0.15);
+        color: #fbbf24;
+    }
+
+    .streak-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 16px;
+    }
+
+    .streak-card-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 16px;
+    }
+
+    .streak-stat-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+    }
+
+    .streak-stat-row + .streak-stat-row {
+        border-top: 1px solid var(--border-subtle);
+    }
+
+    .streak-stat-label {
+        font-size: 15px;
+        color: var(--text-secondary);
+    }
+
+    .streak-stat-value {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .streak-progress-bar {
+        width: 100%;
+        height: 8px;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 4px;
+        margin-top: 12px;
+        overflow: hidden;
+    }
+
+    .streak-progress-fill {
+        height: 100%;
+        border-radius: 4px;
+        background: linear-gradient(90deg, #7c3aed, #a855f7);
+        transition: width 0.3s ease;
+    }
+
+    .streak-progress-fill.rest {
+        background: linear-gradient(90deg, #22c55e, #4ade80);
+    }
+
+    .streak-rule {
+        display: flex;
+        gap: 12px;
+        padding: 10px 0;
+    }
+
+    .streak-rule + .streak-rule {
+        border-top: 1px solid var(--border-subtle);
+    }
+
+    .streak-rule-icon {
+        font-size: 20px;
+        flex-shrink: 0;
+        width: 28px;
+        text-align: center;
+    }
+
+    .streak-rule-text {
+        font-size: 14px;
+        color: var(--text-secondary);
+        line-height: 1.5;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="streak-page">
+    <!-- Hero -->
+    <div class="streak-hero">
+        <span class="streak-hero-emoji">🔥</span>
+        <div class="streak-hero-count">{{ current_streak }}</div>
+        <div class="streak-hero-label">Day Streak</div>
+        {% if has_activity_today %}
+        <span class="streak-hero-status active">Active today</span>
+        {% elif has_rest_today %}
+        <span class="streak-hero-status active">Resting today</span>
+        {% else %}
+        <span class="streak-hero-status pending">Not yet today</span>
+        {% endif %}
+    </div>
+
+    <!-- Stats -->
+    <div class="streak-card">
+        <div class="streak-card-title">Stats</div>
+        <div class="streak-stat-row">
+            <span class="streak-stat-label">Current Streak</span>
+            <span class="streak-stat-value">{{ current_streak }} day{{ current_streak|pluralize }}</span>
+        </div>
+        <div class="streak-stat-row">
+            <span class="streak-stat-label">Longest Streak</span>
+            <span class="streak-stat-value">{{ longest_streak }} day{{ longest_streak|pluralize }}</span>
+        </div>
+    </div>
+
+    <!-- Weekly Progress -->
+    <div class="streak-card">
+        <div class="streak-card-title">This Week</div>
+        <div class="streak-stat-row">
+            <span class="streak-stat-label">Workouts</span>
+            <span class="streak-stat-value">{{ weekly_workout_count }} / {{ weekly_workout_goal }}</span>
+        </div>
+        <div class="streak-progress-bar">
+            <div class="streak-progress-fill" style="width: {% if weekly_workout_goal > 0 %}{% widthratio weekly_workout_count weekly_workout_goal 100 %}%{% else %}0%{% endif %};max-width:100%;"></div>
+        </div>
+
+        <div class="streak-stat-row" style="margin-top: 8px;">
+            <span class="streak-stat-label">Rest Days Used</span>
+            <span class="streak-stat-value">{{ rest_info.rest_days_used }} / {{ rest_info.rest_days_allowed }}</span>
+        </div>
+        <div class="streak-stat-row">
+            <span class="streak-stat-label">Rest Days Remaining</span>
+            <span class="streak-stat-value">{{ rest_info.rest_days_remaining }}</span>
+        </div>
+    </div>
+
+    <!-- How Streaks Work -->
+    <div class="streak-card">
+        <div class="streak-card-title">How Streaks Work</div>
+        <div class="streak-rule">
+            <span class="streak-rule-icon">🏋️</span>
+            <span class="streak-rule-text">Complete a workout or quick check-in each day to keep your streak alive.</span>
+        </div>
+        <div class="streak-rule">
+            <span class="streak-rule-icon">😴</span>
+            <span class="streak-rule-text">Use rest days to protect your streak when you need a break. You get {{ rest_info.rest_days_allowed }} per week based on your workout goal.</span>
+        </div>
+        <div class="streak-rule">
+            <span class="streak-rule-icon">🌙</span>
+            <span class="streak-rule-text">Days reset at 3:00 AM, so late-night workouts still count for the previous day.</span>
+        </div>
+        <div class="streak-rule">
+            <span class="streak-rule-icon">💔</span>
+            <span class="streak-rule-text">Missing a day without a rest day resets your streak to zero.</span>
+        </div>
+    </div>
+</div>
+{% endblock %}

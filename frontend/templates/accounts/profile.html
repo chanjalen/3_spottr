@@ -2394,10 +2394,17 @@
                 <div class="metric-card-label">&#128170; Total Workouts</div>
                 <div class="metric-card-value" id="totalWorkouts">{{ profile_user.total_workouts }}</div>
             </div>
+            {% if is_own_profile %}
+            <a href="{% url 'workouts:streak_details' %}" class="metric-card" style="text-decoration:none;color:inherit;">
+                <div class="metric-card-label">&#128293; Current Streak</div>
+                <div class="metric-card-value">{{ profile_user.current_streak }}</div>
+            </a>
+            {% else %}
             <div class="metric-card">
                 <div class="metric-card-label">&#128293; Current Streak</div>
                 <div class="metric-card-value">{{ profile_user.current_streak }}</div>
             </div>
+            {% endif %}
             <div class="metric-card">
                 <div class="metric-card-label">&#128101; Friends</div>
                 <div class="metric-card-value" id="friendsCount">{{ friends_count }}</div>

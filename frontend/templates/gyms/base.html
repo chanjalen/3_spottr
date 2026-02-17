@@ -1062,6 +1062,10 @@
             background: linear-gradient(135deg, #f97316, #fb923c);
         }
 
+        .popup-option-icon.green {
+            background: linear-gradient(135deg, #22c55e, #4ade80);
+        }
+
         .popup-option-text {
             font-size: 15px;
             font-weight: 600;
@@ -2368,10 +2372,12 @@
         </div>
         <div class="header-right">
             {% if user.is_authenticated %}
-            <div class="streak-badge">
+            {% if user.current_streak > 0 %}
+            <a href="{% url 'workouts:streak_details' %}" class="streak-badge" style="text-decoration:none;color:inherit;">
                 <span>🔥</span>
-                <span>{{ user.current_streak }}</span>
-            </div>
+                <span>{{ user.current_streak }}d</span>
+            </a>
+            {% endif %}
             <button class="notif-bell-btn" id="notifBellBtn" aria-label="Notifications">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
@@ -2436,6 +2442,10 @@
         <a href="{% url 'workouts:log_workout' %}" class="popup-option">
             <div class="popup-option-icon orange">🏋️</div>
             <span class="popup-option-text">Log Workout</span>
+        </a>
+        <a href="#" class="popup-option" id="restDayBtn">
+            <div class="popup-option-icon green">😴</div>
+            <span class="popup-option-text">Rest Day</span>
         </a>
     </div>
 
@@ -3188,6 +3198,27 @@
             let postLinkValue = '';
             let replyRestriction = 'everyone';
             let attachedPrData = null;
+
+            // Rest Day button handler
+            const restDayBtn = document.getElementById('restDayBtn');
+            if (restDayBtn) {
+                restDayBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    closeCreatePopup();
+                    if (!confirm('Are you sure you want to log a rest day?')) return;
+                    fetch('/workouts/rest-day/', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                        },
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        alert(data.message || data.error || 'Done');
+                    })
+                    .catch(() => alert('Something went wrong. Please try again.'));
+                });
+            }
 
             if (createPostBtn && postModal) {
                 // Open post modal
