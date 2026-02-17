@@ -1136,13 +1136,13 @@
                 {% endif %}
                 <div class="feed-poll-options">
                     {% for option in item.poll.options %}
-                    <div class="feed-poll-option {% if item.poll.user_voted %}voted{% endif %} {% if item.poll.user_vote_option == option.id %}selected{% endif %}"
+                    <div class="feed-poll-option {% if item.poll.user_voted or not item.poll.is_active %}voted{% endif %} {% if item.poll.user_vote_option == option.id %}selected{% endif %}"
                          data-option-id="{{ option.id }}"
                          {% if item.poll.is_active %}onclick="votePoll('{{ item.poll.id }}', '{{ option.id }}', this)"{% endif %}>
-                        <div class="feed-poll-option-bar" style="width: {% if item.poll.user_voted %}{{ option.percentage }}%{% else %}0{% endif %}"></div>
+                        <div class="feed-poll-option-bar" style="width: {% if item.poll.user_voted or not item.poll.is_active %}{{ option.percentage }}%{% else %}0{% endif %}"></div>
                         <div class="feed-poll-option-content">
                             <span class="feed-poll-option-text">{{ option.text }}</span>
-                            {% if item.poll.user_voted %}
+                            {% if item.poll.user_voted or not item.poll.is_active %}
                             <span class="feed-poll-option-percent">{{ option.percentage }}%</span>
                             {% endif %}
                         </div>
