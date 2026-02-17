@@ -15,9 +15,11 @@ urlpatterns = [
 
     # Post likes
     path('post/<str:post_id>/like/', views.toggle_like_post_view, name='toggle_like_post'),
+    path('post/<str:post_id>/likers/', views.post_likers_view, name='post_likers'),
 
     # Check-in likes
     path('checkin/<str:checkin_id>/like/', views.toggle_like_checkin_view, name='toggle_like_checkin'),
+    path('checkin/<str:checkin_id>/likers/', views.checkin_likers_view, name='checkin_likers'),
 
     # Comment likes
     path('comment/<str:comment_id>/like/', views.toggle_like_comment_view, name='toggle_like_comment'),

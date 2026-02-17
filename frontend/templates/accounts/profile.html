@@ -616,6 +616,53 @@
         color: var(--text-primary);
         margin-bottom: 8px;
     }
+    .post-card-like-count:hover {
+        text-decoration: underline;
+    }
+
+    /* Likers modal */
+    .likers-modal-overlay {
+        display: none; position: fixed; inset: 0;
+        background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+        z-index: 1100; align-items: center; justify-content: center;
+    }
+    .likers-modal-overlay.active { display: flex; }
+    .likers-modal {
+        background: var(--bg-card); border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl); width: 360px;
+        max-width: calc(100vw - 32px); max-height: 70vh;
+        display: flex; flex-direction: column; overflow: hidden;
+        box-shadow: var(--shadow-lg);
+    }
+    .likers-modal-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 18px 20px 14px; border-bottom: 1px solid var(--border-subtle);
+    }
+    .likers-modal-title { font-size: 17px; font-weight: 700; color: var(--text-primary); margin: 0; }
+    .likers-modal-close { background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; padding: 4px; line-height: 1; }
+    .likers-modal-close:hover { color: var(--text-primary); }
+    .likers-modal-body { overflow-y: auto; flex: 1; padding: 8px 0; }
+    .likers-row {
+        display: flex; align-items: center; gap: 12px;
+        padding: 10px 20px; text-decoration: none; color: inherit;
+        transition: background 0.2s;
+    }
+    .likers-row:hover { background: var(--bg-hover); }
+    .likers-avatar {
+        width: 40px; height: 40px; border-radius: 50%; overflow: hidden;
+        background: var(--bg-elevated); display: flex; align-items: center;
+        justify-content: center; flex-shrink: 0;
+    }
+    .likers-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .likers-avatar-letter {
+        font-size: 15px; font-weight: 700;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .likers-info { flex: 1; min-width: 0; }
+    .likers-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+    .likers-username { font-size: 12px; color: var(--text-muted); }
+    .likers-empty { text-align: center; padding: 32px 20px; color: var(--text-muted); font-size: 14px; }
 
     .post-comment-input-wrap {
         display: flex;
@@ -1450,6 +1497,104 @@
         color: #ef4444;
     }
 
+    .profile-message-btn {
+        padding: 10px 20px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+        cursor: pointer;
+        font-family: 'Inter', sans-serif;
+        transition: all 0.2s;
+    }
+
+    .profile-message-btn:hover {
+        border-color: var(--brand-cyan);
+        color: var(--brand-cyan);
+    }
+
+    /* Message Modal */
+    .msg-modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.6);
+        backdrop-filter: blur(4px);
+        z-index: 200;
+        align-items: flex-end;
+        justify-content: center;
+    }
+    .msg-modal-overlay.active { display: flex; }
+    .msg-modal {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+        padding: 24px;
+        width: 100%;
+        max-width: 640px;
+        animation: msgSlideUp 0.3s var(--ease-out);
+    }
+    @keyframes msgSlideUp {
+        from { transform: translateY(100%); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+    .msg-modal-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 16px;
+        text-align: center;
+    }
+    .msg-modal textarea {
+        width: 100%;
+        padding: 12px 16px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-size: 14px;
+        font-family: inherit;
+        outline: none;
+        resize: vertical;
+        min-height: 80px;
+        margin-bottom: 12px;
+    }
+    .msg-modal textarea:focus { border-color: var(--brand-purple); }
+    .msg-modal textarea::placeholder { color: var(--text-muted); }
+    .msg-modal-actions {
+        display: flex;
+        gap: 12px;
+    }
+    .msg-modal-cancel {
+        flex: 1;
+        padding: 12px;
+        background: none;
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-secondary);
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        font-family: inherit;
+    }
+    .msg-modal-cancel:hover { border-color: var(--border-hover); color: var(--text-primary); }
+    .msg-modal-send {
+        flex: 2;
+        padding: 12px;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        border: none;
+        border-radius: var(--radius-md);
+        color: #fff;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+    }
+    .msg-modal-send:hover { box-shadow: 0 4px 16px rgba(124,58,237,0.4); }
+    .msg-modal-send:disabled { opacity: 0.6; cursor: not-allowed; }
+
     /* ============ ADD FRIENDS BUTTON ============ */
     .profile-action-btns {
         display: flex;
@@ -2236,6 +2381,7 @@
             <button class="profile-follow-btn {% if is_following %}following-state{% else %}follow{% endif %}" id="profileFollowBtn" data-user-id="{{ profile_user.pk }}" onclick="toggleProfileFollow()">
                 {% if is_following %}Following{% else %}Follow{% endif %}
             </button>
+            <button class="profile-message-btn" id="profileMessageBtn" onclick="openMessageModal()">Message</button>
             <button class="profile-block-btn {% if is_blocked %}blocked{% endif %}" id="profileBlockBtn" data-user-id="{{ profile_user.pk }}" onclick="toggleProfileBlock()">
                 {% if is_blocked %}Blocked{% else %}Block{% endif %}
             </button>
@@ -2506,6 +2652,33 @@
         </div>
     </div>
 </div>
+
+<!-- Likers Modal -->
+<div class="likers-modal-overlay" id="likersOverlay">
+    <div class="likers-modal">
+        <div class="likers-modal-header">
+            <h3 class="likers-modal-title">Likes</h3>
+            <button class="likers-modal-close" id="likersClose">&times;</button>
+        </div>
+        <div class="likers-modal-body" id="likersBody">
+            <div class="likers-empty">Loading...</div>
+        </div>
+    </div>
+</div>
+
+{% if not is_own_profile and user.is_authenticated %}
+<!-- Message Modal -->
+<div class="msg-modal-overlay" id="msgModalOverlay">
+    <div class="msg-modal">
+        <div class="msg-modal-title">Message {{ profile_user.display_name }}</div>
+        <textarea id="msgInput" placeholder="Write a message..." maxlength="1000"></textarea>
+        <div class="msg-modal-actions">
+            <button class="msg-modal-cancel" id="msgCancel">Cancel</button>
+            <button class="msg-modal-send" id="msgSend">Send</button>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
@@ -2854,8 +3027,8 @@
         html += '<button class="post-reaction-btn" onclick="focusCommentInput(this)">\u{1F4AC}</button>';
         html += '</div>';
 
-        // Like count
-        html += '<div class="post-card-like-count">' + post.likeCount + (post.likeCount === 1 ? ' like' : ' likes') + '</div>';
+        // Like count (clickable to show likers)
+        html += '<div class="post-card-like-count" onclick="showLikers(\'' + post.postId + '\', \'' + post.postType + '\')" style="cursor:pointer;">' + post.likeCount + (post.likeCount === 1 ? ' like' : ' likes') + '</div>';
 
         // Description
         if (post.description) {
@@ -3791,6 +3964,108 @@
         })
         .catch(function() { btn.disabled = false; });
     };
+})();
+
+// ---- Likers Modal ----
+window.showLikers = function(itemId, itemType) {
+    var overlay = document.getElementById('likersOverlay');
+    var body = document.getElementById('likersBody');
+    var closeBtn = document.getElementById('likersClose');
+
+    overlay.classList.add('active');
+    body.innerHTML = '<div class="likers-empty">Loading...</div>';
+
+    var url = itemType === 'checkin'
+        ? '/social/checkin/' + itemId + '/likers/'
+        : '/social/post/' + itemId + '/likers/';
+
+    fetch(url, { credentials: 'same-origin' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            var likers = data.likers || [];
+            if (likers.length === 0) {
+                body.innerHTML = '<div class="likers-empty">No likes yet</div>';
+                return;
+            }
+            body.innerHTML = likers.map(function(l) {
+                var avatar = l.avatar_url
+                    ? '<img src="' + l.avatar_url + '" alt="' + l.username + '">'
+                    : '<span class="likers-avatar-letter">' + (l.display_name || l.username || '?')[0].toUpperCase() + '</span>';
+                return '<a href="/accounts/profile/' + l.username + '/" class="likers-row">'
+                    + '<div class="likers-avatar">' + avatar + '</div>'
+                    + '<div class="likers-info">'
+                    + '<div class="likers-name">' + l.display_name + '</div>'
+                    + '<div class="likers-username">@' + l.username + '</div>'
+                    + '</div></a>';
+            }).join('');
+        })
+        .catch(function() {
+            body.innerHTML = '<div class="likers-empty">Could not load likes</div>';
+        });
+
+    function closeLikers() { overlay.classList.remove('active'); }
+    closeBtn.onclick = closeLikers;
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) closeLikers(); });
+};
+
+// ---- Message Modal ----
+window.openMessageModal = function() {
+    var overlay = document.getElementById('msgModalOverlay');
+    if (!overlay) return;
+    overlay.classList.add('active');
+    document.getElementById('msgInput').value = '';
+    document.getElementById('msgInput').focus();
+};
+
+(function() {
+    var overlay = document.getElementById('msgModalOverlay');
+    if (!overlay) return;
+    var cancelBtn = document.getElementById('msgCancel');
+    var sendBtn = document.getElementById('msgSend');
+    var input = document.getElementById('msgInput');
+    var recipientId = document.getElementById('profileFollowBtn')?.dataset.userId;
+    var csrfToken = document.cookie.split('; ').find(function(r) { return r.startsWith('csrftoken='); });
+    csrfToken = csrfToken ? csrfToken.split('=')[1] : '';
+
+    function closeModal() { overlay.classList.remove('active'); }
+    cancelBtn.addEventListener('click', closeModal);
+    overlay.addEventListener('click', function(e) { if (e.target === overlay) closeModal(); });
+
+    sendBtn.addEventListener('click', function() {
+        var text = input.value.trim();
+        if (!text || !recipientId) return;
+        sendBtn.disabled = true;
+        sendBtn.textContent = 'Sending...';
+
+        fetch('/api/messaging/dm/send/', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+            credentials: 'same-origin',
+            body: JSON.stringify({ recipient_id: recipientId, content: text })
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.id || data.success) {
+                closeModal();
+                sendBtn.textContent = 'Send';
+                sendBtn.disabled = false;
+                var msgBtn = document.getElementById('profileMessageBtn');
+                if (msgBtn) {
+                    msgBtn.textContent = data.is_request ? 'Request sent!' : 'Sent!';
+                    setTimeout(function() { msgBtn.textContent = 'Message'; }, 2000);
+                }
+            } else {
+                alert(data.error || data.detail || 'Could not send message.');
+                sendBtn.textContent = 'Send';
+                sendBtn.disabled = false;
+            }
+        })
+        .catch(function() {
+            alert('Network error. Please try again.');
+            sendBtn.textContent = 'Send';
+            sendBtn.disabled = false;
+        });
+    });
 })();
 </script>
 {% endblock %}

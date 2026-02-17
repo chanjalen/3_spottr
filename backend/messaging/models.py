@@ -43,6 +43,7 @@ class Message(BaseModel):
     )
 
     content = models.TextField()
+    is_request = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['-created_at']

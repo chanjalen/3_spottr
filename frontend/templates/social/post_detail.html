@@ -149,6 +149,57 @@
         font-weight: 600; cursor: pointer;
     }
     .no-comments { text-align: center; padding: 16px; color: var(--text-muted); font-size: 13px; }
+
+    .feed-profile-link {
+        display: flex; align-items: center; gap: 12px;
+        text-decoration: none; color: inherit; flex: 1; min-width: 0;
+    }
+    .feed-profile-link:hover .feed-username { color: var(--text-brand); }
+    .like-count { cursor: pointer; }
+    .like-count:hover { text-decoration: underline; }
+
+    .likers-modal-overlay {
+        display: none; position: fixed; inset: 0;
+        background: rgba(0,0,0,0.6); backdrop-filter: blur(4px);
+        z-index: 200; align-items: center; justify-content: center;
+    }
+    .likers-modal-overlay.active { display: flex; }
+    .likers-modal {
+        background: var(--bg-card); border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl); width: 360px;
+        max-width: calc(100vw - 32px); max-height: 70vh;
+        display: flex; flex-direction: column; overflow: hidden;
+        box-shadow: var(--shadow-lg);
+    }
+    .likers-modal-header {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 18px 20px 14px; border-bottom: 1px solid var(--border-subtle);
+    }
+    .likers-modal-title { font-size: 17px; font-weight: 700; color: var(--text-primary); margin: 0; }
+    .likers-modal-close { background: none; border: none; color: var(--text-muted); font-size: 20px; cursor: pointer; padding: 4px; line-height: 1; }
+    .likers-modal-close:hover { color: var(--text-primary); }
+    .likers-modal-body { overflow-y: auto; flex: 1; padding: 8px 0; }
+    .likers-row {
+        display: flex; align-items: center; gap: 12px;
+        padding: 10px 20px; text-decoration: none; color: inherit;
+        transition: background var(--duration) var(--ease-out);
+    }
+    .likers-row:hover { background: var(--bg-hover); }
+    .likers-avatar {
+        width: 40px; height: 40px; border-radius: 50%; overflow: hidden;
+        background: var(--bg-elevated); display: flex; align-items: center;
+        justify-content: center; flex-shrink: 0;
+    }
+    .likers-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .likers-avatar-letter {
+        font-size: 15px; font-weight: 700;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .likers-info { flex: 1; min-width: 0; }
+    .likers-name { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+    .likers-username { font-size: 12px; color: var(--text-muted); }
+    .likers-empty { text-align: center; padding: 32px 20px; color: var(--text-muted); font-size: 14px; }
 </style>
 {% endblock %}
 
@@ -157,26 +208,28 @@
 
 <div class="feed-card" data-item-id="{{ item.id }}" data-item-type="{{ item.type }}">
     <div class="feed-card-header">
-        <div class="feed-avatar">
-            {% if item.user.avatar_url %}
-            <img src="{{ item.user.avatar_url }}" alt="{{ item.user.display_name }}">
-            {% else %}
-            <span class="feed-avatar-letter">{{ item.user.display_name|make_list|first|upper }}</span>
-            {% endif %}
-        </div>
-        <div class="feed-user-info">
-            <div class="feed-user-row">
-                <span class="feed-username">{{ item.user.display_name }}</span>
-                <span class="feed-streak">🔥 {{ item.user.current_streak }}</span>
-            </div>
-            <div class="feed-meta">
-                <span>{{ item.created_at|timesince }} ago</span>
-                {% if item.location_name %}
-                <span class="feed-meta-dot"></span>
-                <span class="feed-location">📍 {{ item.location_name }}</span>
+        <a href="/accounts/profile/{{ item.user.username }}/" class="feed-profile-link">
+            <div class="feed-avatar">
+                {% if item.user.avatar_url %}
+                <img src="{{ item.user.avatar_url }}" alt="{{ item.user.display_name }}">
+                {% else %}
+                <span class="feed-avatar-letter">{{ item.user.display_name|make_list|first|upper }}</span>
                 {% endif %}
             </div>
-        </div>
+            <div class="feed-user-info">
+                <div class="feed-user-row">
+                    <span class="feed-username">{{ item.user.display_name }}</span>
+                    <span class="feed-streak">🔥 {{ item.user.current_streak }}</span>
+                </div>
+                <div class="feed-meta">
+                    <span>{{ item.created_at|timesince }} ago</span>
+                    {% if item.location_name %}
+                    <span class="feed-meta-dot"></span>
+                    <span class="feed-location">📍 {{ item.location_name }}</span>
+                    {% endif %}
+                </div>
+            </div>
+        </a>
     </div>
 
     {% if item.video_url %}
@@ -278,7 +331,7 @@
                 data-item-type="{{ item.type }}"
                 onclick="toggleLike(this)">
             <span class="feed-action-icon">{% if item.user_liked %}❤️{% else %}🤍{% endif %}</span>
-            <span class="like-count">{{ item.like_count }}</span>
+            <span class="like-count" onclick="event.stopPropagation(); showLikers()">{{ item.like_count }}</span>
         </button>
         <button class="feed-action comment-btn" onclick="document.getElementById('commentInput').focus()">
             <span class="feed-action-icon">💬</span>
@@ -294,6 +347,19 @@
         <div class="comment-input-container">
             <textarea class="comment-input" id="commentInput" placeholder="Write a comment..." rows="1" maxlength="500"></textarea>
             <button class="comment-submit" onclick="submitComment()">Post</button>
+        </div>
+    </div>
+</div>
+
+<!-- Likers Modal -->
+<div class="likers-modal-overlay" id="likersOverlay">
+    <div class="likers-modal">
+        <div class="likers-modal-header">
+            <h3 class="likers-modal-title">Likes</h3>
+            <button class="likers-modal-close" id="likersClose">&times;</button>
+        </div>
+        <div class="likers-modal-body" id="likersBody">
+            <div class="likers-empty">Loading...</div>
         </div>
     </div>
 </div>
@@ -405,5 +471,49 @@ function escapeHtml(str) {
 }
 
 loadComments();
+
+function showLikers() {
+    const overlay = document.getElementById('likersOverlay');
+    const body = document.getElementById('likersBody');
+    const closeBtn = document.getElementById('likersClose');
+
+    overlay.classList.add('active');
+    body.innerHTML = '<div class="likers-empty">Loading...</div>';
+
+    const url = itemType === 'checkin'
+        ? `/social/checkin/${itemId}/likers/`
+        : `/social/post/${itemId}/likers/`;
+
+    fetch(url, { credentials: 'same-origin' })
+        .then(r => r.json())
+        .then(data => {
+            const likers = data.likers || [];
+            if (likers.length === 0) {
+                body.innerHTML = '<div class="likers-empty">No likes yet</div>';
+                return;
+            }
+            body.innerHTML = likers.map(l => {
+                const avatar = l.avatar_url
+                    ? `<img src="${l.avatar_url}" alt="${l.username}">`
+                    : `<span class="likers-avatar-letter">${(l.display_name || l.username || '?')[0].toUpperCase()}</span>`;
+                return `<a href="/accounts/profile/${l.username}/" class="likers-row">
+                    <div class="likers-avatar">${avatar}</div>
+                    <div class="likers-info">
+                        <div class="likers-name">${l.display_name}</div>
+                        <div class="likers-username">@${l.username}</div>
+                    </div>
+                </a>`;
+            }).join('');
+        })
+        .catch(() => {
+            body.innerHTML = '<div class="likers-empty">Could not load likes</div>';
+        });
+
+    function closeLikers() { overlay.classList.remove('active'); }
+    closeBtn.onclick = closeLikers;
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) closeLikers();
+    });
+}
 </script>
 {% endblock %}
