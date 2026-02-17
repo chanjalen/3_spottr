@@ -683,6 +683,8 @@ def toggle_like_post_view(request, post_id):
             type='like'
         )
         liked = True
+        from notifications.dispatcher import notify_like_post
+        notify_like_post(request.user, post)
 
     # Get updated like count
     like_count = Reaction.objects.filter(post=post).count()
@@ -726,6 +728,40 @@ def toggle_like_checkin_view(request, checkin_id):
         'liked': liked,
         'like_count': like_count,
     })
+
+
+@login_required
+@require_GET
+def post_likers_view(request, post_id):
+    """Get list of users who liked a post."""
+    post = get_object_or_404(Post, id=post_id)
+    reactions = Reaction.objects.filter(post=post).select_related('user').order_by('-created_at')
+    likers = []
+    for r in reactions:
+        likers.append({
+            'id': str(r.user.id),
+            'username': r.user.username,
+            'display_name': r.user.display_name or r.user.username,
+            'avatar_url': r.user.avatar_url or None,
+        })
+    return JsonResponse({'success': True, 'likers': likers})
+
+
+@login_required
+@require_GET
+def checkin_likers_view(request, checkin_id):
+    """Get list of users who liked a check-in."""
+    checkin = get_object_or_404(QuickWorkout, id=checkin_id)
+    reactions = Reaction.objects.filter(quick_workout=checkin).select_related('user').order_by('-created_at')
+    likers = []
+    for r in reactions:
+        likers.append({
+            'id': str(r.user.id),
+            'username': r.user.username,
+            'display_name': r.user.display_name or r.user.username,
+            'avatar_url': r.user.avatar_url or None,
+        })
+    return JsonResponse({'success': True, 'likers': likers})
 
 
 @login_required
@@ -899,6 +935,9 @@ def add_comment_view(request, post_id):
         description=text,
     )
 
+    from notifications.dispatcher import notify_comment
+    notify_comment(request.user, post, comment)
+
     return JsonResponse({
         'success': True,
         'comment': {
@@ -955,6 +994,9 @@ def add_checkin_comment_view(request, checkin_id):
         user=request.user,
         description=text,
     )
+
+    from notifications.dispatcher import notify_comment_on_checkin
+    notify_comment_on_checkin(request.user, checkin, comment)
 
     return JsonResponse({
         'success': True,
@@ -1113,6 +1155,9 @@ def add_comment_reply_view(request, comment_id):
         user=request.user,
         description=text,
     )
+
+    from notifications.dispatcher import notify_comment_reply
+    notify_comment_reply(request.user, parent_comment, reply)
 
     return JsonResponse({
         'success': True,

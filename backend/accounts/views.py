@@ -287,6 +287,8 @@ def follow_toggle_view(request):
             action = 'unfollowed'
         else:
             action = 'followed'
+            from notifications.dispatcher import notify_follow
+            notify_follow(request.user, target)
 
     return JsonResponse({
         'action': action,

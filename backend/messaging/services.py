@@ -96,17 +96,27 @@ def send_zap(sender, recipient_id):
     return message
 
 
+def _is_mutual_follow(user_a, user_b):
+    """Check if both users follow each other."""
+    from social.models import Follow
+    a_follows_b = Follow.objects.filter(follower=user_a, following=user_b).exists()
+    b_follows_a = Follow.objects.filter(follower=user_b, following=user_a).exists()
+    return a_follows_b and b_follows_a
+
+
 def send_dm(sender, recipient_id, content, post_id=None, quick_workout_id=None):
     """
     Send a direct message to another user.
-    Requires mutual follow and no blocks.
-    Optionally attach a shared post or check-in.
+    If users mutually follow each other, message is sent normally.
+    Otherwise, message is sent as a pending message request.
+    Blocks are still enforced.
     Returns the created Message.
     """
     _check_not_self(sender, recipient_id)
     recipient = _get_user(recipient_id)
     _check_no_block(sender, recipient)
-    _check_mutual_follow(sender, recipient)
+
+    is_request = not _is_mutual_follow(sender, recipient)
 
     post = _get_post(post_id) if post_id else None
     quick_workout = _get_quick_workout(quick_workout_id) if quick_workout_id else None
@@ -117,6 +127,7 @@ def send_dm(sender, recipient_id, content, post_id=None, quick_workout_id=None):
         content=content,
         post=post,
         quick_workout=quick_workout,
+        is_request=is_request,
     )
 
     # Auto-mark as read by sender

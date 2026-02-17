@@ -169,7 +169,7 @@ class MessageSerializer(serializers.ModelSerializer):
             'recipient', 'recipient_username',
             'group', 'group_name',
             'content', 'shared_post_id', 'shared_post',
-            'is_read', 'created_at',
+            'is_request', 'is_read', 'created_at',
         ]
 
     def get_recipient_username(self, obj):
