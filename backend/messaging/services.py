@@ -63,6 +63,14 @@ def _get_post(post_id):
         raise PostNotFoundError("Post not found.")
 
 
+def _get_quick_workout(qw_id):
+    from social.models import QuickWorkout
+    try:
+        return QuickWorkout.objects.get(id=qw_id)
+    except QuickWorkout.DoesNotExist:
+        raise PostNotFoundError("Check-in not found.")
+
+
 # ---------------------------------------------------------------------------
 # Send Messages
 # ---------------------------------------------------------------------------
@@ -88,11 +96,11 @@ def send_zap(sender, recipient_id):
     return message
 
 
-def send_dm(sender, recipient_id, content, post_id=None):
+def send_dm(sender, recipient_id, content, post_id=None, quick_workout_id=None):
     """
     Send a direct message to another user.
     Requires mutual follow and no blocks.
-    Optionally attach a shared post.
+    Optionally attach a shared post or check-in.
     Returns the created Message.
     """
     _check_not_self(sender, recipient_id)
@@ -101,12 +109,14 @@ def send_dm(sender, recipient_id, content, post_id=None):
     _check_mutual_follow(sender, recipient)
 
     post = _get_post(post_id) if post_id else None
+    quick_workout = _get_quick_workout(quick_workout_id) if quick_workout_id else None
 
     message = Message.objects.create(
         sender=sender,
         recipient=recipient,
         content=content,
         post=post,
+        quick_workout=quick_workout,
     )
 
     # Auto-mark as read by sender
@@ -115,11 +125,11 @@ def send_dm(sender, recipient_id, content, post_id=None):
     return message
 
 
-def send_group_message(sender, group_id, content, post_id=None):
+def send_group_message(sender, group_id, content, post_id=None, quick_workout_id=None):
     """
     Send a message in a group chat.
     Sender must be a group member.
-    Optionally attach a shared post.
+    Optionally attach a shared post or check-in.
     Returns the created Message.
     """
     from groups.models import Group
@@ -132,12 +142,14 @@ def send_group_message(sender, group_id, content, post_id=None):
     _check_group_member(group, sender)
 
     post = _get_post(post_id) if post_id else None
+    quick_workout = _get_quick_workout(quick_workout_id) if quick_workout_id else None
 
     message = Message.objects.create(
         sender=sender,
         group=group,
         content=content,
         post=post,
+        quick_workout=quick_workout,
     )
 
     # Auto-mark as read by sender
@@ -204,7 +216,7 @@ def list_dm_conversations(user):
         if msg:
             message_ids.append(msg.id)
 
-    return Message.objects.filter(id__in=message_ids).order_by('-created_at')
+    return Message.objects.filter(id__in=message_ids).select_related('post__user', 'quick_workout__user', 'quick_workout__location').order_by('-created_at')
 
 
 def list_group_conversations(user):
@@ -228,7 +240,7 @@ def list_group_conversations(user):
     )
 
     message_ids = [entry['latest'] for entry in latest_per_group]
-    return Message.objects.filter(id__in=message_ids).order_by('-created_at')
+    return Message.objects.filter(id__in=message_ids).select_related('post__user', 'quick_workout__user', 'quick_workout__location').order_by('-created_at')
 
 
 # ---------------------------------------------------------------------------
@@ -250,7 +262,7 @@ def get_dm_messages(user, partner_id, limit=50, offset=0):
     messages = Message.objects.filter(
         Q(sender=user, recipient=partner) |
         Q(sender=partner, recipient=user)
-    ).order_by('created_at')
+    ).select_related('post__user', 'quick_workout__user', 'quick_workout__location').order_by('created_at')
 
     return messages[offset:offset + limit]
 
@@ -269,7 +281,7 @@ def get_group_messages(user, group_id, limit=50, offset=0):
 
     _check_group_member(group, user)
 
-    messages = Message.objects.filter(group=group).order_by('created_at')
+    messages = Message.objects.filter(group=group).select_related('post__user', 'quick_workout__user', 'quick_workout__location').order_by('created_at')
     return messages[offset:offset + limit]
 
 

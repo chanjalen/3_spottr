@@ -15,6 +15,8 @@ from media.utils import create_media_asset, get_media_url, build_media_url
 from gyms.models import Gym, WorkoutInvite, JoinRequest
 from workouts.models import PersonalRecord
 from messaging.models import Message, MessageRead
+from messaging.services import send_dm, send_group_message
+from messaging.exceptions import NotMutualFollowError, UserBlockedError, NotGroupMemberError, PostNotFoundError
 from groups.models import Group, GroupMember, GroupJoinRequest
 from django.utils import timezone
 from datetime import timedelta, date
@@ -370,6 +372,129 @@ def feed_view(request):
     return render(request, 'social/feed.html', {
         'feed_items': feed_items,
     })
+
+
+def post_detail_view(request, post_id):
+    """Display a single post with full details."""
+    post = get_object_or_404(Post, id=post_id)
+
+    like_count = Reaction.objects.filter(post=post).count()
+    comment_count = Comment.objects.filter(post=post).count()
+    user_liked = False
+    if request.user.is_authenticated:
+        user_liked = Reaction.objects.filter(post=post, user=request.user).exists()
+
+    item = {
+        'type': 'workout' if post.workout else 'post',
+        'id': str(post.id),
+        'user': post.user,
+        'location': post.location,
+        'description': post.description,
+        'created_at': post.created_at,
+        'photo_url': get_media_url('post', str(post.id)) or (build_media_url(post.photo.name) if post.photo else None),
+        'video_url': build_media_url(post.video.name) if post.video else None,
+        'link_url': post.link_url,
+        'like_count': like_count,
+        'comment_count': comment_count,
+        'user_liked': user_liked,
+    }
+
+    # Workout details
+    if post.workout:
+        workout = post.workout
+        from workouts.models import Exercise, ExerciseSet
+        exercises = Exercise.objects.filter(workout=workout)
+        exercise_count = exercises.count()
+        total_sets = ExerciseSet.objects.filter(exercise__workout=workout).count()
+
+        if workout.duration:
+            total_seconds = int(workout.duration.total_seconds())
+            hours = total_seconds // 3600
+            minutes = (total_seconds % 3600) // 60
+            duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+        else:
+            duration_str = "--"
+
+        item['workout'] = {
+            'id': str(workout.id),
+            'name': workout.name,
+            'duration': duration_str,
+            'exercise_count': exercise_count,
+            'total_sets': total_sets,
+            'exercises': [e.name for e in exercises[:3]],
+        }
+
+    # Personal record
+    pr = PersonalRecord.objects.filter(post=post).first()
+    if pr:
+        item['personal_record'] = {
+            'id': str(pr.id),
+            'exercise_name': pr.exercise_name,
+            'value': pr.value,
+            'unit': pr.unit,
+        }
+
+    # Poll
+    try:
+        poll = post.poll
+        user_voted = False
+        user_vote_option = None
+        if request.user.is_authenticated:
+            vote = PollVote.objects.filter(poll=poll, user=request.user).first()
+            if vote:
+                user_voted = True
+                user_vote_option = str(vote.option.id)
+        total_votes = poll.get_total_votes()
+        poll_options = []
+        for opt in poll.options.all():
+            percentage = round((opt.votes / total_votes * 100) if total_votes > 0 else 0)
+            poll_options.append({
+                'id': str(opt.id),
+                'text': opt.text,
+                'votes': opt.votes,
+                'percentage': percentage,
+            })
+        item['poll'] = {
+            'id': str(poll.id),
+            'question': poll.question,
+            'options': poll_options,
+            'total_votes': total_votes,
+            'is_active': poll.is_active,
+            'user_voted': user_voted,
+            'user_vote_option': user_vote_option,
+        }
+    except Poll.DoesNotExist:
+        item['poll'] = None
+
+    return render(request, 'social/post_detail.html', {'item': item})
+
+
+def checkin_detail_view(request, checkin_id):
+    """Display a single check-in with full details."""
+    checkin = get_object_or_404(QuickWorkout, id=checkin_id)
+
+    like_count = Reaction.objects.filter(quick_workout=checkin).count()
+    comment_count = Comment.objects.filter(quick_workout=checkin).count()
+    user_liked = False
+    if request.user.is_authenticated:
+        user_liked = Reaction.objects.filter(quick_workout=checkin, user=request.user).exists()
+
+    item = {
+        'type': 'checkin',
+        'id': str(checkin.id),
+        'user': checkin.user,
+        'location': checkin.location,
+        'location_name': checkin.location_name or (checkin.location.name if checkin.location else ''),
+        'workout_type': checkin.type.replace('_', ' ').title() if checkin.type else '',
+        'description': checkin.description,
+        'created_at': checkin.created_at,
+        'photo_url': get_checkin_photo(checkin.id),
+        'like_count': like_count,
+        'comment_count': comment_count,
+        'user_liked': user_liked,
+    }
+
+    return render(request, 'social/post_detail.html', {'item': item})
 
 
 def get_checkin_photo(checkin_id):
@@ -1241,4 +1366,116 @@ def vote_poll_view(request, poll_id):
         'total_votes': total_votes,
         'results': results,
         'voted_option': str(option.id),
+    })
+
+
+@login_required
+@require_GET
+def share_recipients_view(request):
+    """
+    Get friends (mutual follows) and groups for the share modal.
+    Supports ?q= search parameter.
+    """
+    user = request.user
+    q = request.GET.get('q', '').strip().lower()
+
+    # Get mutual follows (friends)
+    from accounts.models import User as UserModel
+    my_following_ids = set(Follow.objects.filter(follower=user).values_list('following_id', flat=True))
+    my_follower_ids = set(Follow.objects.filter(following=user).values_list('follower_id', flat=True))
+    friend_ids = my_following_ids & my_follower_ids
+
+    friends_qs = UserModel.objects.filter(id__in=friend_ids).order_by('display_name')
+    if q:
+        friends_qs = friends_qs.filter(
+            Q(display_name__icontains=q) | Q(username__icontains=q)
+        )
+
+    friends = []
+    for f in friends_qs[:30]:
+        friends.append({
+            'id': str(f.id),
+            'display_name': f.display_name,
+            'username': f.username,
+            'avatar_url': f.avatar_url or None,
+            'type': 'user',
+        })
+
+    # Get user's groups
+    groups_qs = Group.objects.filter(
+        members__user=user
+    ).order_by('name')
+    if q:
+        groups_qs = groups_qs.filter(name__icontains=q)
+
+    groups = []
+    for g in groups_qs[:20]:
+        groups.append({
+            'id': str(g.id),
+            'name': g.name,
+            'type': 'group',
+        })
+
+    return JsonResponse({
+        'success': True,
+        'friends': friends,
+        'groups': groups,
+    })
+
+
+@login_required
+@require_POST
+def share_post_view(request):
+    """
+    Share a post or check-in to one or more friends and/or groups.
+    Body JSON: { post_id, item_type, recipient_ids: [], group_ids: [] }
+    """
+    data = json.loads(request.body)
+    item_id = data.get('post_id', '')
+    item_type = data.get('item_type', 'post')
+    user_message = data.get('message', '').strip()
+    recipient_ids = data.get('recipient_ids', [])
+    group_ids = data.get('group_ids', [])
+
+    if not item_id:
+        return JsonResponse({'success': False, 'error': 'Item ID is required'}, status=400)
+
+    if not recipient_ids and not group_ids:
+        return JsonResponse({'success': False, 'error': 'Select at least one recipient'}, status=400)
+
+    # Determine if this is a Post or a QuickWorkout (check-in)
+    post_id_for_msg = None
+    qw_id_for_msg = None
+    if item_type == 'checkin':
+        checkin = get_object_or_404(QuickWorkout, id=item_id)
+        qw_id_for_msg = str(checkin.id)
+    else:
+        post = get_object_or_404(Post, id=item_id)
+        post_id_for_msg = str(post.id)
+
+    content = user_message if user_message else "Shared a post"
+
+    sent_count = 0
+    errors = []
+
+    # Send to individual friends
+    for rid in recipient_ids:
+        try:
+            send_dm(request.user, rid, content, post_id=post_id_for_msg, quick_workout_id=qw_id_for_msg)
+            sent_count += 1
+        except (NotMutualFollowError, UserBlockedError) as e:
+            errors.append(str(e))
+
+    # Send to groups
+    for gid in group_ids:
+        try:
+            send_group_message(request.user, gid, content, post_id=post_id_for_msg, quick_workout_id=qw_id_for_msg)
+            sent_count += 1
+        except (NotGroupMemberError, PostNotFoundError) as e:
+            errors.append(str(e))
+
+    return JsonResponse({
+        'success': True,
+        'sent_count': sent_count,
+        'errors': errors,
     })

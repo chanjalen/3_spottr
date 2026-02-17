@@ -1,0 +1,409 @@
+{% extends 'gyms/base.html' %}
+
+{% block title %}Spottr - Post{% endblock %}
+
+{% block extra_css %}
+<style>
+    .detail-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--text-muted);
+        text-decoration: none;
+        font-size: 14px;
+        margin-bottom: 16px;
+        padding: 8px 0;
+    }
+    .detail-back:hover { color: var(--text-primary); }
+
+    .feed-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+    }
+    .feed-card-header {
+        display: flex; align-items: center; gap: 12px; padding: 16px;
+    }
+    .feed-avatar {
+        width: 44px; height: 44px; border-radius: 50%; overflow: hidden;
+        background: var(--bg-elevated); display: flex; align-items: center;
+        justify-content: center; flex-shrink: 0;
+    }
+    .feed-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .feed-avatar-letter {
+        font-size: 18px; font-weight: 700;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .feed-user-info { flex: 1; min-width: 0; }
+    .feed-user-row { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+    .feed-username { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+    .feed-streak {
+        display: flex; align-items: center; gap: 4px;
+        background: var(--bg-elevated); padding: 2px 8px;
+        border-radius: var(--radius-pill); font-size: 12px; color: var(--text-secondary);
+    }
+    .feed-meta { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted); }
+    .feed-meta-dot { width: 3px; height: 3px; background: var(--text-muted); border-radius: 50%; }
+    .feed-location { display: flex; align-items: center; gap: 4px; }
+
+    .feed-card-image { width: 100%; aspect-ratio: 4/3; background: var(--bg-elevated); position: relative; }
+    .feed-card-image img { width: 100%; height: 100%; object-fit: cover; }
+
+    .feed-card-body { padding: 16px; }
+    .feed-workout-tag {
+        display: inline-flex; align-items: center; gap: 6px;
+        background: var(--brand-purple-muted); color: var(--text-brand);
+        padding: 6px 12px; border-radius: var(--radius-pill);
+        font-size: 13px; font-weight: 500; margin-bottom: 8px;
+    }
+    .feed-description { font-size: 14px; color: var(--text-secondary); line-height: 1.5; }
+
+    .feed-workout-summary {
+        background: var(--bg-elevated); border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg); padding: 16px; margin-bottom: 12px;
+        text-decoration: none; display: block;
+    }
+    .feed-workout-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+    .feed-workout-name { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+    .feed-workout-view-link { font-size: 12px; color: var(--brand-cyan); font-weight: 500; }
+    .feed-workout-stats { display: flex; justify-content: space-around; margin-bottom: 12px; }
+    .feed-workout-stat { text-align: center; }
+    .feed-workout-stat-value { display: block; font-size: 20px; font-weight: 700; color: var(--brand-cyan); }
+    .feed-workout-stat-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; }
+    .feed-workout-exercises { font-size: 13px; color: var(--text-secondary); padding-top: 12px; border-top: 1px solid var(--border-subtle); }
+
+    .feed-pr-card {
+        display: flex; justify-content: space-between; align-items: center;
+        background: linear-gradient(135deg, #0d2818, #1a3a2a);
+        border: 1px solid rgba(34, 197, 94, 0.3);
+        border-radius: var(--radius-lg); padding: 16px 20px; margin-bottom: 12px;
+    }
+    .feed-pr-left { display: flex; flex-direction: column; gap: 4px; }
+    .feed-pr-label { font-size: 12px; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 0.5px; }
+    .feed-pr-exercise { font-size: 18px; font-weight: 600; color: #fff; }
+    .feed-pr-right { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+    .feed-pr-value { font-size: 20px; font-weight: 700; color: #22c55e; }
+    .feed-pr-badge { font-size: 11px; color: #4ade80; font-weight: 600; text-transform: uppercase; }
+
+    .feed-link-preview {
+        display: flex; align-items: center; gap: 12px;
+        background: var(--bg-elevated); border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-lg); padding: 12px 16px; margin-top: 12px;
+        text-decoration: none;
+    }
+    .feed-link-icon { font-size: 20px; color: var(--brand-cyan); }
+    .feed-link-url { font-size: 14px; color: var(--brand-cyan); word-break: break-all; }
+
+    .feed-poll { background: var(--bg-elevated); border: 1px solid var(--border-subtle); border-radius: var(--radius-lg); padding: 16px; margin-top: 12px; }
+    .feed-poll-question { font-size: 15px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; }
+    .feed-poll-options { display: flex; flex-direction: column; gap: 8px; }
+    .feed-poll-option {
+        position: relative; padding: 12px 16px; background: var(--bg-card);
+        border: 1px solid var(--border-default); border-radius: var(--radius-md);
+        overflow: hidden;
+    }
+    .feed-poll-option.selected { border-color: var(--brand-cyan); }
+    .feed-poll-option-bar { position: absolute; top: 0; left: 0; height: 100%; background: rgba(6,182,212,0.15); z-index: 0; }
+    .feed-poll-option-content { position: relative; z-index: 1; display: flex; justify-content: space-between; align-items: center; }
+    .feed-poll-option-text { font-size: 14px; color: var(--text-primary); }
+    .feed-poll-option-percent { font-size: 14px; font-weight: 600; color: var(--text-secondary); }
+    .feed-poll-meta { display: flex; align-items: center; gap: 8px; margin-top: 12px; font-size: 13px; color: var(--text-muted); }
+
+    .feed-card-actions {
+        display: flex; align-items: center; gap: 16px;
+        padding: 12px 16px; border-top: 1px solid var(--border-subtle);
+    }
+    .feed-action {
+        display: flex; align-items: center; gap: 6px; background: none; border: none;
+        color: var(--text-muted); font-size: 14px; cursor: pointer; padding: 6px 0;
+        transition: all 0.2s ease;
+    }
+    .feed-action:hover { color: var(--text-secondary); }
+    .feed-action.liked { color: #ef4444; }
+    .feed-action-icon { font-size: 18px; }
+    .feed-action-icon svg { display: block; }
+
+    /* Comments */
+    .feed-comments-section { border-top: 1px solid var(--border-subtle); padding: 16px; }
+    .comments-list { display: flex; flex-direction: column; gap: 12px; margin-bottom: 12px; }
+    .comment-item { display: flex; gap: 10px; }
+    .comment-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--bg-elevated); overflow: hidden; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+    .comment-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .comment-content { flex: 1; }
+    .comment-author { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+    .comment-text { font-size: 13px; color: var(--text-secondary); line-height: 1.4; }
+    .comment-meta { font-size: 11px; color: var(--text-muted); margin-top: 4px; display: flex; gap: 12px; align-items: center; }
+    .comment-input-container { display: flex; gap: 8px; align-items: flex-end; }
+    .comment-input {
+        flex: 1; padding: 10px 14px; border-radius: 20px;
+        border: 1px solid var(--border-default); background: var(--bg-elevated);
+        color: var(--text-primary); font-size: 13px; resize: none; outline: none;
+        font-family: inherit;
+    }
+    .comment-submit {
+        padding: 10px 16px; border-radius: 20px; border: none;
+        background: var(--brand-cyan); color: #000; font-size: 13px;
+        font-weight: 600; cursor: pointer;
+    }
+    .no-comments { text-align: center; padding: 16px; color: var(--text-muted); font-size: 13px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="javascript:history.back()" class="detail-back">&larr; Back</a>
+
+<div class="feed-card" data-item-id="{{ item.id }}" data-item-type="{{ item.type }}">
+    <div class="feed-card-header">
+        <div class="feed-avatar">
+            {% if item.user.avatar_url %}
+            <img src="{{ item.user.avatar_url }}" alt="{{ item.user.display_name }}">
+            {% else %}
+            <span class="feed-avatar-letter">{{ item.user.display_name|make_list|first|upper }}</span>
+            {% endif %}
+        </div>
+        <div class="feed-user-info">
+            <div class="feed-user-row">
+                <span class="feed-username">{{ item.user.display_name }}</span>
+                <span class="feed-streak">🔥 {{ item.user.current_streak }}</span>
+            </div>
+            <div class="feed-meta">
+                <span>{{ item.created_at|timesince }} ago</span>
+                {% if item.location_name %}
+                <span class="feed-meta-dot"></span>
+                <span class="feed-location">📍 {{ item.location_name }}</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if item.video_url %}
+    <div class="feed-card-image">
+        <video src="{{ item.video_url }}" controls playsinline style="width:100%;border-radius:0;"></video>
+    </div>
+    {% elif item.photo_url %}
+    <div class="feed-card-image">
+        <img src="{{ item.photo_url }}" alt="Post photo">
+    </div>
+    {% endif %}
+
+    <div class="feed-card-body">
+        {% if item.personal_record %}
+        <div class="feed-pr-card">
+            <div class="feed-pr-left">
+                <span class="feed-pr-label">Personal Record</span>
+                <span class="feed-pr-exercise">{{ item.personal_record.exercise_name }}</span>
+            </div>
+            <div class="feed-pr-right">
+                <span class="feed-pr-value">{{ item.personal_record.value }} {{ item.personal_record.unit }}</span>
+                <span class="feed-pr-badge">&#8599; New PR</span>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if item.type == 'checkin' and item.workout_type %}
+        <div class="feed-workout-tag">💪 {{ item.workout_type }}</div>
+        {% endif %}
+
+        {% if item.type == 'workout' and item.workout %}
+        <a href="/workouts/{{ item.workout.id }}/view/" class="feed-workout-summary">
+            <div class="feed-workout-header">
+                <span class="feed-workout-name">{{ item.workout.name }}</span>
+                <span class="feed-workout-view-link">View Workout &rarr;</span>
+            </div>
+            <div class="feed-workout-stats">
+                <div class="feed-workout-stat">
+                    <span class="feed-workout-stat-value">{{ item.workout.exercise_count }}</span>
+                    <span class="feed-workout-stat-label">exercises</span>
+                </div>
+                <div class="feed-workout-stat">
+                    <span class="feed-workout-stat-value">{{ item.workout.total_sets }}</span>
+                    <span class="feed-workout-stat-label">sets</span>
+                </div>
+                <div class="feed-workout-stat">
+                    <span class="feed-workout-stat-value">{{ item.workout.duration }}</span>
+                    <span class="feed-workout-stat-label">duration</span>
+                </div>
+            </div>
+            {% if item.workout.exercises %}
+            <div class="feed-workout-exercises">🏋️ {{ item.workout.exercises|join:", " }}</div>
+            {% endif %}
+        </a>
+        {% endif %}
+
+        {% if item.description %}
+        <p class="feed-description">{{ item.description }}</p>
+        {% endif %}
+
+        {% if item.link_url %}
+        <a href="{{ item.link_url }}" target="_blank" rel="noopener" class="feed-link-preview">
+            <span class="feed-link-icon">&#128279;</span>
+            <span class="feed-link-url">{{ item.link_url }}</span>
+        </a>
+        {% endif %}
+
+        {% if item.poll %}
+        <div class="feed-poll" data-poll-id="{{ item.poll.id }}" data-is-active="{{ item.poll.is_active|yesno:'true,false' }}">
+            {% if item.poll.question != item.description %}
+            <div class="feed-poll-question">{{ item.poll.question }}</div>
+            {% endif %}
+            <div class="feed-poll-options">
+                {% for option in item.poll.options %}
+                <div class="feed-poll-option {% if item.poll.user_voted %}voted{% endif %} {% if item.poll.user_vote_option == option.id %}selected{% endif %}">
+                    <div class="feed-poll-option-bar" style="width: {% if item.poll.user_voted %}{{ option.percentage }}%{% else %}0{% endif %}"></div>
+                    <div class="feed-poll-option-content">
+                        <span class="feed-poll-option-text">{{ option.text }}</span>
+                        {% if item.poll.user_voted %}
+                        <span class="feed-poll-option-percent">{{ option.percentage }}%</span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            <div class="feed-poll-meta">
+                <span>{{ item.poll.total_votes }} vote{{ item.poll.total_votes|pluralize }}</span>
+                {% if not item.poll.is_active %}
+                <span>&#8226; Poll ended</span>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="feed-card-actions">
+        <button class="feed-action like-btn {% if item.user_liked %}liked{% endif %}"
+                data-item-id="{{ item.id }}"
+                data-item-type="{{ item.type }}"
+                onclick="toggleLike(this)">
+            <span class="feed-action-icon">{% if item.user_liked %}❤️{% else %}🤍{% endif %}</span>
+            <span class="like-count">{{ item.like_count }}</span>
+        </button>
+        <button class="feed-action comment-btn" onclick="document.getElementById('commentInput').focus()">
+            <span class="feed-action-icon">💬</span>
+            <span class="comment-count">{{ item.comment_count }}</span>
+        </button>
+    </div>
+
+    <!-- Comments Section (always visible on detail page) -->
+    <div class="feed-comments-section">
+        <div class="comments-list" id="commentsList">
+            <div class="no-comments">Loading comments...</div>
+        </div>
+        <div class="comment-input-container">
+            <textarea class="comment-input" id="commentInput" placeholder="Write a comment..." rows="1" maxlength="500"></textarea>
+            <button class="comment-submit" onclick="submitComment()">Post</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const csrftoken = document.querySelector('[name=csrfmiddlewaretoken]')?.value
+    || '{{ csrf_token }}';
+const itemId = '{{ item.id }}';
+const itemType = '{{ item.type }}';
+
+function toggleLike(btn) {
+    let url;
+    if (itemType === 'checkin') {
+        url = '/social/checkin/' + itemId + '/like/';
+    } else {
+        url = '/social/post/' + itemId + '/like/';
+    }
+
+    fetch(url, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrftoken },
+        credentials: 'same-origin'
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            const icon = btn.querySelector('.feed-action-icon');
+            const count = btn.querySelector('.like-count');
+            if (data.liked) {
+                btn.classList.add('liked');
+                icon.textContent = '\u2764\uFE0F';
+            } else {
+                btn.classList.remove('liked');
+                icon.textContent = '\uD83E\uDD0D';
+            }
+            count.textContent = data.like_count;
+        }
+    });
+}
+
+// Load comments on page load
+function loadComments() {
+    let url;
+    if (itemType === 'checkin') {
+        url = '/social/checkin/' + itemId + '/comments/';
+    } else {
+        url = '/social/post/' + itemId + '/comments/';
+    }
+
+    fetch(url, { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(data => {
+        const list = document.getElementById('commentsList');
+        if (!data.success || data.comments.length === 0) {
+            list.innerHTML = '<div class="no-comments">No comments yet. Be the first to comment!</div>';
+            return;
+        }
+        let html = '';
+        data.comments.forEach(c => {
+            const avatarHtml = c.user.avatar_url
+                ? '<img src="' + c.user.avatar_url + '" alt="">'
+                : c.user.display_name.charAt(0).toUpperCase();
+            html += '<div class="comment-item" data-comment-id="' + c.id + '">';
+            html += '<div class="comment-avatar">' + avatarHtml + '</div>';
+            html += '<div class="comment-content">';
+            html += '<span class="comment-author">' + c.user.display_name + '</span> ';
+            html += '<span class="comment-text">' + escapeHtml(c.text) + '</span>';
+            html += '<div class="comment-meta"><span>' + c.time_ago + '</span>';
+            html += '<span>' + c.like_count + ' like' + (c.like_count !== 1 ? 's' : '') + '</span></div>';
+            html += '</div></div>';
+        });
+        list.innerHTML = html;
+    });
+}
+
+function submitComment() {
+    const input = document.getElementById('commentInput');
+    const text = input.value.trim();
+    if (!text) return;
+
+    let url;
+    if (itemType === 'checkin') {
+        url = '/social/checkin/' + itemId + '/comments/add/';
+    } else {
+        url = '/social/post/' + itemId + '/comments/add/';
+    }
+
+    fetch(url, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ text: text })
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            input.value = '';
+            loadComments();
+            const countEl = document.querySelector('.comment-count');
+            countEl.textContent = parseInt(countEl.textContent) + 1;
+        }
+    });
+}
+
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+}
+
+loadComments();
+</script>
+{% endblock %}

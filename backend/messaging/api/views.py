@@ -63,6 +63,7 @@ def send_dm(request):
             recipient_id=serializer.validated_data['recipient_id'],
             content=serializer.validated_data['content'],
             post_id=serializer.validated_data.get('post_id'),
+            quick_workout_id=serializer.validated_data.get('quick_workout_id'),
         )
     except CannotMessageSelfError as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -94,6 +95,7 @@ def send_group_message(request, group_id):
             group_id=group_id,
             content=serializer.validated_data['content'],
             post_id=serializer.validated_data.get('post_id'),
+            quick_workout_id=serializer.validated_data.get('quick_workout_id'),
         )
     except ConversationNotFoundError as e:
         return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
