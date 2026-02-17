@@ -1156,7 +1156,7 @@ def create_post_view(request):
         # Poll data
         poll_question = request.POST.get('poll_question', '').strip()
         poll_options = request.POST.getlist('poll_options[]')
-        poll_duration = int(request.POST.get('poll_duration', 24))
+        poll_duration = float(request.POST.get('poll_duration', 24))
 
         # PR data
         pr_exercise_name = request.POST.get('pr_exercise_name', '').strip()
@@ -1175,7 +1175,7 @@ def create_post_view(request):
         # Poll data
         poll_question = data.get('poll_question', '').strip()
         poll_options = data.get('poll_options', [])
-        poll_duration = int(data.get('poll_duration', 24))
+        poll_duration = float(data.get('poll_duration', 24))
 
         # PR data
         pr_exercise_name = data.get('pr_exercise_name', '').strip()
@@ -1238,7 +1238,7 @@ def create_post_view(request):
         poll = Poll.objects.create(
             post=post,
             question=poll_question,
-            duration_hours=poll_duration,
+            duration_hours=max(1, int(poll_duration)),
             ends_at=timezone.now() + timedelta(hours=poll_duration),
         )
 

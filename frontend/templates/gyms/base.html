@@ -1283,6 +1283,26 @@
             color: var(--text-primary);
         }
 
+        .post-poll-name-input {
+            flex: 1;
+            background: var(--bg-elevated, #1a1a1a);
+            border: 1px solid var(--border-subtle, #333);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            outline: none;
+            margin-right: 8px;
+        }
+        .post-poll-name-input:focus {
+            border-color: var(--brand-cyan, #06b6d4);
+        }
+        .post-poll-name-input::placeholder {
+            color: var(--text-muted, #888);
+            font-weight: 400;
+        }
+
         .post-poll-remove {
             background: none;
             border: none;
@@ -2239,7 +2259,7 @@
             <!-- Poll Section -->
             <div class="post-poll-section" id="postPollSection">
                 <div class="post-poll-header">
-                    <span class="post-poll-title">Create Poll</span>
+                    <input type="text" class="post-poll-name-input" id="pollNameInput" placeholder="Name poll" maxlength="200">
                     <button class="post-poll-remove" id="postPollRemove">&times;</button>
                 </div>
                 <div class="post-poll-options" id="postPollOptions">
@@ -2250,6 +2270,7 @@
                 <div class="post-poll-duration">
                     <span class="post-poll-duration-label">Poll duration:</span>
                     <select class="post-poll-duration-select" id="pollDuration">
+                        <option value="0.5">30 minutes</option>
                         <option value="1">1 hour</option>
                         <option value="6">6 hours</option>
                         <option value="12">12 hours</option>
@@ -2745,6 +2766,7 @@
                     postLinkPreview.classList.remove('has-link');
                     postLinkUrl.textContent = '';
                     postPollSection.classList.remove('active');
+                    document.getElementById('pollNameInput').value = '';
                     postPollOptions.innerHTML = `
                         <input type="text" class="post-poll-option-input" placeholder="Option 1" maxlength="100">
                         <input type="text" class="post-poll-option-input" placeholder="Option 2" maxlength="100">
@@ -2903,7 +2925,7 @@
                     let pollQuestion = '';
                     let pollOptions = [];
                     if (hasPoll) {
-                        pollQuestion = text; // Use post text as poll question
+                        pollQuestion = document.getElementById('pollNameInput').value.trim() || text;
                         const inputs = postPollOptions.querySelectorAll('input');
                         inputs.forEach(input => {
                             if (input.value.trim()) {
