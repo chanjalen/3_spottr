@@ -56,12 +56,25 @@ class Streak(BaseModel):
     Tracks the last workout date for a user to calculate streaks.
     current_streak and longest_streak live on the User model.
     """
+    ACTIVITY_CHOICES = [
+        ('workout', 'Workout'),
+        ('checkin', 'Check-in'),
+        ('rest', 'Rest Day'),
+    ]
+
     user = models.OneToOneField(
         'accounts.User',
         on_delete=models.CASCADE,
         related_name='streak',
     )
     last_workout_date = models.DateField(null=True, blank=True)
+    last_streak_date = models.DateField(null=True, blank=True)
+    last_activity_type = models.CharField(
+        max_length=10,
+        choices=ACTIVITY_CHOICES,
+        blank=True,
+        default='',
+    )
 
     def __str__(self):
-        return f"{self.user.username} - last workout {self.last_workout_date}"
+        return f"{self.user.username} - last streak {self.last_streak_date}"

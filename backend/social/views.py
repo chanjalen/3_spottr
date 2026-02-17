@@ -554,6 +554,11 @@ def create_checkin_view(request):
         request.user.total_workouts = F('total_workouts') + 1
         request.user.save(update_fields=['total_workouts'])
 
+        # Update streak
+        from workouts.services.streak_service import update_streak
+        request.user.refresh_from_db()
+        update_streak(request.user, activity_type='checkin')
+
         # Save the photo if provided
         if photo:
             path = f'checkins/{checkin.id}.jpg'

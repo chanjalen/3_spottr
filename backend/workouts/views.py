@@ -7,7 +7,7 @@ from django.views.decorators.http import require_POST, require_GET
 from django.utils import timezone
 from django.db.models import F
 
-from .models import Workout, Exercise, ExerciseCatalog, ExerciseSet, PersonalRecord
+from .models import Workout, Exercise, ExerciseCatalog, ExerciseSet, PersonalRecord, Streak, RestDay
 from social.models import Post
 
 
@@ -514,6 +514,10 @@ def finish_workout_view(request, workout_id):
                         achieved_date=timezone.now().date(),
                     )
 
+        # Update streak
+        from workouts.services.streak_service import update_streak
+        update_streak(request.user, activity_type='workout')
+
         # Increment total workouts
         request.user.total_workouts = F('total_workouts') + 1
         request.user.save(update_fields=['total_workouts'])
@@ -795,3 +799,24 @@ def create_personal_record_view(request):
         'post_id': str(post.id) if post else None,
         'message': 'Personal Record saved!'
     })
+
+
+@login_required
+@require_POST
+def rest_day_view(request):
+    """Record a rest day for the current user."""
+    from workouts.services.streak_service import record_rest_day
+    result = record_rest_day(request.user)
+
+    status_code = 200 if result['success'] else 400
+    return JsonResponse(result, status=status_code)
+
+
+@login_required
+@require_GET
+def streak_details_view(request):
+    """Display the streak details page."""
+    from workouts.services.streak_service import get_streak_details
+    details = get_streak_details(request.user)
+
+    return render(request, 'workouts/streak_details.html', details)

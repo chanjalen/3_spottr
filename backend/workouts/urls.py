@@ -10,6 +10,10 @@ urlpatterns = [
     # Start a new workout
     path('start/', views.start_workout_view, name='start_workout'),
 
+    # Streak
+    path('streak/', views.streak_details_view, name='streak_details'),
+    path('rest-day/', views.rest_day_view, name='rest_day'),
+
     # Active workout page
     path('<str:workout_id>/', views.active_workout_view, name='active_workout'),
 
