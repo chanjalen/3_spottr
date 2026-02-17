@@ -1005,6 +1005,13 @@
         word-wrap: break-word;
     }
 
+    .chat-bubble:has(.shared-post-card) {
+        max-width: 85%;
+        padding: 6px;
+        background: transparent !important;
+        color: var(--text-primary, #fff) !important;
+    }
+
     .chat-bubble.sent {
         align-self: flex-end;
         background: var(--brand-cyan);
@@ -1045,6 +1052,100 @@
 
     .chat-username-link:hover {
         text-decoration: underline;
+    }
+
+    /* Shared post card inside chat bubble */
+    .shared-post-card {
+        display: block;
+        background: var(--bg-card, #1a1a1a);
+        border: 1px solid var(--border-subtle, #333);
+        border-radius: 14px;
+        overflow: hidden;
+        margin-bottom: 6px;
+        text-decoration: none;
+        color: inherit;
+        cursor: pointer;
+        transition: border-color 0.15s ease;
+        max-width: 320px;
+    }
+    .shared-post-card:hover {
+        border-color: var(--brand-cyan, #06b6d4);
+    }
+    .shared-post-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+    }
+    .shared-post-avatar {
+        width: 28px; height: 28px; border-radius: 50%;
+        background: var(--bg-elevated, #333);
+        overflow: hidden; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 12px; font-weight: 700; color: var(--text-muted, #888);
+    }
+    .shared-post-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    .shared-post-author-name {
+        font-size: 13px; font-weight: 600; color: var(--text-primary, #fff);
+    }
+    .shared-post-author-sub {
+        font-size: 11px; color: var(--text-muted, #888);
+    }
+    .shared-post-media {
+        width: 100%;
+        max-height: 200px;
+        object-fit: cover;
+    }
+    .shared-post-body {
+        padding: 10px 12px;
+    }
+    .shared-post-text {
+        font-size: 13px;
+        line-height: 1.4;
+        color: var(--text-secondary, #ccc);
+    }
+    .shared-post-workout {
+        background: var(--bg-elevated, #222);
+        border: 1px solid var(--border-subtle, #333);
+        border-radius: 10px;
+        padding: 10px 12px;
+        margin-bottom: 6px;
+    }
+    .shared-post-workout-name {
+        font-size: 13px; font-weight: 600; color: var(--text-primary, #fff); margin-bottom: 6px;
+    }
+    .shared-post-workout-stats {
+        display: flex; gap: 16px; font-size: 12px; color: var(--text-muted, #888);
+    }
+    .shared-post-workout-stats strong {
+        color: var(--brand-cyan, #06b6d4);
+    }
+    .shared-post-pr {
+        background: linear-gradient(135deg, #0d2818, #1a3a2a);
+        border: 1px solid rgba(34, 197, 94, 0.3);
+        border-radius: 10px;
+        padding: 10px 12px;
+        margin-bottom: 6px;
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .shared-post-pr-name { font-size: 12px; color: rgba(255,255,255,0.6); }
+    .shared-post-pr-exercise { font-size: 14px; font-weight: 600; color: #fff; }
+    .shared-post-pr-value { font-size: 16px; font-weight: 700; color: #22c55e; }
+    .shared-post-checkin-tag {
+        display: inline-block; background: rgba(139,92,246,0.15); color: #a78bfa;
+        padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500;
+        margin-bottom: 6px;
+    }
+    .shared-post-footer {
+        padding: 6px 12px 10px;
+        font-size: 11px;
+        color: var(--text-muted, #888);
+        display: flex; gap: 12px;
+    }
+    .shared-post-tap {
+        display: block; text-align: center; padding: 6px;
+        font-size: 11px; color: var(--brand-cyan, #06b6d4);
+        border-top: 1px solid var(--border-subtle, #333);
     }
 
     .chat-input-container {
@@ -2080,9 +2181,31 @@ function loadMessages(type, id) {
                 ? `<a href="/accounts/profile/${msg.sender_username}/" class="chat-username-link">${msg.sender_username}</a>`
                 : msg.sender_username;
 
+            // Build shared post card if present
+            let postCard = '';
+            if (msg.shared_post && msg.shared_post.id) {
+                try {
+                    postCard = buildSharedPostCard(msg.shared_post);
+                } catch (e) {
+                    console.error('Error building shared post card:', e);
+                }
+            }
+
+            let contentHtml;
+            if (isZap) {
+                contentHtml = '⚡';
+            } else if (postCard) {
+                // Show the post card, and the user's message below it if it's not the default
+                const msgText = msg.content && msg.content !== 'Shared a post' && msg.content !== 'Shared a check-in'
+                    ? `<div style="margin-top:8px;padding:8px 10px;background:var(--bg-elevated,#222);border-radius:10px;font-size:14px;color:var(--text-primary,#fff);">${escapeHtml(msg.content)}</div>` : '';
+                contentHtml = postCard + msgText;
+            } else {
+                contentHtml = escapeHtml(msg.content);
+            }
+
             html += `
                 <div class="chat-bubble ${bubbleClass}">
-                    ${isZap ? '⚡' : escapeHtml(msg.content)}
+                    ${contentHtml}
                     <div class="chat-bubble-time">${usernameHtml}${msg.created_at ? ' · ' + formatTime(msg.created_at) : ''}</div>
                 </div>
             `;
@@ -2697,6 +2820,86 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function buildSharedPostCard(sp) {
+    const detailUrl = sp.detail_url || '#';
+    const avatarHtml = sp.author_avatar_url
+        ? `<img src="${sp.author_avatar_url}" alt="">`
+        : (sp.author_display_name || '?').charAt(0).toUpperCase();
+
+    let mediaHtml = '';
+    if (sp.video_url) {
+        mediaHtml = `<video class="shared-post-media" src="${sp.video_url}" controls playsinline style="width:100%;max-height:200px;object-fit:cover;"></video>`;
+    } else if (sp.photo_url) {
+        mediaHtml = `<img class="shared-post-media" src="${sp.photo_url}" alt="">`;
+    }
+
+    let bodyHtml = '';
+
+    // Workout summary
+    if (sp.workout) {
+        const w = sp.workout;
+        let exHtml = '';
+        if (w.exercises && w.exercises.length) {
+            exHtml = `<div style="font-size:11px;color:var(--text-muted,#888);margin-top:4px;">\uD83C\uDFCB\uFE0F ${escapeHtml(w.exercises.join(', '))}</div>`;
+        }
+        bodyHtml += `<div class="shared-post-workout">
+            <div class="shared-post-workout-name">${escapeHtml(w.name)}</div>
+            <div class="shared-post-workout-stats">
+                <span><strong>${w.exercise_count}</strong> exercises</span>
+                <span><strong>${w.total_sets}</strong> sets</span>
+                <span><strong>${escapeHtml(w.duration)}</strong></span>
+            </div>
+            ${exHtml}
+        </div>`;
+    }
+
+    // Personal record
+    if (sp.personal_record) {
+        const pr = sp.personal_record;
+        bodyHtml += `<div class="shared-post-pr">
+            <div>
+                <div class="shared-post-pr-name">Personal Record</div>
+                <div class="shared-post-pr-exercise">${escapeHtml(pr.exercise_name)}</div>
+            </div>
+            <div class="shared-post-pr-value">${escapeHtml(pr.value)} ${escapeHtml(pr.unit)}</div>
+        </div>`;
+    }
+
+    // Check-in tag
+    if (sp.item_type === 'checkin' && sp.workout_type) {
+        bodyHtml += `<div class="shared-post-checkin-tag">\uD83D\uDCAA ${escapeHtml(sp.workout_type)}</div>`;
+        if (sp.location_name) {
+            bodyHtml += `<div style="font-size:12px;color:var(--text-muted,#888);margin-bottom:4px;">\uD83D\uDCCD ${escapeHtml(sp.location_name)}</div>`;
+        }
+    }
+
+    // Description text
+    if (sp.description) {
+        bodyHtml += `<div class="shared-post-text">${escapeHtml(sp.description)}</div>`;
+    }
+
+    // Likes and comments
+    const likeCount = sp.like_count || 0;
+    const commentCount = sp.comment_count || 0;
+
+    return `<a class="shared-post-card" href="${detailUrl}">
+        <div class="shared-post-header">
+            <div class="shared-post-avatar">${avatarHtml}</div>
+            <div>
+                <div class="shared-post-author-name">${escapeHtml(sp.author_display_name || '')}</div>
+                <div class="shared-post-author-sub">@${escapeHtml(sp.author_username || '')}</div>
+            </div>
+        </div>
+        ${mediaHtml}
+        <div class="shared-post-body">${bodyHtml}</div>
+        <div class="shared-post-footer">
+            <span>\u2764\uFE0F ${likeCount}</span>
+            <span>\uD83D\uDCAC ${commentCount}</span>
+        </div>
+        <div class="shared-post-tap">Tap to view full post</div>
+    </a>`;
 }
 
 function formatTime(isoString) {

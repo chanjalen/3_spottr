@@ -440,6 +440,204 @@
         transition: transform var(--duration) var(--ease-out);
     }
 
+    .feed-action-icon svg {
+        display: block;
+    }
+
+    .share-btn.sent .feed-action-icon svg {
+        color: var(--accent);
+    }
+
+    /* ============ SHARE MODAL ============ */
+    .share-modal-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.6);
+        z-index: 9999;
+        align-items: flex-end;
+        justify-content: center;
+    }
+    .share-modal-backdrop.open {
+        display: flex;
+    }
+    .share-modal {
+        background: var(--bg-card, #1a1a1a);
+        border-radius: 20px 20px 0 0;
+        width: 100%;
+        max-width: 500px;
+        max-height: 70vh;
+        display: flex;
+        flex-direction: column;
+        animation: slideUp 0.25s ease-out;
+    }
+    @keyframes slideUp {
+        from { transform: translateY(100%); }
+        to { transform: translateY(0); }
+    }
+    .share-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border-subtle, #333);
+    }
+    .share-modal-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary, #fff);
+    }
+    .share-modal-close {
+        background: none;
+        border: none;
+        color: var(--text-muted, #888);
+        font-size: 24px;
+        cursor: pointer;
+        padding: 0;
+        line-height: 1;
+    }
+    .share-search-wrap {
+        padding: 12px 20px;
+    }
+    .share-search-input {
+        width: 100%;
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1px solid var(--border-subtle, #333);
+        background: var(--bg-elevated, #222);
+        color: var(--text-primary, #fff);
+        font-size: 14px;
+        outline: none;
+        box-sizing: border-box;
+    }
+    .share-search-input::placeholder {
+        color: var(--text-muted, #888);
+    }
+    .share-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0 20px 12px;
+    }
+    .share-section-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted, #888);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 12px 0 6px;
+    }
+    .share-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 0;
+        cursor: pointer;
+        border-bottom: 1px solid var(--border-subtle, #222);
+    }
+    .share-item:last-child {
+        border-bottom: none;
+    }
+    .share-item-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: var(--bg-elevated, #333);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        color: var(--text-muted, #888);
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+    .share-item-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+    .share-item-info {
+        flex: 1;
+        min-width: 0;
+    }
+    .share-item-name {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-primary, #fff);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .share-item-sub {
+        font-size: 12px;
+        color: var(--text-muted, #888);
+    }
+    .share-item-check {
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        border: 2px solid var(--border-subtle, #444);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        transition: all 0.15s ease;
+    }
+    .share-item.selected .share-item-check {
+        background: var(--accent, #3b82f6);
+        border-color: var(--accent, #3b82f6);
+    }
+    .share-item.selected .share-item-check::after {
+        content: '\2713';
+        color: #fff;
+        font-size: 14px;
+        font-weight: 700;
+    }
+    .share-send-bar {
+        padding: 12px 20px;
+        border-top: 1px solid var(--border-subtle, #333);
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    .share-message-input {
+        width: 100%;
+        padding: 10px 14px;
+        border-radius: 12px;
+        border: 1px solid var(--border-subtle, #333);
+        background: var(--bg-elevated, #222);
+        color: var(--text-primary, #fff);
+        font-size: 14px;
+        outline: none;
+        box-sizing: border-box;
+    }
+    .share-message-input::placeholder {
+        color: var(--text-muted, #888);
+    }
+    .share-send-btn {
+        width: 100%;
+        padding: 12px;
+        border-radius: 12px;
+        border: none;
+        background: var(--accent, #3b82f6);
+        color: #fff;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        opacity: 0.4;
+        pointer-events: none;
+        transition: opacity 0.15s ease;
+    }
+    .share-send-btn.enabled {
+        opacity: 1;
+        pointer-events: auto;
+    }
+    .share-empty {
+        text-align: center;
+        padding: 24px 0;
+        color: var(--text-muted, #888);
+        font-size: 14px;
+    }
+
     /* ============ COMMENTS SECTION ============ */
     .feed-comments-section {
         display: none;
@@ -976,8 +1174,8 @@
                 <span class="feed-action-icon">💬</span>
                 <span class="comment-count">{{ item.comment_count }}</span>
             </button>
-            <button class="feed-action" onclick="sharePost('{{ item.id }}')">
-                <span class="feed-action-icon">🔗</span>
+            <button class="feed-action share-btn" onclick="openShareModal('{{ item.id }}', '{{ item.type }}')">
+                <span class="feed-action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></span>
             </button>
         </div>
 
@@ -1004,6 +1202,26 @@
         <p class="feed-empty-subtext">Be the first to share your workout!</p>
     </div>
     {% endfor %}
+</div>
+
+<!-- Share Modal -->
+<div class="share-modal-backdrop" id="shareModal" onclick="if(event.target===this)closeShareModal()">
+    <div class="share-modal">
+        <div class="share-modal-header">
+            <span class="share-modal-title">Share post</span>
+            <button class="share-modal-close" onclick="closeShareModal()">&times;</button>
+        </div>
+        <div class="share-search-wrap">
+            <input type="text" class="share-search-input" id="shareSearchInput" placeholder="Search friends or groups..." autocomplete="off">
+        </div>
+        <div class="share-list" id="shareList">
+            <div class="share-empty">Loading...</div>
+        </div>
+        <div class="share-send-bar">
+            <input type="text" class="share-message-input" id="shareMessageInput" placeholder="Add a message..." maxlength="500" autocomplete="off">
+            <button class="share-send-btn" id="shareSendBtn" onclick="sendShare()">Send</button>
+        </div>
+    </div>
 </div>
 
 <script>
@@ -1437,19 +1655,159 @@ function deleteComment(commentId, itemId) {
     .catch(error => console.error('Error:', error));
 }
 
-// Share post (copy link)
-function sharePost(itemId) {
-    const url = window.location.origin + '/social/post/' + itemId + '/';
+// ============ SHARE MODAL ============
+let sharePostId = null;
+let shareItemType = null;
+let shareSelected = { users: new Set(), groups: new Set() };
+let shareDebounce = null;
 
-    if (navigator.clipboard) {
-        navigator.clipboard.writeText(url).then(() => {
-            alert('Link copied to clipboard!');
-        }).catch(() => {
-            alert('Failed to copy link');
-        });
-    } else {
-        alert('Link: ' + url);
+function openShareModal(postId, itemType) {
+    sharePostId = postId;
+    shareItemType = itemType || 'post';
+    shareSelected = { users: new Set(), groups: new Set() };
+    document.getElementById('shareModal').classList.add('open');
+    document.getElementById('shareSearchInput').value = '';
+    document.getElementById('shareMessageInput').value = '';
+    document.getElementById('shareSendBtn').classList.remove('enabled');
+    document.body.style.overflow = 'hidden';
+    loadShareRecipients('');
+    setTimeout(() => document.getElementById('shareSearchInput').focus(), 200);
+}
+
+function closeShareModal() {
+    document.getElementById('shareModal').classList.remove('open');
+    document.body.style.overflow = '';
+    sharePostId = null;
+}
+
+document.getElementById('shareSearchInput').addEventListener('input', function() {
+    clearTimeout(shareDebounce);
+    shareDebounce = setTimeout(() => loadShareRecipients(this.value.trim()), 250);
+});
+
+function loadShareRecipients(query) {
+    const url = '/social/share/recipients/' + (query ? '?q=' + encodeURIComponent(query) : '');
+    fetch(url, { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(data => {
+        if (!data.success) return;
+        renderShareList(data.friends, data.groups);
+    });
+}
+
+function renderShareList(friends, groups) {
+    const list = document.getElementById('shareList');
+    if (!friends.length && !groups.length) {
+        list.innerHTML = '<div class="share-empty">No friends or groups found</div>';
+        return;
     }
+
+    let html = '';
+
+    if (friends.length) {
+        html += '<div class="share-section-label">Friends</div>';
+        friends.forEach(f => {
+            const sel = shareSelected.users.has(f.id) ? ' selected' : '';
+            const avatar = f.avatar_url
+                ? '<img src="' + f.avatar_url + '" alt="">'
+                : f.display_name.charAt(0).toUpperCase();
+            html += '<div class="share-item' + sel + '" data-type="user" data-id="' + f.id + '" onclick="toggleShareItem(this)">';
+            html += '<div class="share-item-avatar">' + avatar + '</div>';
+            html += '<div class="share-item-info">';
+            html += '<div class="share-item-name">' + escapeShareHtml(f.display_name) + '</div>';
+            html += '<div class="share-item-sub">@' + escapeShareHtml(f.username) + '</div>';
+            html += '</div>';
+            html += '<div class="share-item-check"></div>';
+            html += '</div>';
+        });
+    }
+
+    if (groups.length) {
+        html += '<div class="share-section-label">Groups</div>';
+        groups.forEach(g => {
+            const sel = shareSelected.groups.has(g.id) ? ' selected' : '';
+            html += '<div class="share-item' + sel + '" data-type="group" data-id="' + g.id + '" onclick="toggleShareItem(this)">';
+            html += '<div class="share-item-avatar">👥</div>';
+            html += '<div class="share-item-info">';
+            html += '<div class="share-item-name">' + escapeShareHtml(g.name) + '</div>';
+            html += '<div class="share-item-sub">Group</div>';
+            html += '</div>';
+            html += '<div class="share-item-check"></div>';
+            html += '</div>';
+        });
+    }
+
+    list.innerHTML = html;
+}
+
+function escapeShareHtml(str) {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(str));
+    return div.innerHTML;
+}
+
+function toggleShareItem(el) {
+    const type = el.dataset.type;
+    const id = el.dataset.id;
+    const set = type === 'user' ? shareSelected.users : shareSelected.groups;
+
+    if (set.has(id)) {
+        set.delete(id);
+        el.classList.remove('selected');
+    } else {
+        set.add(id);
+        el.classList.add('selected');
+    }
+
+    const total = shareSelected.users.size + shareSelected.groups.size;
+    const btn = document.getElementById('shareSendBtn');
+    if (total > 0) {
+        btn.classList.add('enabled');
+        btn.textContent = 'Send (' + total + ')';
+    } else {
+        btn.classList.remove('enabled');
+        btn.textContent = 'Send';
+    }
+}
+
+function sendShare() {
+    const btn = document.getElementById('shareSendBtn');
+    if (!btn.classList.contains('enabled')) return;
+
+    btn.textContent = 'Sending...';
+    btn.classList.remove('enabled');
+
+    fetch('/social/share/send/', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrftoken,
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({
+            post_id: sharePostId,
+            item_type: shareItemType,
+            message: document.getElementById('shareMessageInput').value.trim(),
+            recipient_ids: Array.from(shareSelected.users),
+            group_ids: Array.from(shareSelected.groups),
+        }),
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            btn.textContent = 'Sent!';
+            setTimeout(() => closeShareModal(), 800);
+        } else {
+            btn.textContent = 'Send';
+            btn.classList.add('enabled');
+            alert(data.error || 'Failed to share');
+        }
+    })
+    .catch(() => {
+        btn.textContent = 'Send';
+        btn.classList.add('enabled');
+        alert('Failed to share');
+    });
 }
 
 // Auto-resize textarea

@@ -34,6 +34,13 @@ class Message(BaseModel):
         blank=True,
         related_name='shared_messages',
     )
+    quick_workout = models.ForeignKey(
+        'social.QuickWorkout',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='shared_messages',
+    )
 
     content = models.TextField()
 

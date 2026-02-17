@@ -9,6 +9,10 @@ urlpatterns = [
     path('feed/', views.feed_view, name='feed'),
     path('checkin/create/', views.create_checkin_view, name='create_checkin'),
 
+    # Post/checkin detail
+    path('post/<str:post_id>/view/', views.post_detail_view, name='post_detail'),
+    path('checkin/<str:checkin_id>/view/', views.checkin_detail_view, name='checkin_detail'),
+
     # Post likes
     path('post/<str:post_id>/like/', views.toggle_like_post_view, name='toggle_like_post'),
 
@@ -42,4 +46,8 @@ urlpatterns = [
 
     # Poll voting
     path('poll/<str:poll_id>/vote/', views.vote_poll_view, name='vote_poll'),
+
+    # Share
+    path('share/recipients/', views.share_recipients_view, name='share_recipients'),
+    path('share/send/', views.share_post_view, name='share_post'),
 ]
