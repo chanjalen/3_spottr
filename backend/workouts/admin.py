@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Workout, Exercise, WorkoutTemplate, TemplateExercise, Streak, PersonalRecord, ExerciseCatalog, ExerciseSet
+from .models import Workout, Exercise, WorkoutTemplate, TemplateExercise, Streak, PersonalRecord, ExerciseCatalog, ExerciseSet, RestDay
 
 
 @admin.register(Workout)
@@ -31,8 +31,15 @@ class TemplateExerciseAdmin(admin.ModelAdmin):
 
 @admin.register(Streak)
 class StreakAdmin(admin.ModelAdmin):
-    list_display = ['user', 'last_workout_date']
+    list_display = ['user', 'last_workout_date', 'last_streak_date', 'last_activity_type']
     search_fields = ['user__username']
+
+
+@admin.register(RestDay)
+class RestDayAdmin(admin.ModelAdmin):
+    list_display = ['user', 'streak_date', 'created_at']
+    search_fields = ['user__username']
+    list_filter = ['streak_date']
 
 
 @admin.register(PersonalRecord)
