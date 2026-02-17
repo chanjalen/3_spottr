@@ -36,6 +36,7 @@ INSTALLED_APPS = [
     "groups",
     "messaging",
     "notifications",
+    "storages",
 ]
 
 MIDDLEWARE = [
@@ -122,6 +123,31 @@ LOGIN_URL = '/accounts/login/'
 LOGIN_REDIRECT_URL = '/'
 LOGOUT_REDIRECT_URL = '/'
 
-# Media files (user uploads)
-MEDIA_URL = '/media/'
+# Media files (user uploads) — Supabase S3 storage
+STORAGES = {
+    "default": {
+        "BACKEND": "storages.backends.s3boto3.S3Boto3Storage",
+    },
+    "staticfiles": {
+        "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",
+    },
+}
+
+AWS_S3_ENDPOINT_URL = os.environ.get("SUPABASE_S3_ENDPOINT")
+AWS_ACCESS_KEY_ID = os.environ.get("SUPABASE_S3_ACCESS_KEY")
+AWS_SECRET_ACCESS_KEY = os.environ.get("SUPABASE_S3_SECRET_KEY")
+AWS_STORAGE_BUCKET_NAME = os.environ.get("SUPABASE_S3_BUCKET", "Media_Uploads")
+AWS_S3_REGION_NAME = "us-east-1"
+AWS_DEFAULT_ACL = "public-read"
+AWS_QUERYSTRING_AUTH = False
+
+# Build the public URL domain for serving media.
+# S3 endpoint: https://<ref>.storage.supabase.co/storage/v1/s3
+# Public URL:  https://<ref>.supabase.co/storage/v1/object/public/<bucket>/<path>
+_s3_endpoint = os.environ.get("SUPABASE_S3_ENDPOINT", "")
+_project_ref = _s3_endpoint.split("//")[-1].split(".")[0] if _s3_endpoint else ""
+_bucket = os.environ.get("SUPABASE_S3_BUCKET", "Media_Uploads")
+AWS_S3_CUSTOM_DOMAIN = f"{_project_ref}.supabase.co/storage/v1/object/public/{_bucket}"
+
+MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/"
 MEDIA_ROOT = BASE_DIR / 'media_uploads'

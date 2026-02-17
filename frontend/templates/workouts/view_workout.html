@@ -396,8 +396,8 @@
     <div class="workout-info-card">
         <div class="workout-info-header">
             <div class="workout-user-avatar">
-                {% if workout.user.avatar %}
-                <img src="{{ workout.user.avatar.url }}" alt="{{ workout.user.display_name }}">
+                {% if workout.user.avatar_url %}
+                <img src="{{ workout.user.avatar_url }}" alt="{{ workout.user.display_name }}">
                 {% else %}
                 {{ workout.user.display_name|make_list|first|upper }}
                 {% endif %}

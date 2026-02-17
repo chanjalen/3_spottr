@@ -52,6 +52,11 @@ class MediaAsset(BaseModel):
             )
         ]
 
+    @property
+    def url(self):
+        from django.conf import settings
+        return f"{settings.MEDIA_URL}{self.storage_key}"
+
     def __str__(self):
         return f"{self.kind} - {self.storage_key}"
 

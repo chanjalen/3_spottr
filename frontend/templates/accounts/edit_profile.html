@@ -667,8 +667,8 @@
 
                         <div class="avatar-section">
                             <div class="avatar-preview" id="avatarPreview">
-                                {% if user.avatar %}
-                                <img src="{{ user.avatar.url }}" alt="Avatar" id="avatarImg">
+                                {% if user.avatar_url %}
+                                <img src="{{ user.avatar_url }}" alt="Avatar" id="avatarImg">
                                 {% else %}
                                 <span class="avatar-placeholder" id="avatarPlaceholder">{{ user.display_name|make_list|first|upper }}</span>
                                 {% endif %}

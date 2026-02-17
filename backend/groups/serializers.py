@@ -17,9 +17,7 @@ class GroupMemberSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'user', 'username', 'display_name', 'role', 'joined_at', 'avatar_url']
 
     def get_avatar_url(self, obj):
-        if obj.user.avatar:
-            return obj.user.avatar.url
-        return None
+        return obj.user.avatar_url or None
 
 
 class GroupListSerializer(serializers.ModelSerializer):

@@ -844,8 +844,8 @@
     <div class="feed-card" data-item-id="{{ item.id }}" data-item-type="{{ item.type }}">
         <div class="feed-card-header">
             <div class="feed-avatar">
-                {% if item.user.avatar %}
-                <img src="{{ item.user.avatar.url }}" alt="{{ item.user.display_name }}">
+                {% if item.user.avatar_url %}
+                <img src="{{ item.user.avatar_url }}" alt="{{ item.user.display_name }}">
                 {% else %}
                 <span class="feed-avatar-letter">{{ item.user.display_name|make_list|first|upper }}</span>
                 {% endif %}
