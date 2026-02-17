@@ -70,3 +70,52 @@ def notify_follow(actor, target_user):
         target_type=Notification.TargetType.USER,
         target_id=str(target_user.id),
     )
+
+
+def notify_workout_invite(actor, recipient, workout_invite):
+    """Create a notification when someone sends an individual workout invite."""
+    if actor.id == recipient.id:
+        return
+    Notification.objects.create(
+        recipient=recipient,
+        triggered_by=actor,
+        type=Notification.Type.WORKOUT_INVITE,
+        target_type=Notification.TargetType.WORKOUT_INVITE,
+        target_id=str(workout_invite.id),
+    )
+
+
+def notify_group_join_request(actor, group, join_request):
+    """Notify all group admins when someone requests to join a private group."""
+    from groups.models import GroupMember
+    admin_memberships = GroupMember.objects.filter(
+        group=group,
+        role__in=['admin', 'creator'],
+    ).select_related('user')
+    for membership in admin_memberships:
+        if membership.user_id != actor.id:
+            Notification.objects.create(
+                recipient=membership.user,
+                triggered_by=actor,
+                type=Notification.Type.JOIN_REQUEST,
+                target_type=Notification.TargetType.GROUP,
+                target_id=str(group.id),
+                context_type='join_request',
+                context_id=str(join_request.id),
+            )
+
+
+def notify_workout_join_request(actor, workout_invite, join_request):
+    """Notify the workout invite owner when someone requests to join."""
+    owner = workout_invite.user
+    if actor.id == owner.id:
+        return
+    Notification.objects.create(
+        recipient=owner,
+        triggered_by=actor,
+        type=Notification.Type.JOIN_REQUEST,
+        target_type=Notification.TargetType.WORKOUT_INVITE,
+        target_id=str(workout_invite.id),
+        context_type='workout_join_request',
+        context_id=str(join_request.id),
+    )

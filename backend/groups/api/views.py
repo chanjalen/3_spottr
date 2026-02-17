@@ -12,6 +12,7 @@ from groups.serializers import (
     GroupMemberSerializer,
     GroupInviteCodeSerializer,
     GroupJoinRequestSerializer,
+    GroupStreakDetailSerializer,
     CreateGroupSerializer,
     UpdateGroupSerializer,
     JoinRequestMessageSerializer,
@@ -351,6 +352,9 @@ def join_request_create(request, group_id):
     except DuplicateJoinRequestError as e:
         return Response({"error": str(e)}, status=status.HTTP_409_CONFLICT)
 
+    from notifications.dispatcher import notify_group_join_request
+    notify_group_join_request(request.user, join_request.group, join_request)
+
     return Response(
         GroupJoinRequestSerializer(join_request).data,
         status=status.HTTP_201_CREATED,
@@ -398,3 +402,22 @@ def join_request_deny(request, group_id, request_id):
         return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
 
     return Response(GroupJoinRequestSerializer(join_request).data)
+
+
+# ---------------------------------------------------------------------------
+# Group Streak
+# ---------------------------------------------------------------------------
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def group_streak_detail(request, group_id):
+    """Get group streak details including per-member streak info."""
+    try:
+        data = services.get_group_streak_details(group_id, request.user)
+    except GroupNotFoundError as e:
+        return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+    except NotGroupMemberError as e:
+        return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+
+    serializer = GroupStreakDetailSerializer(data)
+    return Response(serializer.data)

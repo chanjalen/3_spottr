@@ -31,6 +31,8 @@ class Group(BaseModel):
     description = models.TextField(max_length=500, blank=True)
     avatar = models.ImageField(upload_to='group_avatars/', null=True, blank=True)
     group_streak = models.IntegerField(default=0)
+    longest_group_streak = models.IntegerField(default=0)
+    last_streak_date = models.DateField(null=True, blank=True)
     privacy = models.CharField(
         max_length=10,
         choices=Privacy.choices,

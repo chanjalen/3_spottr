@@ -56,6 +56,7 @@ def _build_notification_item(notif, actor):
         'type': notif.type,
         'target_type': notif.target_type,
         'target_id': notif.target_id,
+        'context_id': notif.context_id,
         'is_read': notif.read_at is not None,
         'time_ago': _time_ago(notif.created_at),
         'created_at': notif.created_at.isoformat(),
@@ -200,6 +201,21 @@ def notification_list(request):
 
             elif notif.type == Notification.Type.FOLLOW:
                 item['message'] = f"{actor_name} started following you"
+
+            elif notif.type == Notification.Type.WORKOUT_INVITE:
+                item['message'] = f"{actor_name} invited you to work out"
+
+            elif notif.type == Notification.Type.JOIN_REQUEST:
+                if notif.target_type == Notification.TargetType.GROUP:
+                    from groups.models import Group as GroupModel
+                    try:
+                        group = GroupModel.objects.get(id=notif.target_id)
+                        group_name = group.name
+                    except GroupModel.DoesNotExist:
+                        group_name = 'your group'
+                    item['message'] = f"{actor_name} wants to join {group_name}"
+                else:
+                    item['message'] = f"{actor_name} requested to join your workout"
 
             else:
                 item['message'] = f"{actor_name} sent you a notification"

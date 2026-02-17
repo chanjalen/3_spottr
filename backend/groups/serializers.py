@@ -28,7 +28,7 @@ class GroupListSerializer(serializers.ModelSerializer):
         model = Group
         fields = [
             'id', 'name', 'description', 'avatar', 'privacy',
-            'group_streak', 'member_count', 'is_member',
+            'group_streak', 'longest_group_streak', 'member_count', 'is_member',
             'created_at',
         ]
 
@@ -44,8 +44,8 @@ class GroupDetailSerializer(serializers.ModelSerializer):
         model = Group
         fields = [
             'id', 'created_by', 'name', 'description', 'avatar', 'privacy',
-            'group_streak', 'members', 'member_count', 'is_member', 'user_role',
-            'invite_code', 'created_at', 'updated_at',
+            'group_streak', 'longest_group_streak', 'members', 'member_count',
+            'is_member', 'user_role', 'invite_code', 'created_at', 'updated_at',
         ]
 
     def get_member_count(self, obj):
@@ -71,6 +71,21 @@ class GroupDetailSerializer(serializers.ModelSerializer):
                 code = obj.invite_codes.filter(is_active=True).first()
                 return code.code if code else None
         return None
+
+
+class GroupStreakMemberSerializer(serializers.Serializer):
+    user_id = serializers.CharField()
+    username = serializers.CharField()
+    display_name = serializers.CharField()
+    avatar_url = serializers.CharField(allow_null=True)
+    current_streak = serializers.IntegerField()
+    has_activity_today = serializers.BooleanField()
+
+
+class GroupStreakDetailSerializer(serializers.Serializer):
+    group_streak = serializers.IntegerField()
+    longest_group_streak = serializers.IntegerField()
+    members = GroupStreakMemberSerializer(many=True)
 
 
 class GroupInviteCodeSerializer(serializers.ModelSerializer):
