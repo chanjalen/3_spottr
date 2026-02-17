@@ -9,6 +9,6 @@ class UserSerializer(serializers.ModelSerializer):
             'id', 'email', 'phone_number', 'username', 'display_name',
             'birthday', 'avatar', 'bio', 'workout_frequency', 'member_since',
             'current_streak', 'longest_streak', 'total_workouts', 'status',
-            'enrolled_gym', 'created_at', 'updated_at',
+            'enrolled_gyms', 'created_at', 'updated_at',
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']

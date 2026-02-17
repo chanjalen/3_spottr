@@ -32,15 +32,15 @@
         </div>
         <button class="survey-btn" id="surveyBtn" title="Report busy level">&#9998;</button>
     </div>
-    <div class="people-count">{{ enrolled_count }} people there</div>
+    <div class="busy-level-display {% if busy_level and busy_level <= 2 %}color-low{% elif busy_level == 3 %}color-moderate{% elif busy_level == 4 %}color-high{% elif busy_level and busy_level >= 5 %}color-very-high{% endif %}">
+        {{ busy_label }}
+    </div>
     <div class="busy-bar">
-        <div class="busy-bar-segment low" style="flex:1;"></div>
-        <div class="busy-bar-segment moderate" style="flex:1;"></div>
-        <div class="busy-bar-segment high" style="flex:1;"></div>
-        <div class="busy-bar-segment very-high" style="flex:0.5;"></div>
-        {% if busy_level %}
-        <div class="busy-bar-indicator" style="left:{% widthratio busy_level 5 100 %}%;"></div>
-        {% endif %}
+        <div class="busy-bar-track">
+            {% if busy_level %}
+            <div class="busy-bar-fill {% if busy_level <= 2 %}fill-low{% elif busy_level == 3 %}fill-moderate{% elif busy_level == 4 %}fill-high{% else %}fill-very-high{% endif %}" style="width:{% widthratio busy_level 5 100 %}%;"></div>
+            {% endif %}
+        </div>
     </div>
 </div>
 
@@ -145,31 +145,6 @@
                 <button type="submit" class="modal-submit" id="joinSubmitBtn">Send Request</button>
             </div>
         </form>
-    </div>
-</div>
-
-<!-- Streak Leaderboard -->
-<div class="section-block">
-    <div class="section-header">
-        <h2 class="section-title">Streaks at {{ gym.name }}</h2>
-    </div>
-
-    <div class="leaderboard-list">
-        {% for entry in leaderboard %}
-        <div class="leaderboard-row">
-            <span class="leaderboard-rank">#{{ entry.rank }}</span>
-            <div class="leaderboard-avatar">
-                <span class="leaderboard-avatar-letter">{{ entry.user.username|make_list|first|upper }}</span>
-            </div>
-            <div class="leaderboard-info">
-                <div class="leaderboard-name">{{ entry.user.username }}</div>
-                <div class="leaderboard-streak">Best: {{ entry.user.longest_streak }} days</div>
-            </div>
-            <div class="leaderboard-stat">{{ entry.user.current_streak }}d</div>
-        </div>
-        {% empty %}
-        <div class="invite-empty">No streaks yet. Start working out to claim the top spot!</div>
-        {% endfor %}
     </div>
 </div>
 
@@ -345,44 +320,36 @@
         box-shadow: var(--shadow-glow);
     }
 
-    .people-count {
+    .busy-level-display {
         font-size: 28px;
         font-weight: 700;
-        color: var(--text-primary);
         margin-bottom: 16px;
         letter-spacing: -0.5px;
     }
 
     /* ============ BUSY BAR ============ */
     .busy-bar {
-        display: flex;
-        gap: 3px;
+        margin-top: 4px;
+    }
+
+    .busy-bar-track {
         height: 10px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
         border-radius: var(--radius-pill);
         overflow: hidden;
-        position: relative;
     }
 
-    .busy-bar-segment {
+    .busy-bar-fill {
+        height: 100%;
         border-radius: var(--radius-pill);
-        transition: opacity var(--duration) var(--ease-out);
+        transition: width 0.4s var(--ease-out);
     }
 
-    .busy-bar-segment.low { background: #22c55e; }
-    .busy-bar-segment.moderate { background: #eab308; }
-    .busy-bar-segment.high { background: #f97316; }
-    .busy-bar-segment.very-high { background: #ef4444; }
-
-    .busy-bar-indicator {
-        position: absolute;
-        top: -4px;
-        width: 4px;
-        height: 18px;
-        background: #fff;
-        border-radius: 2px;
-        transform: translateX(-50%);
-        box-shadow: 0 0 6px rgba(255,255,255,0.5);
-    }
+    .busy-bar-fill.fill-low { background: #22c55e; }
+    .busy-bar-fill.fill-moderate { background: #eab308; }
+    .busy-bar-fill.fill-high { background: #f97316; }
+    .busy-bar-fill.fill-very-high { background: #ef4444; }
 
     /* ============ SURVEY MODAL ============ */
     .survey-modal, .invite-modal, .join-modal {
@@ -861,7 +828,7 @@
                 }
                 enrollBtn.textContent = 'Unenrolling...';
                 try {
-                    const res = await fetch('/api/gyms/unenroll/', {
+                    const res = await fetch(`/api/gyms/gyms/${gymId}/unenroll/`, {
                         method: 'POST',
                         headers: {
                             'Content-Type': 'application/json',

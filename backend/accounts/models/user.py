@@ -49,10 +49,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     )
 
     # Gym enrollment
-    enrolled_gym = models.ForeignKey(
+    enrolled_gyms = models.ManyToManyField(
         'gyms.Gym',
-        on_delete=models.SET_NULL,
-        null=True,
         blank=True,
         related_name='enrolled_users',
     )

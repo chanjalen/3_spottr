@@ -37,37 +37,35 @@ def get_gym_detail(gym_id):
 
 def enroll_user(user, gym_id):
     """
-    Set the user's enrolled gym. Returns the gym.
+    Enroll the user at a gym. Returns the gym.
     Raises GymNotFoundError if gym_id is invalid.
-    Raises AlreadyEnrolledError if user is already enrolled.
+    Raises AlreadyEnrolledError if user is already enrolled at that gym.
     """
     try:
         gym = Gym.objects.get(id=gym_id)
     except Gym.DoesNotExist:
         raise GymNotFoundError("Gym not found.")
 
-    if user.enrolled_gym_id is not None:
-        if str(user.enrolled_gym_id) == str(gym_id):
-            raise AlreadyEnrolledError("You are already enrolled at this gym.")
-        raise AlreadyEnrolledError(
-            f"You are already enrolled at {user.enrolled_gym.name}. Unenroll first to switch gyms."
-        )
+    if user.enrolled_gyms.filter(id=gym.id).exists():
+        raise AlreadyEnrolledError("You are already enrolled at this gym.")
 
-    user.enrolled_gym = gym
-    user.save(update_fields=['enrolled_gym', 'updated_at'])
+    user.enrolled_gyms.add(gym)
     return gym
 
 
-def unenroll_user(user):
-    """Remove the user's enrolled gym."""
-    user.enrolled_gym = None
-    user.save(update_fields=['enrolled_gym', 'updated_at'])
+def unenroll_user(user, gym_id):
+    """Remove the user from a specific gym."""
+    try:
+        gym = Gym.objects.get(id=gym_id)
+    except Gym.DoesNotExist:
+        raise GymNotFoundError("Gym not found.")
+
+    user.enrolled_gyms.remove(gym)
 
 
 def get_enrolled_users_count(gym):
     """Get the number of users enrolled at this gym."""
-    from accounts.models import User
-    return User.objects.filter(enrolled_gym=gym).count()
+    return gym.enrolled_users.count()
 
 
 def _is_eligible_for_busy_level(user, gym):
@@ -75,7 +73,7 @@ def _is_eligible_for_busy_level(user, gym):
     Check if a user can submit a busy level for a gym.
     Eligible if enrolled at the gym OR has completed a workout there.
     """
-    if user.enrolled_gym_id == gym.id:
+    if user.enrolled_gyms.filter(id=gym.id).exists():
         return True
 
     from workouts.models import Workout
@@ -206,11 +204,12 @@ def list_workout_invites(user, gym_id=None):
     """
     now = timezone.now()
 
-    # User's own invites (always visible, including expired)
-    own = Q(user=user)
+    # User's own invites (hide expired)
+    own = Q(user=user, expires_at__gt=now)
 
     # Gym invites visible to enrolled users (not expired)
-    gym_q = Q(type='gym', gym=user.enrolled_gym, expires_at__gt=now) if user.enrolled_gym_id else Q(pk=None)
+    enrolled_gym_ids = user.enrolled_gyms.values_list('id', flat=True)
+    gym_q = Q(type='gym', gym_id__in=enrolled_gym_ids, expires_at__gt=now)
 
     # Group invites for user's groups (not expired)
     user_group_ids = user.group_memberships.values_list('group_id', flat=True)
@@ -382,62 +381,6 @@ def deny_join_request(user, request_id):
     return join_request
 
 
-# ---- Leaderboard services ----
-
-def recalculate_gym_leaderboard(gym_id):
-    """
-    Recalculate the streak leaderboard for a gym.
-    Ranks enrolled users by current_streak DESC, longest_streak DESC.
-    Excludes users with show_streak=False.
-    Removes stale entries for users who unenrolled or hid their streak.
-    """
-    from accounts.models import User
-    from social.models import LeaderboardEntry
-    from workouts.models import Streak
-
-    try:
-        gym = Gym.objects.get(id=gym_id)
-    except Gym.DoesNotExist:
-        raise GymNotFoundError("Gym not found.")
-
-    # Get eligible users ordered by streak
-    eligible_users = User.objects.filter(
-        enrolled_gym=gym,
-        show_streak=True,
-    ).order_by('-current_streak', '-longest_streak')
-
-    # Remove stale entries (unenrolled or hidden streak)
-    LeaderboardEntry.objects.filter(gym=gym).exclude(
-        user__in=eligible_users
-    ).delete()
-
-    # Update/create entries with new ranks
-    entries = []
-    for rank, user in enumerate(eligible_users, start=1):
-        streak, _ = Streak.objects.get_or_create(user=user)
-        entry, _ = LeaderboardEntry.objects.update_or_create(
-            user=user,
-            gym=gym,
-            defaults={'rank': rank, 'streak': streak},
-        )
-        entries.append(entry)
-
-    return entries
-
-
-def get_gym_leaderboard(gym_id):
-    """
-    Get the leaderboard for a gym. Recalculates on demand.
-    Returns ranked LeaderboardEntry queryset.
-    """
-    recalculate_gym_leaderboard(gym_id)
-
-    from social.models import LeaderboardEntry
-    return LeaderboardEntry.objects.filter(
-        gym_id=gym_id
-    ).select_related('user').order_by('rank')
-
-
 # ---- Top Lifters services ----
 
 LIFT_MAP = {
@@ -459,7 +402,7 @@ def get_top_lifters(gym_id, lift='bench'):
     if lift in LIFT_MAP:
         exercise_name = LIFT_MAP[lift]
         prs = PersonalRecord.objects.filter(
-            user__enrolled_gym_id=gym_id,
+            user__enrolled_gyms__id=gym_id,
             exercise_name__iexact=exercise_name,
             unit__in=['lbs', 'kg'],
         ).select_related('user')
@@ -486,7 +429,7 @@ def get_top_lifters(gym_id, lift='bench'):
         return results
 
     elif lift == 'total':
-        enrolled_users = User.objects.filter(enrolled_gym_id=gym_id)
+        enrolled_users = User.objects.filter(enrolled_gyms__id=gym_id)
         results = []
         for user in enrolled_users:
             total = 0

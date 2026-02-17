@@ -71,20 +71,21 @@ def gym_enroll(request, gym_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-def gym_unenroll(request):
-    """Unenroll the current user from their gym."""
-    services.unenroll_user(request.user)
+def gym_unenroll(request, gym_id):
+    """Unenroll the current user from a specific gym."""
+    try:
+        services.unenroll_user(request.user, gym_id)
+    except GymNotFoundError as e:
+        return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def gym_current(request):
-    """Get the current user's enrolled gym, or null."""
-    gym = request.user.enrolled_gym
-    if gym is None:
-        return Response(None)
-    serializer = GymDetailSerializer(gym, context={'request': request})
+    """Get all gyms the current user is enrolled at."""
+    gyms = request.user.enrolled_gyms.all()
+    serializer = GymDetailSerializer(gyms, many=True, context={'request': request})
     return Response(serializer.data)
 
 

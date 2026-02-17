@@ -9,7 +9,7 @@ urlpatterns = [
     path('gyms/<str:gym_id>/enroll/', views.gym_enroll, name='gym-enroll'),
     path('gyms/<str:gym_id>/busy-level/', views.gym_busy_level, name='gym-busy-level'),
     path('gyms/<str:gym_id>/leaderboard/', views.gym_leaderboard, name='gym-leaderboard'),
-    path('unenroll/', views.gym_unenroll, name='gym-unenroll'),
+    path('gyms/<str:gym_id>/unenroll/', views.gym_unenroll, name='gym-unenroll'),
     path('me/gym/', views.gym_current, name='gym-current'),
 
     # Workout Invites

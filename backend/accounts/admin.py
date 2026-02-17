@@ -13,7 +13,7 @@ class UserAdmin(BaseUserAdmin):
     fieldsets = (
         (None, {'fields': ('username', 'password')}),
         ('Profile', {'fields': ('email', 'phone_number', 'display_name', 'birthday', 'avatar', 'bio')}),
-        ('Fitness', {'fields': ('workout_frequency', 'current_streak', 'longest_streak', 'total_workouts', 'enrolled_gym')}),
+        ('Fitness', {'fields': ('workout_frequency', 'current_streak', 'longest_streak', 'total_workouts', 'enrolled_gyms')}),
         ('Status', {'fields': ('status',)}),
         ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
     )

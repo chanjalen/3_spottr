@@ -8,26 +8,11 @@
     <h1>Nearby Gyms</h1>
 </div>
 
-<!-- GET Search (filters via URL query param, same page reloads with filtered results) -->
 <div class="search-bar">
     <span class="search-icon">&#128269;</span>
-    <input type="text" id="gymSearchInput" placeholder="Quick filter gyms..." autocomplete="off">
+    <input type="text" id="gymSearchInput" placeholder="Search gyms..." autocomplete="off">
 </div>
 
-<!-- POST Search Form (server-side filter, hides non-matching results) -->
-<form method="POST" action="{% url 'gyms:gym_list_generic' %}" class="post-search-form">
-    {% csrf_token %}
-    <div class="search-bar">
-        <span class="search-icon">&#128269;</span>
-        <input type="text" name="search_query" placeholder="Search gyms (server-side)..." value="{{ search_query }}" autocomplete="off">
-        <button type="submit" class="search-submit-btn">Search</button>
-    </div>
-</form>
-{% if search_query %}
-<div class="search-results-info">
-    Showing results for "<strong>{{ search_query }}</strong>" &mdash; <a href="{% url 'gyms:gym_list_generic' %}">Clear</a>
-</div>
-{% endif %}
 
 <!-- Aggregation Summary -->
 <div class="aggregation-summary">
@@ -37,14 +22,9 @@
     </div>
     <div class="agg-item">
         <span class="agg-label">Showing</span>
-        <span class="agg-value">{{ gyms|length }}</span>
+        <span class="agg-value" id="showingCount">{{ gyms|length }}</span>
     </div>
 </div>
-
-<!-- Chart Link -->
-<a href="{% url 'gyms:busy_chart_page' %}" class="chart-link-btn">
-    &#128202; View Busy Level Chart
-</a>
 
 <!-- Map -->
 <div class="map-container">
@@ -55,6 +35,9 @@
 <script id="gymMapData" type="application/json">
 [{% for gym in gyms %}{"name":"{{ gym.name|escapejs }}","lat":{{ gym.latitude|default:"null" }},"lng":{{ gym.longitude|default:"null" }},"busy":{{ gym.busy_level|default:"null" }},"label":"{{ gym.busy_label|escapejs }}","id":"{{ gym.pk }}"}{% if not forloop.last %},{% endif %}{% endfor %}]
 </script>
+
+<!-- Clear filter button (hidden by default) -->
+<button id="clearFilterBtn" class="clear-filter-btn" style="display:none;">Show All Gyms</button>
 
 <!-- Gym cards -->
 <div class="gym-list" id="gymList">
@@ -76,15 +59,19 @@
             <div class="gym-stats">
                 <div class="stat-box activity">
                     <div class="stat-label">Activity</div>
-                    <div class="stat-value">{{ gym.busy_responses }}/{{ gym.enrolled_count }}</div>
-                    <div class="stat-sublabel {% if gym.busy_level and gym.busy_level <= 2 %}busy-low{% elif gym.busy_level == 3 %}busy-moderate{% elif gym.busy_level == 4 %}busy-high{% elif gym.busy_level and gym.busy_level >= 5 %}busy-very-high{% endif %}">
+                    <div class="stat-value stat-value-text {% if gym.busy_level and gym.busy_level <= 2 %}busy-low{% elif gym.busy_level == 3 %}busy-moderate{% elif gym.busy_level == 4 %}busy-high{% elif gym.busy_level and gym.busy_level >= 5 %}busy-very-high{% endif %}">
                         {{ gym.busy_label }}
                     </div>
                 </div>
                 <div class="stat-box">
-                    <div class="stat-label">Top PR</div>
-                    <div class="stat-value">-- lbs</div>
+                    <div class="stat-label">Top Total Lifter</div>
+                    {% if gym.top_lifter_name %}
+                    <div class="stat-value">{{ gym.top_lifter_total|floatformat:0 }} {{ gym.top_lifter_unit }}</div>
+                    <div class="stat-sublabel">{{ gym.top_lifter_name }}</div>
+                    {% else %}
+                    <div class="stat-value">--</div>
                     <div class="stat-sublabel">No data</div>
+                    {% endif %}
                 </div>
             </div>
         </div>
@@ -251,37 +238,25 @@
     .busy-high { color: #f97316 !important; }
     .busy-very-high { color: #ef4444 !important; }
 
-    /* POST search form */
-    .post-search-form { margin-bottom: 16px; }
-    .post-search-form .search-bar { margin-bottom: 0; }
-    .search-submit-btn {
-        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
-        color: #fff;
-        border: none;
-        padding: 8px 20px;
-        border-radius: var(--radius-pill);
-        font-family: inherit;
-        font-size: 13px;
+    /* Clear filter button */
+    .clear-filter-btn {
+        display: block;
+        width: 100%;
+        padding: 10px 16px;
+        margin-bottom: 16px;
+        background: rgba(6,182,212,0.12);
+        color: #22d3ee;
+        border: 1px solid rgba(6,182,212,0.3);
+        border-radius: var(--radius-md);
+        font-family: 'Inter', sans-serif;
+        font-size: 14px;
         font-weight: 600;
         cursor: pointer;
-        white-space: nowrap;
         transition: all var(--duration) var(--ease-out);
     }
-    .search-submit-btn:hover {
-        box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4);
-    }
-    .search-results-info {
-        background: var(--bg-card);
-        border: 1px solid var(--border-default);
-        border-radius: var(--radius-md);
-        padding: 12px 18px;
-        margin-bottom: 16px;
-        font-size: 14px;
-        color: var(--text-secondary);
-    }
-    .search-results-info a {
-        color: var(--text-brand);
-        text-decoration: none;
+    .clear-filter-btn:hover {
+        background: rgba(6,182,212,0.2);
+        border-color: rgba(6,182,212,0.5);
     }
 
     /* Aggregation summary */
@@ -311,26 +286,6 @@
         font-weight: 700;
         color: var(--text-primary);
     }
-
-    /* Chart link button */
-    .chart-link-btn {
-        display: inline-block;
-        background: var(--bg-card);
-        border: 1px solid var(--border-default);
-        border-radius: var(--radius-pill);
-        padding: 10px 20px;
-        color: var(--text-brand);
-        text-decoration: none;
-        font-size: 14px;
-        font-weight: 600;
-        margin-bottom: 20px;
-        transition: all var(--duration) var(--ease-out);
-    }
-    .chart-link-btn:hover {
-        border-color: var(--brand-purple);
-        box-shadow: var(--shadow-glow);
-        transform: translateY(-1px);
-    }
 </style>
 {% endblock %}
 
@@ -341,15 +296,15 @@
     const csrfToken = '{{ csrf_token }}';
     const searchInput = document.getElementById('gymSearchInput');
     const gymCards = document.querySelectorAll('.gym-card-link');
+    const showingCount = document.getElementById('showingCount');
+    const clearFilterBtn = document.getElementById('clearFilterBtn');
 
-    if (searchInput) {
-        searchInput.addEventListener('input', function() {
-            const query = this.value.toLowerCase().trim();
-            gymCards.forEach(card => {
-                const name = card.dataset.name || '';
-                card.style.display = name.includes(query) ? '' : 'none';
-            });
-        });
+    // Helper: show all gym cards and reset counts
+    function showAllGyms() {
+        gymCards.forEach(card => card.style.display = '');
+        if (showingCount) showingCount.textContent = gymCards.length;
+        if (clearFilterBtn) clearFilterBtn.style.display = 'none';
+        if (searchInput) searchInput.value = '';
     }
 
     // ---- Leaflet Map ----
@@ -374,9 +329,10 @@
         return '#22c55e';
     }
 
-    // Custom circle marker for each gym
+    // Custom circle marker for each gym, store markers for filtering
+    const markers = [];
     gymData.forEach(function(g) {
-        if (g.lat == null || g.lng == null) return;
+        if (g.lat == null || g.lng == null) { markers.push(null); return; }
         var color = g.busy != null ? busyColor(g.busy) : '#22c55e';
         var marker = L.circleMarker([g.lat, g.lng], {
             radius: 10,
@@ -391,12 +347,55 @@
             '<div class="popup-name">' + g.name + '</div>' +
             '<div class="popup-busy">' + busyText + '</div>'
         );
-        // Click pin to scroll to gym card
-        marker.on('click', function() {
-            var card = document.querySelector('.gym-card-link[data-name="' + g.name.toLowerCase() + '"]');
-            if (card) card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        marker.on('click', function(e) {
+            L.DomEvent.stopPropagation(e);
+            // Clear search input
+            if (searchInput) searchInput.value = '';
+            // Show only the clicked gym's card
+            let visible = 0;
+            gymCards.forEach(card => {
+                const match = card.dataset.name === g.name.toLowerCase();
+                card.style.display = match ? '' : 'none';
+                if (match) visible++;
+            });
+            if (showingCount) showingCount.textContent = visible;
+            // Show the clear filter button and scroll to results
+            if (clearFilterBtn) clearFilterBtn.style.display = '';
+            document.getElementById('gymList').scrollIntoView({ behavior: 'smooth', block: 'start' });
         });
+        markers.push({ marker: marker, name: g.name.toLowerCase() });
     });
+
+    // ---- Clear filter button ----
+    if (clearFilterBtn) {
+        clearFilterBtn.addEventListener('click', showAllGyms);
+    }
+
+    // ---- Click map background to reset filter ----
+    map.on('click', function(e) {
+        // Only reset if no marker was clicked (markers stop propagation via popup)
+        showAllGyms();
+    });
+
+    // ---- Client-side search: filter cards, markers, and showing count ----
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            const query = this.value.toLowerCase().trim();
+            let visible = 0;
+            gymCards.forEach(card => {
+                const name = card.dataset.name || '';
+                const match = name.includes(query);
+                card.style.display = match ? '' : 'none';
+                if (match) visible++;
+            });
+            markers.forEach(m => {
+                if (!m) return;
+                if (m.name.includes(query)) { m.marker.addTo(map); }
+                else { map.removeLayer(m.marker); }
+            });
+            if (showingCount) showingCount.textContent = visible;
+        });
+    }
 
     // Legend control
     var legend = L.control({ position: 'topright' });
@@ -453,7 +452,8 @@
             btn.disabled = true;
             btn.textContent = 'Unenrolling...';
             try {
-                const res = await fetch('/api/gyms/unenroll/', {
+                const gymId = btn.dataset.gymId;
+                const res = await fetch(`/api/gyms/gyms/${gymId}/unenroll/`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
