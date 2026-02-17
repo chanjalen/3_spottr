@@ -865,7 +865,11 @@
             </div>
         </div>
 
-        {% if item.photo_url %}
+        {% if item.video_url %}
+        <div class="feed-card-image">
+            <video src="{{ item.video_url }}" controls playsinline style="width:100%;border-radius:16px;"></video>
+        </div>
+        {% elif item.photo_url %}
         <div class="feed-card-image">
             <img src="{{ item.photo_url }}" alt="Workout photo">
         </div>

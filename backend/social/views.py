@@ -281,6 +281,7 @@ def feed_view(request):
             'description': post.description,
             'created_at': post.created_at,
             'photo_url': get_media_url('post', str(post.id)) or (build_media_url(post.photo.name) if post.photo else None),
+            'video_url': build_media_url(post.video.name) if post.video else None,
             'link_url': post.link_url,
             'like_count': like_count,
             'comment_count': comment_count,
@@ -502,6 +503,7 @@ def get_user_posts(user, viewer=None):
             'description': post.description,
             'created_at': post.created_at,
             'photo_url': get_media_url('post', str(post.id)) or (build_media_url(post.photo.name) if post.photo else None),
+            'video_url': build_media_url(post.video.name) if post.video else None,
             'like_count': like_count,
             'comment_count': comment_count,
             'user_liked': user_liked,
@@ -1024,6 +1026,7 @@ def create_post_view(request):
         visibility = request.POST.get('visibility', 'main')
         reply_restriction = request.POST.get('reply_restriction', 'everyone')
         photo = request.FILES.get('photo')
+        video = request.FILES.get('video')
 
         # Poll data
         poll_question = request.POST.get('poll_question', '').strip()
@@ -1042,6 +1045,7 @@ def create_post_view(request):
         visibility = data.get('visibility', 'main')
         reply_restriction = data.get('reply_restriction', 'everyone')
         photo = None
+        video = None
 
         # Poll data
         poll_question = data.get('poll_question', '').strip()
@@ -1058,10 +1062,10 @@ def create_post_view(request):
     has_pr = bool(pr_exercise_name and pr_value)
 
     # Validation
-    if not text and not photo and not poll_question and not has_pr:
+    if not text and not photo and not video and not poll_question and not has_pr:
         return JsonResponse({
             'success': False,
-            'error': 'Post must have text, photo, poll, or a personal record'
+            'error': 'Post must have text, media, poll, or a personal record'
         }, status=400)
 
     if len(text) > 500:
@@ -1085,6 +1089,18 @@ def create_post_view(request):
         post.save()
         # Track in MediaAsset/MediaLink (already_saved=True because ImageField saved it)
         asset = create_media_asset(request.user, photo, post.photo.name, 'image', already_saved=True)
+        MediaLink.objects.create(
+            asset=asset,
+            destination_type='post',
+            destination_id=str(post.id),
+            type='inline',
+        )
+
+    # Save video if provided
+    if video:
+        post.video = video
+        post.save()
+        asset = create_media_asset(request.user, video, post.video.name, 'video', already_saved=True)
         MediaLink.objects.create(
             asset=asset,
             destination_type='post',

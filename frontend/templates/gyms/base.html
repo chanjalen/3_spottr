@@ -2219,6 +2219,7 @@
             <!-- Media Preview -->
             <div class="post-media-preview" id="postMediaPreview">
                 <img id="postMediaImg" src="" alt="Media preview">
+                <video id="postMediaVideo" src="" controls playsinline style="display:none;width:100%;max-height:300px;border-radius:12px;"></video>
                 <button class="post-media-remove" id="postMediaRemove">&times;</button>
             </div>
 
@@ -2270,7 +2271,7 @@
             <!-- Bottom Toolbar -->
             <div class="post-toolbar">
                 <div class="post-toolbar-actions">
-                    <button class="post-toolbar-btn" id="addMediaBtn" title="Add photo">&#128247;</button>
+                    <button class="post-toolbar-btn" id="addMediaBtn" title="Add photo/video">&#128247;</button>
                     <button class="post-toolbar-btn" id="addPollBtn" title="Create poll">&#128202;</button>
                     <button class="post-toolbar-btn" id="addLinkBtn" title="Add link">&#128279;</button>
                     <button class="post-toolbar-btn" id="addTagBtn" title="Add hashtag">#</button>
@@ -2280,7 +2281,7 @@
                 <button class="post-submit-btn" id="postSubmitBtn">Post</button>
             </div>
         </div>
-        <input type="file" id="postMediaInput" accept="image/*">
+        <input type="file" id="postMediaInput" accept="image/*,video/*">
     </div>
 
     <!-- Link Input Modal -->
@@ -2679,6 +2680,7 @@
             const postMediaInput = document.getElementById('postMediaInput');
             const postMediaPreview = document.getElementById('postMediaPreview');
             const postMediaImg = document.getElementById('postMediaImg');
+            const postMediaVideo = document.getElementById('postMediaVideo');
             const postMediaRemove = document.getElementById('postMediaRemove');
             const postLinkPreview = document.getElementById('postLinkPreview');
             const postLinkUrl = document.getElementById('postLinkUrl');
@@ -2730,6 +2732,9 @@
                     attachedPrData = null;
                     postMediaPreview.classList.remove('has-media');
                     postMediaImg.src = '';
+                    postMediaImg.style.display = '';
+                    postMediaVideo.src = '';
+                    postMediaVideo.style.display = 'none';
                     postLinkPreview.classList.remove('has-link');
                     postLinkUrl.textContent = '';
                     postPollSection.classList.remove('active');
@@ -2770,13 +2775,22 @@
                     const file = e.target.files[0];
                     if (file) {
                         postMediaFile = file;
-                        const reader = new FileReader();
-                        reader.onload = function(event) {
-                            postMediaImg.src = event.target.result;
-                            postMediaPreview.classList.add('has-media');
-                            updatePostButton();
-                        };
-                        reader.readAsDataURL(file);
+                        const isVideo = file.type.startsWith('video/');
+                        if (isVideo) {
+                            postMediaImg.style.display = 'none';
+                            postMediaVideo.style.display = 'block';
+                            postMediaVideo.src = URL.createObjectURL(file);
+                        } else {
+                            postMediaVideo.style.display = 'none';
+                            postMediaImg.style.display = '';
+                            const reader = new FileReader();
+                            reader.onload = function(event) {
+                                postMediaImg.src = event.target.result;
+                            };
+                            reader.readAsDataURL(file);
+                        }
+                        postMediaPreview.classList.add('has-media');
+                        updatePostButton();
                     }
                 });
 
@@ -2785,6 +2799,9 @@
                     postMediaInput.value = '';
                     postMediaPreview.classList.remove('has-media');
                     postMediaImg.src = '';
+                    postMediaImg.style.display = '';
+                    postMediaVideo.src = '';
+                    postMediaVideo.style.display = 'none';
                     updatePostButton();
                 });
 
@@ -2906,7 +2923,11 @@
                     }
 
                     if (postMediaFile) {
-                        formData.append('photo', postMediaFile);
+                        if (postMediaFile.type.startsWith('video/')) {
+                            formData.append('video', postMediaFile);
+                        } else {
+                            formData.append('photo', postMediaFile);
+                        }
                     }
 
                     if (hasPoll && pollQuestion) {

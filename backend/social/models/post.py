@@ -42,6 +42,11 @@ class Post(BaseModel):
         null=True,
         blank=True,
     )
+    video = models.FileField(
+        upload_to='posts/videos/',
+        null=True,
+        blank=True,
+    )
     link_url = models.URLField(
         max_length=500,
         blank=True,

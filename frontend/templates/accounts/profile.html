@@ -2274,7 +2274,9 @@
     <div class="posts-grid">
         {% for post in user_posts %}
         <div class="post-thumb" data-index="{{ forloop.counter0 }}" data-post-id="{{ post.id }}" data-post-type="{{ post.type }}" data-description="{{ post.description }}" data-time="{{ post.created_at|timesince }} ago" data-date="{{ post.created_at|date:'Y-n-j' }}" data-location="{% if post.location_name %}{{ post.location_name }}{% elif post.location %}{{ post.location.name }}{% endif %}" data-like-count="{{ post.like_count }}" data-comment-count="{{ post.comment_count }}" data-user-liked="{% if post.user_liked %}true{% else %}false{% endif %}" {% if post.workout %}data-workout-name="{{ post.workout.name }}" data-workout-exercises="{{ post.workout.exercise_count }}" data-workout-sets="{{ post.workout.total_sets }}"{% endif %} onclick="openPostViewer({{ forloop.counter0 }})">
-            {% if post.photo_url %}
+            {% if post.video_url %}
+            <video src="{{ post.video_url }}" muted playsinline style="width:100%;height:100%;object-fit:cover;"></video>
+            {% elif post.photo_url %}
             <img src="{{ post.photo_url }}" alt="Post photo">
             {% elif post.workout %}
             <div class="post-thumb-content">
@@ -2597,7 +2599,9 @@
             var p = posts[idx];
             var likedCls = p.userLiked ? ' liked' : '';
             html += '<div class="calendar-post-card" data-post-id="' + p.postId + '" data-post-type="' + p.postType + '" data-post-index="' + idx + '">';
-            if (p.imageUrl) {
+            if (p.videoUrl) {
+                html += '<video class="calendar-post-card-image" src="' + p.videoUrl + '" controls playsinline style="width:100%;border-radius:12px;"></video>';
+            } else if (p.imageUrl) {
                 html += '<img class="calendar-post-card-image" src="' + p.imageUrl + '" alt="Post">';
             } else if (p.workoutName) {
                 html += '<div class="calendar-post-workout-summary">';
@@ -2779,12 +2783,14 @@
     var posts = [];
     postThumbs.forEach(function(thumb) {
         var img = thumb.querySelector('img');
+        var vid = thumb.querySelector('video');
         var placeholder = thumb.querySelector('.post-placeholder');
         var workoutName = thumb.getAttribute('data-workout-name') || '';
         var workoutExercises = thumb.getAttribute('data-workout-exercises') || '';
         var workoutSets = thumb.getAttribute('data-workout-sets') || '';
         posts.push({
             imageUrl: img ? img.src : null,
+            videoUrl: vid ? vid.src : null,
             emoji: placeholder ? placeholder.textContent.trim() : null,
             description: thumb.getAttribute('data-description') || '',
             time: thumb.getAttribute('data-time') || '',
@@ -2820,7 +2826,9 @@
         html += '</div>';
 
         // Post visual content
-        if (post.imageUrl) {
+        if (post.videoUrl) {
+            html += '<video class="post-card-image" src="' + post.videoUrl + '" controls playsinline style="width:100%;border-radius:12px;"></video>';
+        } else if (post.imageUrl) {
             html += '<img class="post-card-image" src="' + post.imageUrl + '" alt="Post">';
         } else if (post.workoutName) {
             html += '<div class="post-card-workout-summary">';
