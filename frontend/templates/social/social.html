@@ -542,6 +542,32 @@
         justify-content: space-between;
     }
 
+    .conv-zap-btn {
+        flex-shrink: 0;
+        width: 34px;
+        height: 34px;
+        border: none;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #fbbf24, #f59e0b);
+        color: #000;
+        font-size: 16px;
+        cursor: pointer;
+        transition: all var(--duration);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-left: 8px;
+    }
+
+    .conv-zap-btn:hover {
+        transform: scale(1.15);
+    }
+
+    .conv-zap-btn.sent {
+        background: linear-gradient(135deg, #4ade80, #22c55e);
+        pointer-events: none;
+    }
+
     /* Group member count badge */
     .group-members-badge {
         display: inline-flex;
@@ -1687,6 +1713,7 @@
                 {% endif %}
             </div>
         </div>
+        <button class="conv-zap-btn" onclick="event.stopPropagation(); sendQuickZap('{{ conv.partner.id }}', this)" title="Send Zap">⚡</button>
     </div>
     {% empty %}
     <div class="social-empty">
@@ -2049,8 +2076,8 @@ function loadMessages(type, id) {
             const isZap = msg.content === 'ZAP';
             const bubbleClass = isZap ? 'zap' : (isSent ? 'sent' : 'received');
 
-            const usernameHtml = (!isSent && currentChatType === 'dm' && currentChatPartnerUsername)
-                ? `<a href="/accounts/profile/${currentChatPartnerUsername}/" class="chat-username-link">${msg.sender_username}</a>`
+            const usernameHtml = (!isSent && msg.sender_username)
+                ? `<a href="/accounts/profile/${msg.sender_username}/" class="chat-username-link">${msg.sender_username}</a>`
                 : msg.sender_username;
 
             html += `
@@ -2139,6 +2166,29 @@ function sendZap() {
         messagesEl.scrollTop = messagesEl.scrollHeight;
     })
     .catch(err => console.error('Error sending zap:', err));
+}
+
+function sendQuickZap(userId, btn) {
+    btn.disabled = true;
+    fetch(`/api/messaging/zap/${userId}/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrftoken },
+        credentials: 'same-origin',
+    })
+    .then(r => r.json())
+    .then(data => {
+        btn.textContent = '✓';
+        btn.classList.add('sent');
+        setTimeout(() => {
+            btn.textContent = '⚡';
+            btn.classList.remove('sent');
+            btn.disabled = false;
+        }, 2000);
+    })
+    .catch(err => {
+        console.error('Error sending zap:', err);
+        btn.disabled = false;
+    });
 }
 
 // ============ GROUPS ============
@@ -2276,19 +2326,28 @@ function togglePending() {
 
 // ============ PENDING ACTIONS ============
 function followBack(userId, btn) {
-    fetch(`/api/social/follow/${userId}/`, {
+    btn.disabled = true;
+    var formData = new FormData();
+    formData.append('user_id', userId);
+
+    fetch('/accounts/api/follow-toggle/', {
         method: 'POST',
         headers: { 'X-CSRFToken': csrftoken },
         credentials: 'same-origin',
+        body: formData,
     })
     .then(r => r.json())
     .then(data => {
-        btn.textContent = 'Following';
-        btn.classList.remove('accept');
-        btn.classList.add('joined');
-        btn.disabled = true;
+        if (data.action === 'followed') {
+            btn.textContent = 'Following';
+            btn.classList.remove('accept');
+            btn.classList.add('joined');
+        }
     })
-    .catch(err => console.error('Error:', err));
+    .catch(err => {
+        console.error('Error:', err);
+        btn.disabled = false;
+    });
 }
 
 function acceptInvite(inviteId, btn) {

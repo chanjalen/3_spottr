@@ -14,7 +14,7 @@ class GymListSerializer(serializers.ModelSerializer):
     def get_is_enrolled(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
-            return request.user.enrolled_gym_id == obj.id
+            return request.user.enrolled_gyms.filter(id=obj.id).exists()
         return False
 
 
@@ -37,7 +37,7 @@ class GymDetailSerializer(serializers.ModelSerializer):
     def get_is_enrolled(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
-            return request.user.enrolled_gym_id == obj.id
+            return request.user.enrolled_gyms.filter(id=obj.id).exists()
         return False
 
 
