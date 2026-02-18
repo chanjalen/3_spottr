@@ -275,7 +275,10 @@
     .streak-modal-overlay {
         display: none;
         position: fixed;
-        inset: 0;
+        top: 0;
+        bottom: 0;
+        left: max(0px, calc(50vw - 270px));
+        right: max(0px, calc(50vw - 270px));
         background: rgba(0, 0, 0, 0.6);
         z-index: 200;
         align-items: flex-end;

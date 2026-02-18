@@ -1639,7 +1639,7 @@
 
     {% for conv in dm_conversations %}
     <div class="conversation-row fade-in" style="animation-delay: {{ forloop.counter0 }}00ms"
-         onclick="openChat('dm', '{{ conv.partner.id }}', '{{ conv.partner.display_name }}', '{{ conv.partner.username }}')">
+         onclick="openChat('dm', '{{ conv.partner.id }}', '{{ conv.partner.display_name }}', '{{ conv.partner.username }}', {{ conv.partner_checked_in|lower }})">
         <div class="conversation-avatar">
             {% if conv.partner.avatar_url %}
             <img src="{{ conv.partner.avatar_url }}" alt="{{ conv.partner.display_name }}">
@@ -1661,7 +1661,7 @@
                 {% endif %}
             </div>
         </div>
-        <button class="conv-zap-btn" onclick="event.stopPropagation(); sendQuickZap('{{ conv.partner.id }}', this)" title="Send Zap">⚡</button>
+        {% if not conv.partner_checked_in %}<button class="conv-zap-btn" onclick="event.stopPropagation(); sendQuickZap('{{ conv.partner.id }}', this)" title="Send Zap">⚡</button>{% endif %}
     </div>
     {% empty %}
     <div class="social-empty">
@@ -1955,7 +1955,7 @@ let currentChatType = null;
 let currentChatId = null;
 let currentChatPartnerUsername = null;
 
-function openChat(type, id, name, username) {
+function openChat(type, id, name, username, partnerCheckedIn) {
     currentChatType = type;
     currentChatId = id;
     currentChatPartnerUsername = username || null;
@@ -1975,8 +1975,8 @@ function openChat(type, id, name, username) {
     }
     document.getElementById('chatAvatarLetter').textContent = name.charAt(0).toUpperCase();
 
-    // Show/hide zap button (DM only)
-    document.getElementById('chatZapBtn').style.display = type === 'dm' ? 'block' : 'none';
+    // Show/hide zap button (DM only, and only if partner hasn't checked in today)
+    document.getElementById('chatZapBtn').style.display = (type === 'dm' && !partnerCheckedIn) ? 'block' : 'none';
 
     // Update avatar style for group
     const avatarEl = document.getElementById('chatAvatar');

@@ -48,9 +48,10 @@ class Message(BaseModel):
     class Meta:
         ordering = ['-created_at']
         indexes = [
-            models.Index(fields=['recipient', '-created_at'], name='idx_message_recipient'),
-            models.Index(fields=['group', '-created_at'], name='idx_message_group'),
-            models.Index(fields=['sender', '-created_at'], name='idx_message_sender'),
+            # Composite cursor indexes — include id for stable tie-breaking on equal timestamps
+            models.Index(fields=['group', '-created_at', '-id'], name='idx_message_group_cursor'),
+            models.Index(fields=['sender', 'recipient', '-created_at', '-id'], name='idx_message_dm_sent'),
+            models.Index(fields=['recipient', 'sender', '-created_at', '-id'], name='idx_message_dm_recv'),
         ]
         constraints = [
             models.CheckConstraint(
