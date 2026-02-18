@@ -516,7 +516,9 @@ def finish_workout_view(request, workout_id):
 
         # Update streak
         from workouts.services.streak_service import update_streak
+        from groups.services import update_group_streaks_for_user
         update_streak(request.user, activity_type='workout')
+        update_group_streaks_for_user(request.user)
 
         # Increment total workouts
         request.user.total_workouts = F('total_workouts') + 1

@@ -8,6 +8,10 @@ urlpatterns = [
     path('', views.group_list, name='group-list'),
     path('create/', views.group_create, name='group-create'),
     path('me/', views.my_groups, name='my-groups'),
+
+    # Invite codes (must be before <str:group_id>/ to avoid wildcard capture)
+    path('join-via-code/', views.join_via_code, name='join-via-code'),
+
     path('<str:group_id>/', views.group_detail, name='group-detail'),
     path('<str:group_id>/update/', views.group_update, name='group-update'),
     path('<str:group_id>/delete/', views.group_delete, name='group-delete'),
@@ -27,7 +31,6 @@ urlpatterns = [
     # Invite codes
     path('<str:group_id>/invite-codes/', views.invite_code_list_create, name='invite-code-list-create'),
     path('<str:group_id>/invite-codes/<str:code_id>/deactivate/', views.invite_code_deactivate, name='invite-code-deactivate'),
-    path('join-via-code/', views.join_via_code, name='join-via-code'),
 
     # Join requests (private groups)
     path('<str:group_id>/join-requests/', views.join_request_list, name='join-request-list'),

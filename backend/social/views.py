@@ -471,8 +471,10 @@ def create_checkin_view(request):
 
         # Update streak
         from workouts.services.streak_service import update_streak
+        from groups.services import update_group_streaks_for_user
         request.user.refresh_from_db()
         update_streak(request.user, activity_type='checkin')
+        update_group_streaks_for_user(request.user)
 
         # Save the photo if provided
         if photo:
