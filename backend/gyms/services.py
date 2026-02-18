@@ -180,6 +180,7 @@ def create_workout_invite(user, data):
         except Group.DoesNotExist:
             raise WorkoutInviteNotFoundError("Group not found.")
 
+    spots = data.get('spots_available', 1)
     return WorkoutInvite.objects.create(
         user=user,
         gym=gym,
@@ -188,7 +189,8 @@ def create_workout_invite(user, data):
         description=data['description'],
         workout_type=data['workout_type'],
         scheduled_time=data['scheduled_time'],
-        spots_available=data.get('spots_available', 1),
+        spots_available=spots,
+        total_spots=spots,
         type=data['type'],
         expires_at=data['expires_at'],
     )
@@ -207,16 +209,16 @@ def list_workout_invites(user, gym_id=None):
     # User's own invites (hide expired)
     own = Q(user=user, expires_at__gt=now)
 
-    # Gym invites visible to enrolled users (not expired)
+    # Gym invites visible to enrolled users (not expired, not full)
     enrolled_gym_ids = user.enrolled_gyms.values_list('id', flat=True)
-    gym_q = Q(type='gym', gym_id__in=enrolled_gym_ids, expires_at__gt=now)
+    gym_q = Q(type='gym', gym_id__in=enrolled_gym_ids, expires_at__gt=now, spots_available__gt=0)
 
-    # Group invites for user's groups (not expired)
+    # Group invites for user's groups (not expired, not full)
     user_group_ids = user.group_memberships.values_list('group_id', flat=True)
-    group_q = Q(type='group', group_id__in=user_group_ids, expires_at__gt=now)
+    group_q = Q(type='group', group_id__in=user_group_ids, expires_at__gt=now, spots_available__gt=0)
 
-    # Individual invites sent to this user (not expired)
-    individual_q = Q(type='individual', invited_user=user, expires_at__gt=now)
+    # Individual invites sent to this user (not expired, not full)
+    individual_q = Q(type='individual', invited_user=user, expires_at__gt=now, spots_available__gt=0)
 
     qs = WorkoutInvite.objects.filter(own | gym_q | group_q | individual_q).distinct()
 
@@ -268,10 +270,8 @@ def create_join_request(user, invite_id, description):
     if invite.user_id == user.id:
         raise DuplicateJoinRequestError("You cannot join your own invite.")
 
-    if JoinRequest.objects.filter(
-        workout_invite=invite, user=user, status=JoinRequest.Status.PENDING
-    ).exists():
-        raise DuplicateJoinRequestError("You already have a pending request for this invite.")
+    if JoinRequest.objects.filter(workout_invite=invite, user=user).exists():
+        raise DuplicateJoinRequestError("You have already requested to join this invite.")
 
     return JoinRequest.objects.create(
         workout_invite=invite,
@@ -343,19 +343,56 @@ def accept_join_request(user, request_id):
     Follow.objects.get_or_create(follower=creator, following=requester)
     Follow.objects.get_or_create(follower=requester, following=creator)
 
-    # Send a DM with workout details
-    from messaging.models import Message
     scheduled = invite.scheduled_time.strftime('%b %d at %I:%M %p') if invite.scheduled_time else 'TBD'
     gym_name = invite.gym.name if invite.gym else 'the gym'
-    msg_content = (
-        f"{creator.display_name} and {requester.display_name} have a "
-        f"{invite.workout_type} workout at {gym_name} - {scheduled}"
-    )
-    Message.objects.create(
-        sender=creator,
-        recipient=requester,
-        content=msg_content,
-    )
+
+    if invite.total_spots == 1:
+        # 1-on-1 invite → send a DM
+        from messaging.models import Message
+        msg_content = (
+            f"{creator.display_name} and {requester.display_name} have a "
+            f"{invite.workout_type} workout at {gym_name} - {scheduled}"
+        )
+        Message.objects.create(
+            sender=creator,
+            recipient=requester,
+            content=msg_content,
+        )
+    else:
+        # Multi-person invite → create or reuse a group chat
+        from groups.models import Group, GroupMember
+        from messaging.models import Message
+
+        if invite.workout_chat is None:
+            group = Group.objects.create(
+                created_by=creator,
+                name=f"{invite.workout_type} at {gym_name}",
+                description=invite.description,
+                privacy=Group.Privacy.PRIVATE,
+            )
+            GroupMember.objects.create(
+                group=group,
+                user=creator,
+                role=GroupMember.Role.CREATOR,
+            )
+            invite.workout_chat = group
+            invite.save(update_fields=['workout_chat', 'updated_at'])
+
+        GroupMember.objects.get_or_create(
+            group=invite.workout_chat,
+            user=requester,
+            defaults={'role': GroupMember.Role.MEMBER},
+        )
+
+        msg_content = (
+            f"{requester.display_name} joined! "
+            f"{invite.workout_type} at {gym_name} - {scheduled}"
+        )
+        Message.objects.create(
+            sender=creator,
+            group=invite.workout_chat,
+            content=msg_content,
+        )
 
     return join_request
 

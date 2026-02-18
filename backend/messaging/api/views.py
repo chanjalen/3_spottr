@@ -176,6 +176,7 @@ def group_conversations(request):
         conversations.append({
             'group_id': str(msg.group.id),
             'group_name': msg.group.name,
+            'group_streak': msg.group.group_streak,
             'latest_message': msg,
             'unread_count': unread,
         })

@@ -1177,6 +1177,164 @@
         font-size: 12px;
         font-weight: 600;
         color: var(--text-secondary);
+        cursor: pointer;
+        border: 1px solid var(--border-default);
+        transition: border-color var(--duration) var(--ease-out),
+                    box-shadow var(--duration) var(--ease-out);
+        user-select: none;
+    }
+
+    .group-profile-streak:hover {
+        border-color: var(--border-hover);
+        box-shadow: var(--shadow-glow);
+    }
+
+    .group-profile-streak:active {
+        opacity: 0.8;
+    }
+
+    /* ── Inline streak modal ── */
+    .group-streak-modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.55);
+        z-index: 300;
+        align-items: flex-end;
+        justify-content: center;
+    }
+
+    .group-streak-modal-overlay.open {
+        display: flex;
+    }
+
+    .group-streak-modal {
+        background: var(--bg-surface);
+        border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+        width: 100%;
+        max-height: 65vh;
+        display: flex;
+        flex-direction: column;
+        animation: slideUp 0.26s var(--ease-out) both;
+    }
+
+    .group-streak-modal-handle {
+        width: 36px;
+        height: 4px;
+        background: var(--text-muted);
+        border-radius: 2px;
+        margin: 12px auto 0;
+        flex-shrink: 0;
+    }
+
+    .group-streak-modal-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 14px 20px 12px;
+        border-bottom: 1px solid var(--border-subtle);
+        flex-shrink: 0;
+    }
+
+    .group-streak-modal-title {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-primary);
+        flex: 1;
+    }
+
+    .group-streak-modal-badge {
+        font-size: 11px;
+        font-weight: 700;
+        color: #fff;
+        background: #ef4444;
+        border-radius: 10px;
+        padding: 2px 7px;
+        min-width: 20px;
+        text-align: center;
+    }
+
+    .group-streak-modal-badge.green {
+        background: #22c55e;
+    }
+
+    .group-streak-modal-close {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        font-size: 20px;
+        cursor: pointer;
+        padding: 2px 4px;
+        line-height: 1;
+        transition: color var(--duration);
+    }
+
+    .group-streak-modal-close:hover {
+        color: var(--text-primary);
+    }
+
+    .group-streak-modal-body {
+        overflow-y: auto;
+        padding: 12px 20px 28px;
+        flex: 1;
+    }
+
+    .streak-inline-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 0;
+    }
+
+    .streak-inline-row + .streak-inline-row {
+        border-top: 1px solid var(--border-subtle);
+    }
+
+    .streak-inline-avatar {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        font-weight: 700;
+        color: #fff;
+        flex-shrink: 0;
+        overflow: hidden;
+    }
+
+    .streak-inline-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .streak-inline-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .streak-inline-name {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+
+    .streak-inline-username {
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+
+    .streak-inline-count {
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        gap: 3px;
+        flex-shrink: 0;
     }
 
     /* Edit form */
@@ -1632,7 +1790,7 @@
 </div>
 
 <!-- ==================== GROUP PROFILE SLIDE-OVER ==================== -->
-<div class="group-profile-container" id="groupProfileContainer">
+<div class="group-profile-container" id="groupProfileContainer" style="position:relative;">
     <div class="group-profile-header">
         <button class="group-profile-back" onclick="closeGroupProfile()">&#8592;</button>
         <span class="group-profile-header-title" id="groupProfileHeaderTitle">Group Profile</span>
@@ -1653,7 +1811,7 @@
         <div class="group-profile-meta">
             <span class="group-profile-privacy-badge" id="groupProfilePrivacy"></span>
             <span class="group-profile-meta-item" id="groupProfileMemberCount"></span>
-            <span class="group-profile-streak" id="groupProfileStreak" style="display:none;"></span>
+            <span class="group-profile-streak" id="groupProfileStreak" style="display:none;" onclick="openGroupStreakModal()" role="button" title="View streak details"></span>
         </div>
     </div>
 
@@ -1682,6 +1840,21 @@
     <div class="group-profile-members">
         <div class="group-profile-members-title">Members</div>
         <div id="groupProfileMembersList"></div>
+    </div>
+</div>
+
+<!-- ==================== INLINE STREAK MODAL (inside group profile) ==================== -->
+<div class="group-streak-modal-overlay" id="groupStreakOverlay" onclick="closeGroupStreakModal()">
+    <div class="group-streak-modal" onclick="event.stopPropagation()">
+        <div class="group-streak-modal-handle"></div>
+        <div class="group-streak-modal-header">
+            <span class="group-streak-modal-title" id="groupStreakModalTitle">Loading…</span>
+            <span class="group-streak-modal-badge" id="groupStreakModalBadge" style="display:none;"></span>
+            <button class="group-streak-modal-close" onclick="closeGroupStreakModal()">&times;</button>
+        </div>
+        <div class="group-streak-modal-body" id="groupStreakModalBody">
+            <div class="modal-spinner"><div class="spinner"></div></div>
+        </div>
     </div>
 </div>
 
@@ -2482,5 +2655,100 @@ document.getElementById('chatInput').addEventListener('keydown', function(e) {
 document.getElementById('joinCodeInput').addEventListener('input', function() {
     this.value = this.value.toUpperCase();
 });
+
+// ============ GROUP STREAK MODAL ============
+let cachedGroupStreakMembers = null;
+
+function openGroupStreakModal() {
+    const overlay = document.getElementById('groupStreakOverlay');
+    overlay.classList.add('open');
+
+    const groupStreak = currentGroupProfileData ? currentGroupProfileData.group_streak : 0;
+    const title = groupStreak > 0 ? 'Not Checked In Today' : 'No Active Streak';
+    document.getElementById('groupStreakModalTitle').textContent = title;
+    document.getElementById('groupStreakModalBadge').style.display = 'none';
+
+    if (cachedGroupStreakMembers && cachedGroupStreakMembers.groupId === currentGroupProfileId) {
+        renderGroupStreakMembers(cachedGroupStreakMembers.members, groupStreak);
+        return;
+    }
+
+    document.getElementById('groupStreakModalBody').innerHTML =
+        '<div class="modal-spinner"><div class="spinner"></div></div>';
+
+    fetch(`/api/groups/${currentGroupProfileId}/streak/`, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin',
+    })
+    .then(r => { if (!r.ok) throw new Error('Failed'); return r.json(); })
+    .then(data => {
+        cachedGroupStreakMembers = { groupId: currentGroupProfileId, members: data.members };
+        renderGroupStreakMembers(data.members, groupStreak);
+    })
+    .catch(() => {
+        document.getElementById('groupStreakModalBody').innerHTML = `
+            <div class="modal-empty">
+                <div class="modal-empty-icon">⚠️</div>
+                <div class="modal-empty-title">Couldn't load data</div>
+                <div class="modal-empty-subtitle">Please try again.</div>
+            </div>`;
+    });
+}
+
+function renderGroupStreakMembers(members, groupStreak) {
+    const flagged = groupStreak > 0
+        ? members.filter(m => !m.has_activity_today)
+        : members.filter(m => m.current_streak === 0);
+
+    const badge = document.getElementById('groupStreakModalBadge');
+    badge.textContent = flagged.length;
+    badge.className = 'group-streak-modal-badge' + (flagged.length === 0 ? ' green' : '');
+    badge.style.display = '';
+
+    const body = document.getElementById('groupStreakModalBody');
+
+    if (flagged.length === 0) {
+        const emptyTitle = groupStreak > 0 ? "Everyone's checked in! 🎉" : "All members are on a streak!";
+        const emptySub = groupStreak > 0
+            ? "All members have logged activity today."
+            : "Every member has an active personal streak.";
+        body.innerHTML = `
+            <div class="modal-empty">
+                <div class="modal-empty-icon">✅</div>
+                <div class="modal-empty-title">${emptyTitle}</div>
+                <div class="modal-empty-subtitle">${emptySub}</div>
+            </div>`;
+        return;
+    }
+
+    body.innerHTML = flagged.map(m => {
+        const displayName = m.display_name || m.username;
+        const avatarHtml = m.avatar_url
+            ? `<img src="${m.avatar_url}" alt="${escapeHtml(displayName)}">`
+            : escapeHtml(displayName.charAt(0).toUpperCase());
+        return `
+            <div class="streak-inline-row">
+                <div class="streak-inline-avatar">${avatarHtml}</div>
+                <div class="streak-inline-info">
+                    <div class="streak-inline-name">${escapeHtml(displayName)}</div>
+                    <div class="streak-inline-username">@${escapeHtml(m.username)}</div>
+                </div>
+                <div class="streak-inline-count">⚡ ${m.current_streak}d</div>
+            </div>`;
+    }).join('');
+}
+
+function closeGroupStreakModal() {
+    document.getElementById('groupStreakOverlay').classList.remove('open');
+}
+
+// Clear cached streak data when opening a different group
+const _origOpenGroupProfile = openGroupProfile;
+openGroupProfile = function(groupId) {
+    if (groupId !== currentGroupProfileId) {
+        cachedGroupStreakMembers = null;
+    }
+    _origOpenGroupProfile(groupId);
+};
 </script>
 {% endblock %}

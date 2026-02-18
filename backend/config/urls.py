@@ -14,6 +14,7 @@ urlpatterns = [
     path("gyms/", include("gyms.urls")),
     path("social/", include("social.urls")),
     path("workouts/", include("workouts.urls")),
+    path("groups/", include("groups.urls")),
     path("api/gyms/", include("gyms.api.urls")),
     path("api/groups/", include("groups.api.urls")),
     path("api/messaging/", include("messaging.api.urls")),

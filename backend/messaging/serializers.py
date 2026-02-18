@@ -207,6 +207,7 @@ class GroupConversationSerializer(serializers.Serializer):
     """Represents a group conversation preview."""
     group_id = serializers.CharField()
     group_name = serializers.CharField()
+    group_streak = serializers.IntegerField()
     latest_message = MessageSerializer()
     unread_count = serializers.IntegerField()
 

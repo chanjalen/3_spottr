@@ -92,10 +92,19 @@ class WorkoutInvite(BaseModel):
         related_name='received_workout_invites',
     )
 
+    workout_chat = models.ForeignKey(
+        'groups.Group',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='workout_invite',
+    )
+
     description = models.CharField(max_length=255)
     workout_type = models.CharField(max_length=50)
     scheduled_time = models.DateTimeField()
     spots_available = models.IntegerField(default=1)
+    total_spots = models.IntegerField(default=1)
     type = models.CharField(max_length=50)  # gym invite, group/individual invite
     expires_at = models.DateTimeField()
 

@@ -87,6 +87,7 @@ class GroupMember(BaseModel):
         default=Role.MEMBER,
     )
     joined_at = models.DateTimeField(auto_now_add=True)
+    last_checkin_date = models.DateField(null=True, blank=True)
 
     objects = GroupMemberManager()
 

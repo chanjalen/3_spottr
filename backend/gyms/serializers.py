@@ -82,7 +82,7 @@ class WorkoutInviteListSerializer(serializers.ModelSerializer):
         model = WorkoutInvite
         fields = [
             'id', 'username', 'gym_name', 'description', 'workout_type',
-            'scheduled_time', 'spots_available', 'type', 'is_expired',
+            'scheduled_time', 'spots_available', 'total_spots', 'type', 'is_expired',
             'expires_at', 'created_at',
         ]
 
@@ -96,6 +96,7 @@ class WorkoutInviteDetailSerializer(serializers.ModelSerializer):
     gym_name = serializers.CharField(source='gym.name', read_only=True)
     invited_username = serializers.CharField(source='invited_user.username', read_only=True, default=None)
     group_name = serializers.CharField(source='group.name', read_only=True, default=None)
+    workout_chat_id = serializers.CharField(source='workout_chat.id', read_only=True, default=None)
     is_expired = serializers.SerializerMethodField()
     join_requests = serializers.SerializerMethodField()
 
@@ -103,9 +104,10 @@ class WorkoutInviteDetailSerializer(serializers.ModelSerializer):
         model = WorkoutInvite
         fields = [
             'id', 'username', 'gym_name', 'group_name', 'invited_username',
-            'description', 'workout_type', 'scheduled_time', 'spots_available',
+            'description', 'workout_type', 'scheduled_time',
+            'spots_available', 'total_spots',
             'type', 'is_expired', 'expires_at', 'join_requests',
-            'created_at', 'updated_at',
+            'workout_chat_id', 'created_at', 'updated_at',
         ]
 
     def get_is_expired(self, obj):
