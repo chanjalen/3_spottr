@@ -1954,6 +1954,9 @@ function switchTab(tabName) {
 let currentChatType = null;
 let currentChatId = null;
 let currentChatPartnerUsername = null;
+let chatOldestId = null;
+let chatHasMore = false;
+let chatLoadingMore = false;
 
 function openChat(type, id, name, username, partnerCheckedIn) {
     currentChatType = type;
@@ -2014,9 +2017,58 @@ function closeChat() {
     }
 }
 
+function buildMessageHtml(msg) {
+    const isSent = msg.sender_username === '{{ user.username }}';
+    const isZap = msg.content === 'ZAP';
+    const bubbleClass = isZap ? 'zap' : (isSent ? 'sent' : 'received');
+
+    const usernameHtml = (!isSent && msg.sender_username)
+        ? `<a href="/accounts/profile/${msg.sender_username}/" class="chat-username-link">${msg.sender_username}</a>`
+        : msg.sender_username;
+
+    let postCard = '';
+    if (msg.shared_post && msg.shared_post.id) {
+        try { postCard = buildSharedPostCard(msg.shared_post); } catch (e) { console.error('Error building shared post card:', e); }
+    }
+
+    let contentHtml;
+    if (isZap) {
+        contentHtml = '⚡';
+    } else if (postCard) {
+        const msgText = msg.content && msg.content !== 'Shared a post' && msg.content !== 'Shared a check-in'
+            ? `<div style="margin-top:8px;padding:8px 10px;background:var(--bg-elevated,#222);border-radius:10px;font-size:14px;color:var(--text-primary,#fff);">${escapeHtml(msg.content)}</div>` : '';
+        contentHtml = postCard + msgText;
+    } else {
+        contentHtml = escapeHtml(msg.content);
+    }
+
+    return `<div class="chat-bubble ${bubbleClass}">
+        ${contentHtml}
+        <div class="chat-bubble-time">${usernameHtml}${msg.created_at ? ' · ' + formatTime(msg.created_at) : ''}</div>
+    </div>`;
+}
+
+function markMessagesRead(messages) {
+    const messageIds = messages.filter(m => m.sender_username !== '{{ user.username }}').map(m => m.id);
+    if (messageIds.length > 0) {
+        fetch('/api/messaging/read/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ message_ids: messageIds })
+        });
+    }
+}
+
 function loadMessages(type, id) {
     const messagesEl = document.getElementById('chatMessages');
     messagesEl.innerHTML = '<div class="social-empty"><p class="social-empty-subtext">Loading messages...</p></div>';
+    chatOldestId = null;
+    chatHasMore = false;
+    chatLoadingMore = false;
+
+    // Remove any previous scroll listener
+    messagesEl.onscroll = null;
 
     let url;
     if (type === 'dm') {
@@ -2034,63 +2086,74 @@ function loadMessages(type, id) {
             return;
         }
 
-        // Messages are returned oldest-first from the API
-        let html = '';
-        for (const msg of messages) {
-            const isSent = msg.sender_username === '{{ user.username }}';
-            const isZap = msg.content === 'ZAP';
-            const bubbleClass = isZap ? 'zap' : (isSent ? 'sent' : 'received');
+        chatOldestId = data.oldest_id || null;
+        chatHasMore = data.has_more || false;
 
-            const usernameHtml = (!isSent && msg.sender_username)
-                ? `<a href="/accounts/profile/${msg.sender_username}/" class="chat-username-link">${msg.sender_username}</a>`
-                : msg.sender_username;
-
-            // Build shared post card if present
-            let postCard = '';
-            if (msg.shared_post && msg.shared_post.id) {
-                try {
-                    postCard = buildSharedPostCard(msg.shared_post);
-                } catch (e) {
-                    console.error('Error building shared post card:', e);
-                }
-            }
-
-            let contentHtml;
-            if (isZap) {
-                contentHtml = '⚡';
-            } else if (postCard) {
-                // Show the post card, and the user's message below it if it's not the default
-                const msgText = msg.content && msg.content !== 'Shared a post' && msg.content !== 'Shared a check-in'
-                    ? `<div style="margin-top:8px;padding:8px 10px;background:var(--bg-elevated,#222);border-radius:10px;font-size:14px;color:var(--text-primary,#fff);">${escapeHtml(msg.content)}</div>` : '';
-                contentHtml = postCard + msgText;
-            } else {
-                contentHtml = escapeHtml(msg.content);
-            }
-
-            html += `
-                <div class="chat-bubble ${bubbleClass}">
-                    ${contentHtml}
-                    <div class="chat-bubble-time">${usernameHtml}${msg.created_at ? ' · ' + formatTime(msg.created_at) : ''}</div>
-                </div>
-            `;
-        }
-        messagesEl.innerHTML = html;
+        messagesEl.innerHTML = messages.map(buildMessageHtml).join('');
         messagesEl.scrollTop = messagesEl.scrollHeight;
 
-        // Mark as read
-        const messageIds = messages.filter(m => m.sender_username !== '{{ user.username }}').map(m => m.id);
-        if (messageIds.length > 0) {
-            fetch('/api/messaging/read/', {
-                method: 'POST',
-                headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/json' },
-                credentials: 'same-origin',
-                body: JSON.stringify({ message_ids: messageIds })
-            });
-        }
+        markMessagesRead(messages);
+
+        // Attach scroll listener for infinite scroll upward
+        messagesEl.onscroll = function() {
+            if (messagesEl.scrollTop < 80 && chatHasMore && !chatLoadingMore) {
+                loadOlderMessages(type, id);
+            }
+        };
     })
     .catch(err => {
         console.error('Error loading messages:', err);
         messagesEl.innerHTML = '<div class="social-empty"><p class="social-empty-subtext">Failed to load messages</p></div>';
+    });
+}
+
+function loadOlderMessages(type, id) {
+    if (!chatOldestId || chatLoadingMore) return;
+    chatLoadingMore = true;
+
+    const messagesEl = document.getElementById('chatMessages');
+
+    // Show a subtle loading indicator at the top
+    const loader = document.createElement('div');
+    loader.id = 'olderMsgsLoader';
+    loader.style.cssText = 'text-align:center;padding:8px;font-size:12px;color:var(--text-muted,#888);';
+    loader.textContent = 'Loading older messages...';
+    messagesEl.prepend(loader);
+
+    let url;
+    if (type === 'dm') {
+        url = `/api/messaging/dm/${id}/?before_id=${chatOldestId}`;
+    } else {
+        url = `/api/messaging/groups/${id}/messages/?before_id=${chatOldestId}`;
+    }
+
+    fetch(url, { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(data => {
+        loader.remove();
+        const messages = data.results || [];
+        if (messages.length === 0) {
+            chatHasMore = false;
+            chatLoadingMore = false;
+            return;
+        }
+
+        chatOldestId = data.oldest_id || chatOldestId;
+        chatHasMore = data.has_more || false;
+
+        // Preserve scroll position when prepending
+        const prevHeight = messagesEl.scrollHeight;
+        const html = messages.map(buildMessageHtml).join('');
+        messagesEl.insertAdjacentHTML('afterbegin', html);
+        messagesEl.scrollTop = messagesEl.scrollHeight - prevHeight;
+
+        markMessagesRead(messages);
+        chatLoadingMore = false;
+    })
+    .catch(err => {
+        console.error('Error loading older messages:', err);
+        loader.remove();
+        chatLoadingMore = false;
     });
 }
 
