@@ -63,6 +63,15 @@ def social_view(request):
             read_receipts__user=user
         ).count()
 
+        from workouts.services.streak_service import get_streak_date
+        from workouts.models import Streak, RestDay
+        today_streak = get_streak_date()
+        streak_obj = Streak.objects.filter(user=partner).first()
+        partner_checked_in = (
+            (streak_obj is not None and streak_obj.last_streak_date == today_streak)
+            or RestDay.objects.filter(user=partner, streak_date=today_streak).exists()
+        )
+
         dm_conversations.append({
             'partner': partner,
             'last_message': last_msg.content[:80],
@@ -70,6 +79,7 @@ def social_view(request):
             'time_ago': get_time_ago(last_msg.created_at),
             'unread_count': unread_count,
             'is_zap': last_msg.content == 'ZAP',
+            'partner_checked_in': partner_checked_in,
         })
 
     # Sort DM conversations by last message time

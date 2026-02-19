@@ -1,4 +1,5 @@
-from django.db.models import Q, Max, Subquery, OuterRef
+from django.db.models import Q, Max, Count, Subquery, OuterRef
+from django.db.models import Prefetch
 
 from .models import Message, MessageRead
 from .exceptions import (
@@ -10,6 +11,7 @@ from .exceptions import (
     PostNotFoundError,
     CannotMessageSelfError,
     RecipientNotFoundError,
+    RecipientAlreadyCheckedInError,
 )
 
 
@@ -63,6 +65,22 @@ def _get_post(post_id):
         raise PostNotFoundError("Post not found.")
 
 
+def _check_recipient_not_checked_in(recipient):
+    """Raise if the recipient has already checked in today (workout, check-in, or rest day)."""
+    from workouts.services.streak_service import get_streak_date
+    from workouts.models import Streak, RestDay
+    today_streak = get_streak_date()
+    streak_obj = Streak.objects.filter(user=recipient).first()
+    already_active = (
+        streak_obj is not None and streak_obj.last_streak_date == today_streak
+    )
+    already_rested = RestDay.objects.filter(user=recipient, streak_date=today_streak).exists()
+    if already_active or already_rested:
+        raise RecipientAlreadyCheckedInError(
+            f"{recipient.username} has already checked in today and can't be zapped."
+        )
+
+
 def _get_quick_workout(qw_id):
     from social.models import QuickWorkout
     try:
@@ -85,6 +103,7 @@ def send_zap(sender, recipient_id):
     recipient = _get_user(recipient_id)
     _check_no_block(sender, recipient)
     _check_mutual_follow(sender, recipient)
+    _check_recipient_not_checked_in(recipient)
 
     message = Message.objects.create(
         sender=sender,
@@ -177,111 +196,192 @@ def list_dm_conversations(user):
     """
     Return a list of users the authenticated user has DM conversations with,
     along with the latest message in each conversation.
-    Returns a queryset of Messages (the latest message per conversation partner).
-    """
-    # Get all DM messages involving the user
-    user_dms = Message.objects.filter(
-        Q(sender=user, recipient__isnull=False) |
-        Q(recipient=user)
-    )
 
-    if not user_dms.exists():
+    Uses a correlated subquery per partner so the DB does the work in one
+    round-trip instead of firing one query per conversation partner.
+    """
+    from accounts.models import User
+
+    # Collect all unique partner IDs (one query each direction, both cheap)
+    sent_partner_ids = set(
+        Message.objects.filter(sender=user, recipient__isnull=False)
+        .values_list('recipient_id', flat=True)
+    )
+    recv_partner_ids = set(
+        Message.objects.filter(recipient=user)
+        .values_list('sender_id', flat=True)
+    )
+    partner_ids = sent_partner_ids | recv_partner_ids
+
+    if not partner_ids:
         return Message.objects.none()
 
-    # For each conversation partner, get the latest message ID
-    # We need to figure out the "other user" for each message
-    # Approach: get latest message per unique partner
-    sent = (
-        Message.objects.filter(sender=user, recipient__isnull=False)
-        .values('recipient')
-        .annotate(latest=Max('created_at'))
+    # For each partner, get the id of the most recent message using a
+    # correlated subquery — one server-side index scan per partner.
+    latest_msg_subq = Message.objects.filter(
+        Q(sender=user, recipient=OuterRef('pk'))
+        | Q(sender=OuterRef('pk'), recipient=user)
+    ).order_by('-created_at', '-id').values('id')[:1]
+
+    latest_msg_ids = list(
+        User.objects.filter(id__in=partner_ids)
+        .annotate(latest_msg_id=Subquery(latest_msg_subq))
+        .values_list('latest_msg_id', flat=True)
     )
-    received = (
-        Message.objects.filter(recipient=user)
-        .values('sender')
-        .annotate(latest=Max('created_at'))
+    latest_msg_ids = [mid for mid in latest_msg_ids if mid is not None]
+
+    return (
+        Message.objects.filter(id__in=latest_msg_ids)
+        .select_related('sender', 'recipient', 'post', 'quick_workout')
+        .order_by('-created_at')
     )
-
-    # Build a dict of partner_id -> latest timestamp
-    partner_latest = {}
-    for entry in sent:
-        pid = entry['recipient']
-        ts = entry['latest']
-        if pid not in partner_latest or ts > partner_latest[pid]:
-            partner_latest[pid] = ts
-
-    for entry in received:
-        pid = entry['sender']
-        ts = entry['latest']
-        if pid not in partner_latest or ts > partner_latest[pid]:
-            partner_latest[pid] = ts
-
-    # For each partner, get the actual latest message
-    message_ids = []
-    for partner_id, latest_ts in partner_latest.items():
-        msg = Message.objects.filter(
-            Q(sender=user, recipient_id=partner_id) |
-            Q(sender_id=partner_id, recipient=user),
-            created_at=latest_ts,
-        ).first()
-        if msg:
-            message_ids.append(msg.id)
-
-    return Message.objects.filter(id__in=message_ids).select_related('post__user', 'quick_workout__user', 'quick_workout__location').order_by('-created_at')
 
 
 def list_group_conversations(user):
     """
     Return groups the user is a member of that have messages,
     along with the latest message per group.
-    Returns a queryset of Messages (latest per group).
-    """
-    from groups.models import GroupMember
 
-    group_ids = GroupMember.objects.filter(user=user).values_list('group_id', flat=True)
+    Uses a correlated subquery so one DB round-trip replaces the previous
+    Max('id') approach (which was wrong for UUID strings).
+    """
+    from groups.models import Group, GroupMember
+
+    group_ids = list(
+        GroupMember.objects.filter(user=user).values_list('group_id', flat=True)
+    )
 
     if not group_ids:
         return Message.objects.none()
 
-    # Get latest message per group
-    latest_per_group = (
-        Message.objects.filter(group_id__in=group_ids)
-        .values('group_id')
-        .annotate(latest=Max('id'))
+    # For each group, get the id of the most recent message
+    latest_msg_subq = Message.objects.filter(
+        group_id=OuterRef('id')
+    ).order_by('-created_at', '-id').values('id')[:1]
+
+    latest_msg_ids = list(
+        Group.objects.filter(id__in=group_ids)
+        .annotate(latest_msg_id=Subquery(latest_msg_subq))
+        .values_list('latest_msg_id', flat=True)
+    )
+    latest_msg_ids = [mid for mid in latest_msg_ids if mid is not None]
+
+    return (
+        Message.objects.filter(id__in=latest_msg_ids)
+        .select_related('sender', 'group', 'post', 'quick_workout')
+        .order_by('-created_at')
     )
 
-    message_ids = [entry['latest'] for entry in latest_per_group]
-    return Message.objects.filter(id__in=message_ids).select_related('post__user', 'quick_workout__user', 'quick_workout__location').order_by('-created_at')
-
 
 # ---------------------------------------------------------------------------
-# Message History
+# Unread Count Helpers (batch — one query each, no per-conversation loop)
 # ---------------------------------------------------------------------------
 
-def get_dm_messages(user, partner_id, limit=50, offset=0):
+def get_dm_unread_map(user):
     """
-    Get messages between user and a partner (both directions).
-    Returns a queryset of Messages ordered oldest-first.
+    Return a dict of {sender_id (str): unread_count} for DM messages.
+    Single aggregation query replaces the per-conversation count loop.
+    """
+    rows = (
+        Message.objects.filter(recipient=user)
+        .exclude(read_receipts__user=user)
+        .values('sender_id')
+        .annotate(count=Count('id'))
+    )
+    return {str(row['sender_id']): row['count'] for row in rows}
+
+
+def get_group_unread_map(user, group_ids):
+    """
+    Return a dict of {group_id (str): unread_count} for group messages.
+    Single aggregation query replaces the per-group count loop.
+    """
+    rows = (
+        Message.objects.filter(group_id__in=group_ids)
+        .exclude(sender=user)
+        .exclude(read_receipts__user=user)
+        .values('group_id')
+        .annotate(count=Count('id'))
+    )
+    return {str(row['group_id']): row['count'] for row in rows}
+
+
+# ---------------------------------------------------------------------------
+# Message History  (cursor-based pagination)
+# ---------------------------------------------------------------------------
+
+def get_dm_messages(user, partner_id, limit=50, before_id=None, after_id=None):
+    """
+    Cursor-based message history between user and partner.
+
+    - Default (no cursor): returns the most recent `limit` messages, newest first.
+    - before_id: returns up to `limit` messages older than that message, newest first.
+      Use this for infinite-scroll upward (pass oldest_id from previous response).
+    - after_id: returns up to `limit` messages newer than that message, oldest first.
+      Use this for polling / incremental sync (pass newest_id from previous response).
+
+    Returns: (messages list, has_more bool)
     """
     _check_not_self(user, partner_id)
     partner = _get_user(partner_id)
-
-    # Verify mutual follow to view conversation
     _check_no_block(user, partner)
     _check_mutual_follow(user, partner)
 
-    messages = Message.objects.filter(
-        Q(sender=user, recipient=partner) |
-        Q(sender=partner, recipient=user)
-    ).select_related('post__user', 'quick_workout__user', 'quick_workout__location').order_by('created_at')
+    base_qs = Message.objects.filter(
+        Q(sender=user, recipient=partner) | Q(sender=partner, recipient=user)
+    ).select_related('sender', 'post__user', 'quick_workout__user', 'quick_workout__location').prefetch_related(
+        Prefetch(
+            'read_receipts',
+            queryset=MessageRead.objects.filter(user=user),
+            to_attr='user_read_receipts',
+        )
+    )
 
-    return messages[offset:offset + limit]
+    if before_id:
+        try:
+            cursor = Message.objects.values('created_at', 'id').get(id=before_id)
+        except Message.DoesNotExist:
+            raise MessageNotFoundError("Cursor message not found.")
+        base_qs = base_qs.filter(
+            Q(created_at__lt=cursor['created_at'])
+            | Q(created_at=cursor['created_at'], id__lt=cursor['id'])
+        )
+        # Fetch newest-first (so LIMIT grabs the closest older messages), then reverse
+        # to return oldest-first so the client can prepend them in correct order.
+        chunk = list(base_qs.order_by('-created_at', '-id')[:limit + 1])
+        has_more = len(chunk) > limit
+        return list(reversed(chunk[:limit])), has_more
+
+    if after_id:
+        try:
+            cursor = Message.objects.values('created_at', 'id').get(id=after_id)
+        except Message.DoesNotExist:
+            raise MessageNotFoundError("Cursor message not found.")
+        base_qs = base_qs.filter(
+            Q(created_at__gt=cursor['created_at'])
+            | Q(created_at=cursor['created_at'], id__gt=cursor['id'])
+        )
+        # Oldest-first so the client can append in order and use the last id as next cursor
+        messages = list(base_qs.order_by('created_at', 'id')[:limit + 1])
+        has_more = len(messages) > limit
+        return messages[:limit], has_more
+
+    # Default: fetch the latest N messages newest-first, then reverse to oldest-first
+    # so the client renders them top-to-bottom and scrolls to the bottom to see newest.
+    chunk = list(base_qs.order_by('-created_at', '-id')[:limit + 1])
+    has_more = len(chunk) > limit
+    return list(reversed(chunk[:limit])), has_more
 
 
-def get_group_messages(user, group_id, limit=50, offset=0):
+def get_group_messages(user, group_id, limit=50, before_id=None, after_id=None):
     """
-    Get messages in a group chat. User must be a member.
-    Returns a queryset of Messages ordered oldest-first.
+    Cursor-based message history for a group chat.
+
+    - Default (no cursor): returns the most recent `limit` messages, newest first.
+    - before_id: older messages (scroll up).
+    - after_id: newer messages (incremental sync), oldest first.
+
+    Returns: (messages list, has_more bool)
     """
     from groups.models import Group
 
@@ -292,8 +392,43 @@ def get_group_messages(user, group_id, limit=50, offset=0):
 
     _check_group_member(group, user)
 
-    messages = Message.objects.filter(group=group).select_related('post__user', 'quick_workout__user', 'quick_workout__location').order_by('created_at')
-    return messages[offset:offset + limit]
+    base_qs = Message.objects.filter(group=group).select_related('sender', 'post__user', 'quick_workout__user', 'quick_workout__location').prefetch_related(
+        Prefetch(
+            'read_receipts',
+            queryset=MessageRead.objects.filter(user=user),
+            to_attr='user_read_receipts',
+        )
+    )
+
+    if before_id:
+        try:
+            cursor = Message.objects.values('created_at', 'id').get(id=before_id)
+        except Message.DoesNotExist:
+            raise MessageNotFoundError("Cursor message not found.")
+        base_qs = base_qs.filter(
+            Q(created_at__lt=cursor['created_at'])
+            | Q(created_at=cursor['created_at'], id__lt=cursor['id'])
+        )
+        chunk = list(base_qs.order_by('-created_at', '-id')[:limit + 1])
+        has_more = len(chunk) > limit
+        return list(reversed(chunk[:limit])), has_more
+
+    if after_id:
+        try:
+            cursor = Message.objects.values('created_at', 'id').get(id=after_id)
+        except Message.DoesNotExist:
+            raise MessageNotFoundError("Cursor message not found.")
+        base_qs = base_qs.filter(
+            Q(created_at__gt=cursor['created_at'])
+            | Q(created_at=cursor['created_at'], id__gt=cursor['id'])
+        )
+        messages = list(base_qs.order_by('created_at', 'id')[:limit + 1])
+        has_more = len(messages) > limit
+        return messages[:limit], has_more
+
+    chunk = list(base_qs.order_by('-created_at', '-id')[:limit + 1])
+    has_more = len(chunk) > limit
+    return list(reversed(chunk[:limit])), has_more
 
 
 # ---------------------------------------------------------------------------
@@ -333,7 +468,6 @@ def get_unread_count(user):
     """
     Get total unread message count for the user (DMs + group messages).
     """
-    # All messages where user is recipient (DM) or in the group, minus already read
     dm_unread = Message.objects.filter(
         recipient=user,
     ).exclude(
@@ -346,7 +480,7 @@ def get_unread_count(user):
     group_unread = Message.objects.filter(
         group_id__in=group_ids,
     ).exclude(
-        sender=user,  # Don't count own messages
+        sender=user,
     ).exclude(
         read_receipts__user=user,
     ).count()

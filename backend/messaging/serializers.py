@@ -154,6 +154,44 @@ class SharedCheckinSerializer(serializers.Serializer):
         return Comment.objects.filter(quick_workout=obj).count()
 
 
+class MessageListSerializer(serializers.ModelSerializer):
+    """
+    Serializer for message lists. Returns full shared post/check-in data inline
+    so post cards render directly in the chat thread.
+    """
+    sender_username = serializers.CharField(source='sender.username', read_only=True)
+    is_read = serializers.SerializerMethodField()
+    shared_post_id = serializers.CharField(source='post_id', read_only=True)
+    shared_post = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Message
+        fields = [
+            'id', 'sender', 'sender_username',
+            'content', 'is_request', 'is_read',
+            'created_at', 'shared_post_id', 'shared_post',
+        ]
+
+    def get_is_read(self, obj):
+        # Use prefetched receipts (to_attr='user_read_receipts') when available
+        if hasattr(obj, 'user_read_receipts'):
+            return bool(obj.user_read_receipts)
+        request = self.context.get('request')
+        if request and request.user.is_authenticated:
+            return obj.read_receipts.filter(user=request.user).exists()
+        return False
+
+    def get_shared_post(self, obj):
+        try:
+            if obj.post:
+                return SharedPostSerializer(obj.post).data
+            if obj.quick_workout:
+                return SharedCheckinSerializer(obj.quick_workout).data
+        except Exception:
+            return None
+        return None
+
+
 class MessageSerializer(serializers.ModelSerializer):
     sender_username = serializers.CharField(source='sender.username', read_only=True)
     recipient_username = serializers.SerializerMethodField()
@@ -199,7 +237,7 @@ class ConversationSerializer(serializers.Serializer):
     """Represents a conversation preview (latest message + partner info)."""
     partner_id = serializers.CharField()
     partner_username = serializers.CharField()
-    latest_message = MessageSerializer()
+    latest_message = MessageListSerializer()
     unread_count = serializers.IntegerField()
 
 
@@ -208,7 +246,7 @@ class GroupConversationSerializer(serializers.Serializer):
     group_id = serializers.CharField()
     group_name = serializers.CharField()
     group_streak = serializers.IntegerField()
-    latest_message = MessageSerializer()
+    latest_message = MessageListSerializer()
     unread_count = serializers.IntegerField()
 
 

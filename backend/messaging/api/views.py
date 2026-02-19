@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from messaging import services
 from messaging.serializers import (
     MessageSerializer,
+    MessageListSerializer,
     ConversationSerializer,
     GroupConversationSerializer,
     UnreadCountSerializer,
@@ -22,6 +23,7 @@ from messaging.exceptions import (
     PostNotFoundError,
     CannotMessageSelfError,
     RecipientNotFoundError,
+    RecipientAlreadyCheckedInError,
 )
 
 
@@ -43,6 +45,8 @@ def send_zap(request, recipient_id):
         return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
     except NotMutualFollowError as e:
         return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+    except RecipientAlreadyCheckedInError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     return Response(
         MessageSerializer(message, context={'request': request}).data,
@@ -119,32 +123,19 @@ def send_group_message(request, group_id):
 def dm_conversations(request):
     """
     List all DM conversations with the latest message per partner.
-    Returns conversation previews with unread counts.
+    Unread counts are fetched in a single batch query instead of per-conversation.
     """
     latest_messages = services.list_dm_conversations(request.user)
+    unread_map = services.get_dm_unread_map(request.user)
 
     conversations = []
     for msg in latest_messages:
-        # Determine the conversation partner
-        if msg.sender == request.user:
-            partner = msg.recipient
-        else:
-            partner = msg.sender
-
-        # Count unread from this partner
-        from messaging.models import Message
-        from django.db.models import Q
-        unread = Message.objects.filter(
-            sender=partner, recipient=request.user,
-        ).exclude(
-            read_receipts__user=request.user,
-        ).count()
-
+        partner = msg.recipient if msg.sender == request.user else msg.sender
         conversations.append({
             'partner_id': str(partner.id),
             'partner_username': partner.username,
             'latest_message': msg,
-            'unread_count': unread,
+            'unread_count': unread_map.get(str(partner.id), 0),
         })
 
     serializer = ConversationSerializer(
@@ -158,27 +149,24 @@ def dm_conversations(request):
 def group_conversations(request):
     """
     List all group conversations with the latest message per group.
-    Returns conversation previews with unread counts.
+    Unread counts are fetched in a single batch query instead of per-group.
     """
+    from groups.models import GroupMember
+    group_ids = list(
+        GroupMember.objects.filter(user=request.user).values_list('group_id', flat=True)
+    )
+
     latest_messages = services.list_group_conversations(request.user)
+    unread_map = services.get_group_unread_map(request.user, group_ids)
 
     conversations = []
     for msg in latest_messages:
-        from messaging.models import Message
-        unread = Message.objects.filter(
-            group=msg.group,
-        ).exclude(
-            sender=request.user,
-        ).exclude(
-            read_receipts__user=request.user,
-        ).count()
-
         conversations.append({
             'group_id': str(msg.group.id),
             'group_name': msg.group.name,
             'group_streak': msg.group.group_streak,
             'latest_message': msg,
-            'unread_count': unread,
+            'unread_count': unread_map.get(str(msg.group.id), 0),
         })
 
     serializer = GroupConversationSerializer(
@@ -188,18 +176,35 @@ def group_conversations(request):
 
 
 # ---------------------------------------------------------------------------
-# Message History
+# Message History  (cursor-based pagination)
 # ---------------------------------------------------------------------------
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def dm_messages(request, partner_id):
-    """Get message history with a specific user. Supports ?limit= and ?offset=."""
-    limit = int(request.query_params.get('limit', 50))
-    offset = int(request.query_params.get('offset', 0))
+    """
+    Cursor-based DM message history.
+
+    Query params:
+      ?before_id=<id>  — load messages older than this (scroll up / infinite scroll)
+      ?after_id=<id>   — load messages newer than this (polling / realtime sync)
+      ?limit=<n>       — page size, default 50, max 100
+
+    Response:
+      messages    — newest-first (before_id/default) or oldest-first (after_id)
+      has_more    — true if more messages exist in that direction
+      oldest_id   — id of the oldest message in this page (use as before_id to scroll up)
+      newest_id   — id of the newest message in this page (use as after_id to poll)
+    """
+    limit = min(int(request.query_params.get('limit', 50)), 100)
+    before_id = request.query_params.get('before_id')
+    after_id = request.query_params.get('after_id')
 
     try:
-        messages = services.get_dm_messages(request.user, partner_id, limit=limit, offset=offset)
+        messages, has_more = services.get_dm_messages(
+            request.user, partner_id,
+            limit=limit, before_id=before_id, after_id=after_id,
+        )
     except CannotMessageSelfError as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
     except RecipientNotFoundError as e:
@@ -208,27 +213,67 @@ def dm_messages(request, partner_id):
         return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
     except NotMutualFollowError as e:
         return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+    except MessageNotFoundError as e:
+        return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
 
-    serializer = MessageSerializer(messages, many=True, context={'request': request})
-    return Response(serializer.data)
+    serializer = MessageListSerializer(messages, many=True, context={'request': request})
+
+    # Messages are always returned oldest-first. oldest_id = messages[0], newest_id = messages[-1].
+    oldest_id = str(messages[0].id) if messages else None
+    newest_id = str(messages[-1].id) if messages else None
+
+    return Response({
+        'results': serializer.data,   # 'results' matches the existing frontend expectation
+        'has_more': has_more,
+        'oldest_id': oldest_id,       # pass as ?before_id= to load older messages
+        'newest_id': newest_id,       # pass as ?after_id= to poll for new messages
+    })
 
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def group_messages(request, group_id):
-    """Get message history for a group. Supports ?limit= and ?offset=."""
-    limit = int(request.query_params.get('limit', 50))
-    offset = int(request.query_params.get('offset', 0))
+    """
+    Cursor-based group message history.
+
+    Query params:
+      ?before_id=<id>  — load messages older than this (scroll up / infinite scroll)
+      ?after_id=<id>   — load messages newer than this (polling / realtime sync)
+      ?limit=<n>       — page size, default 50, max 100
+
+    Response:
+      messages    — newest-first (before_id/default) or oldest-first (after_id)
+      has_more    — true if more messages exist in that direction
+      oldest_id   — id of the oldest message in this page (use as before_id to scroll up)
+      newest_id   — id of the newest message in this page (use as after_id to poll)
+    """
+    limit = min(int(request.query_params.get('limit', 50)), 100)
+    before_id = request.query_params.get('before_id')
+    after_id = request.query_params.get('after_id')
 
     try:
-        messages = services.get_group_messages(request.user, group_id, limit=limit, offset=offset)
+        messages, has_more = services.get_group_messages(
+            request.user, group_id,
+            limit=limit, before_id=before_id, after_id=after_id,
+        )
     except ConversationNotFoundError as e:
         return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
     except NotGroupMemberError as e:
         return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+    except MessageNotFoundError as e:
+        return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
 
-    serializer = MessageSerializer(messages, many=True, context={'request': request})
-    return Response(serializer.data)
+    serializer = MessageListSerializer(messages, many=True, context={'request': request})
+
+    oldest_id = str(messages[0].id) if messages else None
+    newest_id = str(messages[-1].id) if messages else None
+
+    return Response({
+        'results': serializer.data,
+        'has_more': has_more,
+        'oldest_id': oldest_id,
+        'newest_id': newest_id,
+    })
 
 
 # ---------------------------------------------------------------------------

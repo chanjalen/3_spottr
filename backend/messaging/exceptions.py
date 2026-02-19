@@ -36,3 +36,8 @@ class CannotMessageSelfError(Exception):
 class RecipientNotFoundError(Exception):
     """Raised when the recipient user does not exist."""
     pass
+
+
+class RecipientAlreadyCheckedInError(Exception):
+    """Raised when trying to zap a user who has already checked in today."""
+    pass
