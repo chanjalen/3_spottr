@@ -20,7 +20,7 @@ Variables:
             {% endif %}
         </div>
         <div class="lb-podium-name">{{ entry.user.display_name }}</div>
-        <div class="lb-podium-workouts">{{ entry.user.total_workouts }} workouts</div>
+        <div class="lb-podium-workouts">{{ entry.user.total_workouts }} workouts &bull; {{ entry.user.current_streak }}🔥</div>
     </a>
     {% elif entry.rank == 2 %}
     <a href="{% url 'accounts:user_profile' entry.user.username %}" class="lb-podium-slot rank-2">
@@ -33,7 +33,7 @@ Variables:
             {% endif %}
         </div>
         <div class="lb-podium-name">{{ entry.user.display_name }}</div>
-        <div class="lb-podium-workouts">{{ entry.user.total_workouts }} workouts</div>
+        <div class="lb-podium-workouts">{{ entry.user.total_workouts }} workouts &bull; {{ entry.user.current_streak }}🔥</div>
     </a>
     {% elif entry.rank == 3 %}
     <a href="{% url 'accounts:user_profile' entry.user.username %}" class="lb-podium-slot rank-3">
@@ -46,7 +46,7 @@ Variables:
             {% endif %}
         </div>
         <div class="lb-podium-name">{{ entry.user.display_name }}</div>
-        <div class="lb-podium-workouts">{{ entry.user.total_workouts }} workouts</div>
+        <div class="lb-podium-workouts">{{ entry.user.total_workouts }} workouts &bull; {{ entry.user.current_streak }}🔥</div>
     </a>
     {% endif %}
     {% endfor %}

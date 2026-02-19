@@ -122,24 +122,54 @@
         color: var(--text-primary);
     }
 
-    .streak-progress-bar {
-        width: 100%;
-        height: 8px;
-        background: rgba(255, 255, 255, 0.08);
-        border-radius: 4px;
-        margin-top: 12px;
-        overflow: hidden;
+    /* Week day bubbles */
+    .week-days {
+        display: flex;
+        justify-content: space-between;
+        padding: 4px 0 12px;
     }
 
-    .streak-progress-fill {
-        height: 100%;
-        border-radius: 4px;
-        background: linear-gradient(90deg, #7c3aed, #a855f7);
-        transition: width 0.3s ease;
+    .week-day-bubble {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0;
     }
 
-    .streak-progress-fill.rest {
-        background: linear-gradient(90deg, #22c55e, #4ade80);
+    .week-day-circle {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 700;
+        background: var(--bg-base);
+        border: 2px solid var(--border-subtle);
+        color: var(--text-muted);
+        transition: background 0.2s, border-color 0.2s, color 0.2s;
+    }
+
+    .week-day-circle.active {
+        background: linear-gradient(135deg, var(--brand-purple), #a855f7);
+        border-color: transparent;
+        color: #fff;
+    }
+
+    .week-day-circle.today:not(.active) {
+        border-color: var(--brand-purple);
+        color: var(--text-primary);
+    }
+
+    .week-day-circle.rest {
+        background: rgba(34, 197, 94, 0.15);
+        border-color: #22c55e;
+        color: #22c55e;
+    }
+
+    .week-day-circle.future {
+        opacity: 0.35;
     }
 
     .streak-rule {
@@ -300,15 +330,23 @@
                 Edit goal
             </button>
         </div>
-        <div class="streak-stat-row">
+        <div class="streak-stat-row" style="padding-bottom: 12px;">
             <span class="streak-stat-label">Workouts</span>
-            <span class="streak-stat-value" id="weeklyGoalDisplay">{{ weekly_workout_count }} / {{ weekly_workout_goal }}</span>
-        </div>
-        <div class="streak-progress-bar">
-            <div class="streak-progress-fill" id="weeklyProgressFill" style="width: {% if weekly_workout_goal > 0 %}{% widthratio weekly_workout_count weekly_workout_goal 100 %}%{% else %}0%{% endif %};max-width:100%;"></div>
+            <span class="streak-stat-value">{{ weekly_workout_count }} / {{ weekly_workout_goal }}</span>
         </div>
 
-        <div class="streak-stat-row" style="margin-top: 8px;">
+        <!-- 7-day activity bubbles -->
+        <div class="week-days">
+            {% for day in week_days %}
+            <div class="week-day-bubble">
+                <div class="week-day-circle{% if day.active %} active{% elif day.rest %} rest{% endif %}{% if day.is_today and not day.active and not day.rest %} today{% endif %}{% if day.is_future %} future{% endif %}">
+                    {{ day.label }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="streak-stat-row">
             <span class="streak-stat-label">Rest Days Used</span>
             <span class="streak-stat-value">{{ rest_info.rest_days_used }} / <span id="restDaysAllowed">{{ rest_info.rest_days_allowed }}</span></span>
         </div>
@@ -365,7 +403,6 @@
     const options = document.querySelectorAll('.goal-option');
 
     let selected = {{ weekly_workout_goal }};
-    const weeklyCount = {{ weekly_workout_count }};
     const restUsed = {{ rest_info.rest_days_used }};
 
     editBtn.addEventListener('click', () => overlay.classList.add('open'));
@@ -396,11 +433,6 @@
             const data = await res.json();
             if (data.success) {
                 const goal = data.weekly_workout_goal;
-                // Update the goal display
-                document.getElementById('weeklyGoalDisplay').textContent = weeklyCount + ' / ' + goal;
-                // Update progress bar
-                const pct = goal > 0 ? Math.min(100, Math.round(weeklyCount / goal * 100)) : 0;
-                document.getElementById('weeklyProgressFill').style.width = pct + '%';
                 // Update rest day counts (7 - goal)
                 const allowed = Math.max(0, 7 - goal);
                 const remaining = Math.max(0, allowed - restUsed);

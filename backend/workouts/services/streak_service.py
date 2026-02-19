@@ -211,24 +211,53 @@ def get_streak_details(user):
         user=user, streak_date=today_streak
     ).exists()
 
-    # Weekly workout count
+    # Week starts Sunday — build 7-day window
     from workouts.models import Workout
     from social.models import QuickWorkout
-    iso_year, iso_week, _ = today_streak.isocalendar()
-    week_start = date.fromisocalendar(iso_year, iso_week, 1)
+    days_since_sunday = (today_streak.weekday() + 1) % 7
+    week_start = today_streak - timedelta(days=days_since_sunday)
     week_end = week_start + timedelta(days=6)
 
-    weekly_workouts = Workout.objects.filter(
-        user=user,
-        start_time__date__gte=week_start,
-        start_time__date__lte=week_end,
-    ).count()
+    # Unique dates with at least one workout or check-in (no double-counting)
+    workout_dates = set(
+        Workout.objects.filter(
+            user=user,
+            start_time__date__gte=week_start,
+            start_time__date__lte=week_end,
+        ).values_list('start_time__date', flat=True)
+    )
+    checkin_dates = set(
+        QuickWorkout.objects.filter(
+            user=user,
+            created_at__date__gte=week_start,
+            created_at__date__lte=week_end,
+        ).values_list('created_at__date', flat=True)
+    )
+    active_dates = workout_dates | checkin_dates
 
-    weekly_checkins = QuickWorkout.objects.filter(
-        user=user,
-        created_at__date__gte=week_start,
-        created_at__date__lte=week_end,
-    ).count()
+    # Rest days used this week
+    rest_dates = set(
+        RestDay.objects.filter(
+            user=user,
+            streak_date__gte=week_start,
+            streak_date__lte=week_end,
+        ).values_list('streak_date', flat=True)
+    )
+
+    # Build per-day status list for the 7 bubbles (Sun=0 … Sat=6)
+    day_labels = ['S', 'M', 'T', 'W', 'Th', 'F', 'S']
+    week_days = []
+    for i in range(7):
+        day = week_start + timedelta(days=i)
+        week_days.append({
+            'label': day_labels[i],
+            'active': day in active_dates,
+            'rest': day in rest_dates and day not in active_dates,
+            'is_today': day == today_streak,
+            'is_future': day > today_streak,
+        })
+
+    weekly_active_days = len(active_dates)
 
     rest_info = get_weekly_rest_day_info(user)
 
@@ -238,8 +267,9 @@ def get_streak_details(user):
         'has_activity_today': has_activity_today,
         'has_rest_today': has_rest_today,
         'rest_info': rest_info,
-        'weekly_workout_count': weekly_workouts + weekly_checkins,
+        'weekly_workout_count': weekly_active_days,
         'weekly_workout_goal': user.weekly_workout_goal,
+        'week_days': week_days,
     }
 
 
