@@ -2581,10 +2581,10 @@
                 </div>
             </div>
 
-            <!-- Reply Restriction -->
+            <!-- Visibility Setting -->
             <div class="post-reply-restriction" id="replyRestrictionBtn">
-                <span class="post-reply-icon">&#9679;</span>
-                <span class="post-reply-text" id="replyRestrictionText">Everyone can reply</span>
+                <span class="post-reply-icon">&#127758;</span>
+                <span class="post-reply-text" id="replyRestrictionText">Everyone can see</span>
             </div>
 
             <!-- Media Preview -->
@@ -3340,7 +3340,7 @@
 
             let postMediaFile = null;
             let postLinkValue = '';
-            let replyRestriction = 'everyone';
+            let postVisibility = 'main';
             let attachedPrData = null;
 
             // Rest Day button handler
@@ -3408,6 +3408,10 @@
                         <input type="text" class="post-poll-option-input" placeholder="Option 1" maxlength="100">
                         <input type="text" class="post-poll-option-input" placeholder="Option 2" maxlength="100">
                     `;
+                    // Reset visibility
+                    postVisibility = 'main';
+                    replyRestrictionText.textContent = 'Everyone can see';
+                    replyRestrictionBtn.querySelector('.post-reply-icon').textContent = '\u{1F30E}';
                     // Reset PR preview
                     const prPreview = document.getElementById('postPrPreview');
                     if (prPreview) prPreview.classList.remove('has-pr');
@@ -3534,21 +3538,25 @@
                     }
                 });
 
-                // Reply restriction
+                // Visibility toggle
                 const replyRestrictionBtn = document.getElementById('replyRestrictionBtn');
                 const replyRestrictionText = document.getElementById('replyRestrictionText');
-                const replyOptions = ['everyone', 'friends', 'mentions'];
-                const replyLabels = {
-                    'everyone': 'Everyone can reply',
-                    'friends': 'Only friends can reply',
-                    'mentions': 'Only people you mention can reply'
+                const visibilityOptions = ['main', 'friends'];
+                const visibilityLabels = {
+                    'main': 'Everyone can see',
+                    'friends': 'Only friends can see'
+                };
+                const visibilityIcons = {
+                    'main': '\u{1F30E}',
+                    'friends': '\u{1F465}'
                 };
 
                 replyRestrictionBtn.addEventListener('click', function() {
-                    const currentIndex = replyOptions.indexOf(replyRestriction);
-                    const nextIndex = (currentIndex + 1) % replyOptions.length;
-                    replyRestriction = replyOptions[nextIndex];
-                    replyRestrictionText.textContent = replyLabels[replyRestriction];
+                    const currentIndex = visibilityOptions.indexOf(postVisibility);
+                    const nextIndex = (currentIndex + 1) % visibilityOptions.length;
+                    postVisibility = visibilityOptions[nextIndex];
+                    replyRestrictionText.textContent = visibilityLabels[postVisibility];
+                    replyRestrictionBtn.querySelector('.post-reply-icon').textContent = visibilityIcons[postVisibility];
                 });
 
                 // Submit post
@@ -3581,8 +3589,7 @@
 
                     const formData = new FormData();
                     formData.append('text', text);
-                    formData.append('visibility', 'main');
-                    formData.append('reply_restriction', replyRestriction);
+                    formData.append('visibility', postVisibility);
 
                     if (postLinkValue) {
                         formData.append('link_url', postLinkValue);

@@ -1,13 +1,18 @@
+import base64
 import json
 import os
 import uuid
+from collections import defaultdict
+from datetime import timedelta, date, datetime
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST, require_GET
 from django.conf import settings
+from django.core.cache import cache
 from django.core.files.storage import default_storage
-from django.db.models import F, Q, Max, Subquery, OuterRef, Exists, Count
+from django.db.models import F, Q, Max, Subquery, OuterRef, Exists, Count, Value, CharField
 
 from .models import QuickWorkout, Post, Comment, Reaction, Poll, PollOption, PollVote, Follow
 from media.models import MediaLink
@@ -19,7 +24,9 @@ from messaging.services import send_dm, send_group_message
 from messaging.exceptions import NotMutualFollowError, UserBlockedError, NotGroupMemberError, PostNotFoundError
 from groups.models import Group, GroupMember
 from django.utils import timezone
-from datetime import timedelta, date
+
+FEED_PAGE_SIZE = 20
+FEED_CACHE_TTL = 60
 
 
 @login_required
@@ -154,148 +161,359 @@ def social_view(request):
     })
 
 
+def _encode_cursor(created_at, item_id):
+    """Encode a cursor as base64 'iso_timestamp|id'."""
+    raw = f"{created_at.isoformat()}|{item_id}"
+    return base64.urlsafe_b64encode(raw.encode()).decode()
+
+
+def _decode_cursor(cursor_str):
+    """Decode a cursor. Returns (datetime, id_str) or None."""
+    try:
+        raw = base64.urlsafe_b64decode(cursor_str.encode()).decode()
+        ts, item_id = raw.split('|', 1)
+        dt = datetime.fromisoformat(ts)
+        if dt.tzinfo is None:
+            dt = timezone.make_aware(dt)
+        return dt, item_id
+    except Exception:
+        return None
+
+
+def _serialize_user(user):
+    """Convert User model instance to a plain dict for templates/JSON."""
+    return {
+        'username': user.username,
+        'display_name': user.display_name or user.username,
+        'avatar_url': user.avatar_url or None,
+        'current_streak': getattr(user, 'current_streak', 0),
+    }
+
+
+def _bulk_media_urls(destination_type, entity_ids):
+    """Single query to get photo URLs for a batch of entities.
+    Returns dict mapping entity_id -> URL."""
+    if not entity_ids:
+        return {}
+    links = MediaLink.objects.filter(
+        destination_type=destination_type,
+        destination_id__in=[str(eid) for eid in entity_ids],
+        type='inline',
+    ).select_related('asset')
+    result = {}
+    for link in links:
+        if link.destination_id not in result:
+            result[link.destination_id] = build_media_url(link.asset.storage_key)
+    return result
+
+
+def _format_duration(duration):
+    """Format a timedelta duration to a human-readable string."""
+    if not duration:
+        return "--"
+    total_seconds = int(duration.total_seconds())
+    hours = total_seconds // 3600
+    minutes = (total_seconds % 3600) // 60
+    if hours > 0:
+        return f"{hours}h {minutes}m"
+    return f"{minutes}m"
+
+
+def _get_feed_page(request, tab, cursor=None):
+    """
+    Core feed function: returns (feed_items, next_cursor).
+    Uses annotated queries to eliminate N+1 problems.
+    """
+    user = request.user if request.user.is_authenticated else None
+
+    # Build base querysets with annotations
+    if tab == 'friends' and user:
+        my_following_ids = set(Follow.objects.filter(follower=user).values_list('following_id', flat=True))
+        my_follower_ids = set(Follow.objects.filter(following=user).values_list('follower_id', flat=True))
+        friend_ids = my_following_ids & my_follower_ids
+        visible_user_ids = friend_ids | {user.id}
+
+        qw_qs = QuickWorkout.objects.filter(user_id__in=visible_user_ids, visibility='friends')
+        post_qs = Post.objects.filter(user_id__in=visible_user_ids, visibility='friends')
+    else:
+        qw_qs = QuickWorkout.objects.filter(visibility='main')
+        post_qs = Post.objects.filter(visibility='main')
+
+    # Annotate counts (eliminates N+1)
+    qw_qs = qw_qs.select_related('user', 'location').annotate(
+        like_count=Count('reactions', distinct=True),
+        comment_count=Count('comments', distinct=True),
+    )
+    post_qs = post_qs.select_related('user', 'location', 'workout').annotate(
+        like_count=Count('reactions', distinct=True),
+        comment_count=Count('comments', distinct=True),
+    )
+
+    if user:
+        qw_qs = qw_qs.annotate(
+            user_liked=Exists(Reaction.objects.filter(quick_workout=OuterRef('pk'), user=user)),
+        )
+        post_qs = post_qs.annotate(
+            user_liked=Exists(Reaction.objects.filter(post=OuterRef('pk'), user=user)),
+        )
+    else:
+        qw_qs = qw_qs.annotate(
+            user_liked=Value(False, output_field=CharField()),
+        )
+        post_qs = post_qs.annotate(
+            user_liked=Value(False, output_field=CharField()),
+        )
+
+    # Apply cursor filter
+    if cursor:
+        decoded = _decode_cursor(cursor)
+        if decoded:
+            cursor_dt, cursor_id = decoded
+            cursor_filter = Q(created_at__lt=cursor_dt) | Q(created_at=cursor_dt, id__lt=cursor_id)
+            qw_qs = qw_qs.filter(cursor_filter)
+            post_qs = post_qs.filter(cursor_filter)
+
+    # Fetch page_size + 1 from each, merge, take page_size + 1
+    limit = FEED_PAGE_SIZE + 1
+    qw_list = list(qw_qs.order_by('-created_at', '-id')[:limit])
+    post_list = list(post_qs.order_by('-created_at', '-id')[:limit])
+
+    # Merge into unified list sorted by created_at desc
+    raw_items = []
+    for qw in qw_list:
+        raw_items.append(('checkin', qw.created_at, qw.id, qw))
+    for p in post_list:
+        raw_items.append(('post', p.created_at, p.id, p))
+    raw_items.sort(key=lambda x: (x[1], x[2]), reverse=True)
+    raw_items = raw_items[:limit]
+
+    # Determine next_cursor
+    has_more = len(raw_items) > FEED_PAGE_SIZE
+    if has_more:
+        raw_items = raw_items[:FEED_PAGE_SIZE]
+
+    if has_more and raw_items:
+        last = raw_items[-1]
+        next_cursor = _encode_cursor(last[1], last[2])
+    else:
+        next_cursor = None
+
+    # Collect IDs for bulk fetches
+    checkin_ids = [item[2] for item in raw_items if item[0] == 'checkin']
+    post_ids = [item[2] for item in raw_items if item[0] == 'post']
+    post_objs = {item[2]: item[3] for item in raw_items if item[0] == 'post'}
+
+    # Bulk fetch media URLs (1-2 queries instead of N)
+    checkin_photos = _bulk_media_urls('quick_workout', checkin_ids)
+    post_photos = _bulk_media_urls('post', post_ids)
+
+    # Bulk fetch polls for posts (with prefetched options)
+    polls_by_post = {}
+    if post_ids:
+        polls = Poll.objects.filter(post_id__in=post_ids).prefetch_related('options')
+        for poll in polls:
+            polls_by_post[poll.post_id] = poll
+
+    # Bulk fetch user's poll votes
+    user_poll_votes = {}
+    if user and polls_by_post:
+        poll_ids_list = [p.id for p in polls_by_post.values()]
+        votes = PollVote.objects.filter(poll_id__in=poll_ids_list, user=user).select_related('option')
+        for v in votes:
+            user_poll_votes[v.poll_id] = v
+
+    # Bulk fetch personal records for posts
+    prs_by_post = {}
+    if post_ids:
+        prs = PersonalRecord.objects.filter(post_id__in=post_ids)
+        for pr in prs:
+            prs_by_post[pr.post_id] = pr
+
+    # Bulk fetch workout details for workout posts
+    from workouts.models import Exercise, ExerciseSet
+    workout_ids = [obj.workout_id for obj in post_objs.values() if obj.workout_id]
+    exercise_counts = {}
+    set_counts = {}
+    exercise_names = {}
+    if workout_ids:
+        # Exercise counts per workout
+        from django.db.models import Count as DjCount
+        ex_counts = Exercise.objects.filter(workout_id__in=workout_ids).values('workout_id').annotate(cnt=DjCount('id'))
+        for row in ex_counts:
+            exercise_counts[row['workout_id']] = row['cnt']
+        # Set counts per workout
+        s_counts = ExerciseSet.objects.filter(exercise__workout_id__in=workout_ids).values('exercise__workout_id').annotate(cnt=DjCount('id'))
+        for row in s_counts:
+            set_counts[row['exercise__workout_id']] = row['cnt']
+        # Exercise names (first 3 per workout)
+        exercises = Exercise.objects.filter(workout_id__in=workout_ids).order_by('workout_id', 'order')
+        names_by_wk = defaultdict(list)
+        for ex in exercises:
+            if len(names_by_wk[ex.workout_id]) < 3:
+                names_by_wk[ex.workout_id].append(ex.name)
+        exercise_names = dict(names_by_wk)
+
+    # Build feed items
+    feed_items = []
+    for item_type, created_at, item_id, obj in raw_items:
+        if item_type == 'checkin':
+            photo_url = checkin_photos.get(str(item_id))
+            # Fallback for legacy uploads
+            if not photo_url:
+                path = f'checkins/{item_id}.jpg'
+                try:
+                    if default_storage.exists(path):
+                        photo_url = build_media_url(path)
+                except Exception:
+                    pass
+            feed_items.append({
+                'type': 'checkin',
+                'id': str(item_id),
+                'user': obj.user,
+                'location': obj.location,
+                'location_name': obj.location_name or (obj.location.name if obj.location else ''),
+                'workout_type': obj.type.replace('_', ' ').title() if obj.type else '',
+                'description': obj.description,
+                'created_at': created_at,
+                'photo_url': photo_url,
+                'like_count': obj.like_count,
+                'comment_count': obj.comment_count,
+                'user_liked': bool(obj.user_liked) if user else False,
+            })
+        else:
+            post = obj
+            photo_url = post_photos.get(str(item_id)) or (build_media_url(post.photo.name) if post.photo else None)
+            post_data = {
+                'type': 'workout' if post.workout_id else 'post',
+                'id': str(item_id),
+                'user': post.user,
+                'location': post.location,
+                'description': post.description,
+                'created_at': created_at,
+                'photo_url': photo_url,
+                'video_url': build_media_url(post.video.name) if post.video else None,
+                'link_url': post.link_url,
+                'like_count': post.like_count,
+                'comment_count': post.comment_count,
+                'user_liked': bool(post.user_liked) if user else False,
+            }
+
+            # Poll
+            poll = polls_by_post.get(item_id)
+            if poll:
+                vote = user_poll_votes.get(poll.id)
+                user_voted = vote is not None
+                user_vote_option = str(vote.option_id) if vote else None
+                total_votes = sum(opt.votes for opt in poll.options.all())
+                poll_options = []
+                for opt in poll.options.all():
+                    percentage = round((opt.votes / total_votes * 100) if total_votes > 0 else 0)
+                    poll_options.append({
+                        'id': str(opt.id),
+                        'text': opt.text,
+                        'votes': opt.votes,
+                        'percentage': percentage,
+                    })
+                post_data['poll'] = {
+                    'id': str(poll.id),
+                    'question': poll.question,
+                    'options': poll_options,
+                    'total_votes': total_votes,
+                    'is_active': poll.is_active,
+                    'user_voted': user_voted,
+                    'user_vote_option': user_vote_option,
+                }
+            else:
+                post_data['poll'] = None
+
+            # Workout details
+            if post.workout_id and post.workout:
+                workout = post.workout
+                post_data['workout'] = {
+                    'id': str(workout.id),
+                    'name': workout.name,
+                    'duration': _format_duration(workout.duration),
+                    'exercise_count': exercise_counts.get(workout.id, 0),
+                    'total_sets': set_counts.get(workout.id, 0),
+                    'exercises': exercise_names.get(workout.id, []),
+                }
+
+            # Personal record
+            pr = prs_by_post.get(item_id)
+            if pr:
+                post_data['personal_record'] = {
+                    'id': str(pr.id),
+                    'exercise_name': pr.exercise_name,
+                    'value': pr.value,
+                    'unit': pr.unit,
+                }
+
+            feed_items.append(post_data)
+
+    return feed_items, next_cursor
+
+
+def _serialize_feed_items_for_json(feed_items):
+    """Convert feed items with User objects to JSON-serializable dicts."""
+    result = []
+    for item in feed_items:
+        item_copy = dict(item)
+        # Serialize user object
+        if hasattr(item_copy.get('user'), 'username'):
+            item_copy['user'] = _serialize_user(item_copy['user'])
+        # Serialize created_at to ISO string
+        if hasattr(item_copy.get('created_at'), 'isoformat'):
+            item_copy['time_ago'] = get_time_ago(item_copy['created_at'])
+            item_copy['created_at'] = item_copy['created_at'].isoformat()
+        # Serialize location
+        loc = item_copy.get('location')
+        if loc and hasattr(loc, 'name'):
+            item_copy['location'] = {'name': loc.name, 'id': str(loc.id)}
+        elif loc is None:
+            item_copy['location'] = None
+        result.append(item_copy)
+    return result
+
+
 def feed_view(request):
     """
     Display the main feed with all posts and quick workouts.
+    Supports ?tab=main (default) and ?tab=friends.
+    AJAX requests (with cursor param or XMLHttpRequest) return JSON for infinite scroll.
     """
-    # Get quick workouts (check-ins) that are visible to main feed
-    quick_workouts = QuickWorkout.objects.filter(
-        visibility='main'
-    ).select_related('user', 'location').order_by('-created_at')[:50]
+    tab = request.GET.get('tab', 'main')
+    if tab not in ('main', 'friends'):
+        tab = 'main'
 
-    # Get regular posts
-    posts = Post.objects.filter(
-        visibility='main'
-    ).select_related('user', 'location').order_by('-created_at')[:50]
+    cursor = request.GET.get('cursor', None)
+    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or cursor
 
-    # Combine and sort by created_at
-    feed_items = []
+    if is_ajax:
+        feed_items, next_cursor = _get_feed_page(request, tab, cursor)
+        items_json = _serialize_feed_items_for_json(feed_items)
+        return JsonResponse({'items': items_json, 'next_cursor': next_cursor})
 
-    for qw in quick_workouts:
-        like_count = Reaction.objects.filter(quick_workout=qw).count()
-        comment_count = Comment.objects.filter(quick_workout=qw).count()
-        user_liked = False
-        if request.user.is_authenticated:
-            user_liked = Reaction.objects.filter(quick_workout=qw, user=request.user).exists()
+    # Server-rendered first page with caching
+    user = request.user if request.user.is_authenticated else None
+    cache_key = f'feed:{user.id if user else "anon"}:{tab}:page1' if user else None
 
-        feed_items.append({
-            'type': 'checkin',
-            'id': str(qw.id),
-            'user': qw.user,
-            'location': qw.location,
-            'location_name': qw.location_name or (qw.location.name if qw.location else ''),
-            'workout_type': qw.type.replace('_', ' ').title() if qw.type else '',
-            'description': qw.description,
-            'created_at': qw.created_at,
-            'photo_url': get_checkin_photo(qw.id),
-            'like_count': like_count,
-            'comment_count': comment_count,
-            'user_liked': user_liked,
-        })
+    feed_items = None
+    next_cursor = None
 
-    for post in posts:
-        like_count = Reaction.objects.filter(post=post).count()
-        comment_count = Comment.objects.filter(post=post).count()
-        user_liked = False
-        if request.user.is_authenticated:
-            user_liked = Reaction.objects.filter(post=post, user=request.user).exists()
+    if cache_key:
+        cached = cache.get(cache_key)
+        if cached:
+            feed_items, next_cursor = cached
 
-        post_data = {
-            'type': 'workout' if post.workout else 'post',
-            'id': str(post.id),
-            'user': post.user,
-            'location': post.location,
-            'description': post.description,
-            'created_at': post.created_at,
-            'photo_url': get_media_url('post', str(post.id)) or (build_media_url(post.photo.name) if post.photo else None),
-            'video_url': build_media_url(post.video.name) if post.video else None,
-            'link_url': post.link_url,
-            'like_count': like_count,
-            'comment_count': comment_count,
-            'user_liked': user_liked,
-        }
-
-        # Check for poll
-        try:
-            poll = post.poll
-            user_voted = False
-            user_vote_option = None
-            if request.user.is_authenticated:
-                vote = PollVote.objects.filter(poll=poll, user=request.user).first()
-                if vote:
-                    user_voted = True
-                    user_vote_option = str(vote.option.id)
-
-            total_votes = poll.get_total_votes()
-            poll_options = []
-            for opt in poll.options.all():
-                percentage = round((opt.votes / total_votes * 100) if total_votes > 0 else 0)
-                poll_options.append({
-                    'id': str(opt.id),
-                    'text': opt.text,
-                    'votes': opt.votes,
-                    'percentage': percentage,
-                })
-
-            post_data['poll'] = {
-                'id': str(poll.id),
-                'question': poll.question,
-                'options': poll_options,
-                'total_votes': total_votes,
-                'is_active': poll.is_active,
-                'user_voted': user_voted,
-                'user_vote_option': user_vote_option,
-            }
-        except Poll.DoesNotExist:
-            post_data['poll'] = None
-
-        # Add workout details if this is a workout post
-        if post.workout:
-            workout = post.workout
-            from workouts.models import Exercise, ExerciseSet
-
-            exercises = Exercise.objects.filter(workout=workout)
-            exercise_count = exercises.count()
-            total_sets = ExerciseSet.objects.filter(exercise__workout=workout).count()
-
-            # Format duration
-            if workout.duration:
-                total_seconds = int(workout.duration.total_seconds())
-                hours = total_seconds // 3600
-                minutes = (total_seconds % 3600) // 60
-                if hours > 0:
-                    duration_str = f"{hours}h {minutes}m"
-                else:
-                    duration_str = f"{minutes}m"
-            else:
-                duration_str = "--"
-
-            post_data['workout'] = {
-                'id': str(workout.id),
-                'name': workout.name,
-                'duration': duration_str,
-                'exercise_count': exercise_count,
-                'total_sets': total_sets,
-                'exercises': [e.name for e in exercises[:3]],
-            }
-
-        # Check for personal records attached to this post
-        pr = PersonalRecord.objects.filter(post=post).first()
-        if pr:
-            post_data['personal_record'] = {
-                'id': str(pr.id),
-                'exercise_name': pr.exercise_name,
-                'value': pr.value,
-                'unit': pr.unit,
-            }
-
-        feed_items.append(post_data)
-
-    # Sort by created_at descending
-    feed_items.sort(key=lambda x: x['created_at'], reverse=True)
+    if feed_items is None:
+        feed_items, next_cursor = _get_feed_page(request, tab)
+        if cache_key:
+            cache.set(cache_key, (feed_items, next_cursor), FEED_CACHE_TTL)
 
     return render(request, 'social/feed.html', {
         'feed_items': feed_items,
+        'active_tab': tab,
+        'next_cursor': next_cursor or '',
     })
 
 
@@ -472,7 +690,7 @@ def create_checkin_view(request):
             location_name=gym.name,
             type=activity,
             description=f'{activity.replace("_", " ").title()} workout',
-            visibility='main',
+            visibility='friends',
         )
 
         # Increment total workouts
