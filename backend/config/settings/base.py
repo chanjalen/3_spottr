@@ -151,3 +151,12 @@ AWS_S3_CUSTOM_DOMAIN = f"{_project_ref}.supabase.co/storage/v1/object/public/{_b
 
 MEDIA_URL = f"https://{AWS_S3_CUSTOM_DOMAIN}/"
 MEDIA_ROOT = BASE_DIR / 'media_uploads'
+
+# Cache
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'spottr-feed-cache',
+        'TIMEOUT': 60,
+    }
+}

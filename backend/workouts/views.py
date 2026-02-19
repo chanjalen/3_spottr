@@ -385,6 +385,7 @@ def finish_workout_view(request, workout_id):
             'save_template': request.POST.get('save_template') == 'true',
             'template_name': request.POST.get('template_name', ''),
             'post_to_feed': request.POST.get('post_to_feed', 'true') == 'true',
+            'visibility': request.POST.get('visibility', 'main'),
         }
         photo = request.FILES.get('photo')
     else:
@@ -467,12 +468,16 @@ def finish_workout_view(request, workout_id):
         if workout.notes:
             description += f"\n\n{workout.notes}"
 
+        visibility = data.get('visibility', 'main')
+        if visibility not in ('main', 'friends'):
+            visibility = 'main'
+
         post = Post.objects.create(
             user=request.user,
             workout=workout,
             location=workout.gym,
             description=description,
-            visibility='main',
+            visibility=visibility,
         )
 
         # Save photo if provided

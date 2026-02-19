@@ -998,6 +998,43 @@
         gap: 4px;
     }
 
+    /* ============ INFINITE SCROLL ============ */
+    .feed-loading-spinner {
+        display: none;
+        text-align: center;
+        padding: 24px;
+    }
+    .feed-loading-spinner.active {
+        display: block;
+    }
+    .feed-loading-spinner .spinner-dots {
+        display: inline-flex;
+        gap: 6px;
+    }
+    .feed-loading-spinner .spinner-dots span {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--text-muted);
+        animation: feedDotPulse 1.2s infinite ease-in-out;
+    }
+    .feed-loading-spinner .spinner-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .feed-loading-spinner .spinner-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes feedDotPulse {
+        0%, 80%, 100% { opacity: 0.3; transform: scale(0.8); }
+        40% { opacity: 1; transform: scale(1); }
+    }
+    .feed-end-message {
+        display: none;
+        text-align: center;
+        padding: 24px;
+        color: var(--text-muted);
+        font-size: 14px;
+    }
+    .feed-end-message.active {
+        display: block;
+    }
+
     /* ============ EMPTY STATE ============ */
     .feed-empty {
         text-align: center;
@@ -1166,8 +1203,8 @@
 {% block content %}
 <!-- Feed Tabs -->
 <div class="feed-tabs">
-    <a href="#" class="feed-tab active">Main</a>
-    <a href="#" class="feed-tab">Friends</a>
+    <a href="/?tab=main" class="feed-tab {% if active_tab != 'friends' %}active{% endif %}">Main</a>
+    <a href="/?tab=friends" class="feed-tab {% if active_tab == 'friends' %}active{% endif %}">Friends</a>
 </div>
 
 <!-- Search -->
@@ -1176,7 +1213,7 @@
 </div>
 
 <!-- Feed List -->
-<div class="feed-list">
+<div class="feed-list" id="feedList" data-next-cursor="{{ next_cursor|default:'' }}" data-tab="{{ active_tab }}">
     {% for item in feed_items %}
     <div class="feed-card" data-item-id="{{ item.id }}" data-item-type="{{ item.type }}">
         <div class="feed-card-header">
@@ -1344,6 +1381,12 @@
     </div>
     {% endfor %}
 </div>
+
+<!-- Feed Loading Spinner -->
+<div class="feed-loading-spinner" id="feedLoadingSpinner">
+    <div class="spinner-dots"><span></span><span></span><span></span></div>
+</div>
+<div class="feed-end-message" id="feedEndMessage">You're all caught up!</div>
 
 <!-- Share Modal -->
 <div class="share-modal-backdrop" id="shareModal" onclick="if(event.target===this)closeShareModal()">
@@ -2017,6 +2060,230 @@ document.querySelectorAll('.comment-input').forEach(textarea => {
         this.style.height = 'auto';
         this.style.height = Math.min(this.scrollHeight, 120) + 'px';
     });
+});
+
+// ============ INFINITE SCROLL ============
+let feedNextCursor = document.getElementById('feedList') ? document.getElementById('feedList').dataset.nextCursor : '';
+let feedLoading = false;
+const feedTab = document.getElementById('feedList') ? document.getElementById('feedList').dataset.tab : 'main';
+
+function renderFeedCard(item) {
+    const user = item.user || {};
+    const displayName = user.display_name || user.username || '?';
+    const avatarLetter = displayName.charAt(0).toUpperCase();
+    const avatarHtml = user.avatar_url
+        ? `<img src="${escapeAttr(user.avatar_url)}" alt="${escapeAttr(displayName)}">`
+        : `<span class="feed-avatar-letter">${avatarLetter}</span>`;
+    const streak = user.current_streak || 0;
+    const timeAgo = item.time_ago || '';
+    const locationName = item.location_name || (item.location ? item.location.name : '') || '';
+
+    let mediaHtml = '';
+    if (item.video_url) {
+        mediaHtml = `<div class="feed-card-image"><video src="${escapeAttr(item.video_url)}" controls playsinline style="width:100%;border-radius:16px;"></video></div>`;
+    } else if (item.photo_url) {
+        mediaHtml = `<div class="feed-card-image"><img src="${escapeAttr(item.photo_url)}" alt="Workout photo"></div>`;
+    }
+
+    let bodyHtml = '';
+
+    // PR card
+    if (item.personal_record) {
+        const pr = item.personal_record;
+        bodyHtml += `<div class="feed-pr-card">
+            <div class="feed-pr-left">
+                <span class="feed-pr-label">Personal Record</span>
+                <span class="feed-pr-exercise">${escapeHtml(pr.exercise_name)}</span>
+            </div>
+            <div class="feed-pr-right">
+                <span class="feed-pr-value">${escapeHtml(pr.value)} ${escapeHtml(pr.unit)}</span>
+                <span class="feed-pr-badge">&#8599; New PR</span>
+            </div>
+        </div>`;
+    }
+
+    // Workout type tag for checkins
+    if (item.type === 'checkin' && item.workout_type) {
+        bodyHtml += `<div class="feed-workout-tag">\uD83D\uDCAA ${escapeHtml(item.workout_type)}</div>`;
+    }
+
+    // Workout summary for workout posts
+    if (item.type === 'workout' && item.workout) {
+        const w = item.workout;
+        let exercisesHtml = '';
+        if (w.exercises && w.exercises.length) {
+            exercisesHtml = `<div class="feed-workout-exercises">\uD83C\uDFCB\uFE0F ${escapeHtml(w.exercises.join(', '))}</div>`;
+        }
+        bodyHtml += `<a href="/workouts/${escapeAttr(w.id)}/view/" class="feed-workout-summary">
+            <div class="feed-workout-header">
+                <span class="feed-workout-name">${escapeHtml(w.name)}</span>
+                <span class="feed-workout-view-link">View Workout &rarr;</span>
+            </div>
+            <div class="feed-workout-stats">
+                <div class="feed-workout-stat">
+                    <span class="feed-workout-stat-value">${w.exercise_count}</span>
+                    <span class="feed-workout-stat-label">exercises</span>
+                </div>
+                <div class="feed-workout-stat">
+                    <span class="feed-workout-stat-value">${w.total_sets}</span>
+                    <span class="feed-workout-stat-label">sets</span>
+                </div>
+                <div class="feed-workout-stat">
+                    <span class="feed-workout-stat-value">${escapeHtml(w.duration)}</span>
+                    <span class="feed-workout-stat-label">duration</span>
+                </div>
+            </div>
+            ${exercisesHtml}
+        </a>`;
+    }
+
+    // Description
+    if (item.description) {
+        bodyHtml += `<p class="feed-description">${escapeHtml(item.description)}</p>`;
+    }
+
+    // Link
+    if (item.link_url) {
+        bodyHtml += `<a href="${escapeAttr(item.link_url)}" target="_blank" rel="noopener" class="feed-link-preview">
+            <span class="feed-link-icon">&#128279;</span>
+            <span class="feed-link-url">${escapeHtml(item.link_url)}</span>
+        </a>`;
+    }
+
+    // Poll
+    if (item.poll) {
+        const poll = item.poll;
+        const hasVoted = poll.user_voted;
+        const isActive = poll.is_active;
+        let questionHtml = '';
+        if (poll.question !== item.description) {
+            questionHtml = `<div class="feed-poll-question">${escapeHtml(poll.question)}</div>`;
+        }
+        let optionsHtml = '';
+        (poll.options || []).forEach(opt => {
+            const votedClass = (hasVoted || !isActive) ? ' voted' : '';
+            const selectedClass = (poll.user_vote_option === opt.id) ? ' selected' : '';
+            const barWidth = (hasVoted || !isActive) ? opt.percentage + '%' : '0';
+            const percentHtml = (hasVoted || !isActive) ? `<span class="feed-poll-option-percent">${opt.percentage}%</span>` : '';
+            const clickHandler = isActive ? ` onclick="votePoll('${escapeAttr(poll.id)}', '${escapeAttr(opt.id)}', this)"` : '';
+            optionsHtml += `<div class="feed-poll-option${votedClass}${selectedClass}" data-option-id="${escapeAttr(opt.id)}"${clickHandler}>
+                <div class="feed-poll-option-bar" style="width: ${barWidth}"></div>
+                <div class="feed-poll-option-content">
+                    <span class="feed-poll-option-text">${escapeHtml(opt.text)}</span>
+                    ${percentHtml}
+                </div>
+            </div>`;
+        });
+        const endedHtml = !isActive ? '<span class="feed-poll-ended">&#8226; Poll ended</span>' : '';
+        const pluralS = poll.total_votes !== 1 ? 's' : '';
+        bodyHtml += `<div class="feed-poll" data-poll-id="${escapeAttr(poll.id)}" data-user-voted="${hasVoted}" data-user-vote-option="${poll.user_vote_option || ''}" data-is-active="${isActive}">
+            ${questionHtml}
+            <div class="feed-poll-options">${optionsHtml}</div>
+            <div class="feed-poll-meta">
+                <span>${poll.total_votes} vote${pluralS}</span>
+                ${endedHtml}
+            </div>
+        </div>`;
+    }
+
+    // Location display
+    let locationHtml = '';
+    if (locationName) {
+        locationHtml = `<span class="feed-meta-dot"></span><span class="feed-location">\uD83D\uDCCD ${escapeHtml(locationName)}</span>`;
+    }
+
+    const likedClass = item.user_liked ? ' liked' : '';
+    const heartIcon = item.user_liked ? '\u2764\uFE0F' : '\uD83E\uDD0D';
+
+    return `<div class="feed-card" data-item-id="${escapeAttr(item.id)}" data-item-type="${escapeAttr(item.type)}">
+        <div class="feed-card-header">
+            <a href="/accounts/profile/${escapeAttr(user.username)}/" class="feed-profile-link">
+                <div class="feed-avatar">${avatarHtml}</div>
+                <div class="feed-user-info">
+                    <div class="feed-user-row">
+                        <span class="feed-username">${escapeHtml(displayName)}</span>
+                        <span class="feed-streak">\uD83D\uDD25 ${streak}</span>
+                    </div>
+                    <div class="feed-meta">
+                        <span>${escapeHtml(timeAgo)}</span>
+                        ${locationHtml}
+                    </div>
+                </div>
+            </a>
+        </div>
+        ${mediaHtml}
+        <div class="feed-card-body">${bodyHtml}</div>
+        <div class="feed-card-actions">
+            <button class="feed-action like-btn${likedClass}" data-item-id="${escapeAttr(item.id)}" data-item-type="${escapeAttr(item.type)}" onclick="toggleLike(this)">
+                <span class="feed-action-icon">${heartIcon}</span>
+                <span class="like-count" onclick="event.stopPropagation(); showLikers('${escapeAttr(item.id)}', '${escapeAttr(item.type)}')">${item.like_count}</span>
+            </button>
+            <button class="feed-action comment-btn" data-item-id="${escapeAttr(item.id)}" data-item-type="${escapeAttr(item.type)}" onclick="toggleComments(this)">
+                <span class="feed-action-icon">\uD83D\uDCAC</span>
+                <span class="comment-count">${item.comment_count}</span>
+            </button>
+            <button class="feed-action share-btn" onclick="openShareModal('${escapeAttr(item.id)}', '${escapeAttr(item.type)}')">
+                <span class="feed-action-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></span>
+            </button>
+        </div>
+        <div class="feed-comments-section" id="comments-${escapeAttr(item.id)}">
+            <div class="comments-list" id="comments-list-${escapeAttr(item.id)}">
+                <div class="comments-loading">Loading comments...</div>
+            </div>
+            <div class="comment-input-container">
+                <textarea class="comment-input" id="comment-input-${escapeAttr(item.id)}" placeholder="Write a comment..." rows="1" maxlength="500"></textarea>
+                <button class="comment-submit" onclick="submitComment('${escapeAttr(item.id)}', '${escapeAttr(item.type)}')">Post</button>
+            </div>
+        </div>
+    </div>`;
+}
+
+function escapeAttr(str) {
+    if (str == null) return '';
+    return String(str).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function loadMoreFeedItems() {
+    if (feedLoading || !feedNextCursor) return;
+    feedLoading = true;
+
+    const spinner = document.getElementById('feedLoadingSpinner');
+    spinner.classList.add('active');
+
+    const url = `/?tab=${encodeURIComponent(feedTab)}&cursor=${encodeURIComponent(feedNextCursor)}`;
+    fetch(url, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'same-origin',
+    })
+    .then(r => r.json())
+    .then(data => {
+        spinner.classList.remove('active');
+        const feedList = document.getElementById('feedList');
+        (data.items || []).forEach(item => {
+            feedList.insertAdjacentHTML('beforeend', renderFeedCard(item));
+        });
+        feedNextCursor = data.next_cursor || '';
+        feedList.dataset.nextCursor = feedNextCursor;
+
+        if (!feedNextCursor) {
+            document.getElementById('feedEndMessage').classList.add('active');
+        }
+        feedLoading = false;
+    })
+    .catch(err => {
+        console.error('Feed load error:', err);
+        spinner.classList.remove('active');
+        feedLoading = false;
+    });
+}
+
+window.addEventListener('scroll', function() {
+    if (feedLoading || !feedNextCursor) return;
+    const scrollBottom = window.innerHeight + window.scrollY;
+    const docHeight = document.documentElement.scrollHeight;
+    if (docHeight - scrollBottom < 200) {
+        loadMoreFeedItems();
+    }
 });
 
 // Vote on poll (supports changing votes)
