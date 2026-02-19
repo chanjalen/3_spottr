@@ -2455,14 +2455,6 @@
         </div>
     </div>
 
-    {% if request.resolver_match.app_name == 'gyms' %}
-    <nav>
-        <a href="{% url 'gyms:gym_list_manual' %}" {% if request.resolver_match.url_name == 'gym_list_manual' %}class="active"{% endif %}>Manual</a>
-        <a href="{% url 'gyms:gym_list_render' %}" {% if request.resolver_match.url_name == 'gym_list_render' %}class="active"{% endif %}>Render</a>
-        <a href="{% url 'gyms:gym_list_cbv' %}" {% if request.resolver_match.url_name == 'gym_list_cbv' %}class="active"{% endif %}>Base CBV</a>
-        <a href="{% url 'gyms:gym_list_generic' %}" {% if request.resolver_match.url_name == 'gym_list_generic' or request.resolver_match.url_name == 'gym_detail' %}class="active"{% endif %}>Generic</a>
-    </nav>
-    {% endif %}
 
     <main class="main-content">
         {% block content %}{% endblock %}
@@ -2730,7 +2722,7 @@
             <span class="nav-icon">🏠</span>
             <span>Feed</span>
         </a>
-        <a href="{% url 'gyms:gym_list_generic' %}" {% if request.resolver_match.app_name == 'gyms' %}class="active"{% endif %}>
+        <a href="{% url 'gyms:gym_list' %}" {% if request.resolver_match.app_name == 'gyms' %}class="active"{% endif %}>
             <span class="nav-icon">📍</span>
             <span>Gyms</span>
         </a>

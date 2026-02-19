@@ -497,6 +497,13 @@
         font-weight: 600;
         color: var(--text-primary);
         margin-bottom: 4px;
+        cursor: pointer;
+        display: inline-block;
+        transition: color var(--duration) var(--ease-out);
+    }
+
+    .group-card-name:hover {
+        color: var(--brand-cyan);
     }
 
     .group-card-meta {
@@ -1737,7 +1744,7 @@
                 {% endif %}
             </div>
             <div class="group-card-info">
-                <div class="group-card-name">{{ group.name }}</div>
+                <div class="group-card-name" onclick="openGroupProfile('{{ group.id }}', 'discover')">{{ group.name }}</div>
                 <div class="group-card-meta">
                     <span>👥 {{ group.member_count }} members</span>
                     {% if group.group_streak > 0 %}
@@ -2005,16 +2012,8 @@ function openChat(type, id, name, username, partnerCheckedIn) {
 function closeChat() {
     document.getElementById('chatContainer').classList.remove('active');
     document.querySelector('.social-tabs').style.display = 'flex';
-    document.querySelectorAll('.tab-panel').forEach(p => {
-        if (p.classList.contains('active')) p.style.display = 'block';
-        else p.style.display = 'none';
-    });
-    // Re-show the active tab panel
-    const activeTab = document.querySelector('.social-tab.active');
-    if (activeTab) {
-        const tabName = activeTab.dataset.tab;
-        document.getElementById(`tab-${tabName}`).style.display = 'block';
-    }
+    // Clear inline styles so CSS classes (.tab-panel.active) control visibility again
+    document.querySelectorAll('.tab-panel').forEach(p => p.style.display = '');
 }
 
 function buildMessageHtml(msg) {
@@ -2369,12 +2368,40 @@ function startNewChat(friendId, friendName) {
 // ============ GROUP PROFILE ============
 let currentGroupProfileId = null;
 let currentGroupProfileData = null;
+let groupProfileOrigin = 'chat'; // 'chat' | 'discover'
 
-function openGroupProfile(groupId) {
+function resetGroupProfileContent() {
+    document.getElementById('groupProfileHeaderTitle').textContent = 'Loading…';
+    document.getElementById('groupProfileAvatar').innerHTML = '<span></span>';
+    document.getElementById('groupProfileName').textContent = '';
+    document.getElementById('groupProfileDescription').textContent = '';
+    document.getElementById('groupProfilePrivacy').textContent = '';
+    document.getElementById('groupProfileMemberCount').textContent = '';
+    const streakEl = document.getElementById('groupProfileStreak');
+    streakEl.textContent = '';
+    streakEl.style.display = 'none';
+    document.getElementById('groupProfileInviteInline').style.display = 'none';
+    document.getElementById('groupProfileEditBtn').style.display = 'none';
+    document.getElementById('groupProfileMembersList').innerHTML =
+        '<p style="color:var(--text-muted);text-align:center;padding:24px 0;font-size:14px;">Loading…</p>';
+}
+
+function openGroupProfile(groupId, origin) {
     currentGroupProfileId = groupId;
+    groupProfileOrigin = origin || 'chat';
 
-    // Hide chat, show group profile
-    document.getElementById('chatContainer').classList.remove('active');
+    // Clear stale content immediately so there's no flash of old data
+    resetGroupProfileContent();
+
+    if (groupProfileOrigin === 'discover') {
+        // Full-page view: hide tabs just like opening a chat
+        document.querySelector('.social-tabs').style.display = 'none';
+        document.querySelectorAll('.tab-panel').forEach(p => p.style.display = 'none');
+        window.scrollTo(0, 0);
+    } else {
+        // Came from chat: swap chat for group profile
+        document.getElementById('chatContainer').classList.remove('active');
+    }
     document.getElementById('groupProfileContainer').classList.add('active');
 
     // Fetch group details
@@ -2386,6 +2413,8 @@ function openGroupProfile(groupId) {
     })
     .catch(err => {
         console.error('Error loading group profile:', err);
+        document.getElementById('groupProfileMembersList').innerHTML =
+            '<div class="modal-empty"><div class="modal-empty-icon">⚠️</div><div class="modal-empty-title">Couldn\'t load group</div></div>';
     });
 }
 
@@ -2517,8 +2546,17 @@ function closeGroupProfile() {
     document.getElementById('groupProfileContainer').classList.remove('active');
     // Hide edit form if open
     document.getElementById('groupEditForm').classList.remove('active');
-    // Show chat again
-    document.getElementById('chatContainer').classList.add('active');
+
+    if (groupProfileOrigin === 'discover') {
+        // Restore tabs and land back on the groups tab
+        document.querySelector('.social-tabs').style.display = 'flex';
+        document.querySelectorAll('.tab-panel').forEach(p => p.style.display = '');
+        switchTab('groups');
+        window.scrollTo(0, 0);
+    } else {
+        // Came from chat: show chat again
+        document.getElementById('chatContainer').classList.add('active');
+    }
 }
 
 function toggleGroupEdit() {
@@ -2807,11 +2845,11 @@ function closeGroupStreakModal() {
 
 // Clear cached streak data when opening a different group
 const _origOpenGroupProfile = openGroupProfile;
-openGroupProfile = function(groupId) {
+openGroupProfile = function(groupId, origin) {
     if (groupId !== currentGroupProfileId) {
         cachedGroupStreakMembers = null;
     }
-    _origOpenGroupProfile(groupId);
+    _origOpenGroupProfile(groupId, origin);
 };
 </script>
 {% endblock %}

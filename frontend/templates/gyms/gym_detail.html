@@ -15,7 +15,7 @@
         {% else %}
         <button class="enroll-action-btn" id="enrollBtn">Enroll</button>
         {% endif %}
-        <a href="{% url 'gyms:gym_list_generic' %}" class="view-map-btn">View Map</a>
+        <a href="{% url 'gyms:gym_list' %}" class="view-map-btn">View Map</a>
     </div>
 </div>
 
@@ -87,10 +87,14 @@
                 <span class="invite-avatar-letter">{{ invite.user.username|make_list|first|upper }}</span>
             </div>
             <div class="invite-info">
-                <div class="invite-title">{{ invite.user.username }} is looking for {{ invite.spots_available }} {% if invite.spots_available == 1 %}person{% else %}people{% endif %}</div>
+                <div class="invite-title"><a href="{% url 'accounts:user_profile' username=invite.user.username %}" class="user-link">{{ invite.user.username }}</a> is looking for {{ invite.spots_available }} {% if invite.spots_available == 1 %}person{% else %}people{% endif %}</div>
                 <div class="invite-meta">{{ invite.workout_type }} &middot; {{ invite.scheduled_time|date:"M j" }} at {{ invite.scheduled_time|time:"g:i A" }}</div>
             </div>
+            {% if invite.user == request.user %}
+            <button class="cancel-invite-btn" data-invite-id="{{ invite.id }}">Cancel Invite</button>
+            {% else %}
             <button class="join-btn" data-invite-id="{{ invite.id }}">Join</button>
+            {% endif %}
         </div>
         {% empty %}
         <div class="invite-empty">No active invites right now. Be the first to post one!</div>
@@ -780,6 +784,29 @@
         cursor: default;
     }
 
+    .cancel-invite-btn {
+        padding: 8px 18px;
+        background: rgba(239,68,68,0.12);
+        border: 1px solid rgba(239,68,68,0.3);
+        border-radius: var(--radius-pill);
+        color: #f87171;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all var(--duration) var(--ease-out);
+        flex-shrink: 0;
+    }
+
+    .cancel-invite-btn:hover {
+        background: rgba(239,68,68,0.22);
+        border-color: rgba(239,68,68,0.5);
+    }
+
+    /* ============ USER LINKS ============ */
+    .user-link { color: var(--text-brand, #22d3ee); text-decoration: none; }
+    .user-link:hover { text-decoration: underline; }
+
     /* ============ TOP LIFTERS SELECT ============ */
     .lifters-select {
         padding: 8px 14px;
@@ -1058,6 +1085,38 @@
         });
     }
 
+    // ---- Cancel Invite ----
+    document.querySelectorAll('.cancel-invite-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (!confirm('Cancel this workout invite?')) return;
+            const inviteId = btn.dataset.inviteId;
+            btn.disabled = true;
+            btn.textContent = 'Cancelling...';
+            try {
+                const res = await fetch(`/api/gyms/invites/${inviteId}/`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': csrfToken },
+                });
+                if (res.ok || res.status === 204) {
+                    btn.closest('.invite-card').remove();
+                    const inviteList = document.getElementById('inviteList');
+                    if (inviteList && inviteList.querySelectorAll('.invite-card').length === 0) {
+                        inviteList.innerHTML = '<div class="invite-empty">No active invites right now. Be the first to post one!</div>';
+                    }
+                } else {
+                    const data = await res.json().catch(() => ({}));
+                    alert(data.error || 'Could not cancel invite.');
+                    btn.disabled = false;
+                    btn.textContent = 'Cancel Invite';
+                }
+            } catch {
+                alert('Network error. Please try again.');
+                btn.disabled = false;
+                btn.textContent = 'Cancel Invite';
+            }
+        });
+    });
+
     // ---- Top Lifters ----
     const liftersSelect = document.getElementById('liftersSelect');
     const liftersList = document.getElementById('liftersList');
@@ -1085,7 +1144,7 @@
                         <span class="leaderboard-avatar-letter">${(l.username[0] || '?').toUpperCase()}</span>
                     </div>
                     <div class="leaderboard-info">
-                        <div class="leaderboard-name">${l.display_name}</div>
+                        <div class="leaderboard-name"><a href="/accounts/profile/${encodeURIComponent(l.username)}/" class="user-link">${l.display_name}</a></div>
                         <div class="leaderboard-streak">@${l.username}</div>
                     </div>
                     <div class="leaderboard-stat">${l.value} ${l.unit}</div>
