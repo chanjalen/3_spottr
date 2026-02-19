@@ -25,7 +25,7 @@ from messaging.exceptions import NotMutualFollowError, UserBlockedError, NotGrou
 from groups.models import Group, GroupMember
 from django.utils import timezone
 
-FEED_PAGE_SIZE = 20
+FEED_PAGE_SIZE = 5
 FEED_CACHE_TTL = 60
 
 
