@@ -1674,3 +1674,65 @@ def share_post_view(request):
         'sent_count': sent_count,
         'errors': errors,
     })
+
+
+@login_required
+@require_GET
+def leaderboard_view(request):
+    from accounts.models import User
+
+    active_tab = request.GET.get('tab', 'friends')
+
+    # --- Friends leaderboard ---
+    following_ids = list(
+        Follow.objects.filter(follower=request.user)
+        .values_list('following_id', flat=True)
+    )
+    all_ids = following_ids + [request.user.id]
+    friends_qs = (
+        User.objects.filter(id__in=all_ids)
+        .order_by('-current_streak', '-total_workouts')
+        .only('id', 'username', 'display_name', 'current_streak', 'total_workouts', 'avatar')
+    )
+    friends_ranked = [
+        {'rank': i + 1, 'user': u}
+        for i, u in enumerate(friends_qs)
+    ]
+    friends_my_rank = next(
+        (e['rank'] for e in friends_ranked if e['user'].id == request.user.id), None
+    )
+
+    # --- Gym leaderboard ---
+    enrolled_gyms = list(request.user.enrolled_gyms.all())
+    gym_id_param = request.GET.get('gym_id')
+    selected_gym = None
+    if gym_id_param:
+        selected_gym = next((g for g in enrolled_gyms if str(g.id) == gym_id_param), None)
+    if not selected_gym and enrolled_gyms:
+        selected_gym = enrolled_gyms[0]
+
+    gym_ranked = []
+    gym_my_rank = None
+    if selected_gym:
+        gym_qs = (
+            User.objects.filter(enrolled_gyms=selected_gym)
+            .order_by('-current_streak', '-total_workouts')
+            .only('id', 'username', 'display_name', 'current_streak', 'total_workouts', 'avatar')
+        )
+        gym_ranked = [
+            {'rank': i + 1, 'user': u}
+            for i, u in enumerate(gym_qs)
+        ]
+        gym_my_rank = next(
+            (e['rank'] for e in gym_ranked if e['user'].id == request.user.id), None
+        )
+
+    return render(request, 'social/leaderboard.html', {
+        'friends_ranked': friends_ranked,
+        'friends_my_rank': friends_my_rank,
+        'gym_ranked': gym_ranked,
+        'gym_my_rank': gym_my_rank,
+        'selected_gym': selected_gym,
+        'enrolled_gyms': enrolled_gyms,
+        'active_tab': active_tab,
+    })

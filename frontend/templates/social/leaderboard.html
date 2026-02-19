@@ -1,0 +1,514 @@
+{% extends 'gyms/base.html' %}
+
+{% block title %}Spottr - Leaderboard{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* ===== PAGE SHELL ===== */
+    .lb-page {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 0 0 120px;
+    }
+
+    /* ===== HEADER ===== */
+    .lb-header {
+        text-align: center;
+        padding: 24px 16px 20px;
+    }
+
+    .lb-header-icon {
+        font-size: 32px;
+        line-height: 1;
+        margin-bottom: 6px;
+    }
+
+    .lb-header-title {
+        font-size: 24px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin: 0 0 4px;
+    }
+
+    .lb-header-sub {
+        font-size: 13px;
+        color: var(--text-muted);
+        margin: 0;
+    }
+
+    /* ===== PILL TABS ===== */
+    .lb-tab-wrap {
+        padding: 0 16px 20px;
+    }
+
+    .lb-tabs {
+        display: flex;
+        background: var(--bg-elevated);
+        border-radius: 12px;
+        padding: 4px;
+        gap: 4px;
+    }
+
+    .lb-tab {
+        flex: 1;
+        text-align: center;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-decoration: none;
+        padding: 10px 0;
+        border-radius: 9px;
+        transition: color 0.2s, background 0.2s;
+    }
+
+    .lb-tab:hover {
+        color: var(--text-secondary);
+    }
+
+    .lb-tab.active {
+        background: linear-gradient(90deg, var(--brand-cyan), #0ea5e9);
+        color: #fff;
+    }
+
+    /* ===== GYM BANNER / DROPDOWN ===== */
+    .lb-gym-banner {
+        margin: 0 16px 20px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: 10px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 12px 16px;
+        color: var(--brand-cyan);
+        font-size: 14px;
+        font-weight: 600;
+        cursor: default;
+        position: relative;
+    }
+
+    .lb-gym-banner.is-dropdown {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .lb-gym-pin {
+        font-size: 16px;
+        flex-shrink: 0;
+    }
+
+    .lb-gym-name {
+        flex: 1;
+        text-align: center;
+    }
+
+    .lb-gym-chevron {
+        font-size: 12px;
+        color: var(--text-muted);
+        flex-shrink: 0;
+        transition: transform 0.2s;
+    }
+
+    .lb-gym-banner.is-dropdown.open .lb-gym-chevron {
+        transform: rotate(180deg);
+    }
+
+    .lb-gym-dropdown {
+        position: absolute;
+        top: calc(100% + 6px);
+        left: 0;
+        right: 0;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: 10px;
+        overflow: hidden;
+        z-index: 50;
+        display: none;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    .lb-gym-dropdown.open {
+        display: block;
+    }
+
+    .lb-gym-option {
+        display: block;
+        padding: 12px 16px;
+        font-size: 14px;
+        color: var(--text-secondary);
+        text-decoration: none;
+        transition: background 0.15s;
+    }
+
+    .lb-gym-option:hover {
+        background: var(--bg-hover);
+        color: var(--text-primary);
+    }
+
+    .lb-gym-option.selected {
+        color: var(--brand-cyan);
+        font-weight: 600;
+    }
+
+    /* ===== PODIUM ===== */
+    .lb-podium {
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        padding: 8px 16px 24px;
+        gap: 8px;
+    }
+
+    .lb-podium-slot {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        text-decoration: none;
+        gap: 6px;
+        max-width: 130px;
+    }
+
+    /* 2nd left, 1st center elevated, 3rd right */
+    .lb-podium-slot.rank-2 { order: 1; }
+    .lb-podium-slot.rank-1 { order: 2; margin-bottom: 28px; }
+    .lb-podium-slot.rank-3 { order: 3; }
+
+    .lb-podium-icon {
+        font-size: 22px;
+        line-height: 1;
+    }
+
+    .lb-podium-slot.rank-1 .lb-podium-icon {
+        font-size: 28px;
+    }
+
+    .lb-podium-avatar {
+        border-radius: 50%;
+        overflow: hidden;
+        border: 3px solid transparent;
+        flex-shrink: 0;
+    }
+
+    .lb-podium-slot.rank-1 .lb-podium-avatar {
+        width: 80px;
+        height: 80px;
+        border-color: #f59e0b;
+    }
+
+    .lb-podium-slot.rank-2 .lb-podium-avatar {
+        width: 62px;
+        height: 62px;
+        border-color: #9ca3af;
+    }
+
+    .lb-podium-slot.rank-3 .lb-podium-avatar {
+        width: 62px;
+        height: 62px;
+        border-color: #b45309;
+    }
+
+    .lb-podium-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    .lb-podium-avatar-letter {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        color: #fff;
+        font-weight: 700;
+        font-size: 24px;
+    }
+
+    .lb-podium-slot.rank-2 .lb-podium-avatar-letter,
+    .lb-podium-slot.rank-3 .lb-podium-avatar-letter {
+        font-size: 20px;
+    }
+
+    .lb-podium-name {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-primary);
+        text-align: center;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        width: 100%;
+    }
+
+    .lb-podium-slot.rank-1 .lb-podium-name {
+        font-size: 15px;
+    }
+
+    .lb-podium-workouts {
+        font-size: 12px;
+        color: var(--text-muted);
+        text-align: center;
+    }
+
+    .lb-podium-slot.rank-1 .lb-podium-workouts {
+        color: var(--text-primary);
+        font-weight: 700;
+        font-size: 13px;
+    }
+
+    /* ===== RANKED LIST ===== */
+    .lb-list {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .lb-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 16px;
+        border-top: 1px solid var(--border-subtle);
+        text-decoration: none;
+        transition: background 0.15s;
+    }
+
+    .lb-row:hover {
+        background: var(--bg-hover);
+    }
+
+    .lb-row.is-me {
+        background: rgba(124, 58, 237, 0.08);
+    }
+
+    .lb-rank-num {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text-muted);
+        width: 32px;
+        flex-shrink: 0;
+    }
+
+    .lb-row.is-me .lb-rank-num {
+        color: var(--brand-cyan);
+    }
+
+    .lb-row-avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        overflow: hidden;
+        flex-shrink: 0;
+    }
+
+    .lb-row-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+    }
+
+    .lb-row-avatar-letter {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        color: #fff;
+        font-weight: 700;
+        font-size: 17px;
+    }
+
+    .lb-row-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .lb-row-name {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-primary);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .lb-row.is-me .lb-row-name {
+        color: var(--brand-cyan);
+    }
+
+    .lb-row-meta {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+
+    /* ===== YOUR RANK CARD ===== */
+    .lb-my-rank-card {
+        margin: 24px 16px 0;
+        background: rgba(124, 58, 237, 0.1);
+        border: 1px solid rgba(124, 58, 237, 0.25);
+        border-radius: 16px;
+        padding: 20px;
+        text-align: center;
+    }
+
+    .lb-my-rank-label {
+        font-size: 13px;
+        color: var(--text-muted);
+        margin-bottom: 4px;
+    }
+
+    .lb-my-rank-number {
+        font-size: 36px;
+        font-weight: 800;
+        color: var(--brand-cyan);
+        line-height: 1;
+        margin-bottom: 16px;
+    }
+
+    .lb-my-rank-stats {
+        display: flex;
+        justify-content: center;
+        gap: 40px;
+    }
+
+    .lb-my-rank-stat-val {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--brand-cyan);
+        line-height: 1;
+        margin-bottom: 4px;
+    }
+
+    .lb-my-rank-stat-label {
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+
+    /* ===== EMPTY STATE ===== */
+    .lb-empty {
+        text-align: center;
+        padding: 48px 24px;
+        color: var(--text-muted);
+    }
+
+    .lb-empty-icon {
+        font-size: 40px;
+        margin-bottom: 12px;
+    }
+
+    .lb-empty-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        margin-bottom: 6px;
+    }
+
+    .lb-empty-desc {
+        font-size: 14px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="lb-page">
+
+    <!-- Header -->
+    <div class="lb-header">
+        <div class="lb-header-icon">🏆</div>
+        <h1 class="lb-header-title">Leaderboard</h1>
+        <p class="lb-header-sub">Compete with your gym and friends</p>
+    </div>
+
+    <!-- Pill tabs — Friends first -->
+    <div class="lb-tab-wrap">
+        <div class="lb-tabs">
+            <a href="?tab=friends" class="lb-tab {% if active_tab == 'friends' %}active{% endif %}">Friends</a>
+            <a href="?tab=gym" class="lb-tab {% if active_tab == 'gym' %}active{% endif %}">My Gym</a>
+        </div>
+    </div>
+
+    <!-- ==================== FRIENDS TAB ==================== -->
+    {% if active_tab == 'friends' %}
+        {% if friends_ranked %}
+            {% include 'social/_lb_board.html' with ranked=friends_ranked my_rank=friends_my_rank %}
+        {% else %}
+            <div class="lb-empty">
+                <div class="lb-empty-icon">👥</div>
+                <div class="lb-empty-title">No one here yet</div>
+                <div class="lb-empty-desc">Follow people to see them on your leaderboard</div>
+            </div>
+        {% endif %}
+
+    <!-- ==================== GYM TAB ==================== -->
+    {% else %}
+        {% if not selected_gym %}
+            <div class="lb-empty">
+                <div class="lb-empty-icon">🏋️</div>
+                <div class="lb-empty-title">Not enrolled in a gym</div>
+                <div class="lb-empty-desc">Join a gym to see the gym leaderboard</div>
+            </div>
+        {% else %}
+            <!-- Gym name banner (dropdown if multiple gyms) -->
+            {% if enrolled_gyms|length > 1 %}
+            <div class="lb-gym-banner is-dropdown" id="gymBanner" onclick="toggleGymDropdown()">
+                <span class="lb-gym-pin">📍</span>
+                <span class="lb-gym-name">{{ selected_gym.name }}</span>
+                <span class="lb-gym-chevron">▼</span>
+                <div class="lb-gym-dropdown" id="gymDropdown">
+                    {% for gym in enrolled_gyms %}
+                    <a href="?tab=gym&gym_id={{ gym.id }}"
+                       class="lb-gym-option {% if gym.id == selected_gym.id %}selected{% endif %}">
+                        {{ gym.name }}
+                    </a>
+                    {% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <div class="lb-gym-banner">
+                <span class="lb-gym-pin">📍</span>
+                <span class="lb-gym-name">{{ selected_gym.name }}</span>
+            </div>
+            {% endif %}
+
+            {% if gym_ranked %}
+                {% include 'social/_lb_board.html' with ranked=gym_ranked my_rank=gym_my_rank %}
+            {% else %}
+                <div class="lb-empty">
+                    <div class="lb-empty-icon">🏋️</div>
+                    <div class="lb-empty-title">No members yet</div>
+                    <div class="lb-empty-desc">Be the first to log a workout at {{ selected_gym.name }}</div>
+                </div>
+            {% endif %}
+        {% endif %}
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleGymDropdown() {
+    const banner = document.getElementById('gymBanner');
+    const dropdown = document.getElementById('gymDropdown');
+    if (!banner) return;
+    const isOpen = dropdown.classList.toggle('open');
+    banner.classList.toggle('open', isOpen);
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    const banner = document.getElementById('gymBanner');
+    if (banner && !banner.contains(e.target)) {
+        banner.classList.remove('open');
+        document.getElementById('gymDropdown').classList.remove('open');
+    }
+});
+</script>
+{% endblock %}

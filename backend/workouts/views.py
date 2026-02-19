@@ -827,3 +827,23 @@ def streak_details_view(request):
     details = get_streak_details(request.user)
 
     return render(request, 'workouts/streak_details.html', details)
+
+
+@login_required
+@require_POST
+def update_workout_goal_view(request):
+    """Update the user's weekly workout goal."""
+    import json
+    try:
+        data = json.loads(request.body)
+        goal = int(data.get('weekly_workout_goal', 0))
+    except (ValueError, TypeError, json.JSONDecodeError):
+        return JsonResponse({'success': False, 'error': 'Invalid data'}, status=400)
+
+    if goal < 1 or goal > 7:
+        return JsonResponse({'success': False, 'error': 'Goal must be between 1 and 7'}, status=400)
+
+    request.user.weekly_workout_goal = goal
+    request.user.save(update_fields=['weekly_workout_goal'])
+
+    return JsonResponse({'success': True, 'weekly_workout_goal': goal})
