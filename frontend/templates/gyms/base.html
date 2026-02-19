@@ -2372,12 +2372,10 @@
         </div>
         <div class="header-right">
             {% if user.is_authenticated %}
-            {% if user.current_streak > 0 %}
             <a href="{% url 'workouts:streak_details' %}" class="streak-badge" style="text-decoration:none;color:inherit;">
                 <span>🔥</span>
-                <span>{{ user.current_streak }}d</span>
+                <span>{{ user.current_streak }}</span>
             </a>
-            {% endif %}
             <button class="notif-bell-btn" id="notifBellBtn" aria-label="Notifications">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>

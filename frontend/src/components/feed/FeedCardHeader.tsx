@@ -27,7 +27,7 @@ export default function FeedCardHeader({
           <Text style={styles.name}>{user.display_name}</Text>
           {user.streak != null && user.streak > 0 && (
             <View style={styles.streakBadge}>
-              <Text style={styles.streakText}>{user.streak}d</Text>
+              <Text style={styles.streakText}>{user.streak}</Text>
             </View>
           )}
           <Text style={styles.dot}>&middot;</Text>
