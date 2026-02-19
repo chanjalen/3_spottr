@@ -8,6 +8,7 @@ urlpatterns = [
     path('leaderboard/', views.leaderboard_view, name='leaderboard'),
     path('', views.social_view, name='social'),
     path('feed/', views.feed_view, name='feed'),
+    path('search/', views.search_feed_view, name='search_feed'),
     path('checkin/create/', views.create_checkin_view, name='create_checkin'),
 
     # Post/checkin detail
