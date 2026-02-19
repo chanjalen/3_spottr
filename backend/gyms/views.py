@@ -1,53 +1,12 @@
 from django.contrib.auth.decorators import login_required
 from django.db.models import Count
-from django.http import HttpResponse, JsonResponse
-from django.shortcuts import render
-from django.template import loader
-from django.views import View
+from django.http import JsonResponse
 from django.views.generic import ListView, DetailView
 
 from .models import Gym, BusyLevel
 from . import services
 
 
-# View 1: HttpResponse (Manual)
-# Using loader.get_template() and HttpResponse
-def gym_list_manual(request):
-    """
-    Returns gym list using manual template loading with HttpResponse.
-    """
-    template = loader.get_template('gyms/gym_list_manual.html')
-    gyms = Gym.objects.all()
-    context = {'gyms': gyms}
-    return HttpResponse(template.render(context, request))
-
-
-# View 2: render() Shortcut
-# Using the render() function with model queryset
-def gym_list_render(request):
-    """
-    Returns gym list using render() shortcut.
-    """
-    gyms = Gym.objects.all()
-    context = {'gyms': gyms}
-    return render(request, 'gyms/gym_list_render.html', context)
-
-
-# View 3: Base CBV (inherit from View)
-# Manually implement get() and query the model
-class GymListView(View):
-    """
-    Class-based view that inherits from django.views.View.
-    Manually queries the model and returns a rendered template.
-    """
-    def get(self, request):
-        gyms = Gym.objects.all()
-        context = {'gyms': gyms}
-        return render(request, 'gyms/gym_list_cbv.html', context)
-
-
-# View 4: Generic CBV (inherit from Django generic views)
-# Using ListView and DetailView
 class GymGenericListView(ListView):
     """
     Generic ListView for displaying all gyms.
@@ -81,10 +40,12 @@ class GymGenericListView(ListView):
             top_lifters = services.get_top_lifters(gym_id, lift='total')
             if top_lifters:
                 gym.top_lifter_name = top_lifters[0]['display_name']
+                gym.top_lifter_username = top_lifters[0]['username']
                 gym.top_lifter_total = top_lifters[0]['value']
                 gym.top_lifter_unit = top_lifters[0]['unit']
             else:
                 gym.top_lifter_name = None
+                gym.top_lifter_username = None
                 gym.top_lifter_total = None
                 gym.top_lifter_unit = None
         context['gyms'] = gyms

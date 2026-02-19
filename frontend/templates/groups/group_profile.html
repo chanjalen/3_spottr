@@ -275,11 +275,9 @@
     .streak-modal-overlay {
         display: none;
         position: fixed;
-        top: 0;
-        bottom: 0;
-        left: max(0px, calc(50vw - 270px));
-        right: max(0px, calc(50vw - 270px));
+        inset: 0;
         background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(4px);
         z-index: 200;
         align-items: flex-end;
         justify-content: center;
@@ -290,10 +288,11 @@
     }
 
     .streak-modal {
-        background: var(--bg-surface);
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
         border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
         width: 100%;
-        max-width: 540px;
+        max-width: 640px;
         max-height: 75vh;
         display: flex;
         flex-direction: column;

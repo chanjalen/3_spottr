@@ -66,7 +66,7 @@
                     <div class="stat-label">Top Total Lifter</div>
                     {% if gym.top_lifter_name %}
                     <div class="stat-value">{{ gym.top_lifter_total|floatformat:0 }} {{ gym.top_lifter_unit }}</div>
-                    <div class="stat-sublabel">{{ gym.top_lifter_name }}</div>
+                    <div class="stat-sublabel"><a href="{% url 'accounts:user_profile' username=gym.top_lifter_username %}" class="user-link" onclick="event.stopPropagation();">{{ gym.top_lifter_name }}</a></div>
                     {% else %}
                     <div class="stat-value">--</div>
                     <div class="stat-sublabel">No data</div>
@@ -182,6 +182,8 @@
     #gymMap .leaflet-popup-content { font-family: 'Inter', sans-serif; margin: 10px 14px; }
     .popup-name { font-weight: 600; font-size: 13px; margin-bottom: 2px; }
     .popup-busy { font-size: 12px; color: var(--text-secondary); }
+    .user-link { color: var(--text-brand, #22d3ee); text-decoration: none; }
+    .user-link:hover { text-decoration: underline; }
 
     /* ============ GYM CARD LINKS ============ */
     .gym-card-link {
