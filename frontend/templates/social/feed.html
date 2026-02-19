@@ -45,27 +45,163 @@
     }
 
     .feed-search {
-        display: flex;
-        justify-content: flex-end;
         margin-bottom: 16px;
+        position: relative;
     }
 
-    .feed-search-btn {
-        width: 40px;
-        height: 40px;
-        background: var(--bg-card);
-        border: 1px solid var(--border-default);
-        border-radius: 50%;
+    .feed-search-bar {
         display: flex;
         align-items: center;
-        justify-content: center;
-        cursor: pointer;
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-pill);
+        padding: 0 16px;
         transition: all var(--duration) var(--ease-out);
     }
 
-    .feed-search-btn:hover {
-        border-color: var(--border-hover);
-        box-shadow: var(--shadow-glow);
+    .feed-search-bar:focus-within {
+        border-color: var(--brand-cyan);
+        box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.15);
+    }
+
+    .feed-search-icon {
+        font-size: 16px;
+        flex-shrink: 0;
+        margin-right: 8px;
+        opacity: 0.6;
+    }
+
+    .feed-search-bar input {
+        flex: 1;
+        background: none;
+        border: none;
+        outline: none;
+        color: var(--text-primary);
+        font-size: 14px;
+        padding: 12px 0;
+        font-family: inherit;
+    }
+
+    .feed-search-bar input::placeholder {
+        color: var(--text-muted);
+    }
+
+    .feed-search-clear {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        font-size: 20px;
+        cursor: pointer;
+        padding: 4px 0 4px 8px;
+        line-height: 1;
+    }
+
+    .feed-search-clear:hover {
+        color: var(--text-primary);
+    }
+
+    /* Search Results Overlay */
+    .feed-search-results {
+        display: none;
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+        box-shadow: var(--shadow-lg);
+        max-height: 70vh;
+        overflow-y: auto;
+        z-index: 100;
+    }
+
+    .feed-search-results.active {
+        display: block;
+    }
+
+    .search-section-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        padding: 12px 16px 6px;
+    }
+
+    .search-user-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 16px;
+        text-decoration: none;
+        color: inherit;
+        transition: background var(--duration) var(--ease-out);
+    }
+
+    .search-user-item:hover {
+        background: var(--bg-hover, rgba(255,255,255,0.05));
+    }
+
+    .search-user-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        overflow: hidden;
+        background: var(--bg-elevated);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .search-user-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .search-user-avatar-letter {
+        font-size: 15px;
+        font-weight: 700;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+
+    .search-user-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .search-user-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .search-user-username {
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+
+    .search-empty {
+        text-align: center;
+        padding: 24px 16px;
+        color: var(--text-muted);
+        font-size: 14px;
+    }
+
+    .search-posts-list .feed-card {
+        border-radius: 0;
+        border-left: none;
+        border-right: none;
+        box-shadow: none;
+    }
+
+    .search-posts-list .feed-card:last-child {
+        border-bottom: none;
     }
 
     /* ============ FEED CARDS ============ */
@@ -214,6 +350,41 @@
         font-size: 14px;
         color: var(--text-secondary);
         line-height: 1.5;
+    }
+
+    .hashtag-link {
+        color: var(--brand-cyan);
+        text-decoration: none;
+        font-weight: 500;
+    }
+    .hashtag-link:hover {
+        text-decoration: underline;
+    }
+
+    .hashtag-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px 0;
+        border-bottom: 1px solid var(--border-subtle);
+        margin-bottom: 20px;
+    }
+    .hashtag-back-btn {
+        color: var(--text-primary);
+        text-decoration: none;
+        font-size: 22px;
+        line-height: 1;
+        padding: 4px 8px;
+        border-radius: var(--radius-md);
+        transition: background var(--duration) var(--ease-out);
+    }
+    .hashtag-back-btn:hover {
+        background: var(--bg-hover, rgba(255,255,255,0.05));
+    }
+    .hashtag-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--brand-cyan);
     }
 
     /* Workout Summary */
@@ -1201,6 +1372,13 @@
 {% endblock %}
 
 {% block content %}
+{% if active_tag %}
+<!-- Hashtag Filter Header -->
+<div class="hashtag-header">
+    <a href="/" class="hashtag-back-btn">&larr;</a>
+    <span class="hashtag-title">#{{ active_tag }}</span>
+</div>
+{% else %}
 <!-- Feed Tabs -->
 <div class="feed-tabs">
     <a href="/?tab=main" class="feed-tab {% if active_tab != 'friends' %}active{% endif %}">Main</a>
@@ -1209,11 +1387,19 @@
 
 <!-- Search -->
 <div class="feed-search">
-    <button class="feed-search-btn">🔍</button>
+    <div class="feed-search-bar">
+        <span class="feed-search-icon">&#128269;</span>
+        <input type="text" id="feedSearchInput" placeholder="Search users or #hashtags..." autocomplete="off">
+        <button class="feed-search-clear" id="feedSearchClear" style="display:none">&times;</button>
+    </div>
+    <div class="feed-search-results" id="feedSearchResults">
+        <div class="search-empty">Type to search...</div>
+    </div>
 </div>
+{% endif %}
 
 <!-- Feed List -->
-<div class="feed-list" id="feedList" data-next-cursor="{{ next_cursor|default:'' }}" data-tab="{{ active_tab }}">
+<div class="feed-list" id="feedList" data-next-cursor="{{ next_cursor|default:'' }}" data-tab="{{ active_tab }}" data-tag="{{ active_tag|default:'' }}">
     {% for item in feed_items %}
     <div class="feed-card" data-item-id="{{ item.id }}" data-item-type="{{ item.type }}">
         <div class="feed-card-header">
@@ -1791,6 +1977,11 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Convert #hashtags to clickable links
+function linkHashtags(text) {
+    return text.replace(/(?<!\w)#(\w+)/g, '<a href="/?tag=$1" class="hashtag-link">#$1</a>');
+}
+
 // Toggle like on a comment
 function toggleCommentLike(commentId, button) {
     fetch(`/social/comment/${commentId}/like/`, {
@@ -2066,6 +2257,7 @@ document.querySelectorAll('.comment-input').forEach(textarea => {
 let feedNextCursor = document.getElementById('feedList') ? document.getElementById('feedList').dataset.nextCursor : '';
 let feedLoading = false;
 const feedTab = document.getElementById('feedList') ? document.getElementById('feedList').dataset.tab : 'main';
+const feedTag = document.getElementById('feedList') ? document.getElementById('feedList').dataset.tag : '';
 
 function renderFeedCard(item) {
     const user = item.user || {};
@@ -2139,7 +2331,7 @@ function renderFeedCard(item) {
 
     // Description
     if (item.description) {
-        bodyHtml += `<p class="feed-description">${escapeHtml(item.description)}</p>`;
+        bodyHtml += `<p class="feed-description">${linkHashtags(escapeHtml(item.description))}</p>`;
     }
 
     // Link
@@ -2250,7 +2442,8 @@ function loadMoreFeedItems() {
     const spinner = document.getElementById('feedLoadingSpinner');
     spinner.classList.add('active');
 
-    const url = `/?tab=${encodeURIComponent(feedTab)}&cursor=${encodeURIComponent(feedNextCursor)}`;
+    let url = `/?tab=${encodeURIComponent(feedTab)}&cursor=${encodeURIComponent(feedNextCursor)}`;
+    if (feedTag) url += `&tag=${encodeURIComponent(feedTag)}`;
     fetch(url, {
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
         credentials: 'same-origin',
@@ -2371,5 +2564,107 @@ function votePoll(pollId, optionId, element) {
         alert('Failed to vote');
     });
 }
+
+// ============ FEED SEARCH ============
+(function() {
+    const searchInput = document.getElementById('feedSearchInput');
+    const searchClear = document.getElementById('feedSearchClear');
+    const searchResults = document.getElementById('feedSearchResults');
+    let searchDebounce = null;
+
+    searchInput.addEventListener('input', function() {
+        const q = this.value.trim();
+        searchClear.style.display = q ? 'block' : 'none';
+
+        clearTimeout(searchDebounce);
+        if (!q) {
+            searchResults.classList.remove('active');
+            return;
+        }
+
+        searchDebounce = setTimeout(() => runSearch(q), 300);
+    });
+
+    searchClear.addEventListener('click', function() {
+        searchInput.value = '';
+        searchClear.style.display = 'none';
+        searchResults.classList.remove('active');
+        searchInput.focus();
+    });
+
+    // Close on Escape
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            searchResults.classList.remove('active');
+        }
+    });
+
+    // Close on click outside
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('.feed-search')) {
+            searchResults.classList.remove('active');
+        }
+    });
+
+    function runSearch(query) {
+        searchResults.classList.add('active');
+        searchResults.innerHTML = '<div class="search-empty">Searching...</div>';
+
+        // Fetch users and posts in parallel
+        const userFetch = fetch(`/accounts/api/search-users/?q=${encodeURIComponent(query)}`, {
+            credentials: 'same-origin'
+        }).then(r => r.json()).catch(() => ({ results: [] }));
+
+        const postFetch = fetch(`/social/search/?q=${encodeURIComponent(query)}`, {
+            credentials: 'same-origin'
+        }).then(r => r.json()).catch(() => ({ posts: [] }));
+
+        Promise.all([userFetch, postFetch]).then(([userData, postData]) => {
+            const users = userData.results || [];
+            const posts = postData.posts || [];
+
+            if (!users.length && !posts.length) {
+                searchResults.innerHTML = '<div class="search-empty">No results found</div>';
+                return;
+            }
+
+            let html = '';
+
+            // Users section
+            if (users.length) {
+                html += '<div class="search-section-label">Users</div>';
+                users.forEach(u => {
+                    const avatar = u.avatar_url
+                        ? `<img src="${escapeAttr(u.avatar_url)}" alt="${escapeAttr(u.username)}">`
+                        : `<span class="search-user-avatar-letter">${(u.display_name || u.username || '?')[0].toUpperCase()}</span>`;
+                    html += `<a href="/accounts/profile/${escapeAttr(u.username)}/" class="search-user-item">
+                        <div class="search-user-avatar">${avatar}</div>
+                        <div class="search-user-info">
+                            <div class="search-user-name">${escapeHtml(u.display_name || u.username)}</div>
+                            <div class="search-user-username">@${escapeHtml(u.username)}</div>
+                        </div>
+                    </a>`;
+                });
+            }
+
+            // Posts section
+            if (posts.length) {
+                html += '<div class="search-section-label">Posts</div>';
+                html += '<div class="search-posts-list">';
+                posts.forEach(item => {
+                    html += renderFeedCard(item);
+                });
+                html += '</div>';
+            }
+
+            searchResults.innerHTML = html;
+        });
+    }
+})();
+
+// Process server-rendered descriptions to make hashtags clickable
+document.querySelectorAll('.feed-description').forEach(el => {
+    el.innerHTML = linkHashtags(el.innerHTML);
+});
 </script>
 {% endblock %}

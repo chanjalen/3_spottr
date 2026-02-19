@@ -219,7 +219,7 @@ def _format_duration(duration):
     return f"{minutes}m"
 
 
-def _get_feed_page(request, tab, cursor=None):
+def _get_feed_page(request, tab, cursor=None, tag=None):
     """
     Core feed function: returns (feed_items, next_cursor).
     Uses annotated queries to eliminate N+1 problems.
@@ -238,6 +238,12 @@ def _get_feed_page(request, tab, cursor=None):
     else:
         qw_qs = QuickWorkout.objects.filter(visibility='main')
         post_qs = Post.objects.filter(visibility='main')
+
+    # Filter by hashtag if tag is provided
+    if tag:
+        tag_filter = f'#{tag}'
+        qw_qs = qw_qs.filter(description__icontains=tag_filter)
+        post_qs = post_qs.filter(description__icontains=tag_filter)
 
     # Annotate counts (eliminates N+1)
     qw_qs = qw_qs.select_related('user', 'location').annotate(
@@ -485,17 +491,22 @@ def feed_view(request):
     if tab not in ('main', 'friends'):
         tab = 'main'
 
+    tag = request.GET.get('tag', '').strip()
+
     cursor = request.GET.get('cursor', None)
     is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or cursor
 
     if is_ajax:
-        feed_items, next_cursor = _get_feed_page(request, tab, cursor)
+        feed_items, next_cursor = _get_feed_page(request, tab, cursor, tag=tag or None)
         items_json = _serialize_feed_items_for_json(feed_items)
         return JsonResponse({'items': items_json, 'next_cursor': next_cursor})
 
     # Server-rendered first page with caching
     user = request.user if request.user.is_authenticated else None
-    cache_key = f'feed:{user.id if user else "anon"}:{tab}:page1' if user else None
+    # Skip cache when filtering by tag
+    cache_key = None
+    if not tag:
+        cache_key = f'feed:{user.id if user else "anon"}:{tab}:page1' if user else None
 
     feed_items = None
     next_cursor = None
@@ -506,13 +517,14 @@ def feed_view(request):
             feed_items, next_cursor = cached
 
     if feed_items is None:
-        feed_items, next_cursor = _get_feed_page(request, tab)
+        feed_items, next_cursor = _get_feed_page(request, tab, tag=tag or None)
         if cache_key:
             cache.set(cache_key, (feed_items, next_cursor), FEED_CACHE_TTL)
 
     return render(request, 'social/feed.html', {
         'feed_items': feed_items,
         'active_tab': tab,
+        'active_tag': tag,
         'next_cursor': next_cursor or '',
     })
 
@@ -1328,6 +1340,103 @@ def add_comment_reply_view(request, comment_id):
             'reply_count': 0,
         }
     })
+
+
+@login_required
+@require_GET
+def search_feed_view(request):
+    """Search posts/checkins by hashtag in description."""
+    q = request.GET.get('q', '').strip()
+    if not q:
+        return JsonResponse({'posts': [], 'users': []})
+
+    # Strip leading # if present — always search for #keyword
+    tag = q.lstrip('#')
+    if not tag:
+        return JsonResponse({'posts': [], 'users': []})
+
+    search_term = f'#{tag}'
+    user = request.user
+
+    # Search Posts
+    post_qs = Post.objects.filter(
+        description__icontains=search_term,
+    ).select_related('user', 'location', 'workout').annotate(
+        like_count=Count('reactions', distinct=True),
+        comment_count=Count('comments', distinct=True),
+        user_liked=Exists(Reaction.objects.filter(post=OuterRef('pk'), user=user)),
+    ).order_by('-created_at')[:20]
+
+    # Search QuickWorkouts
+    qw_qs = QuickWorkout.objects.filter(
+        description__icontains=search_term,
+    ).select_related('user', 'location').annotate(
+        like_count=Count('reactions', distinct=True),
+        comment_count=Count('comments', distinct=True),
+        user_liked=Exists(Reaction.objects.filter(quick_workout=OuterRef('pk'), user=user)),
+    ).order_by('-created_at')[:20]
+
+    # Merge and sort
+    raw_items = []
+    for qw in qw_qs:
+        raw_items.append(('checkin', qw.created_at, qw.id, qw))
+    for p in post_qs:
+        raw_items.append(('post', p.created_at, p.id, p))
+    raw_items.sort(key=lambda x: (x[1], x[2]), reverse=True)
+    raw_items = raw_items[:20]
+
+    # Collect IDs for bulk media fetch
+    checkin_ids = [item[2] for item in raw_items if item[0] == 'checkin']
+    post_ids = [item[2] for item in raw_items if item[0] == 'post']
+    checkin_photos = _bulk_media_urls('quick_workout', checkin_ids)
+    post_photos = _bulk_media_urls('post', post_ids)
+
+    # Build feed items
+    feed_items = []
+    for item_type, created_at, item_id, obj in raw_items:
+        if item_type == 'checkin':
+            photo_url = checkin_photos.get(str(item_id))
+            if not photo_url:
+                path = f'checkins/{item_id}.jpg'
+                try:
+                    if default_storage.exists(path):
+                        photo_url = build_media_url(path)
+                except Exception:
+                    pass
+            feed_items.append({
+                'type': 'checkin',
+                'id': str(item_id),
+                'user': obj.user,
+                'location': obj.location,
+                'location_name': obj.location_name or (obj.location.name if obj.location else ''),
+                'workout_type': obj.type.replace('_', ' ').title() if obj.type else '',
+                'description': obj.description,
+                'created_at': created_at,
+                'photo_url': photo_url,
+                'like_count': obj.like_count,
+                'comment_count': obj.comment_count,
+                'user_liked': bool(obj.user_liked),
+            })
+        else:
+            post = obj
+            photo_url = post_photos.get(str(item_id)) or (build_media_url(post.photo.name) if post.photo else None)
+            feed_items.append({
+                'type': 'workout' if post.workout_id else 'post',
+                'id': str(item_id),
+                'user': post.user,
+                'location': post.location,
+                'description': post.description,
+                'created_at': created_at,
+                'photo_url': photo_url,
+                'video_url': build_media_url(post.video.name) if post.video else None,
+                'link_url': post.link_url,
+                'like_count': post.like_count,
+                'comment_count': post.comment_count,
+                'user_liked': bool(post.user_liked),
+            })
+
+    items_json = _serialize_feed_items_for_json(feed_items)
+    return JsonResponse({'posts': items_json, 'users': []})
 
 
 @login_required
