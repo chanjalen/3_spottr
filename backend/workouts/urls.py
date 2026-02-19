@@ -13,6 +13,7 @@ urlpatterns = [
     # Streak
     path('streak/', views.streak_details_view, name='streak_details'),
     path('rest-day/', views.rest_day_view, name='rest_day'),
+    path('api/update-workout-goal/', views.update_workout_goal_view, name='update_workout_goal'),
 
     # Active workout page
     path('<str:workout_id>/', views.active_workout_view, name='active_workout'),

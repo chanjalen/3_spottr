@@ -5,6 +5,7 @@ from . import views
 app_name = 'social'
 
 urlpatterns = [
+    path('leaderboard/', views.leaderboard_view, name='leaderboard'),
     path('', views.social_view, name='social'),
     path('feed/', views.feed_view, name='feed'),
     path('checkin/create/', views.create_checkin_view, name='create_checkin'),
