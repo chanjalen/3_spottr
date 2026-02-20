@@ -2410,10 +2410,10 @@
 </head>
 <body>
     <header class="header">
-        <div class="logo-container">
+        <a href="{% url 'home' %}" class="logo-container" style="text-decoration:none;">
             <div class="logo">S</div>
             <span class="logo-text">Spottr</span>
-        </div>
+        </a>
         <div class="header-right">
             {% if user.is_authenticated %}
             <a href="{% url 'workouts:streak_details' %}" class="streak-badge" style="text-decoration:none;color:inherit;">
