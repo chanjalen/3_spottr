@@ -45,6 +45,16 @@ class Group(BaseModel):
     def __str__(self):
         return self.name
 
+    @property
+    def avatar_url(self):
+        from media.utils import get_media_url, build_media_url
+        url = get_media_url('group', self.pk, 'avatar')
+        if url:
+            return url
+        if self.avatar:
+            return build_media_url(self.avatar.name)
+        return None
+
 
 class GroupMemberManager(models.Manager):
     """Orders members by role: creator → admin → member, then by most recent join."""

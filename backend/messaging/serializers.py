@@ -159,18 +159,24 @@ class MessageListSerializer(serializers.ModelSerializer):
     Serializer for message lists. Returns full shared post/check-in data inline
     so post cards render directly in the chat thread.
     """
-    sender_username = serializers.CharField(source='sender.username', read_only=True)
+    sender_username = serializers.SerializerMethodField()
     is_read = serializers.SerializerMethodField()
     shared_post_id = serializers.CharField(source='post_id', read_only=True)
     shared_post = serializers.SerializerMethodField()
+    join_request_id = serializers.SerializerMethodField()
+    join_request_status = serializers.SerializerMethodField()
 
     class Meta:
         model = Message
         fields = [
             'id', 'sender', 'sender_username',
-            'content', 'is_request', 'is_read',
+            'content', 'is_request', 'is_system', 'is_read',
             'created_at', 'shared_post_id', 'shared_post',
+            'join_request_id', 'join_request_status',
         ]
+
+    def get_sender_username(self, obj):
+        return obj.sender.username if obj.sender else None
 
     def get_is_read(self, obj):
         # Use prefetched receipts (to_attr='user_read_receipts') when available
@@ -180,6 +186,14 @@ class MessageListSerializer(serializers.ModelSerializer):
         if request and request.user.is_authenticated:
             return obj.read_receipts.filter(user=request.user).exists()
         return False
+
+    def get_join_request_id(self, obj):
+        return str(obj.join_request_id) if obj.join_request_id else None
+
+    def get_join_request_status(self, obj):
+        if obj.join_request_id and obj.join_request:
+            return obj.join_request.status
+        return None
 
     def get_shared_post(self, obj):
         try:

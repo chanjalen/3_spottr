@@ -65,8 +65,23 @@
                 <div class="stat-box">
                     <div class="stat-label">Top Total Lifter</div>
                     {% if gym.top_lifter_name %}
-                    <div class="stat-value">{{ gym.top_lifter_total|floatformat:0 }} {{ gym.top_lifter_unit }}</div>
-                    <div class="stat-sublabel"><a href="{% url 'accounts:user_profile' username=gym.top_lifter_username %}" class="user-link" onclick="event.stopPropagation();">{{ gym.top_lifter_name }}</a></div>
+                    <a href="{% url 'accounts:user_profile' username=gym.top_lifter_username %}" class="top-lifter-row" onclick="event.stopPropagation();">
+                        <div class="top-lifter-user">
+                            {% if gym.top_lifter_avatar_url %}
+                            <img src="{{ gym.top_lifter_avatar_url }}" alt="{{ gym.top_lifter_username }}" class="top-lifter-avatar">
+                            {% else %}
+                            <span class="top-lifter-avatar top-lifter-avatar-fallback">{{ gym.top_lifter_username|make_list|first|upper }}</span>
+                            {% endif %}
+                            <div class="top-lifter-names">
+                                <div class="top-lifter-display">{{ gym.top_lifter_name }}</div>
+                                <div class="top-lifter-username">@{{ gym.top_lifter_username }}</div>
+                            </div>
+                        </div>
+                        <div class="top-lifter-weight">
+                            <span class="top-lifter-value">{{ gym.top_lifter_total|floatformat:0 }}</span>
+                            <span class="top-lifter-unit">{{ gym.top_lifter_unit }}</span>
+                        </div>
+                    </a>
                     {% else %}
                     <div class="stat-value">--</div>
                     <div class="stat-sublabel">No data</div>
@@ -184,6 +199,78 @@
     .popup-busy { font-size: 12px; color: var(--text-secondary); }
     .user-link { color: var(--text-brand, #22d3ee); text-decoration: none; }
     .user-link:hover { text-decoration: underline; }
+
+    .top-lifter-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        text-decoration: none;
+        margin-top: 6px;
+    }
+
+    .top-lifter-user {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+    }
+
+    .top-lifter-avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        object-fit: cover;
+        flex-shrink: 0;
+    }
+
+    .top-lifter-avatar-fallback {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        color: #fff;
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    .top-lifter-names {
+        min-width: 0;
+    }
+
+    .top-lifter-display {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .top-lifter-username {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+
+    .top-lifter-weight {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        flex-shrink: 0;
+    }
+
+    .top-lifter-value {
+        font-size: 26px;
+        font-weight: 700;
+        color: #22d3ee;
+        letter-spacing: -0.5px;
+        line-height: 1.2;
+    }
+
+    .top-lifter-unit {
+        font-size: 16px;
+        color: var(--text-muted);
+    }
 
     /* ============ GYM CARD LINKS ============ */
     .gym-card-link {

@@ -91,6 +91,43 @@ def update_group(user, group_id, **fields):
     return group
 
 
+def update_group_avatar(user, group_id, avatar_file):
+    """
+    Replace the group avatar. Admin/creator only.
+    Cleans up any previous MediaAsset/MediaLink before saving the new one.
+    Returns the updated group.
+    """
+    from media.utils import create_media_asset
+    from media.models import MediaLink
+
+    group = _get_group(group_id)
+    _require_admin(group, user)
+
+    # Remove previous avatar MediaLink and underlying asset
+    old_links = MediaLink.objects.filter(
+        destination_type='group',
+        destination_id=str(group.pk),
+        type='avatar',
+    ).select_related('asset')
+    for ml in old_links:
+        ml.asset.delete()
+
+    # Save new file via the ImageField
+    group.avatar = avatar_file
+    group.save(update_fields=['avatar', 'updated_at'])
+
+    # Track in MediaAsset / MediaLink
+    asset = create_media_asset(user, avatar_file, group.avatar.name, 'image', already_saved=True)
+    MediaLink.objects.create(
+        asset=asset,
+        destination_type='group',
+        destination_id=str(group.pk),
+        type='avatar',
+    )
+
+    return group
+
+
 def delete_group(user, group_id):
     """
     Delete a group. Only the creator can delete.
@@ -107,11 +144,17 @@ def get_group(group_id):
     return _get_group(group_id)
 
 
-def search_groups(query=None, limit=50, offset=0):
-    """Search public groups by name. Returns a queryset."""
-    qs = Group.objects.filter(privacy=Group.Privacy.PUBLIC)
-    if query:
-        qs = qs.filter(name__icontains=query)
+def search_groups(query=None, limit=50, offset=0, include_private=False):
+    """
+    Search groups by name. Returns a queryset.
+    When include_private=True (requires a query), both public and private groups are returned.
+    """
+    if include_private and query:
+        qs = Group.objects.filter(name__icontains=query)
+    else:
+        qs = Group.objects.filter(privacy=Group.Privacy.PUBLIC)
+        if query:
+            qs = qs.filter(name__icontains=query)
     return qs[offset:offset + limit]
 
 

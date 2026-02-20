@@ -11,6 +11,8 @@ class Message(BaseModel):
     sender = models.ForeignKey(
         'accounts.User',
         on_delete=models.CASCADE,
+        null=True,
+        blank=True,
         related_name='sent_messages',
     )
     recipient = models.ForeignKey(
@@ -41,9 +43,17 @@ class Message(BaseModel):
         blank=True,
         related_name='shared_messages',
     )
+    join_request = models.ForeignKey(
+        'groups.GroupJoinRequest',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='system_messages',
+    )
 
     content = models.TextField()
     is_request = models.BooleanField(default=False)
+    is_system = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['-created_at']
@@ -64,9 +74,10 @@ class Message(BaseModel):
         ]
 
     def __str__(self):
+        sender_name = self.sender.username if self.sender else 'system'
         if self.recipient:
-            return f"{self.sender.username} -> {self.recipient.username}"
-        return f"{self.sender.username} -> {self.group.name}"
+            return f"{sender_name} -> {self.recipient.username}"
+        return f"{sender_name} -> {self.group.name}"
 
 
 class MessageRead(BaseModel):

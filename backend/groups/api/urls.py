@@ -14,6 +14,7 @@ urlpatterns = [
 
     path('<str:group_id>/', views.group_detail, name='group-detail'),
     path('<str:group_id>/update/', views.group_update, name='group-update'),
+    path('<str:group_id>/avatar/', views.group_avatar_update, name='group-avatar-update'),
     path('<str:group_id>/delete/', views.group_delete, name='group-delete'),
 
     # Streak

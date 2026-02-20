@@ -155,6 +155,29 @@ def send_dm(sender, recipient_id, content, post_id=None, quick_workout_id=None):
     return message
 
 
+def send_system_group_message(group_id, content, join_request=None):
+    """
+    Post a system message in a group chat (no sender, is_system=True).
+    Used for automated events like join requests.
+    Optionally links to a GroupJoinRequest so admins can act on it inline.
+    Returns the created Message.
+    """
+    from groups.models import Group
+
+    try:
+        group = Group.objects.get(id=group_id)
+    except Group.DoesNotExist:
+        raise ConversationNotFoundError("Group not found.")
+
+    return Message.objects.create(
+        sender=None,
+        group=group,
+        content=content,
+        is_system=True,
+        join_request=join_request,
+    )
+
+
 def send_group_message(sender, group_id, content, post_id=None, quick_workout_id=None):
     """
     Send a message in a group chat.
@@ -392,7 +415,7 @@ def get_group_messages(user, group_id, limit=50, before_id=None, after_id=None):
 
     _check_group_member(group, user)
 
-    base_qs = Message.objects.filter(group=group).select_related('sender', 'post__user', 'quick_workout__user', 'quick_workout__location').prefetch_related(
+    base_qs = Message.objects.filter(group=group).select_related('sender', 'post__user', 'quick_workout__user', 'quick_workout__location', 'join_request').prefetch_related(
         Prefetch(
             'read_receipts',
             queryset=MessageRead.objects.filter(user=user),

@@ -456,6 +456,7 @@ def get_top_lifters(gym_id, lift='bench'):
                 best_by_user[uid] = {
                     'username': pr.user.username,
                     'display_name': pr.user.display_name or pr.user.username,
+                    'avatar_url': pr.user.avatar_url,
                     'value': val,
                     'unit': pr.unit,
                 }
@@ -488,6 +489,7 @@ def get_top_lifters(gym_id, lift='bench'):
                 results.append({
                     'username': user.username,
                     'display_name': user.display_name or user.username,
+                    'avatar_url': user.avatar_url,
                     'value': total,
                     'unit': unit or 'lbs',
                 })
