@@ -183,10 +183,11 @@ def _decode_cursor(cursor_str):
 def _serialize_user(user):
     """Convert User model instance to a plain dict for templates/JSON."""
     return {
+        'id': str(user.id),
         'username': user.username,
         'display_name': user.display_name or user.username,
         'avatar_url': user.avatar_url or None,
-        'current_streak': getattr(user, 'current_streak', 0),
+        'streak': getattr(user, 'current_streak', 0),
     }
 
 

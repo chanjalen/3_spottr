@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from .api import views as api_views
 
 app_name = 'accounts'
 
@@ -18,4 +19,9 @@ urlpatterns = [
     path('api/following/', views.following_list_view, name='following_list'),
     path('api/pr/save/', views.save_pr_view, name='save_pr'),
     path('api/pr/delete/', views.delete_pr_view, name='delete_pr'),
+    # Mobile API endpoints
+    path('api/login/', api_views.api_login_view, name='api_login'),
+    path('api/signup/', api_views.api_signup_view, name='api_signup'),
+    path('api/me/', api_views.api_me_view, name='api_me'),
+    path('api/profile/<str:username>/', api_views.api_profile_view, name='api_profile'),
 ]

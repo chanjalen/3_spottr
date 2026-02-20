@@ -116,11 +116,11 @@ export default function InactiveStreakSheet({
 const styles = StyleSheet.create({
   background: {
     backgroundColor: colors.background.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
   },
   handle: {
-    backgroundColor: colors.text.muted,
+    backgroundColor: colors.border.default,
     width: 36,
   },
   header: {

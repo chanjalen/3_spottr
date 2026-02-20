@@ -52,3 +52,7 @@ export async function fetchGroupStreakDetail(groupId: string): Promise<GroupStre
   const { data } = await apiClient.get(`/groups/${groupId}/streak/`);
   return data;
 }
+
+export async function leaveGroup(groupId: string): Promise<void> {
+  await apiClient.post(`/groups/${groupId}/leave/`);
+}

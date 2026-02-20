@@ -3,7 +3,7 @@ import { FeedItem, Poll } from '../types/feed';
 import { votePoll } from '../api/polls';
 
 export function usePollVote(
-  updateItem: (id: number, updates: Partial<FeedItem>) => void,
+  updateItem: (id: string, updates: Partial<FeedItem>) => void,
 ) {
   const handleVote = useCallback(
     async (item: FeedItem, optionId: number) => {

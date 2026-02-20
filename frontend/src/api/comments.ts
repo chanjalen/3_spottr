@@ -3,7 +3,7 @@ import { ENDPOINTS } from './endpoints';
 import { Comment } from '../types/feed';
 
 export async function fetchComments(
-  itemId: number,
+  itemId: string | number,
   itemType: 'post' | 'checkin',
 ): Promise<Comment[]> {
   const endpoint =
@@ -15,7 +15,7 @@ export async function fetchComments(
 }
 
 export async function addComment(
-  itemId: number,
+  itemId: string | number,
   itemType: 'post' | 'checkin',
   description: string,
 ): Promise<Comment> {

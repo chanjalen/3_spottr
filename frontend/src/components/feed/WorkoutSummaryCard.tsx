@@ -16,19 +16,19 @@ export default function WorkoutSummaryCard({ workout }: WorkoutSummaryCardProps)
     <View style={styles.container}>
       <View style={styles.statsRow}>
         <View style={styles.stat}>
-          <Feather name="activity" size={14} color={colors.brand.secondary} />
+          <Feather name="activity" size={14} color={colors.primary} />
           <Text style={styles.statValue}>{workout.exercise_count}</Text>
           <Text style={styles.statLabel}>exercises</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.stat}>
-          <Feather name="layers" size={14} color={colors.brand.secondary} />
+          <Feather name="layers" size={14} color={colors.primary} />
           <Text style={styles.statValue}>{workout.total_sets}</Text>
           <Text style={styles.statLabel}>sets</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.stat}>
-          <Feather name="clock" size={14} color={colors.brand.secondary} />
+          <Feather name="clock" size={14} color={colors.primary} />
           <Text style={styles.statValue}>{workout.duration_minutes}</Text>
           <Text style={styles.statLabel}>min</Text>
         </View>
@@ -55,9 +55,9 @@ export default function WorkoutSummaryCard({ workout }: WorkoutSummaryCardProps)
 const styles = StyleSheet.create({
   container: {
     backgroundColor: colors.background.elevated,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: colors.border.subtle,
+    borderColor: colors.border.default,
     padding: spacing.base,
     marginBottom: spacing.md,
   },
@@ -75,12 +75,12 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: typography.size.base,
     fontFamily: typography.family.bold,
-    color: colors.text.primary,
+    color: colors.textPrimary,
   },
   statLabel: {
     fontSize: typography.size.xs,
     fontFamily: typography.family.regular,
-    color: colors.text.secondary,
+    color: colors.textSecondary,
   },
   divider: {
     width: 1,
@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
   },
   exerciseList: {
     borderTopWidth: 1,
-    borderTopColor: colors.border.subtle,
+    borderTopColor: colors.border.default,
     paddingTop: spacing.md,
     gap: spacing.sm,
   },
@@ -102,23 +102,23 @@ const styles = StyleSheet.create({
     width: 4,
     height: 4,
     borderRadius: 2,
-    backgroundColor: colors.brand.secondary,
+    backgroundColor: colors.primary,
   },
   exerciseName: {
     flex: 1,
     fontSize: typography.size.sm,
     fontFamily: typography.family.regular,
-    color: colors.text.primary,
+    color: colors.textPrimary,
   },
   exerciseSets: {
     fontSize: typography.size.xs,
     fontFamily: typography.family.medium,
-    color: colors.text.secondary,
+    color: colors.textSecondary,
   },
   moreText: {
     fontSize: typography.size.xs,
     fontFamily: typography.family.medium,
-    color: colors.brand.secondary,
+    color: colors.primary,
     marginTop: 2,
   },
 });

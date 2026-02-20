@@ -10,7 +10,7 @@ import { colors, spacing, typography } from '../../theme';
 
 interface CommentItemProps {
   comment: Comment;
-  currentUserId?: number;
+  currentUserId?: string;
   onLike: (id: number) => void;
   onDelete: (id: number) => void;
   onLoadReplies: (id: number) => void;
@@ -27,6 +27,9 @@ export default function CommentItem({
 }: CommentItemProps) {
   const [showReplies, setShowReplies] = useState(false);
   const [showReplyInput, setShowReplyInput] = useState(false);
+
+  if (!comment?.user) return null;
+
   const isOwn = currentUserId === comment.user.id;
 
   const handleToggleReplies = () => {
@@ -60,13 +63,12 @@ export default function CommentItem({
             <Pressable
               style={styles.actionBtn}
               onPress={() => onLike(comment.id)}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
               <Feather
                 name="heart"
                 size={14}
-                color={
-                  comment.user_liked ? colors.semantic.like : colors.text.muted
-                }
+                color={comment.user_liked ? colors.semantic.like : colors.textMuted}
               />
               {comment.like_count > 0 && (
                 <Text
@@ -82,20 +84,18 @@ export default function CommentItem({
             <Pressable
               style={styles.actionBtn}
               onPress={() => setShowReplyInput(!showReplyInput)}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
-              <Feather
-                name="corner-down-right"
-                size={14}
-                color={colors.text.muted}
-              />
+              <Feather name="corner-down-right" size={14} color={colors.textMuted} />
               <Text style={styles.actionText}>Reply</Text>
             </Pressable>
             {isOwn && (
               <Pressable
                 style={styles.actionBtn}
                 onPress={() => onDelete(comment.id)}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
               >
-                <Feather name="trash-2" size={14} color={colors.text.muted} />
+                <Feather name="trash-2" size={14} color={colors.textMuted} />
               </Pressable>
             )}
           </View>
@@ -153,17 +153,17 @@ const styles = StyleSheet.create({
   name: {
     fontSize: typography.size.sm,
     fontFamily: typography.family.semibold,
-    color: colors.text.primary,
+    color: colors.textPrimary,
   },
   time: {
     fontSize: typography.size.xs,
     fontFamily: typography.family.regular,
-    color: colors.text.muted,
+    color: colors.textMuted,
   },
   text: {
     fontSize: typography.size.sm,
     fontFamily: typography.family.regular,
-    color: colors.text.primary,
+    color: colors.textPrimary,
     lineHeight: 20,
   },
   actions: {
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
   actionText: {
     fontSize: typography.size.xs,
     fontFamily: typography.family.medium,
-    color: colors.text.muted,
+    color: colors.textMuted,
   },
   toggleReplies: {
     flexDirection: 'row',
@@ -198,7 +198,7 @@ const styles = StyleSheet.create({
   toggleText: {
     fontSize: typography.size.xs,
     fontFamily: typography.family.medium,
-    color: colors.brand.primary,
+    color: colors.primary,
   },
   replyInputWrap: {
     paddingLeft: spacing['2xl'],

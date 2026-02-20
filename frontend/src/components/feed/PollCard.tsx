@@ -47,7 +47,7 @@ const styles = StyleSheet.create({
   question: {
     fontSize: typography.size.base,
     fontFamily: typography.family.semibold,
-    color: colors.text.primary,
+    color: colors.textPrimary,
     marginBottom: spacing.md,
   },
   footer: {
@@ -59,11 +59,11 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: typography.size.xs,
     fontFamily: typography.family.regular,
-    color: colors.text.muted,
+    color: colors.textMuted,
   },
   endedText: {
     fontSize: typography.size.xs,
     fontFamily: typography.family.medium,
-    color: colors.semantic.warning,
+    color: colors.warning,
   },
 });

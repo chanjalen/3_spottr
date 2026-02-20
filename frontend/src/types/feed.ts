@@ -41,7 +41,7 @@ export interface Poll {
 }
 
 export interface FeedItem {
-  id: number;
+  id: string;
   type: FeedItemType;
   user: UserBrief;
   created_at: string;

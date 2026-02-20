@@ -10,7 +10,7 @@ import {
 } from '../api/comments';
 import { SAMPLE_COMMENTS } from '../utils/sampleData';
 
-const USE_SAMPLE_DATA = __DEV__;
+const USE_SAMPLE_DATA = false;
 
 export function useComments() {
   const [comments, setComments] = useState<Comment[]>([]);
@@ -39,7 +39,7 @@ export function useComments() {
         const newComment: Comment = {
           id: Date.now(),
           user: {
-            id: 99,
+            id: '99',
             username: 'you',
             display_name: 'You',
             avatar_url: null,
@@ -133,7 +133,7 @@ export function useComments() {
         const newReply: Comment = {
           id: Date.now(),
           user: {
-            id: 99,
+            id: '99',
             username: 'you',
             display_name: 'You',
             avatar_url: null,

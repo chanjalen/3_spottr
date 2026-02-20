@@ -430,6 +430,7 @@ LIFT_MAP = {
 def get_top_lifters(gym_id, lift='bench'):
     """
     Get top lifters at a gym for a given lift category.
+    Only verified lifts (PRs with a video attached) are counted.
     lift: 'bench', 'squat', 'deadlift', or 'total'
     Returns list of dicts: [{rank, username, display_name, value, unit}, ...]
     """
@@ -442,7 +443,8 @@ def get_top_lifters(gym_id, lift='bench'):
             user__enrolled_gyms__id=gym_id,
             exercise_name__iexact=exercise_name,
             unit__in=['lbs', 'kg'],
-        ).select_related('user')
+            video__isnull=False,
+        ).exclude(video='').select_related('user')
 
         # Keep only the best PR per user
         best_by_user = {}
@@ -477,7 +479,8 @@ def get_top_lifters(gym_id, lift='bench'):
                     user=user,
                     exercise_name__iexact=name,
                     unit__in=['lbs', 'kg'],
-                ).order_by().first()
+                    video__isnull=False,
+                ).exclude(video='').order_by().first()
                 if pr:
                     try:
                         val = float(pr.value)

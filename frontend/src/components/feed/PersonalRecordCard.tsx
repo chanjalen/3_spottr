@@ -12,7 +12,7 @@ interface PersonalRecordCardProps {
 export default function PersonalRecordCard({ record }: PersonalRecordCardProps) {
   return (
     <LinearGradient
-      colors={['rgba(34,197,94,0.15)', 'rgba(34,197,94,0.05)']}
+      colors={['rgba(16,185,129,0.1)', 'rgba(16,185,129,0.03)']}
       start={{ x: 0, y: 0 }}
       end={{ x: 1, y: 1 }}
       style={styles.container}
@@ -33,9 +33,9 @@ export default function PersonalRecordCard({ record }: PersonalRecordCardProps) 
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: 'rgba(34,197,94,0.2)',
+    borderColor: 'rgba(16,185,129,0.2)',
     padding: spacing.base,
     marginBottom: spacing.md,
   },
@@ -47,7 +47,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    backgroundColor: 'rgba(34,197,94,0.15)',
+    backgroundColor: 'rgba(16,185,129,0.12)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
   exercise: {
     fontSize: typography.size.base,
     fontFamily: typography.family.semibold,
-    color: colors.text.primary,
+    color: colors.textPrimary,
     marginBottom: 4,
   },
   value: {
@@ -72,6 +72,6 @@ const styles = StyleSheet.create({
     fontSize: typography.size.base,
     fontFamily: typography.family.medium,
     color: colors.semantic.prGreen,
-    opacity: 0.7,
+    opacity: 0.75,
   },
 });

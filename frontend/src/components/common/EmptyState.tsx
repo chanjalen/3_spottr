@@ -16,7 +16,7 @@ export default function EmptyState({ tab }: EmptyStateProps) {
   return (
     <View style={styles.container}>
       <View style={styles.iconWrap}>
-        <Feather name="inbox" size={48} color={colors.text.muted} />
+        <Feather name="inbox" size={48} color={colors.textMuted} />
       </View>
       <Text style={styles.title}>Nothing here yet</Text>
       <Text style={styles.message}>{message}</Text>
@@ -44,13 +44,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: typography.size.lg,
     fontFamily: typography.family.semibold,
-    color: colors.text.primary,
+    color: colors.textPrimary,
     marginBottom: spacing.sm,
   },
   message: {
     fontSize: typography.size.sm,
     fontFamily: typography.family.regular,
-    color: colors.text.secondary,
+    color: colors.textSecondary,
     textAlign: 'center',
     lineHeight: 20,
   },
