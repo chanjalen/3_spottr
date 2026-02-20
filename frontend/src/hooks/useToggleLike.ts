@@ -3,7 +3,7 @@ import { FeedItem } from '../types/feed';
 import { toggleLike } from '../api/feed';
 
 export function useToggleLike(
-  updateItem: (id: number, updates: Partial<FeedItem>) => void,
+  updateItem: (id: string, updates: Partial<FeedItem>) => void,
 ) {
   const handleLike = useCallback(
     async (item: FeedItem) => {

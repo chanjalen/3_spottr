@@ -24,8 +24,6 @@ const styles = StyleSheet.create({
     aspectRatio: 4 / 3,
     borderRadius: 16,
     marginBottom: spacing.md,
-    borderWidth: 1,
-    borderColor: colors.border.subtle,
     backgroundColor: colors.background.elevated,
   },
 });

@@ -5,10 +5,10 @@ const hoursAgo = (h: number) => new Date(now.getTime() - h * 3600000).toISOStrin
 
 export const SAMPLE_FEED: FeedItem[] = [
   {
-    id: 1,
+    id: '1',
     type: 'post',
     user: {
-      id: 1,
+      id: '1',
       username: 'alexfit',
       display_name: 'Alex Johnson',
       avatar_url: null,
@@ -46,10 +46,10 @@ export const SAMPLE_FEED: FeedItem[] = [
     visibility: 'main',
   },
   {
-    id: 2,
+    id: '2',
     type: 'checkin',
     user: {
-      id: 2,
+      id: '2',
       username: 'sarahlifts',
       display_name: 'Sarah Chen',
       avatar_url: null,
@@ -71,10 +71,10 @@ export const SAMPLE_FEED: FeedItem[] = [
     visibility: 'main',
   },
   {
-    id: 3,
+    id: '3',
     type: 'post',
     user: {
-      id: 3,
+      id: '3',
       username: 'mikegains',
       display_name: 'Mike Thompson',
       avatar_url: null,
@@ -107,10 +107,10 @@ export const SAMPLE_FEED: FeedItem[] = [
     visibility: 'main',
   },
   {
-    id: 4,
+    id: '4',
     type: 'post',
     user: {
-      id: 4,
+      id: '4',
       username: 'fitjess',
       display_name: 'Jessica Park',
       avatar_url: null,
@@ -144,17 +144,17 @@ export const SAMPLE_FEED: FeedItem[] = [
     visibility: 'main',
   },
   {
-    id: 5,
+    id: '5',
     type: 'checkin',
     user: {
-      id: 5,
+      id: '5',
       username: 'danielstrong',
       display_name: 'Daniel Kim',
       avatar_url: null,
     },
     created_at: hoursAgo(12),
     description: 'Back and biceps. Simple and effective.',
-    location_name: 'Gold\'s Gym',
+    location_name: "Gold's Gym",
     photo_url: null,
     link_url: null,
     like_count: 6,
@@ -172,7 +172,7 @@ export const SAMPLE_COMMENTS: Comment[] = [
   {
     id: 1,
     user: {
-      id: 2,
+      id: '2',
       username: 'sarahlifts',
       display_name: 'Sarah Chen',
       avatar_url: null,
@@ -186,7 +186,7 @@ export const SAMPLE_COMMENTS: Comment[] = [
       {
         id: 10,
         user: {
-          id: 1,
+          id: '1',
           username: 'alexfit',
           display_name: 'Alex Johnson',
           avatar_url: null,
@@ -200,7 +200,7 @@ export const SAMPLE_COMMENTS: Comment[] = [
       {
         id: 11,
         user: {
-          id: 3,
+          id: '3',
           username: 'mikegains',
           display_name: 'Mike Thompson',
           avatar_url: null,
@@ -216,7 +216,7 @@ export const SAMPLE_COMMENTS: Comment[] = [
   {
     id: 2,
     user: {
-      id: 3,
+      id: '3',
       username: 'mikegains',
       display_name: 'Mike Thompson',
       avatar_url: null,
@@ -230,7 +230,7 @@ export const SAMPLE_COMMENTS: Comment[] = [
   {
     id: 3,
     user: {
-      id: 4,
+      id: '4',
       username: 'fitjess',
       display_name: 'Jessica Park',
       avatar_url: null,

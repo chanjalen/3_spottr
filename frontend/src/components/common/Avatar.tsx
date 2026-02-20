@@ -9,13 +9,15 @@ interface AvatarProps {
   size?: number;
 }
 
-export default function Avatar({ uri, name, size = 44 }: AvatarProps) {
-  const initials = name
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
+export default function Avatar({ uri, name, size = 40 }: AvatarProps) {
+  const safeName = name || '';
+  const initials =
+    safeName
+      .split(' ')
+      .map((n) => n[0] || '')
+      .join('')
+      .toUpperCase()
+      .slice(0, 2) || '?';
 
   if (uri) {
     return (
@@ -60,17 +62,15 @@ export default function Avatar({ uri, name, size = 44 }: AvatarProps) {
 
 const styles = StyleSheet.create({
   image: {
-    borderWidth: 1,
-    borderColor: colors.border.subtle,
     backgroundColor: colors.background.elevated,
   },
   fallback: {
-    backgroundColor: colors.brand.primary,
+    backgroundColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
   },
   initials: {
-    color: colors.text.primary,
+    color: colors.textOnPrimary,
     fontFamily: typography.family.semibold,
   },
 });

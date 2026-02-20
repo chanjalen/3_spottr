@@ -202,6 +202,16 @@ def group_join(request, group_id):
     except AlreadyGroupMemberError as e:
         return Response({"error": str(e)}, status=status.HTTP_409_CONFLICT)
 
+    try:
+        from messaging.services import send_system_group_message
+        send_system_group_message(
+            group_id=membership.group.id,
+            content="has joined the group",
+            sender=request.user,
+        )
+    except Exception:
+        pass
+
     return Response(
         GroupMemberSerializer(membership).data,
         status=status.HTTP_201_CREATED,
@@ -220,6 +230,16 @@ def group_leave(request, group_id):
         return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
     except CannotRemoveCreatorError as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        from messaging.services import send_system_group_message
+        send_system_group_message(
+            group_id=group_id,
+            content="has left the group",
+            sender=request.user,
+        )
+    except Exception:
+        pass
 
     return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -357,6 +377,16 @@ def join_via_code(request):
     except AlreadyGroupMemberError as e:
         return Response({"error": str(e)}, status=status.HTTP_409_CONFLICT)
 
+    try:
+        from messaging.services import send_system_group_message
+        send_system_group_message(
+            group_id=membership.group.id,
+            content="has joined the group",
+            sender=request.user,
+        )
+    except Exception:
+        pass
+
     return Response(
         GroupMemberSerializer(membership).data,
         status=status.HTTP_201_CREATED,
@@ -396,6 +426,7 @@ def join_request_create(request, group_id):
             group_id=join_request.group.id,
             content=f"🔒 {display} requested to join '{join_request.group.name}'",
             join_request=join_request,
+            sender=request.user,
         )
     except Exception:
         pass  # Never block the request if messaging fails

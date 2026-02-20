@@ -12,14 +12,15 @@ export type FeedTab = 'main' | 'friends';
 interface FeedTabsProps {
   activeTab: FeedTab;
   onTabChange: (tab: FeedTab) => void;
+  streakCount?: number;
 }
 
 const TABS: { key: FeedTab; label: string }[] = [
-  { key: 'main', label: 'Main' },
-  { key: 'friends', label: 'Friends' },
+  { key: 'main', label: 'Discover' },
+  { key: 'friends', label: 'Following' },
 ];
 
-export default function FeedTabs({ activeTab, onTabChange }: FeedTabsProps) {
+export default function FeedTabs({ activeTab, onTabChange, streakCount }: FeedTabsProps) {
   const tabWidths = React.useRef<number[]>([0, 0]);
   const tabPositions = React.useRef<number[]>([0, 0]);
   const indicatorX = useSharedValue(0);
@@ -57,63 +58,102 @@ export default function FeedTabs({ activeTab, onTabChange }: FeedTabsProps) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.tabRow}>
-        {TABS.map((tab, index) => {
-          const isActive = activeTab === tab.key;
-          return (
-            <Pressable
-              key={tab.key}
-              onPress={() => onTabChange(tab.key)}
-              onLayout={handleTabLayout(index)}
-              style={styles.tab}
-            >
-              <Text
-                style={[
-                  styles.tabLabel,
-                  isActive && styles.tabLabelActive,
-                ]}
+      <View style={styles.row}>
+        <View style={styles.tabRow}>
+          {TABS.map((tab, index) => {
+            const isActive = activeTab === tab.key;
+            return (
+              <Pressable
+                key={tab.key}
+                onPress={() => onTabChange(tab.key)}
+                onLayout={handleTabLayout(index)}
+                style={styles.tab}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: isActive }}
+                accessibilityLabel={tab.label}
               >
-                {tab.label}
-              </Text>
-            </Pressable>
-          );
-        })}
+                <Text
+                  style={[
+                    styles.tabLabel,
+                    isActive ? styles.tabLabelActive : styles.tabLabelInactive,
+                  ]}
+                >
+                  {tab.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+          <Animated.View style={[styles.indicator, indicatorStyle]} />
+        </View>
+
+        {/* Streak badge */}
+        {streakCount != null && streakCount > 0 && (
+          <View style={styles.streakBadge}>
+            <Text style={styles.streakIcon}>🔥</Text>
+            <Text style={styles.streakCount}>{streakCount}</Text>
+          </View>
+        )}
       </View>
-      <Animated.View style={[styles.indicator, indicatorStyle]} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: colors.background.surface,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.subtle,
-    paddingTop: spacing.md,
+    // transparent — sits inside the gradient wrapper in FeedScreen
+  },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md,
   },
   tabRow: {
     flexDirection: 'row',
-    paddingHorizontal: spacing.xl,
     gap: spacing['2xl'],
+    position: 'relative',
   },
   tab: {
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.sm,
+    paddingTop: spacing.xs,
+    minHeight: 44,
+    justifyContent: 'flex-end',
   },
   tabLabel: {
     fontSize: typography.size.base,
     fontFamily: typography.family.medium,
-    color: colors.tab.inactive,
   },
   tabLabelActive: {
-    color: colors.tab.active,
+    color: colors.textOnPrimary,
     fontFamily: typography.family.semibold,
+  },
+  tabLabelInactive: {
+    color: 'rgba(255,255,255,0.65)',
   },
   indicator: {
     height: 2,
-    backgroundColor: colors.tab.indicator,
+    backgroundColor: colors.textOnPrimary,
     borderTopLeftRadius: 1,
     borderTopRightRadius: 1,
     position: 'absolute',
     bottom: 0,
+  },
+  streakBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.surface,
+    borderRadius: 9999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  streakIcon: {
+    fontSize: 14,
+  },
+  streakCount: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.semibold,
+    color: colors.textPrimary,
   },
 });

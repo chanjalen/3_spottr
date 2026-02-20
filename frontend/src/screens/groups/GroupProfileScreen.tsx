@@ -7,22 +7,27 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import * as Haptics from 'expo-haptics';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RouteProp } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
 import InactiveStreakSheet from '../../components/groups/InactiveStreakSheet';
-import { fetchGroupDetail, fetchGroupStreakDetail, GroupDetail, GroupStreakDetail } from '../../api/groups';
+import { fetchGroupDetail, fetchGroupStreakDetail, leaveGroup, GroupDetail, GroupStreakDetail } from '../../api/groups';
 import { colors, spacing, typography } from '../../theme';
+import { RootStackParamList } from '../../navigation/types';
 
-interface GroupProfileScreenProps {
-  groupId: string;
-}
+type Props = {
+  navigation: NativeStackNavigationProp<RootStackParamList, 'GroupProfile'>;
+  route: RouteProp<RootStackParamList, 'GroupProfile'>;
+};
 
-export default function GroupProfileScreen({ groupId }: GroupProfileScreenProps) {
+export default function GroupProfileScreen({ navigation, route }: Props) {
+  const groupId = route.params.groupId;
   const insets = useSafeAreaInsets();
 
   const [group, setGroup] = useState<GroupDetail | null>(null);
@@ -31,6 +36,7 @@ export default function GroupProfileScreen({ groupId }: GroupProfileScreenProps)
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [streakSheetVisible, setStreakSheetVisible] = useState(false);
   const [streakLoading, setStreakLoading] = useState(false);
+  const [isLeaving, setIsLeaving] = useState(false);
 
   const loadGroup = useCallback(async () => {
     try {
@@ -77,6 +83,32 @@ export default function GroupProfileScreen({ groupId }: GroupProfileScreenProps)
     }
   }, [streakDetail, loadStreakDetail]);
 
+  const handleLeaveGroup = useCallback(() => {
+    Alert.alert(
+      'Leave Group',
+      `Are you sure you want to leave ${group?.name}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Leave',
+          style: 'destructive',
+          onPress: async () => {
+            setIsLeaving(true);
+            try {
+              await leaveGroup(groupId);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              navigation.goBack();
+            } catch {
+              Alert.alert('Error', 'Could not leave the group. Please try again.');
+            } finally {
+              setIsLeaving(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [groupId, group?.name, navigation]);
+
   if (isLoading || !group) {
     return (
       <View style={[styles.loader, { paddingTop: insets.top }]}>
@@ -88,7 +120,7 @@ export default function GroupProfileScreen({ groupId }: GroupProfileScreenProps)
   const hasActiveStreak = group.group_streak > 0;
 
   return (
-    <GestureHandlerRootView style={styles.root}>
+    <View style={styles.root}>
       <ScrollView
         style={styles.container}
         contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.base }]}
@@ -105,9 +137,9 @@ export default function GroupProfileScreen({ groupId }: GroupProfileScreenProps)
       >
         {/* Group header */}
         <View style={styles.header}>
-          {group.avatar ? (
+          {group.avatar_url ? (
             <Image
-              source={{ uri: group.avatar }}
+              source={{ uri: group.avatar_url }}
               style={styles.groupAvatar}
               contentFit="cover"
             />
@@ -141,26 +173,41 @@ export default function GroupProfileScreen({ groupId }: GroupProfileScreenProps)
         {/* Streak section */}
         <View style={styles.streakSection}>
           <Text style={styles.streakSectionLabel}>Group Streak</Text>
-          <TouchableOpacity
-            style={[styles.streakButton, hasActiveStreak && styles.streakButtonActive]}
-            onPress={handleStreakPress}
-            activeOpacity={0.75}
-          >
-            {hasActiveStreak ? (
-              <>
-                <Text style={styles.streakFlame}>🔥</Text>
-                <Text style={styles.streakButtonText}>{group.group_streak} day streak</Text>
-              </>
-            ) : (
-              <>
-                <Feather name="zap-off" size={15} color={colors.text.muted} />
-                <Text style={[styles.streakButtonText, styles.streakButtonTextInactive]}>
-                  No group streak active
+          <View style={styles.streakActionsRow}>
+            <TouchableOpacity
+              style={[styles.streakButton, hasActiveStreak && styles.streakButtonActive]}
+              onPress={handleStreakPress}
+              activeOpacity={0.75}
+            >
+              {hasActiveStreak ? (
+                <>
+                  <Text style={styles.streakFlame}>🔥</Text>
+                  <Text style={styles.streakButtonText}>{group.group_streak} day streak</Text>
+                </>
+              ) : (
+                <>
+                  <Feather name="zap-off" size={15} color={colors.text.muted} />
+                  <Text style={[styles.streakButtonText, styles.streakButtonTextInactive]}>
+                    No group streak active
+                  </Text>
+                </>
+              )}
+              <Feather name="chevron-right" size={15} color={hasActiveStreak ? colors.brand.primary : colors.text.muted} />
+            </TouchableOpacity>
+            {(group.user_role === 'member' || group.user_role === 'admin') && (
+              <TouchableOpacity
+                style={styles.leaveButton}
+                onPress={handleLeaveGroup}
+                activeOpacity={0.75}
+                disabled={isLeaving}
+              >
+                <Feather name="log-out" size={14} color="#ef4444" />
+                <Text style={styles.leaveButtonText}>
+                  {isLeaving ? 'Leaving…' : 'Leave'}
                 </Text>
-              </>
+              </TouchableOpacity>
             )}
-            <Feather name="chevron-right" size={15} color={hasActiveStreak ? colors.brand.primary : colors.text.muted} />
-          </TouchableOpacity>
+          </View>
           {group.longest_group_streak > 0 && (
             <Text style={styles.streakBest}>Best: {group.longest_group_streak}d</Text>
           )}
@@ -198,7 +245,7 @@ export default function GroupProfileScreen({ groupId }: GroupProfileScreenProps)
           onClose={() => setStreakSheetVisible(false)}
         />
       )}
-    </GestureHandlerRootView>
+    </View>
   );
 }
 
@@ -218,8 +265,8 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.base,
   },
   content: {
-    paddingHorizontal: spacing.base,
-    paddingBottom: spacing['3xl'],
+    paddingHorizontal: spacing.xl,
+    paddingBottom: 120, // above bottom nav
     gap: spacing.base,
   },
 
@@ -289,6 +336,27 @@ const styles = StyleSheet.create({
     color: colors.text.muted,
     marginBottom: 2,
   },
+  streakActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  leaveButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(239,68,68,0.08)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.3)',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  leaveButtonText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.medium,
+    color: '#ef4444',
+  },
   streakButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -354,7 +422,7 @@ const styles = StyleSheet.create({
   },
   roleBadge: {
     backgroundColor: colors.background.elevated,
-    borderRadius: 6,
+    borderRadius: 8,
     paddingHorizontal: spacing.sm,
     paddingVertical: 3,
   },

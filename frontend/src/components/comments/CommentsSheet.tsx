@@ -95,7 +95,7 @@ export default function CommentsSheet({ item, onClose }: CommentsSheetProps) {
 
       {isLoading ? (
         <View style={styles.loader}>
-          <ActivityIndicator color={colors.brand.primary} />
+          <ActivityIndicator color={colors.primary} />
         </View>
       ) : (
         <FlatList
@@ -120,12 +120,12 @@ export default function CommentsSheet({ item, onClose }: CommentsSheetProps) {
 
 const styles = StyleSheet.create({
   background: {
-    backgroundColor: colors.background.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
   },
   handle: {
-    backgroundColor: colors.text.muted,
+    backgroundColor: colors.border.default,
     width: 36,
   },
   header: {
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: typography.size.md,
     fontFamily: typography.family.semibold,
-    color: colors.text.primary,
+    color: colors.textPrimary,
   },
   list: {
     padding: spacing.base,
@@ -155,6 +155,6 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: typography.size.sm,
     fontFamily: typography.family.regular,
-    color: colors.text.muted,
+    color: colors.textMuted,
   },
 });

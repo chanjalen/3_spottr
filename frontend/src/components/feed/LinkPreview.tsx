@@ -14,12 +14,14 @@ export default function LinkPreview({ url }: LinkPreviewProps) {
     <Pressable
       style={({ pressed }) => [styles.container, pressed && styles.pressed]}
       onPress={() => Linking.openURL(url)}
+      accessibilityLabel={`Open link: ${displayUrl}`}
+      accessibilityRole="link"
     >
-      <Feather name="external-link" size={14} color={colors.brand.primary} />
+      <Feather name="external-link" size={14} color={colors.primary} />
       <Text style={styles.url} numberOfLines={1}>
         {displayUrl}
       </Text>
-      <Feather name="chevron-right" size={14} color={colors.text.muted} />
+      <Feather name="chevron-right" size={14} color={colors.textMuted} />
     </Pressable>
   );
 }
@@ -32,7 +34,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.elevated,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.border.subtle,
+    borderColor: colors.border.default,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.sm,
     marginBottom: spacing.md,
@@ -44,6 +46,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: typography.size.sm,
     fontFamily: typography.family.regular,
-    color: colors.brand.primary,
+    color: colors.primary,
   },
 });

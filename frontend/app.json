@@ -5,9 +5,9 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "splash": {
-      "backgroundColor": "#08080F"
+      "backgroundColor": "#4FC3E0"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
@@ -16,7 +16,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#08080F"
+        "backgroundColor": "#4FC3E0"
       },
       "package": "com.spottr.app"
     },

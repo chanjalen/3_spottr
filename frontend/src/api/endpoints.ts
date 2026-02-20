@@ -1,26 +1,29 @@
 const BASE = '/social';
 
+type ID = string | number;
+
 export const ENDPOINTS = {
   feed: `${BASE}/feed/`,
+  searchFeed: `${BASE}/search/`,
 
-  likePost: (id: number) => `${BASE}/post/${id}/like/`,
-  likeCheckin: (id: number) => `${BASE}/checkin/${id}/like/`,
-  likeComment: (id: number) => `${BASE}/comment/${id}/like/`,
+  likePost: (id: ID) => `${BASE}/post/${id}/like/`,
+  likeCheckin: (id: ID) => `${BASE}/checkin/${id}/like/`,
+  likeComment: (id: ID) => `${BASE}/comment/${id}/like/`,
 
-  postComments: (id: number) => `${BASE}/post/${id}/comments/`,
-  addPostComment: (id: number) => `${BASE}/post/${id}/comments/add/`,
-  checkinComments: (id: number) => `${BASE}/checkin/${id}/comments/`,
-  addCheckinComment: (id: number) => `${BASE}/checkin/${id}/comments/add/`,
+  postComments: (id: ID) => `${BASE}/post/${id}/comments/`,
+  addPostComment: (id: ID) => `${BASE}/post/${id}/comments/add/`,
+  checkinComments: (id: ID) => `${BASE}/checkin/${id}/comments/`,
+  addCheckinComment: (id: ID) => `${BASE}/checkin/${id}/comments/add/`,
 
-  deleteComment: (id: number) => `${BASE}/comment/${id}/delete/`,
-  commentReplies: (id: number) => `${BASE}/comment/${id}/replies/`,
-  addCommentReply: (id: number) => `${BASE}/comment/${id}/replies/add/`,
+  deleteComment: (id: ID) => `${BASE}/comment/${id}/delete/`,
+  commentReplies: (id: ID) => `${BASE}/comment/${id}/replies/`,
+  addCommentReply: (id: ID) => `${BASE}/comment/${id}/replies/add/`,
 
-  deletePost: (id: number) => `${BASE}/post/${id}/delete/`,
-  deleteCheckin: (id: number) => `${BASE}/checkin/${id}/delete/`,
+  deletePost: (id: ID) => `${BASE}/post/${id}/delete/`,
+  deleteCheckin: (id: ID) => `${BASE}/checkin/${id}/delete/`,
 
   createPost: `${BASE}/post/create/`,
   createCheckin: `${BASE}/checkin/create/`,
 
-  votePoll: (id: number) => `${BASE}/poll/${id}/vote/`,
+  votePoll: (id: ID) => `${BASE}/poll/${id}/vote/`,
 } as const;

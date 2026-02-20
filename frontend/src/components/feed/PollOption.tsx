@@ -53,6 +53,9 @@ export default function PollOption({
       ]}
       onPress={isActive ? onVote : undefined}
       disabled={!isActive}
+      accessibilityRole="button"
+      accessibilityLabel={`${text}, ${percentage}%`}
+      accessibilityState={{ selected: isSelected }}
     >
       {hasVoted && (
         <Animated.View
@@ -66,7 +69,7 @@ export default function PollOption({
       <View style={styles.content}>
         <View style={styles.textRow}>
           {isSelected && (
-            <Feather name="check-circle" size={14} color={colors.brand.primary} />
+            <Feather name="check-circle" size={14} color={colors.primary} />
           )}
           <Text style={[styles.text, isSelected && styles.textSelected]}>
             {text}
@@ -84,7 +87,7 @@ export default function PollOption({
 
 const styles = StyleSheet.create({
   container: {
-    borderRadius: 10,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border.default,
     marginBottom: spacing.sm,
@@ -92,7 +95,8 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   selected: {
-    borderColor: colors.brand.primary + '40',
+    borderColor: colors.primary,
+    borderWidth: 1.5,
   },
   disabled: {
     opacity: 0.6,
@@ -102,11 +106,11 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     bottom: 0,
-    backgroundColor: colors.brand.primary + '12',
-    borderRadius: 9,
+    backgroundColor: 'rgba(79,195,224,0.12)',
+    borderRadius: 11,
   },
   barSelected: {
-    backgroundColor: colors.brand.primary + '20',
+    backgroundColor: 'rgba(79,195,224,0.2)',
   },
   content: {
     flexDirection: 'row',
@@ -123,19 +127,19 @@ const styles = StyleSheet.create({
   text: {
     fontSize: typography.size.sm,
     fontFamily: typography.family.medium,
-    color: colors.text.primary,
+    color: colors.textPrimary,
   },
   textSelected: {
-    color: colors.brand.primary,
+    color: colors.primary,
     fontFamily: typography.family.semibold,
   },
   percent: {
     fontSize: typography.size.sm,
     fontFamily: typography.family.medium,
-    color: colors.text.secondary,
+    color: colors.textSecondary,
   },
   percentSelected: {
-    color: colors.brand.primary,
+    color: colors.primary,
     fontFamily: typography.family.semibold,
   },
 });

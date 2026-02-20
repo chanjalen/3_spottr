@@ -309,6 +309,25 @@
         margin-left: 8px;
     }
 
+    .conv-name-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        overflow: hidden;
+    }
+
+    .group-conv-streak {
+        font-size: 11px;
+        font-weight: 600;
+        color: #f97316;
+        background: rgba(249, 115, 22, 0.1);
+        border-radius: var(--radius-pill);
+        padding: 2px 7px;
+        flex-shrink: 0;
+        white-space: nowrap;
+    }
+
     .conversation-preview {
         font-size: 13px;
         color: var(--text-secondary);
@@ -559,25 +578,70 @@
 
     /* System messages in group chat */
     .chat-system-message {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        align-self: center;
+        margin: 8px auto;
+        max-width: 260px;
+        width: fit-content;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+        padding: 12px 18px;
         text-align: center;
-        color: var(--text-muted);
-        font-size: 12px;
-        padding: 6px 16px;
-        font-style: italic;
-        margin: 4px 0;
+        color: var(--text-secondary);
+        font-size: 13px;
+        line-height: 1.5;
+    }
+
+    .sys-msg-avatar {
+        width: 22px;
+        height: 22px;
+        border-radius: 50%;
+        background: var(--bg-elevated);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 10px;
+        font-weight: 600;
+        color: var(--text-primary);
+        overflow: hidden;
+        text-decoration: none;
+        flex-shrink: 0;
+        vertical-align: middle;
+        margin-right: 4px;
+    }
+
+    .sys-msg-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .sys-msg-username {
+        font-weight: 600;
+        color: inherit;
+        text-decoration: none;
+    }
+
+    .sys-msg-username:hover {
+        text-decoration: underline;
     }
 
     .chat-system-actions {
         display: flex;
         gap: 8px;
         justify-content: center;
-        margin-top: 6px;
+        margin-top: 10px;
+        width: 100%;
     }
 
     .sys-accept-btn, .sys-deny-btn {
-        padding: 4px 14px;
+        flex: 1;
+        padding: 7px 14px;
         border-radius: var(--radius-md);
-        font-size: 12px;
+        font-size: 13px;
         font-weight: 600;
         border: none;
         cursor: pointer;
@@ -593,8 +657,8 @@
     .sys-accept-btn:hover { opacity: 0.85; }
 
     .sys-deny-btn {
-        background: var(--bg-elevated);
-        color: var(--text-muted);
+        background: var(--bg-card);
+        color: var(--text-secondary);
         border: 1px solid var(--border-default);
     }
 
@@ -977,6 +1041,36 @@
         overflow-y: auto;
         margin-bottom: 16px;
         padding: 4px 0;
+    }
+
+    .chat-row-received {
+        display: flex;
+        align-items: flex-end;
+        gap: 8px;
+        align-self: flex-start;
+    }
+
+    .chat-msg-avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: 700;
+        color: #fff;
+        flex-shrink: 0;
+        overflow: hidden;
+        text-decoration: none;
+        cursor: pointer;
+    }
+
+    .chat-msg-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
     }
 
     .chat-bubble {
@@ -1375,14 +1469,42 @@
         opacity: 0.8;
     }
 
-    /* ── Inline streak modal ── */
+    .group-profile-leave-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+        background: transparent;
+        padding: 4px 10px;
+        border-radius: var(--radius-pill);
+        font-size: 12px;
+        font-weight: 600;
+        color: #ef4444;
+        cursor: pointer;
+        border: 1px solid rgba(239, 68, 68, 0.35);
+        font-family: inherit;
+        transition: background var(--duration) var(--ease-out),
+                    border-color var(--duration) var(--ease-out);
+        user-select: none;
+    }
+
+    .group-profile-leave-btn:hover {
+        background: rgba(239, 68, 68, 0.08);
+        border-color: rgba(239, 68, 68, 0.6);
+    }
+
+    .group-profile-leave-btn:active { opacity: 0.8; }
+    .group-profile-leave-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ── Streak modal ── */
     .group-streak-modal-overlay {
         display: none;
         position: fixed;
         inset: 0;
-        background: rgba(0,0,0,0.55);
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
         z-index: 300;
-        align-items: flex-end;
+        align-items: center;
         justify-content: center;
     }
 
@@ -1392,37 +1514,41 @@
 
     .group-streak-modal {
         background: var(--bg-surface);
-        border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
-        width: 100%;
-        max-height: 65vh;
+        border-radius: var(--radius-2xl);
+        width: 90%;
+        max-width: 420px;
+        max-height: 80vh;
         display: flex;
         flex-direction: column;
-        animation: slideUp 0.26s var(--ease-out) both;
+        border: 1px solid var(--border-default);
+        box-shadow: var(--shadow-lg);
+        animation: streakModalIn 0.2s var(--ease-out) both;
     }
 
-    .group-streak-modal-handle {
-        width: 36px;
-        height: 4px;
-        background: var(--text-muted);
-        border-radius: 2px;
-        margin: 12px auto 0;
-        flex-shrink: 0;
+    @keyframes streakModalIn {
+        from { opacity: 0; transform: scale(0.95); }
+        to   { opacity: 1; transform: scale(1); }
     }
 
     .group-streak-modal-header {
         display: flex;
         align-items: center;
-        gap: 10px;
-        padding: 14px 20px 12px;
+        justify-content: space-between;
+        padding: 18px 20px;
         border-bottom: 1px solid var(--border-subtle);
         flex-shrink: 0;
     }
 
     .group-streak-modal-title {
-        font-size: 15px;
+        font-size: 18px;
         font-weight: 600;
         color: var(--text-primary);
-        flex: 1;
+    }
+
+    .group-streak-modal-header-right {
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
 
     .group-streak-modal-badge {
@@ -1431,7 +1557,7 @@
         color: #fff;
         background: #ef4444;
         border-radius: 10px;
-        padding: 2px 7px;
+        padding: 2px 8px;
         min-width: 20px;
         text-align: center;
     }
@@ -1441,23 +1567,28 @@
     }
 
     .group-streak-modal-close {
-        background: none;
-        border: none;
-        color: var(--text-muted);
-        font-size: 20px;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        display: flex;
+        align-items: center;
+        justify-content: center;
         cursor: pointer;
-        padding: 2px 4px;
-        line-height: 1;
-        transition: color var(--duration);
+        color: var(--text-secondary);
+        font-size: 18px;
+        transition: all var(--duration);
     }
 
     .group-streak-modal-close:hover {
+        background: var(--bg-hover);
         color: var(--text-primary);
     }
 
     .group-streak-modal-body {
         overflow-y: auto;
-        padding: 12px 20px 28px;
+        padding: 20px;
         flex: 1;
     }
 
@@ -1518,6 +1649,33 @@
         gap: 3px;
         flex-shrink: 0;
     }
+
+    .streak-zap-btn {
+        background: rgba(251, 191, 36, 0.1);
+        border: 1px solid rgba(251, 191, 36, 0.3);
+        border-radius: var(--radius-pill);
+        color: #fbbf24;
+        font-size: 13px;
+        padding: 4px 10px;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: all var(--duration) var(--ease-out);
+        font-family: inherit;
+        font-weight: 500;
+    }
+
+    .streak-zap-btn:hover {
+        background: rgba(251, 191, 36, 0.2);
+        border-color: rgba(251, 191, 36, 0.55);
+    }
+
+    .streak-zap-btn.sent {
+        background: rgba(34, 197, 94, 0.1);
+        border-color: rgba(34, 197, 94, 0.3);
+        color: #22c55e;
+    }
+
+    .streak-zap-btn:disabled { cursor: not-allowed; opacity: 0.65; }
 
     /* Edit group modal */
     .edit-grp-tabs {
@@ -1952,7 +2110,12 @@
         </div>
         <div class="conversation-info">
             <div class="conversation-top">
-                <span class="conversation-name">{{ conv.group.name }}</span>
+                <div class="conv-name-row">
+                    <span class="conversation-name">{{ conv.group.name }}</span>
+                    {% if conv.group.group_streak > 0 %}
+                    <span class="group-conv-streak">🔥 {{ conv.group.group_streak }}</span>
+                    {% endif %}
+                </div>
                 <span class="conversation-time">{{ conv.time_ago }}</span>
             </div>
             <div class="conversation-bottom">
@@ -2075,6 +2238,7 @@
             <span class="group-profile-privacy-badge" id="groupProfilePrivacy"></span>
             <span class="group-profile-meta-item" id="groupProfileMemberCount"></span>
             <span class="group-profile-streak" id="groupProfileStreak" style="display:none;" onclick="openGroupStreakModal()" role="button" title="View streak details"></span>
+            <button class="group-profile-leave-btn" id="groupProfileLeaveBtn" style="display:none;" onclick="leaveCurrentGroup()">🚪 Leave Group</button>
         </div>
     </div>
 
@@ -2156,11 +2320,12 @@
 <!-- ==================== INLINE STREAK MODAL (inside group profile) ==================== -->
 <div class="group-streak-modal-overlay" id="groupStreakOverlay" onclick="closeGroupStreakModal()">
     <div class="group-streak-modal" onclick="event.stopPropagation()">
-        <div class="group-streak-modal-handle"></div>
         <div class="group-streak-modal-header">
             <span class="group-streak-modal-title" id="groupStreakModalTitle">Loading…</span>
-            <span class="group-streak-modal-badge" id="groupStreakModalBadge" style="display:none;"></span>
-            <button class="group-streak-modal-close" onclick="closeGroupStreakModal()">&times;</button>
+            <div class="group-streak-modal-header-right">
+                <span class="group-streak-modal-badge" id="groupStreakModalBadge" style="display:none;"></span>
+                <button class="group-streak-modal-close" onclick="closeGroupStreakModal()">&times;</button>
+            </div>
         </div>
         <div class="group-streak-modal-body" id="groupStreakModalBody">
             <div class="modal-spinner"><div class="spinner"></div></div>
@@ -2323,6 +2488,15 @@ function openChat(type, id, name, username, partnerCheckedIn, userRole, avatarUr
     // Update avatar
     const avatarEl = document.getElementById('chatAvatar');
     avatarEl.style.borderRadius = type === 'group' ? 'var(--radius-sm)' : '50%';
+    avatarEl.style.cursor = 'pointer';
+    if (type === 'dm' && username) {
+        avatarEl.onclick = () => window.location.href = '/accounts/profile/' + username + '/';
+    } else if (type === 'group') {
+        avatarEl.onclick = () => openGroupProfile(currentChatId);
+    } else {
+        avatarEl.onclick = null;
+        avatarEl.style.cursor = 'default';
+    }
     if (avatarUrl) {
         avatarEl.innerHTML = `<img src="${avatarUrl}" alt="${name}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`;
         avatarEl.style.background = 'none';
@@ -2357,15 +2531,52 @@ function closeChat() {
 
 function buildMessageHtml(msg) {
     if (msg.is_system) {
-        const isAdmin = (currentChatUserRole === 'admin' || currentChatUserRole === 'creator');
-        const hasPendingRequest = isAdmin && msg.join_request_id && msg.join_request_status === 'pending';
-        const actionsHtml = hasPendingRequest
-            ? `<div class="chat-system-actions">
-                <button class="sys-accept-btn" onclick="acceptJoinRequestFromChat('${escapeHtml(currentChatId)}', '${escapeHtml(msg.join_request_id)}', this.closest('.chat-system-message'))">Accept</button>
-                <button class="sys-deny-btn" onclick="denyJoinRequestFromChat('${escapeHtml(currentChatId)}', '${escapeHtml(msg.join_request_id)}', this.closest('.chat-system-message'))">Deny</button>
-               </div>`
-            : '';
-        return `<div class="chat-system-message">${escapeHtml(msg.content)}${actionsHtml}</div>`;
+        const username = msg.sender_username || 'Someone';
+        const groupName = document.getElementById('chatPartnerName').textContent;
+
+        // Inline avatar + linked username
+        const avatarContent = msg.sender_avatar_url
+            ? `<img src="${escapeHtml(msg.sender_avatar_url)}" alt="${escapeHtml(username)}">`
+            : escapeHtml(username.charAt(0).toUpperCase());
+        const profileUrl = msg.sender_username ? `/accounts/profile/${escapeHtml(msg.sender_username)}/` : '#';
+        const avatarHtml = `<a href="${profileUrl}" class="sys-msg-avatar">${avatarContent}</a>`;
+        const usernameHtml = `<a href="${profileUrl}" class="sys-msg-username">${escapeHtml(username)}</a>`;
+
+        if (msg.join_request_id && msg.join_request_status === 'accepted') {
+            return `<div class="chat-system-message" data-username="${escapeHtml(username)}" style="color:var(--brand-cyan);border-color:rgba(6,182,212,0.3);">${avatarHtml}${usernameHtml} has joined ${escapeHtml(groupName)}</div>`;
+        }
+
+        if (msg.join_request_id && msg.join_request_status === 'denied') {
+            return `<div class="chat-system-message" data-username="${escapeHtml(username)}" style="color:#ef4444;border-color:rgba(239,68,68,0.3);">${avatarHtml}${usernameHtml} has been rejected from ${escapeHtml(groupName)}</div>`;
+        }
+
+        // Join request pending
+        if (msg.join_request_id) {
+            const isAdmin = (currentChatUserRole === 'admin' || currentChatUserRole === 'creator');
+            const hasPendingRequest = isAdmin && msg.join_request_status === 'pending';
+            const actionsHtml = hasPendingRequest
+                ? `<div class="chat-system-actions">
+                    <button class="sys-accept-btn" onclick="acceptJoinRequestFromChat('${escapeHtml(currentChatId)}', '${escapeHtml(msg.join_request_id)}', this.closest('.chat-system-message'))">Accept</button>
+                    <button class="sys-deny-btn" onclick="denyJoinRequestFromChat('${escapeHtml(currentChatId)}', '${escapeHtml(msg.join_request_id)}', this.closest('.chat-system-message'))">Deny</button>
+                   </div>`
+                : '';
+            const avatarUrl = msg.sender_avatar_url ? escapeHtml(msg.sender_avatar_url) : '';
+            return `<div class="chat-system-message" data-username="${escapeHtml(username)}" data-avatar-url="${avatarUrl}" data-profile-url="${profileUrl}">${avatarHtml}${usernameHtml} requested to join${actionsHtml}</div>`;
+        }
+
+        // Generic system message (join / leave / etc.)
+        // Normalize action text — old messages may have the display name baked in
+        let action, extraStyle = '';
+        if (msg.content.includes('has joined')) {
+            action = 'has joined the group';
+            extraStyle = 'color:#22c55e;border-color:rgba(34,197,94,0.3);';
+        } else if (msg.content.includes('has left')) {
+            action = 'has left the group';
+            extraStyle = 'color:#ef4444;border-color:rgba(239,68,68,0.3);';
+        } else {
+            action = escapeHtml(msg.content);
+        }
+        return `<div class="chat-system-message" style="${extraStyle}">${avatarHtml}${usernameHtml} ${action}</div>`;
     }
 
     const isSent = msg.sender_username === '{{ user.username }}';
@@ -2392,10 +2603,23 @@ function buildMessageHtml(msg) {
         contentHtml = escapeHtml(msg.content);
     }
 
-    return `<div class="chat-bubble ${bubbleClass}">
+    const bubble = `<div class="chat-bubble ${bubbleClass}">
         ${contentHtml}
         <div class="chat-bubble-time">${usernameHtml}${msg.created_at ? ' · ' + formatTime(msg.created_at) : ''}</div>
     </div>`;
+
+    if (!isSent) {
+        const initial = (msg.sender_username || '?').charAt(0).toUpperCase();
+        const avatarInner = msg.sender_avatar_url
+            ? `<img src="${escapeHtml(msg.sender_avatar_url)}" alt="${escapeHtml(msg.sender_username || '')}">`
+            : initial;
+        return `<div class="chat-row-received">
+            <a href="/accounts/profile/${escapeHtml(msg.sender_username)}/" class="chat-msg-avatar">${avatarInner}</a>
+            ${bubble}
+        </div>`;
+    }
+
+    return bubble;
 }
 
 function markMessagesRead(messages) {
@@ -2961,6 +3185,18 @@ function _updateJoinRequestBadge() {
     }
 }
 
+function buildSysMsgUserHtml(messageEl) {
+    const username = messageEl.dataset.username || 'Someone';
+    const profileUrl = messageEl.dataset.profileUrl || '#';
+    const avatarUrl = messageEl.dataset.avatarUrl || '';
+    const avatarContent = avatarUrl
+        ? `<img src="${escapeHtml(avatarUrl)}" alt="${escapeHtml(username)}">`
+        : escapeHtml(username.charAt(0).toUpperCase());
+    const avatarHtml = `<a href="${escapeHtml(profileUrl)}" class="sys-msg-avatar">${avatarContent}</a>`;
+    const usernameHtml = `<a href="${escapeHtml(profileUrl)}" class="sys-msg-username">${escapeHtml(username)}</a>`;
+    return { avatarHtml, usernameHtml };
+}
+
 function acceptJoinRequestFromChat(groupId, requestId, messageEl) {
     fetch(`/api/groups/${groupId}/join-requests/${requestId}/accept/`, {
         method: 'POST',
@@ -2968,11 +3204,12 @@ function acceptJoinRequestFromChat(groupId, requestId, messageEl) {
         credentials: 'same-origin',
     })
     .then(r => {
-        if (r.ok) {
-            if (messageEl) {
-                const actionsEl = messageEl.querySelector('.chat-system-actions');
-                if (actionsEl) actionsEl.remove();
-            }
+        if (r.ok && messageEl) {
+            const groupName = document.getElementById('chatPartnerName').textContent;
+            const { avatarHtml, usernameHtml } = buildSysMsgUserHtml(messageEl);
+            messageEl.innerHTML = `${avatarHtml}${usernameHtml} has joined ${escapeHtml(groupName)}`;
+            messageEl.style.color = 'var(--brand-cyan)';
+            messageEl.style.borderColor = 'rgba(6,182,212,0.3)';
         }
     })
     .catch(() => {});
@@ -2985,11 +3222,12 @@ function denyJoinRequestFromChat(groupId, requestId, messageEl) {
         credentials: 'same-origin',
     })
     .then(r => {
-        if (r.ok) {
-            if (messageEl) {
-                const actionsEl = messageEl.querySelector('.chat-system-actions');
-                if (actionsEl) actionsEl.remove();
-            }
+        if (r.ok && messageEl) {
+            const groupName = document.getElementById('chatPartnerName').textContent;
+            const { avatarHtml, usernameHtml } = buildSysMsgUserHtml(messageEl);
+            messageEl.innerHTML = `${avatarHtml}${usernameHtml} has been rejected from ${escapeHtml(groupName)}`;
+            messageEl.style.color = '#ef4444';
+            messageEl.style.borderColor = 'rgba(239,68,68,0.3)';
         }
     })
     .catch(() => {});
@@ -3092,6 +3330,14 @@ function renderGroupProfile(data) {
         editBtn.style.display = 'inline-block';
     } else {
         editBtn.style.display = 'none';
+    }
+
+    // Show leave button for members and admins (not creator)
+    const leaveBtn = document.getElementById('groupProfileLeaveBtn');
+    if (data.user_role === 'member' || data.user_role === 'admin') {
+        leaveBtn.style.display = 'inline-flex';
+    } else {
+        leaveBtn.style.display = 'none';
     }
 
     // Invite code (visible to all members, inline under description)
@@ -3596,12 +3842,65 @@ function renderGroupStreakMembers(members, groupStreak) {
                     <div class="streak-inline-username">@${escapeHtml(m.username)}</div>
                 </div>
                 <div class="streak-inline-count">⚡ ${m.current_streak}d</div>
+                <button class="streak-zap-btn" onclick="zapStreakMember('${escapeHtml(m.username)}', this)">⚡ Zap</button>
             </div>`;
     }).join('');
 }
 
 function closeGroupStreakModal() {
     document.getElementById('groupStreakOverlay').classList.remove('open');
+}
+
+async function zapStreakMember(username, btn) {
+    btn.disabled = true;
+    try {
+        const resp = await fetch(`/api/messaging/groups/${currentGroupProfileId}/send/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ content: `Hey @${username}, don't forget to check in today! ⚡` }),
+        });
+        if (!resp.ok) throw new Error();
+        btn.textContent = '✓ Sent';
+        btn.classList.add('sent');
+        setTimeout(() => {
+            btn.textContent = '⚡ Zap';
+            btn.classList.remove('sent');
+            btn.disabled = false;
+        }, 2000);
+    } catch {
+        btn.disabled = false;
+    }
+}
+
+async function leaveCurrentGroup() {
+    if (!currentGroupProfileId) return;
+    if (!confirm('Are you sure you want to leave this group?')) return;
+
+    const btn = document.getElementById('groupProfileLeaveBtn');
+    btn.disabled = true;
+    btn.textContent = 'Leaving…';
+
+    try {
+        const resp = await fetch(`/api/groups/${currentGroupProfileId}/leave/`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrftoken },
+            credentials: 'same-origin',
+        });
+
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.error || 'Failed to leave group.');
+        }
+
+        // Close the profile panel and go back
+        closeGroupProfile();
+
+    } catch (err) {
+        alert(err.message || 'Something went wrong. Please try again.');
+        btn.disabled = false;
+        btn.textContent = '🚪 Leave Group';
+    }
 }
 
 // Clear cached streak data when opening a different group

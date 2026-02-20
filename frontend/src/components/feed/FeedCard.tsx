@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, Platform } from 'react-native';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { FeedItem } from '../../types/feed';
 import FeedCardHeader from './FeedCardHeader';
@@ -50,11 +50,18 @@ export default function FeedCard({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.background.card,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border.subtle,
-    padding: spacing.base + 4,
+    backgroundColor: colors.surface,
+    borderRadius: 24,
+    padding: spacing.base,
     marginBottom: spacing.base,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 12,
+      },
+      android: { elevation: 4 },
+    }),
   },
 });

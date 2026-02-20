@@ -39,9 +39,8 @@ const styles = StyleSheet.create({
   description: {
     fontSize: typography.size.base,
     fontFamily: typography.family.regular,
-    color: colors.text.primary,
-    lineHeight: 24,
-    letterSpacing: 0.2,
+    color: colors.textPrimary,
+    lineHeight: 22,
     marginBottom: spacing.md,
   },
 });

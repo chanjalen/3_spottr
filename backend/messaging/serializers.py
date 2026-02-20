@@ -160,6 +160,7 @@ class MessageListSerializer(serializers.ModelSerializer):
     so post cards render directly in the chat thread.
     """
     sender_username = serializers.SerializerMethodField()
+    sender_avatar_url = serializers.SerializerMethodField()
     is_read = serializers.SerializerMethodField()
     shared_post_id = serializers.CharField(source='post_id', read_only=True)
     shared_post = serializers.SerializerMethodField()
@@ -169,7 +170,7 @@ class MessageListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
         fields = [
-            'id', 'sender', 'sender_username',
+            'id', 'sender', 'sender_username', 'sender_avatar_url',
             'content', 'is_request', 'is_system', 'is_read',
             'created_at', 'shared_post_id', 'shared_post',
             'join_request_id', 'join_request_status',
@@ -177,6 +178,9 @@ class MessageListSerializer(serializers.ModelSerializer):
 
     def get_sender_username(self, obj):
         return obj.sender.username if obj.sender else None
+
+    def get_sender_avatar_url(self, obj):
+        return obj.sender.avatar_url if obj.sender else None
 
     def get_is_read(self, obj):
         # Use prefetched receipts (to_attr='user_read_receipts') when available

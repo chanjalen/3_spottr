@@ -155,11 +155,13 @@ def send_dm(sender, recipient_id, content, post_id=None, quick_workout_id=None):
     return message
 
 
-def send_system_group_message(group_id, content, join_request=None):
+def send_system_group_message(group_id, content, join_request=None, sender=None):
     """
-    Post a system message in a group chat (no sender, is_system=True).
+    Post a system message in a group chat (is_system=True).
     Used for automated events like join requests.
     Optionally links to a GroupJoinRequest so admins can act on it inline.
+    sender can be set to the user who triggered the event so the frontend
+    can display their username.
     Returns the created Message.
     """
     from groups.models import Group
@@ -170,7 +172,7 @@ def send_system_group_message(group_id, content, join_request=None):
         raise ConversationNotFoundError("Group not found.")
 
     return Message.objects.create(
-        sender=None,
+        sender=sender,
         group=group,
         content=content,
         is_system=True,

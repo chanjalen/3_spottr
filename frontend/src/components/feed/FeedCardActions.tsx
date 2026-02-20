@@ -56,12 +56,14 @@ export default function FeedCardActions({
       <AnimatedPressable
         style={[styles.action, likeAnimatedStyle]}
         onPress={handleLike}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        accessibilityLabel={`Like, ${likeCount} likes`}
+        accessibilityRole="button"
       >
         <Feather
           name="heart"
           size={18}
-          color={userLiked ? colors.semantic.like : colors.text.muted}
-          fill={userLiked ? colors.semantic.like : 'none'}
+          color={userLiked ? colors.semantic.like : colors.textMuted}
         />
         {likeCount > 0 && (
           <Text
@@ -75,15 +77,27 @@ export default function FeedCardActions({
         )}
       </AnimatedPressable>
 
-      <Pressable style={styles.action} onPress={onComment}>
-        <Feather name="message-circle" size={18} color={colors.text.muted} />
+      <Pressable
+        style={styles.action}
+        onPress={onComment}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        accessibilityLabel={`Comment, ${commentCount} comments`}
+        accessibilityRole="button"
+      >
+        <Feather name="message-circle" size={18} color={colors.textMuted} />
         {commentCount > 0 && (
           <Text style={styles.count}>{commentCount}</Text>
         )}
       </Pressable>
 
-      <Pressable style={styles.action} onPress={handleShare}>
-        <Feather name="share" size={18} color={colors.text.muted} />
+      <Pressable
+        style={styles.action}
+        onPress={handleShare}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        accessibilityLabel="Share"
+        accessibilityRole="button"
+      >
+        <Feather name="share" size={18} color={colors.textMuted} />
       </Pressable>
     </View>
   );
@@ -104,10 +118,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingVertical: spacing.xs,
+    minHeight: 44,
   },
   count: {
     fontSize: typography.size.sm,
     fontFamily: typography.family.medium,
-    color: colors.text.muted,
+    color: colors.textMuted,
   },
 });

@@ -2,7 +2,7 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 
 const API_BASE_URL = __DEV__
-  ? 'http://localhost:8000'
+  ? 'http://192.168.89.71:8000'
   : 'https://api.spottr.app';
 
 export const apiClient = axios.create({
@@ -10,6 +10,7 @@ export const apiClient = axios.create({
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
+    'X-Requested-With': 'XMLHttpRequest',
   },
 });
 

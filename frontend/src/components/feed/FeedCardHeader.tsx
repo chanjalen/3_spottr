@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Avatar from '../common/Avatar';
 import { UserBrief } from '../../types/user';
@@ -19,38 +19,33 @@ export default function FeedCardHeader({
   locationName,
   workoutType,
 }: FeedCardHeaderProps) {
+  // Build the "Posted in X" subtitle: prefer workoutType, fall back to locationName
+  const postedIn = workoutType ?? locationName;
+
+  if (!user) return null;
+
   return (
     <View style={styles.container}>
-      <Avatar uri={user.avatar_url} name={user.display_name} size={44} />
+      <Avatar uri={user.avatar_url} name={user.display_name} size={40} />
+
       <View style={styles.info}>
-        <View style={styles.nameRow}>
-          <Text style={styles.name}>{user.display_name}</Text>
-          {user.streak != null && user.streak > 0 && (
-            <View style={styles.streakBadge}>
-              <Text style={styles.streakText}>{user.streak}</Text>
-            </View>
-          )}
-          <Text style={styles.dot}>&middot;</Text>
-          <Text style={styles.time}>{timeAgo(createdAt)}</Text>
-        </View>
-        <View style={styles.metaRow}>
-          {locationName && (
-            <View style={styles.locationRow}>
-              <Feather
-                name="map-pin"
-                size={12}
-                color={colors.text.muted}
-              />
-              <Text style={styles.location}>{locationName}</Text>
-            </View>
-          )}
-          {workoutType && (
-            <View style={styles.typeBadge}>
-              <Text style={styles.typeText}>{workoutType}</Text>
-            </View>
-          )}
-        </View>
+        <Text style={styles.name} numberOfLines={1}>
+          {user.display_name}
+        </Text>
+        <Text style={styles.meta} numberOfLines={1}>
+          {postedIn ? `Posted in ${postedIn} · ` : ''}{timeAgo(createdAt)}
+        </Text>
       </View>
+
+      {/* Three-dot overflow button */}
+      <Pressable
+        style={({ pressed }) => [styles.moreBtn, pressed && styles.moreBtnPressed]}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        accessibilityLabel="More options"
+        accessibilityRole="button"
+      >
+        <Feather name="more-horizontal" size={20} color={colors.textMuted} />
+      </Pressable>
     </View>
   );
 }
@@ -58,68 +53,33 @@ export default function FeedCardHeader({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     gap: spacing.md,
-    marginBottom: spacing.base,
+    marginBottom: spacing.md,
   },
   info: {
     flex: 1,
   },
-  nameRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-  },
   name: {
-    fontSize: typography.size.base,
+    fontSize: 14,
     fontFamily: typography.family.semibold,
-    color: colors.text.primary,
+    color: colors.textPrimary,
+    lineHeight: 20,
   },
-  streakBadge: {
-    backgroundColor: colors.brand.primary + '20',
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    borderRadius: 8,
-  },
-  streakText: {
-    fontSize: typography.size.xs,
-    fontFamily: typography.family.semibold,
-    color: colors.brand.primary,
-  },
-  dot: {
-    fontSize: typography.size.xs,
-    color: colors.text.muted,
-  },
-  time: {
-    fontSize: typography.size.sm,
+  meta: {
+    fontSize: 12,
     fontFamily: typography.family.regular,
-    color: colors.text.secondary,
+    color: colors.textSecondary,
+    lineHeight: 16,
+    marginTop: 1,
   },
-  metaRow: {
-    flexDirection: 'row',
+  moreBtn: {
+    width: 32,
+    height: 32,
     alignItems: 'center',
-    gap: spacing.sm,
-    marginTop: 2,
+    justifyContent: 'center',
   },
-  locationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  location: {
-    fontSize: typography.size.xs,
-    fontFamily: typography.family.regular,
-    color: colors.text.muted,
-  },
-  typeBadge: {
-    backgroundColor: colors.brand.secondary + '18',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 6,
-  },
-  typeText: {
-    fontSize: typography.size.xs,
-    fontFamily: typography.family.medium,
-    color: colors.brand.secondary,
+  moreBtnPressed: {
+    opacity: 0.6,
   },
 });

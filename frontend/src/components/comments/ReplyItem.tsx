@@ -8,7 +8,7 @@ import { colors, spacing, typography } from '../../theme';
 
 interface ReplyItemProps {
   reply: Comment;
-  currentUserId?: number;
+  currentUserId?: string;
   onLike: (id: number) => void;
   onDelete: (id: number) => void;
 }
@@ -19,6 +19,8 @@ export default function ReplyItem({
   onLike,
   onDelete,
 }: ReplyItemProps) {
+  if (!reply?.user) return null;
+
   const isOwn = currentUserId === reply.user.id;
 
   return (
@@ -31,11 +33,15 @@ export default function ReplyItem({
         </View>
         <Text style={styles.text}>{reply.description}</Text>
         <View style={styles.actions}>
-          <Pressable style={styles.actionBtn} onPress={() => onLike(reply.id)}>
+          <Pressable
+            style={styles.actionBtn}
+            onPress={() => onLike(reply.id)}
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+          >
             <Feather
               name="heart"
               size={12}
-              color={reply.user_liked ? colors.semantic.like : colors.text.muted}
+              color={reply.user_liked ? colors.semantic.like : colors.textMuted}
             />
             {reply.like_count > 0 && (
               <Text
@@ -52,8 +58,9 @@ export default function ReplyItem({
             <Pressable
               style={styles.actionBtn}
               onPress={() => onDelete(reply.id)}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
-              <Feather name="trash-2" size={12} color={colors.text.muted} />
+              <Feather name="trash-2" size={12} color={colors.textMuted} />
             </Pressable>
           )}
         </View>
@@ -81,17 +88,17 @@ const styles = StyleSheet.create({
   name: {
     fontSize: typography.size.xs,
     fontFamily: typography.family.semibold,
-    color: colors.text.primary,
+    color: colors.textPrimary,
   },
   time: {
     fontSize: typography.size.xs,
     fontFamily: typography.family.regular,
-    color: colors.text.muted,
+    color: colors.textMuted,
   },
   text: {
     fontSize: typography.size.sm,
     fontFamily: typography.family.regular,
-    color: colors.text.primary,
+    color: colors.textPrimary,
     lineHeight: 18,
   },
   actions: {
@@ -109,6 +116,6 @@ const styles = StyleSheet.create({
   actionText: {
     fontSize: typography.size.xs,
     fontFamily: typography.family.medium,
-    color: colors.text.muted,
+    color: colors.textMuted,
   },
 });

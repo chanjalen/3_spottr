@@ -27,7 +27,7 @@ export default function CommentInput({
         value={text}
         onChangeText={setText}
         placeholder={placeholder}
-        placeholderTextColor={colors.text.muted}
+        placeholderTextColor={colors.textMuted}
         multiline
         maxLength={500}
       />
@@ -35,6 +35,8 @@ export default function CommentInput({
         style={[styles.button, !text.trim() && styles.buttonDisabled]}
         onPress={handleSubmit}
         disabled={!text.trim()}
+        accessibilityLabel="Post comment"
+        accessibilityRole="button"
       >
         <Text
           style={[
@@ -57,25 +59,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.md,
     borderTopWidth: 1,
-    borderTopColor: colors.border.subtle,
-    backgroundColor: colors.background.surface,
+    borderTopColor: colors.border.default,
+    backgroundColor: colors.surface,
   },
   input: {
     flex: 1,
     backgroundColor: colors.background.elevated,
-    borderRadius: 20,
+    borderRadius: 24,
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.sm + 2,
     fontSize: typography.size.sm,
     fontFamily: typography.family.regular,
-    color: colors.text.primary,
+    color: colors.textPrimary,
     maxHeight: 100,
     borderWidth: 1,
-    borderColor: colors.border.subtle,
+    borderColor: colors.border.default,
   },
   button: {
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.sm + 2,
+    minHeight: 44,
+    justifyContent: 'center',
   },
   buttonDisabled: {
     opacity: 0.4,
@@ -83,9 +87,9 @@ const styles = StyleSheet.create({
   buttonText: {
     fontSize: typography.size.sm,
     fontFamily: typography.family.semibold,
-    color: colors.brand.primary,
+    color: colors.primary,
   },
   buttonTextDisabled: {
-    color: colors.text.muted,
+    color: colors.textMuted,
   },
 });
