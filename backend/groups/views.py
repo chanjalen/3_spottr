@@ -1,5 +1,6 @@
 from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from django.http import HttpResponseForbidden
 
 from .models import Group, GroupMember
 
@@ -12,7 +13,6 @@ def group_profile_view(request, group_id):
     # For private groups only members can view
     is_member = GroupMember.objects.filter(group=group, user=request.user).exists()
     if group.privacy == Group.Privacy.PRIVATE and not is_member:
-        from django.http import HttpResponseForbidden
         return HttpResponseForbidden("This group is private.")
 
     members = GroupMember.objects.filter(group=group).select_related('user')

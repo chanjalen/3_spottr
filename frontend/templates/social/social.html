@@ -539,6 +539,181 @@
         cursor: default;
     }
 
+    .join-group-btn.request {
+        background: var(--bg-elevated);
+        color: var(--brand-purple);
+        border: 1px solid var(--brand-purple);
+    }
+
+    .join-group-btn.request:hover {
+        background: var(--brand-purple);
+        color: #fff;
+    }
+
+    .join-group-btn.pending {
+        background: var(--bg-elevated);
+        color: var(--text-muted);
+        border: 1px solid var(--border-default);
+        cursor: default;
+    }
+
+    /* System messages in group chat */
+    .chat-system-message {
+        text-align: center;
+        color: var(--text-muted);
+        font-size: 12px;
+        padding: 6px 16px;
+        font-style: italic;
+        margin: 4px 0;
+    }
+
+    .chat-system-actions {
+        display: flex;
+        gap: 8px;
+        justify-content: center;
+        margin-top: 6px;
+    }
+
+    .sys-accept-btn, .sys-deny-btn {
+        padding: 4px 14px;
+        border-radius: var(--radius-md);
+        font-size: 12px;
+        font-weight: 600;
+        border: none;
+        cursor: pointer;
+        font-family: inherit;
+        transition: opacity var(--duration) var(--ease-out);
+    }
+
+    .sys-accept-btn {
+        background: var(--brand-cyan);
+        color: #000;
+    }
+
+    .sys-accept-btn:hover { opacity: 0.85; }
+
+    .sys-deny-btn {
+        background: var(--bg-elevated);
+        color: var(--text-muted);
+        border: 1px solid var(--border-default);
+    }
+
+    .sys-deny-btn:hover { opacity: 0.85; }
+
+    /* Private group preview modal */
+    .private-preview-modal {
+        max-width: 380px;
+    }
+
+    .private-preview-body {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding-top: 4px;
+    }
+
+    .private-preview-meta {
+        display: flex;
+        gap: 12px;
+        font-size: 13px;
+        color: var(--text-muted);
+    }
+
+    .private-preview-description {
+        font-size: 14px;
+        color: var(--text-secondary);
+        line-height: 1.5;
+    }
+
+    /* Admin join requests section */
+    .join-requests-section {
+        margin-top: 16px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border-subtle);
+    }
+
+    .join-requests-title {
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-brand);
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        margin-bottom: 10px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    .join-requests-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 18px;
+        height: 18px;
+        padding: 0 5px;
+        border-radius: 9px;
+        background: var(--brand-cyan);
+        color: #000;
+        font-size: 11px;
+        font-weight: 700;
+    }
+
+    .join-request-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .join-request-row:last-child { border-bottom: none; }
+
+    .join-request-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .join-request-name {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+
+    .join-request-msg {
+        font-size: 12px;
+        color: var(--text-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .join-request-actions {
+        display: flex;
+        gap: 6px;
+        flex-shrink: 0;
+    }
+
+    .join-req-accept-btn, .join-req-deny-btn {
+        padding: 5px 12px;
+        border-radius: var(--radius-md);
+        font-size: 12px;
+        font-weight: 600;
+        border: none;
+        cursor: pointer;
+        font-family: inherit;
+    }
+
+    .join-req-accept-btn {
+        background: var(--brand-cyan);
+        color: #000;
+    }
+
+    .join-req-deny-btn {
+        background: var(--bg-elevated);
+        color: var(--text-muted);
+        border: 1px solid var(--border-default);
+    }
+
     /* Join with code */
     .join-code-section {
         background: var(--bg-card);
@@ -1344,64 +1519,145 @@
         flex-shrink: 0;
     }
 
-    /* Edit form */
-    .group-edit-form {
-        display: none;
-        background: var(--bg-card);
-        border: 1px solid var(--border-default);
-        border-radius: var(--radius-xl);
-        padding: 20px;
-        margin-bottom: 16px;
-        box-shadow: var(--shadow-sm);
-    }
-
-    .group-edit-form.active {
-        display: block;
-    }
-
-    .group-edit-form .form-group:last-of-type {
-        margin-bottom: 12px;
-    }
-
-    .group-edit-actions {
+    /* Edit group modal */
+    .edit-grp-tabs {
         display: flex;
-        gap: 10px;
+        border-bottom: 1px solid var(--border-subtle);
     }
 
-    .group-edit-save {
+    .edit-grp-tab {
         flex: 1;
-        padding: 10px 18px;
-        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        padding: 11px 14px;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-muted);
+        background: none;
         border: none;
-        border-radius: var(--radius-lg);
+        border-bottom: 2px solid transparent;
+        cursor: pointer;
+        transition: all var(--duration) var(--ease-out);
+        font-family: inherit;
+        margin-bottom: -1px;
+    }
+
+    .edit-grp-tab.active { color: var(--brand-cyan); border-bottom-color: var(--brand-cyan); }
+    .edit-grp-tab.danger-tab.active { color: #ef4444; border-bottom-color: #ef4444; }
+
+    .edit-grp-panel { display: none; }
+    .edit-grp-panel.active { display: block; }
+
+    .edit-grp-avatar-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        margin-bottom: 16px;
+    }
+
+    .edit-grp-avatar-thumb {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        font-weight: 700;
         color: #fff;
+        overflow: hidden;
+        flex-shrink: 0;
+        border: 2px solid var(--border-default);
+    }
+
+    .edit-grp-avatar-thumb img { width: 100%; height: 100%; object-fit: cover; }
+
+    .edit-grp-avatar-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 14px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all var(--duration);
+    }
+
+    .edit-grp-avatar-btn:hover { border-color: var(--border-hover); }
+
+    .edit-grp-save-btn {
+        width: 100%;
+        padding: 12px;
+        background: var(--brand-cyan);
+        color: #000;
+        border: none;
+        border-radius: var(--radius-md);
+        font-family: inherit;
         font-size: 14px;
         font-weight: 600;
         cursor: pointer;
+        transition: all var(--duration);
+        box-shadow: 0 2px 10px rgba(6, 182, 212, 0.25);
+        margin-top: 4px;
+    }
+
+    .edit-grp-save-btn:hover { box-shadow: 0 4px 18px rgba(6, 182, 212, 0.35); transform: translateY(-1px); }
+    .edit-grp-save-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+    .edit-grp-delete-btn {
+        width: 100%;
+        padding: 12px;
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        border-radius: var(--radius-md);
+        color: #ef4444;
         font-family: inherit;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
         transition: all var(--duration);
     }
 
-    .group-edit-save:hover {
-        transform: translateY(-1px);
+    .edit-grp-delete-btn:hover { background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); }
+    .edit-grp-delete-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .edit-grp-confirm-del-btn {
+        flex: 1;
+        padding: 10px;
+        background: #ef4444;
+        border: none;
+        border-radius: var(--radius-md);
+        color: #fff;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background var(--duration);
     }
 
-    .group-edit-cancel {
-        padding: 10px 18px;
+    .edit-grp-confirm-del-btn:hover { background: #dc2626; }
+    .edit-grp-confirm-del-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .edit-grp-cancel-del-btn {
+        flex: 1;
+        padding: 10px;
         background: var(--bg-elevated);
         border: 1px solid var(--border-default);
-        border-radius: var(--radius-lg);
-        color: var(--text-secondary);
-        font-size: 14px;
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-family: inherit;
+        font-size: 13px;
         font-weight: 500;
         cursor: pointer;
-        font-family: inherit;
         transition: all var(--duration);
     }
 
-    .group-edit-cancel:hover {
-        color: var(--text-primary);
-    }
+    .edit-grp-cancel-del-btn:hover { border-color: var(--border-hover); }
+    .edit-grp-cancel-del-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 
     /* Inline invite code in group profile info */
     .group-profile-invite-inline {
@@ -1646,7 +1902,7 @@
 
     {% for conv in dm_conversations %}
     <div class="conversation-row fade-in" style="animation-delay: {{ forloop.counter0 }}00ms"
-         onclick="openChat('dm', '{{ conv.partner.id }}', '{{ conv.partner.display_name }}', '{{ conv.partner.username }}', {{ conv.partner_checked_in|lower }})">
+         onclick="openChat('dm', '{{ conv.partner.id }}', '{{ conv.partner.display_name }}', '{{ conv.partner.username }}', {{ conv.partner_checked_in|lower }}, null, '{{ conv.partner.avatar_url|default:'' }}')">
         <div class="conversation-avatar">
             {% if conv.partner.avatar_url %}
             <img src="{{ conv.partner.avatar_url }}" alt="{{ conv.partner.display_name }}">
@@ -1686,10 +1942,10 @@
 
     {% for conv in group_conversations %}
     <div class="conversation-row fade-in" style="animation-delay: {{ forloop.counter0 }}00ms"
-         onclick="openChat('group', '{{ conv.group.id }}', '{{ conv.group.name }}')">
+         onclick="openChat('group', '{{ conv.group.id }}', '{{ conv.group.name }}', null, false, '{{ conv.role }}', '{{ conv.group.avatar_url|default:'' }}')">
         <div class="conversation-avatar group">
-            {% if conv.group.avatar %}
-            <img src="{{ conv.group.avatar.url }}" alt="{{ conv.group.name }}">
+            {% if conv.group.avatar_url %}
+            <img src="{{ conv.group.avatar_url }}" alt="{{ conv.group.name }}">
             {% else %}
             <span class="conversation-avatar-letter">{{ conv.group.name|make_list|first|upper }}</span>
             {% endif %}
@@ -1702,7 +1958,7 @@
             <div class="conversation-bottom">
                 <span class="conversation-preview">
                     {% if conv.last_message %}
-                    {{ conv.last_message_sender }}: {{ conv.last_message }}
+                    {% if conv.last_message_sender %}{{ conv.last_message_sender }}: {% endif %}{{ conv.last_message }}
                     {% else %}
                     No messages yet
                     {% endif %}
@@ -1737,8 +1993,8 @@
         {% for group in public_groups %}
         <div class="group-card fade-in" data-group-name="{{ group.name|lower }}">
             <div class="group-card-avatar">
-                {% if group.avatar %}
-                <img src="{{ group.avatar.url }}" alt="{{ group.name }}" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md);">
+                {% if group.avatar_url %}
+                <img src="{{ group.avatar_url }}" alt="{{ group.name }}" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md);">
                 {% else %}
                 <span>{{ group.name|make_list|first|upper }}</span>
                 {% endif %}
@@ -1822,31 +2078,78 @@
         </div>
     </div>
 
-    <div class="group-edit-form" id="groupEditForm">
-        <div class="form-group">
-            <label class="form-label">Group Name</label>
-            <input type="text" class="form-input" id="editGroupName" maxlength="100">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Description</label>
-            <textarea class="form-input form-textarea" id="editGroupDescription" maxlength="500"></textarea>
-        </div>
-        <div class="form-group">
-            <label class="form-label">Privacy</label>
-            <select class="form-input form-select" id="editGroupPrivacy">
-                <option value="public">Public</option>
-                <option value="private">Private</option>
-            </select>
-        </div>
-        <div class="group-edit-actions">
-            <button class="group-edit-save" onclick="saveGroupEdit()">Save Changes</button>
-            <button class="group-edit-cancel" onclick="toggleGroupEdit()">Cancel</button>
-        </div>
-    </div>
 
     <div class="group-profile-members">
         <div class="group-profile-members-title">Members</div>
         <div id="groupProfileMembersList"></div>
+    </div>
+
+    <div class="join-requests-section" id="groupJoinRequestsSection" style="display:none;">
+        <div class="join-requests-title">
+            Join Requests
+            <span class="join-requests-badge" id="joinRequestsBadge">0</span>
+        </div>
+        <div id="joinRequestsList"></div>
+    </div>
+</div>
+
+<!-- ==================== EDIT GROUP MODAL ==================== -->
+<div class="modal-overlay" id="editGroupOverlay" onclick="closeEditGroupModal()"></div>
+<div class="modal-content" id="editGroupModal">
+    <div class="modal-header">
+        <span class="modal-title">Group Settings</span>
+        <button class="modal-close" onclick="closeEditGroupModal()">&times;</button>
+    </div>
+    <div class="edit-grp-tabs" id="editGrpTabs" style="display:none;">
+        <button class="edit-grp-tab active" data-panel="info" onclick="switchEditGrpTab('info')">Group Info</button>
+        <button class="edit-grp-tab danger-tab" data-panel="danger" onclick="switchEditGrpTab('danger')">Danger Zone</button>
+    </div>
+    <div class="modal-body">
+
+        <!-- Info panel -->
+        <div class="edit-grp-panel active" id="editGrpInfoPanel">
+            <div id="editGrpError" style="display:none; padding:10px 14px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); border-radius:var(--radius-md); font-size:13px; color:#fca5a5; margin-bottom:14px;"></div>
+            <div class="edit-grp-avatar-row">
+                <div class="edit-grp-avatar-thumb" id="editGrpAvatarThumb"></div>
+                <div>
+                    <button type="button" class="edit-grp-avatar-btn" onclick="document.getElementById('editGrpAvatarInput').click()">Change Photo</button>
+                    <input type="file" id="editGrpAvatarInput" accept="image/*" style="display:none;">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Group Name</label>
+                <input type="text" class="form-input" id="editGrpName" maxlength="100" placeholder="Group name">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea class="form-input form-textarea" id="editGrpDescription" maxlength="500" placeholder="What's this group about?"></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Privacy</label>
+                <select class="form-input form-select" id="editGrpPrivacy">
+                    <option value="public">Public</option>
+                    <option value="private">Private</option>
+                </select>
+            </div>
+            <button class="edit-grp-save-btn" id="editGrpSaveBtn" onclick="saveGroupEdit()">Save Changes</button>
+        </div>
+
+        <!-- Danger zone panel (creator only) -->
+        <div class="edit-grp-panel" id="editGrpDangerPanel">
+            <div style="padding:14px 16px; background:var(--bg-elevated); border:1px solid rgba(239,68,68,0.2); border-radius:var(--radius-md); margin-bottom:16px;">
+                <div style="font-size:14px; font-weight:600; color:var(--text-primary); margin-bottom:4px;">Delete Group</div>
+                <div style="font-size:12px; color:var(--text-muted); line-height:1.4;">Permanently removes the group and all its members. This cannot be undone.</div>
+            </div>
+            <button class="edit-grp-delete-btn" id="editGrpDeleteBtn" onclick="triggerDeleteGroup()">Delete Group</button>
+            <div id="editGrpDeleteConfirm" style="display:none; margin-top:14px; padding:14px; background:rgba(239,68,68,0.06); border:1px solid rgba(239,68,68,0.2); border-radius:var(--radius-md);">
+                <div style="font-size:13px; color:var(--text-secondary); margin-bottom:12px; line-height:1.5;">Are you sure? This will permanently delete the group and all members and cannot be undone.</div>
+                <div style="display:flex; gap:8px;">
+                    <button class="edit-grp-cancel-del-btn" id="editGrpCancelDelBtn" onclick="cancelDeleteGroup()">Cancel</button>
+                    <button class="edit-grp-confirm-del-btn" id="editGrpConfirmDelBtn" onclick="confirmDeleteGroup()">Yes, Delete It</button>
+                </div>
+            </div>
+        </div>
+
     </div>
 </div>
 
@@ -1865,6 +2168,25 @@
     </div>
 </div>
 
+<!-- ==================== PRIVATE GROUP PREVIEW MODAL ==================== -->
+<div class="modal-overlay" id="privateGroupPreviewOverlay" onclick="closePrivateGroupPreview()"></div>
+<div class="modal-content private-preview-modal" id="privateGroupPreviewModal">
+    <div class="modal-header">
+        <span class="modal-title" id="privatePreviewName"></span>
+        <button class="modal-close" onclick="closePrivateGroupPreview()">&times;</button>
+    </div>
+    <div class="modal-body">
+        <div class="private-preview-body">
+            <div class="private-preview-meta">
+                <span id="privatePreviewMembers"></span>
+                <span id="privatePreviewStreak"></span>
+            </div>
+            <div class="private-preview-description" id="privatePreviewDescription"></div>
+            <button class="join-group-btn" id="privatePreviewRequestBtn" onclick="requestToJoin(_currentPreviewGroupId, this)">Request to Join</button>
+        </div>
+    </div>
+</div>
+
 <!-- ==================== CREATE GROUP MODAL ==================== -->
 <div class="modal-overlay" id="createGroupOverlay" onclick="closeCreateGroup()"></div>
 <div class="modal-content" id="createGroupModal">
@@ -1873,25 +2195,34 @@
         <button class="modal-close" onclick="closeCreateGroup()">&times;</button>
     </div>
     <div class="modal-body">
-        <form id="createGroupForm" onsubmit="submitCreateGroup(event)">
-            {% csrf_token %}
-            <div class="form-group">
-                <label class="form-label">Group Name</label>
-                <input type="text" class="form-input" id="newGroupName" placeholder="e.g., Morning Workout Crew" maxlength="100" required>
+        <div id="createGrpError" style="display:none; padding:10px 14px; background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.2); border-radius:var(--radius-md); font-size:13px; color:#fca5a5; margin-bottom:14px;"></div>
+        <div class="edit-grp-avatar-row">
+            <div class="edit-grp-avatar-thumb" id="createGrpAvatarThumb">
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.4;">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/>
+                </svg>
             </div>
-            <div class="form-group">
-                <label class="form-label">Description (Optional)</label>
-                <textarea class="form-input form-textarea" id="newGroupBio" placeholder="Describe your group..." maxlength="500"></textarea>
+            <div>
+                <button type="button" class="edit-grp-avatar-btn" onclick="document.getElementById('createGrpAvatarInput').click()">Add Photo</button>
+                <input type="file" id="createGrpAvatarInput" accept="image/*" style="display:none;">
             </div>
-            <div class="form-group">
-                <label class="form-label">Privacy</label>
-                <select class="form-input form-select" id="newGroupPrivacy">
-                    <option value="public">Public - Anyone can join</option>
-                    <option value="private">Private - Requires approval</option>
-                </select>
-            </div>
-            <button type="submit" class="form-submit">Create Group</button>
-        </form>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Group Name</label>
+            <input type="text" class="form-input" id="newGroupName" placeholder="e.g., Morning Workout Crew" maxlength="100">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Description (Optional)</label>
+            <textarea class="form-input form-textarea" id="newGroupBio" placeholder="Describe your group..." maxlength="500"></textarea>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Privacy</label>
+            <select class="form-input form-select" id="newGroupPrivacy">
+                <option value="public">Public — Anyone can join</option>
+                <option value="private">Private — Requires approval</option>
+            </select>
+        </div>
+        <button class="edit-grp-save-btn" id="createGrpSubmitBtn" onclick="submitCreateGroup()">Create Group</button>
     </div>
 </div>
 
@@ -1961,14 +2292,16 @@ function switchTab(tabName) {
 let currentChatType = null;
 let currentChatId = null;
 let currentChatPartnerUsername = null;
+let currentChatUserRole = null;
 let chatOldestId = null;
 let chatHasMore = false;
 let chatLoadingMore = false;
 
-function openChat(type, id, name, username, partnerCheckedIn) {
+function openChat(type, id, name, username, partnerCheckedIn, userRole, avatarUrl) {
     currentChatType = type;
     currentChatId = id;
     currentChatPartnerUsername = username || null;
+    currentChatUserRole = (type === 'group') ? (userRole || null) : null;
 
     // Update header
     const partnerNameEl = document.getElementById('chatPartnerName');
@@ -1983,21 +2316,27 @@ function openChat(type, id, name, username, partnerCheckedIn) {
         partnerNameEl.style.cursor = 'default';
         partnerNameEl.onclick = null;
     }
-    document.getElementById('chatAvatarLetter').textContent = name.charAt(0).toUpperCase();
 
     // Show/hide zap button (DM only, and only if partner hasn't checked in today)
     document.getElementById('chatZapBtn').style.display = (type === 'dm' && !partnerCheckedIn) ? 'block' : 'none';
 
-    // Update avatar style for group
+    // Update avatar
     const avatarEl = document.getElementById('chatAvatar');
-    if (type === 'group') {
-        avatarEl.style.borderRadius = 'var(--radius-sm)';
-        avatarEl.style.background = 'linear-gradient(135deg, var(--brand-purple), var(--brand-blue))';
-        document.getElementById('chatAvatarLetter').style.cssText = 'font-size:15px;color:#fff;background:none;-webkit-background-clip:unset;-webkit-text-fill-color:#fff;';
+    avatarEl.style.borderRadius = type === 'group' ? 'var(--radius-sm)' : '50%';
+    if (avatarUrl) {
+        avatarEl.innerHTML = `<img src="${avatarUrl}" alt="${name}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;">`;
+        avatarEl.style.background = 'none';
     } else {
-        avatarEl.style.borderRadius = '50%';
-        avatarEl.style.background = 'var(--bg-elevated)';
-        document.getElementById('chatAvatarLetter').style.cssText = 'font-size:15px;';
+        avatarEl.innerHTML = '<span id="chatAvatarLetter" style="font-size:15px;"></span>';
+        const letterEl = document.getElementById('chatAvatarLetter');
+        letterEl.textContent = name.charAt(0).toUpperCase();
+        if (type === 'group') {
+            avatarEl.style.background = 'linear-gradient(135deg, var(--brand-purple), var(--brand-blue))';
+            letterEl.style.cssText = 'font-size:15px;color:#fff;background:none;-webkit-background-clip:unset;-webkit-text-fill-color:#fff;';
+        } else {
+            avatarEl.style.background = 'var(--bg-elevated)';
+            letterEl.style.cssText = 'font-size:15px;';
+        }
     }
 
     // Hide tabs, show chat
@@ -2017,6 +2356,18 @@ function closeChat() {
 }
 
 function buildMessageHtml(msg) {
+    if (msg.is_system) {
+        const isAdmin = (currentChatUserRole === 'admin' || currentChatUserRole === 'creator');
+        const hasPendingRequest = isAdmin && msg.join_request_id && msg.join_request_status === 'pending';
+        const actionsHtml = hasPendingRequest
+            ? `<div class="chat-system-actions">
+                <button class="sys-accept-btn" onclick="acceptJoinRequestFromChat('${escapeHtml(currentChatId)}', '${escapeHtml(msg.join_request_id)}', this.closest('.chat-system-message'))">Accept</button>
+                <button class="sys-deny-btn" onclick="denyJoinRequestFromChat('${escapeHtml(currentChatId)}', '${escapeHtml(msg.join_request_id)}', this.closest('.chat-system-message'))">Deny</button>
+               </div>`
+            : '';
+        return `<div class="chat-system-message">${escapeHtml(msg.content)}${actionsHtml}</div>`;
+    }
+
     const isSent = msg.sender_username === '{{ user.username }}';
     const isZap = msg.content === 'ZAP';
     const bubbleClass = isZap ? 'zap' : (isSent ? 'sent' : 'received');
@@ -2241,12 +2592,146 @@ function sendQuickZap(userId, btn) {
 }
 
 // ============ GROUPS ============
+const _defaultGroupsHtml = document.getElementById('groupsList')?.innerHTML ?? '';
+let _groupSearchTimer = null;
+const _privateGroupData = {}; // stores group data by id so onclick can look it up safely
+let _currentPreviewGroupId = null;
+
 function searchGroups(query) {
-    const cards = document.querySelectorAll('#groupsList .group-card');
-    const q = query.toLowerCase();
-    cards.forEach(card => {
-        const name = card.dataset.groupName || '';
-        card.style.display = name.includes(q) ? 'flex' : 'none';
+    clearTimeout(_groupSearchTimer);
+    const q = query.trim();
+    if (!q) {
+        document.getElementById('groupsList').innerHTML = _defaultGroupsHtml;
+        return;
+    }
+    _groupSearchTimer = setTimeout(() => _fetchGroupSearch(q), 400);
+}
+
+function _fetchGroupSearch(q) {
+    fetch(`/api/groups/?q=${encodeURIComponent(q)}&limit=50`, { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(groups => {
+        const listEl = document.getElementById('groupsList');
+        if (!groups || groups.length === 0) {
+            listEl.innerHTML = '<div class="social-empty"><p class="social-empty-subtext">No groups found for that search.</p></div>';
+            return;
+        }
+        listEl.innerHTML = groups.map(_buildGroupCardHtml).join('');
+    })
+    .catch(() => {
+        document.getElementById('groupsList').innerHTML =
+            '<div class="social-empty"><p class="social-empty-subtext">Search failed. Try again.</p></div>';
+    });
+}
+
+function _buildGroupCardHtml(group) {
+    const gid = String(group.id);
+    _privateGroupData[gid] = group;
+
+    const avatarHtml = group.avatar_url
+        ? `<img src="${escapeHtml(group.avatar_url)}" alt="${escapeHtml(group.name)}" style="width:100%;height:100%;object-fit:cover;border-radius:var(--radius-md);">`
+        : `<span>${escapeHtml(group.name.charAt(0).toUpperCase())}</span>`;
+
+    const streakHtml = group.group_streak > 0
+        ? `<span>🔥 ${group.group_streak} streak</span>`
+        : `<span>No group streak active</span>`;
+
+    const isPrivate = group.privacy === 'private';
+    let btnHtml;
+    if (group.is_member) {
+        btnHtml = `<button class="join-group-btn joined" disabled>Joined</button>`;
+    } else if (isPrivate) {
+        if (group.has_pending_request) {
+            btnHtml = `<button class="join-group-btn pending" disabled>Requested</button>`;
+        } else {
+            btnHtml = `<button class="join-group-btn request" onclick="event.stopPropagation(); openPrivateGroupPreview('${gid}')">Request</button>`;
+        }
+    } else {
+        btnHtml = `<button class="join-group-btn" onclick="event.stopPropagation(); joinGroup('${gid}', this)">Join</button>`;
+    }
+
+    const nameAction = isPrivate
+        ? `onclick="openPrivateGroupPreview('${gid}')"`
+        : `onclick="openGroupProfile('${gid}', 'discover')"`;
+
+    return `<div class="group-card fade-in" data-group-id="${gid}">
+        <div class="group-card-avatar">${avatarHtml}</div>
+        <div class="group-card-info">
+            <div class="group-card-name" ${nameAction}>${escapeHtml(group.name)}${isPrivate ? ' 🔒' : ''}</div>
+            <div class="group-card-meta">
+                <span>👥 ${group.member_count || 0} members</span>
+                ${streakHtml}
+            </div>
+        </div>
+        ${btnHtml}
+    </div>`;
+}
+
+function openPrivateGroupPreview(groupId) {
+    const group = _privateGroupData[String(groupId)];
+    if (!group) return;
+    _currentPreviewGroupId = String(groupId);
+
+    document.getElementById('privatePreviewName').textContent = group.name;
+    document.getElementById('privatePreviewMembers').textContent = `👥 ${group.member_count || 0} members`;
+    document.getElementById('privatePreviewStreak').textContent = group.group_streak > 0 ? `🔥 ${group.group_streak} streak` : '';
+    document.getElementById('privatePreviewDescription').textContent = group.description || 'No description provided.';
+
+    const btn = document.getElementById('privatePreviewRequestBtn');
+    if (group.has_pending_request) {
+        btn.textContent = 'Request Sent';
+        btn.classList.add('pending');
+        btn.disabled = true;
+    } else {
+        btn.textContent = 'Request to Join';
+        btn.className = 'join-group-btn';
+        btn.disabled = false;
+    }
+
+    document.getElementById('privateGroupPreviewOverlay').classList.add('active');
+    document.getElementById('privateGroupPreviewModal').classList.add('active');
+}
+
+function closePrivateGroupPreview() {
+    document.getElementById('privateGroupPreviewOverlay').classList.remove('active');
+    document.getElementById('privateGroupPreviewModal').classList.remove('active');
+    _currentPreviewGroupId = null;
+}
+
+function requestToJoin(groupId, btn) {
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    fetch(`/api/groups/${groupId}/join-requests/create/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({}),
+    })
+    .then(r => {
+        if (r.ok || r.status === 409) return r.json().then(d => ({ ok: r.ok, data: d }));
+        return r.json().then(d => { throw new Error(d.error || 'Request failed'); });
+    })
+    .then(({ ok, data }) => {
+        // Update modal button
+        btn.textContent = 'Request Sent';
+        btn.classList.add('pending');
+        // Update the data store and card button in the list
+        if (_privateGroupData[groupId]) {
+            _privateGroupData[groupId].has_pending_request = true;
+        }
+        const cardBtn = document.querySelector(`#groupsList [data-group-id="${groupId}"] .join-group-btn`);
+        if (cardBtn) {
+            cardBtn.textContent = 'Requested';
+            cardBtn.className = 'join-group-btn pending';
+            cardBtn.disabled = true;
+            cardBtn.onclick = null;
+        }
+    })
+    .catch(err => {
+        btn.disabled = false;
+        btn.textContent = 'Request to Join';
+        alert(err.message || 'Failed to send request');
     });
 }
 
@@ -2296,7 +2781,19 @@ function joinViaCode() {
 }
 
 // ============ CREATE GROUP MODAL ============
+let _pendingCreateGroupAvatarFile = null;
+
 function openCreateGroup() {
+    // Reset fields
+    document.getElementById('newGroupName').value = '';
+    document.getElementById('newGroupBio').value = '';
+    document.getElementById('newGroupPrivacy').value = 'public';
+    document.getElementById('createGrpError').style.display = 'none';
+    _pendingCreateGroupAvatarFile = null;
+    const thumb = document.getElementById('createGrpAvatarThumb');
+    thumb.innerHTML = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.4;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>`;
+    thumb.style.background = '';
+    document.getElementById('createGrpAvatarInput').value = '';
     document.getElementById('createGroupOverlay').classList.add('active');
     document.getElementById('createGroupModal').classList.add('active');
 }
@@ -2304,37 +2801,75 @@ function openCreateGroup() {
 function closeCreateGroup() {
     document.getElementById('createGroupOverlay').classList.remove('active');
     document.getElementById('createGroupModal').classList.remove('active');
+    _pendingCreateGroupAvatarFile = null;
 }
 
-function submitCreateGroup(e) {
-    e.preventDefault();
+document.getElementById('createGrpAvatarInput').addEventListener('change', function() {
+    const file = this.files[0];
+    if (!file) return;
+    _pendingCreateGroupAvatarFile = file;
+    const reader = new FileReader();
+    reader.onload = e => {
+        const thumb = document.getElementById('createGrpAvatarThumb');
+        thumb.innerHTML = `<img src="${e.target.result}" alt="preview" style="width:100%;height:100%;object-fit:cover;">`;
+        thumb.style.background = 'none';
+    };
+    reader.readAsDataURL(file);
+});
 
+async function submitCreateGroup() {
     const name = document.getElementById('newGroupName').value.trim();
     const description = document.getElementById('newGroupBio').value.trim();
     const privacy = document.getElementById('newGroupPrivacy').value;
+    const errEl = document.getElementById('createGrpError');
+    const btn = document.getElementById('createGrpSubmitBtn');
 
-    if (!name) return;
+    errEl.style.display = 'none';
+    if (!name) {
+        errEl.textContent = 'Group name is required.';
+        errEl.style.display = 'block';
+        return;
+    }
 
-    fetch('/api/groups/create/', {
-        method: 'POST',
-        headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ name, description, privacy })
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.id) {
-            alert('Group created!');
-            closeCreateGroup();
-            location.reload();
-        } else {
-            alert(data.detail || data.error || 'Failed to create group');
+    btn.disabled = true;
+    btn.textContent = 'Creating...';
+
+    try {
+        const r = await fetch('/api/groups/create/', {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ name, description, privacy })
+        });
+        const data = await r.json();
+        if (!r.ok || !data.id) {
+            errEl.textContent = data.detail || data.error || 'Failed to create group.';
+            errEl.style.display = 'block';
+            btn.disabled = false;
+            btn.textContent = 'Create Group';
+            return;
         }
-    })
-    .catch(err => {
+
+        if (_pendingCreateGroupAvatarFile) {
+            const fd = new FormData();
+            fd.append('avatar', _pendingCreateGroupAvatarFile);
+            await fetch(`/api/groups/${data.id}/avatar/`, {
+                method: 'PATCH',
+                headers: { 'X-CSRFToken': csrftoken },
+                credentials: 'same-origin',
+                body: fd
+            });
+        }
+
+        closeCreateGroup();
+        location.reload();
+    } catch (err) {
         console.error('Error:', err);
-        alert('Failed to create group');
-    });
+        errEl.textContent = 'Something went wrong. Please try again.';
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Create Group';
+    }
 }
 
 // ============ NEW CHAT MODAL ============
@@ -2365,6 +2900,101 @@ function startNewChat(friendId, friendName) {
     openChat('dm', friendId, friendName);
 }
 
+// ============ JOIN REQUESTS ============
+function loadJoinRequests(groupId) {
+    fetch(`/api/groups/${groupId}/join-requests/`, { credentials: 'same-origin' })
+    .then(r => r.json())
+    .then(requests => {
+        const section = document.getElementById('groupJoinRequestsSection');
+        const listEl = document.getElementById('joinRequestsList');
+        const badge = document.getElementById('joinRequestsBadge');
+
+        if (!requests || requests.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+
+        badge.textContent = requests.length;
+        section.style.display = 'block';
+        listEl.innerHTML = requests.map(req => `
+            <div class="join-request-row" id="jr-${escapeHtml(req.id)}">
+                <div class="join-request-info">
+                    <div class="join-request-name">${escapeHtml(req.username)}</div>
+                    ${req.message ? `<div class="join-request-msg">${escapeHtml(req.message)}</div>` : ''}
+                </div>
+                <div class="join-request-actions">
+                    <button class="join-req-accept-btn" onclick="acceptJoinRequest('${escapeHtml(currentGroupProfileId)}', '${escapeHtml(req.id)}')">Accept</button>
+                    <button class="join-req-deny-btn" onclick="denyJoinRequest('${escapeHtml(currentGroupProfileId)}', '${escapeHtml(req.id)}')">Deny</button>
+                </div>
+            </div>`).join('');
+    })
+    .catch(() => {});
+}
+
+function acceptJoinRequest(groupId, requestId) {
+    fetch(`/api/groups/${groupId}/join-requests/${requestId}/accept/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrftoken },
+        credentials: 'same-origin',
+    })
+    .then(r => { if (r.ok) { document.getElementById(`jr-${requestId}`)?.remove(); _updateJoinRequestBadge(); if (currentGroupProfileData) { fetch(`/api/groups/${groupId}/`, { credentials: 'same-origin' }).then(r => r.json()).then(d => { currentGroupProfileData = d; renderGroupMembers(d.members, d.user_role); }); } } })
+    .catch(() => {});
+}
+
+function denyJoinRequest(groupId, requestId) {
+    fetch(`/api/groups/${groupId}/join-requests/${requestId}/deny/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrftoken },
+        credentials: 'same-origin',
+    })
+    .then(r => { if (r.ok) { document.getElementById(`jr-${requestId}`)?.remove(); _updateJoinRequestBadge(); } })
+    .catch(() => {});
+}
+
+function _updateJoinRequestBadge() {
+    const listEl = document.getElementById('joinRequestsList');
+    const remaining = listEl ? listEl.querySelectorAll('.join-request-row').length : 0;
+    if (remaining === 0) {
+        document.getElementById('groupJoinRequestsSection').style.display = 'none';
+    } else {
+        document.getElementById('joinRequestsBadge').textContent = remaining;
+    }
+}
+
+function acceptJoinRequestFromChat(groupId, requestId, messageEl) {
+    fetch(`/api/groups/${groupId}/join-requests/${requestId}/accept/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrftoken },
+        credentials: 'same-origin',
+    })
+    .then(r => {
+        if (r.ok) {
+            if (messageEl) {
+                const actionsEl = messageEl.querySelector('.chat-system-actions');
+                if (actionsEl) actionsEl.remove();
+            }
+        }
+    })
+    .catch(() => {});
+}
+
+function denyJoinRequestFromChat(groupId, requestId, messageEl) {
+    fetch(`/api/groups/${groupId}/join-requests/${requestId}/deny/`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': csrftoken },
+        credentials: 'same-origin',
+    })
+    .then(r => {
+        if (r.ok) {
+            if (messageEl) {
+                const actionsEl = messageEl.querySelector('.chat-system-actions');
+                if (actionsEl) actionsEl.remove();
+            }
+        }
+    })
+    .catch(() => {});
+}
+
 // ============ GROUP PROFILE ============
 let currentGroupProfileId = null;
 let currentGroupProfileData = null;
@@ -2384,6 +3014,8 @@ function resetGroupProfileContent() {
     document.getElementById('groupProfileEditBtn').style.display = 'none';
     document.getElementById('groupProfileMembersList').innerHTML =
         '<p style="color:var(--text-muted);text-align:center;padding:24px 0;font-size:14px;">Loading…</p>';
+    document.getElementById('groupJoinRequestsSection').style.display = 'none';
+    document.getElementById('joinRequestsList').innerHTML = '';
 }
 
 function openGroupProfile(groupId, origin) {
@@ -2424,8 +3056,8 @@ function renderGroupProfile(data) {
 
     // Avatar
     const avatarEl = document.getElementById('groupProfileAvatar');
-    if (data.avatar) {
-        avatarEl.innerHTML = `<img src="${data.avatar}" alt="${escapeHtml(data.name)}">`;
+    if (data.avatar_url) {
+        avatarEl.innerHTML = `<img src="${data.avatar_url}" alt="${escapeHtml(data.name)}">`;
     } else {
         avatarEl.innerHTML = `<span>${data.name.charAt(0).toUpperCase()}</span>`;
     }
@@ -2473,6 +3105,11 @@ function renderGroupProfile(data) {
 
     // Render members
     renderGroupMembers(data.members, data.user_role);
+
+    // Load pending join requests for admins/creators
+    if (data.user_role === 'creator' || data.user_role === 'admin') {
+        loadJoinRequests(data.id);
+    }
 }
 
 function renderGroupMembers(members, userRole) {
@@ -2544,8 +3181,7 @@ function copyInviteCode() {
 
 function closeGroupProfile() {
     document.getElementById('groupProfileContainer').classList.remove('active');
-    // Hide edit form if open
-    document.getElementById('groupEditForm').classList.remove('active');
+    closeEditGroupModal();
 
     if (groupProfileOrigin === 'discover') {
         // Restore tabs and land back on the groups tab
@@ -2559,41 +3195,166 @@ function closeGroupProfile() {
     }
 }
 
+let _pendingGroupAvatarFile = null;
+
 function toggleGroupEdit() {
-    const form = document.getElementById('groupEditForm');
-    const isVisible = form.classList.contains('active');
-
-    if (!isVisible && currentGroupProfileData) {
-        // Populate form
-        document.getElementById('editGroupName').value = currentGroupProfileData.name || '';
-        document.getElementById('editGroupDescription').value = currentGroupProfileData.description || '';
-        document.getElementById('editGroupPrivacy').value = currentGroupProfileData.privacy || 'public';
-    }
-
-    form.classList.toggle('active');
+    openEditGroupModal();
 }
 
-function saveGroupEdit() {
-    const name = document.getElementById('editGroupName').value.trim();
-    const description = document.getElementById('editGroupDescription').value.trim();
-    const privacy = document.getElementById('editGroupPrivacy').value;
+function openEditGroupModal() {
+    if (!currentGroupProfileData) return;
+    const d = currentGroupProfileData;
 
-    if (!name) return;
+    // Populate fields
+    document.getElementById('editGrpName').value = d.name || '';
+    document.getElementById('editGrpDescription').value = d.description || '';
+    document.getElementById('editGrpPrivacy').value = d.privacy || 'public';
 
-    fetch(`/api/groups/${currentGroupProfileId}/update/`, {
-        method: 'PATCH',
-        headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/json' },
-        credentials: 'same-origin',
-        body: JSON.stringify({ name, description, privacy })
-    })
-    .then(r => r.json())
-    .then(data => {
-        // Hide edit form
-        document.getElementById('groupEditForm').classList.remove('active');
-        // Refresh profile
+    // Avatar preview
+    const thumb = document.getElementById('editGrpAvatarThumb');
+    if (d.avatar_url) {
+        thumb.innerHTML = `<img src="${d.avatar_url}" alt="">`;
+    } else {
+        thumb.innerHTML = `<span>${(d.name || '?').charAt(0).toUpperCase()}</span>`;
+    }
+
+    // Show Danger Zone tab only for creators
+    document.getElementById('editGrpTabs').style.display = d.user_role === 'creator' ? 'flex' : 'none';
+
+    // Reset to info panel
+    switchEditGrpTab('info');
+
+    // Clear state
+    document.getElementById('editGrpError').style.display = 'none';
+    document.getElementById('editGrpDeleteConfirm').style.display = 'none';
+    document.getElementById('editGrpDeleteBtn').style.display = '';
+    _pendingGroupAvatarFile = null;
+    document.getElementById('editGrpAvatarInput').value = '';
+
+    // Reset save button
+    const saveBtn = document.getElementById('editGrpSaveBtn');
+    saveBtn.disabled = false;
+    saveBtn.textContent = 'Save Changes';
+
+    // Open modal
+    document.getElementById('editGroupOverlay').classList.add('active');
+    document.getElementById('editGroupModal').classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeEditGroupModal() {
+    document.getElementById('editGroupOverlay').classList.remove('active');
+    document.getElementById('editGroupModal').classList.remove('active');
+    document.body.style.overflow = '';
+    _pendingGroupAvatarFile = null;
+}
+
+function switchEditGrpTab(tab) {
+    document.querySelectorAll('.edit-grp-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.edit-grp-panel').forEach(p => p.classList.remove('active'));
+    document.querySelector(`.edit-grp-tab[data-panel="${tab}"]`).classList.add('active');
+    document.getElementById('editGrp' + tab.charAt(0).toUpperCase() + tab.slice(1) + 'Panel').classList.add('active');
+}
+
+document.getElementById('editGrpAvatarInput').addEventListener('change', function () {
+    const file = this.files[0];
+    if (!file) return;
+    _pendingGroupAvatarFile = file;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        document.getElementById('editGrpAvatarThumb').innerHTML = `<img src="${e.target.result}" alt="Preview">`;
+    };
+    reader.readAsDataURL(file);
+});
+
+async function saveGroupEdit() {
+    const name = document.getElementById('editGrpName').value.trim();
+    const description = document.getElementById('editGrpDescription').value;
+    const privacy = document.getElementById('editGrpPrivacy').value;
+    const errorEl = document.getElementById('editGrpError');
+    const btn = document.getElementById('editGrpSaveBtn');
+
+    if (!name) {
+        errorEl.textContent = 'Group name is required.';
+        errorEl.style.display = '';
+        return;
+    }
+
+    errorEl.style.display = 'none';
+    btn.disabled = true;
+    btn.textContent = 'Saving…';
+
+    try {
+        if (_pendingGroupAvatarFile) {
+            const fd = new FormData();
+            fd.append('avatar', _pendingGroupAvatarFile);
+            const avatarResp = await fetch(`/api/groups/${currentGroupProfileId}/avatar/`, {
+                method: 'PATCH',
+                headers: { 'X-CSRFToken': csrftoken },
+                credentials: 'same-origin',
+                body: fd,
+            });
+            if (!avatarResp.ok) throw new Error('Failed to upload avatar.');
+        }
+
+        const resp = await fetch(`/api/groups/${currentGroupProfileId}/update/`, {
+            method: 'PATCH',
+            headers: { 'X-CSRFToken': csrftoken, 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
+            body: JSON.stringify({ name, description, privacy }),
+        });
+
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            throw new Error(err.error || 'Failed to save changes.');
+        }
+
+        closeEditGroupModal();
         openGroupProfile(currentGroupProfileId);
-    })
-    .catch(err => console.error('Error saving group edit:', err));
+
+    } catch (err) {
+        errorEl.textContent = err.message || 'Something went wrong.';
+        errorEl.style.display = '';
+        btn.disabled = false;
+        btn.textContent = 'Save Changes';
+    }
+}
+
+function triggerDeleteGroup() {
+    document.getElementById('editGrpDeleteBtn').style.display = 'none';
+    document.getElementById('editGrpDeleteConfirm').style.display = '';
+}
+
+function cancelDeleteGroup() {
+    document.getElementById('editGrpDeleteConfirm').style.display = 'none';
+    document.getElementById('editGrpDeleteBtn').style.display = '';
+}
+
+async function confirmDeleteGroup() {
+    const btn = document.getElementById('editGrpConfirmDelBtn');
+    const cancelBtn = document.getElementById('editGrpCancelDelBtn');
+    btn.disabled = true;
+    btn.textContent = 'Deleting…';
+    cancelBtn.disabled = true;
+
+    try {
+        const resp = await fetch(`/api/groups/${currentGroupProfileId}/delete/`, {
+            method: 'DELETE',
+            headers: { 'X-CSRFToken': csrftoken },
+            credentials: 'same-origin',
+        });
+
+        if (!resp.ok) throw new Error('Failed to delete group.');
+
+        closeEditGroupModal();
+        closeGroupProfile();
+        _fetchGroupSearch('');
+
+    } catch (err) {
+        btn.disabled = false;
+        btn.textContent = 'Yes, Delete It';
+        cancelBtn.disabled = false;
+    }
 }
 
 function promoteMember(groupId, userId) {

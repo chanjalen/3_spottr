@@ -30,7 +30,7 @@ export interface GroupDetail {
   created_by: string;
   name: string;
   description: string;
-  avatar: string | null;
+  avatar_url: string | null;
   privacy: 'public' | 'private';
   group_streak: number;
   longest_group_streak: number;

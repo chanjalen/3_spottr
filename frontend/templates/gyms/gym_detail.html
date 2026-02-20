@@ -84,7 +84,11 @@
         {% for invite in invites %}
         <div class="invite-card">
             <div class="invite-avatar">
+                {% if invite.user.avatar_url %}
+                <img src="{{ invite.user.avatar_url }}" alt="{{ invite.user.username }}" class="invite-avatar-img">
+                {% else %}
                 <span class="invite-avatar-letter">{{ invite.user.username|make_list|first|upper }}</span>
+                {% endif %}
             </div>
             <div class="invite-info">
                 <div class="invite-title"><a href="{% url 'accounts:user_profile' username=invite.user.username %}" class="user-link">{{ invite.user.username }}</a> is looking for {{ invite.spots_available }} {% if invite.spots_available == 1 %}person{% else %}people{% endif %}</div>
@@ -156,10 +160,10 @@
     <div class="section-header">
         <h2 class="section-title">Top Lifters at {{ gym.name }}</h2>
         <select class="lifters-select" id="liftersSelect">
+            <option value="total" selected>Total</option>
             <option value="bench">Bench Press</option>
             <option value="squat">Squat</option>
             <option value="deadlift">Deadlift</option>
-            <option value="total">Total</option>
         </select>
     </div>
     <div class="lifters-list" id="liftersList">
@@ -526,6 +530,20 @@
         font-size: 16px;
         font-weight: 700;
         color: #fff;
+    }
+
+    .invite-avatar-img {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    .leaderboard-avatar-img {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        object-fit: cover;
     }
 
     .invite-info {
@@ -1141,7 +1159,10 @@
                 <div class="leaderboard-row">
                     <span class="leaderboard-rank">#${l.rank}</span>
                     <div class="leaderboard-avatar">
-                        <span class="leaderboard-avatar-letter">${(l.username[0] || '?').toUpperCase()}</span>
+                        ${l.avatar_url
+                            ? `<img src="${l.avatar_url}" alt="${l.username}" class="leaderboard-avatar-img">`
+                            : `<span class="leaderboard-avatar-letter">${(l.username[0] || '?').toUpperCase()}</span>`
+                        }
                     </div>
                     <div class="leaderboard-info">
                         <div class="leaderboard-name"><a href="/accounts/profile/${encodeURIComponent(l.username)}/" class="user-link">${l.display_name}</a></div>
@@ -1158,7 +1179,7 @@
     if (liftersSelect) {
         liftersSelect.addEventListener('change', () => loadTopLifters(liftersSelect.value));
     }
-    loadTopLifters('bench');
+    loadTopLifters('total');
 })();
 </script>
 {% endblock %}

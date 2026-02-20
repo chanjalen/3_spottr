@@ -23,14 +23,19 @@ class GroupMemberSerializer(serializers.ModelSerializer):
 class GroupListSerializer(serializers.ModelSerializer):
     member_count = serializers.IntegerField(read_only=True)
     is_member = serializers.BooleanField(read_only=True, default=False)
+    has_pending_request = serializers.BooleanField(read_only=True, default=False)
+    avatar_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Group
         fields = [
-            'id', 'name', 'description', 'avatar', 'privacy',
+            'id', 'name', 'description', 'avatar_url', 'privacy',
             'group_streak', 'longest_group_streak', 'member_count', 'is_member',
-            'created_at',
+            'has_pending_request', 'created_at',
         ]
+
+    def get_avatar_url(self, obj):
+        return obj.avatar_url
 
 
 class GroupDetailSerializer(serializers.ModelSerializer):
@@ -39,14 +44,18 @@ class GroupDetailSerializer(serializers.ModelSerializer):
     is_member = serializers.SerializerMethodField()
     user_role = serializers.SerializerMethodField()
     invite_code = serializers.SerializerMethodField()
+    avatar_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Group
         fields = [
-            'id', 'created_by', 'name', 'description', 'avatar', 'privacy',
+            'id', 'created_by', 'name', 'description', 'avatar_url', 'privacy',
             'group_streak', 'longest_group_streak', 'members', 'member_count',
             'is_member', 'user_role', 'invite_code', 'created_at', 'updated_at',
         ]
+
+    def get_avatar_url(self, obj):
+        return obj.avatar_url
 
     def get_member_count(self, obj):
         return obj.members.count()

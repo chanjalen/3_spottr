@@ -5,7 +5,7 @@ from rest_framework.response import Response
 from django.db.models import Count, Exists, OuterRef
 
 from groups import services
-from groups.models import Group, GroupMember
+from groups.models import Group, GroupMember, GroupJoinRequest
 from groups.serializers import (
     GroupListSerializer,
     GroupDetailSerializer,
@@ -38,18 +38,34 @@ from groups.exceptions import (
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def group_list(request):
-    """Search/browse public groups. Optional: ?q=<search>&limit=50&offset=0"""
+    """
+    Search/browse groups. Optional: ?q=<search>&limit=50&offset=0
+    When ?q= is provided, results include both public and private groups.
+    Without a query, only public groups are returned.
+    """
     query = request.query_params.get('q', '').strip()
     limit = int(request.query_params.get('limit', 50))
     offset = int(request.query_params.get('offset', 0))
 
-    groups = services.search_groups(query=query or None, limit=limit, offset=offset)
+    include_private = bool(query)
+    groups = services.search_groups(
+        query=query or None,
+        limit=limit,
+        offset=offset,
+        include_private=include_private,
+    )
 
-    # Annotate member_count and is_member for the list serializer
     groups = groups.annotate(
         member_count=Count('members'),
         is_member=Exists(
             GroupMember.objects.filter(group=OuterRef('pk'), user=request.user)
+        ),
+        has_pending_request=Exists(
+            GroupJoinRequest.objects.filter(
+                group=OuterRef('pk'),
+                user=request.user,
+                status=GroupJoinRequest.Status.PENDING,
+            )
         ),
     )
 
@@ -115,6 +131,23 @@ def group_update(request, group_id):
 
     try:
         group = services.update_group(request.user, group_id, **serializer.validated_data)
+    except GroupNotFoundError as e:
+        return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+    except (NotGroupMemberError, NotGroupAdminError) as e:
+        return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+
+    return Response(GroupDetailSerializer(group, context={'request': request}).data)
+
+
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def group_avatar_update(request, group_id):
+    """Upload or replace the group avatar. Admin/creator only."""
+    if 'avatar' not in request.FILES:
+        return Response({"error": "No avatar file provided."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        group = services.update_group_avatar(request.user, group_id, request.FILES['avatar'])
     except GroupNotFoundError as e:
         return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
     except (NotGroupMemberError, NotGroupAdminError) as e:
@@ -354,6 +387,18 @@ def join_request_create(request, group_id):
 
     from notifications.dispatcher import notify_group_join_request
     notify_group_join_request(request.user, join_request.group, join_request)
+
+    # Post a system message in the group chat so admins see the request inline
+    try:
+        from messaging.services import send_system_group_message
+        display = request.user.display_name or request.user.username
+        send_system_group_message(
+            group_id=join_request.group.id,
+            content=f"🔒 {display} requested to join '{join_request.group.name}'",
+            join_request=join_request,
+        )
+    except Exception:
+        pass  # Never block the request if messaging fails
 
     return Response(
         GroupJoinRequestSerializer(join_request).data,

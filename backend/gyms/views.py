@@ -41,11 +41,13 @@ class GymGenericListView(ListView):
             if top_lifters:
                 gym.top_lifter_name = top_lifters[0]['display_name']
                 gym.top_lifter_username = top_lifters[0]['username']
+                gym.top_lifter_avatar_url = top_lifters[0]['avatar_url']
                 gym.top_lifter_total = top_lifters[0]['value']
                 gym.top_lifter_unit = top_lifters[0]['unit']
             else:
                 gym.top_lifter_name = None
                 gym.top_lifter_username = None
+                gym.top_lifter_avatar_url = None
                 gym.top_lifter_total = None
                 gym.top_lifter_unit = None
         context['gyms'] = gyms

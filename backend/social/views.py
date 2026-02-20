@@ -119,7 +119,7 @@ def social_view(request):
             'member_count': member_count,
             'role': membership.role,
             'last_message': last_msg.content[:80] if last_msg else None,
-            'last_message_sender': last_msg.sender.display_name if last_msg else None,
+            'last_message_sender': (last_msg.sender.display_name if last_msg and last_msg.sender else None),
             'last_message_time': last_msg.created_at if last_msg else group.created_at,
             'time_ago': get_time_ago(last_msg.created_at) if last_msg else '',
             'unread_count': unread_count,
