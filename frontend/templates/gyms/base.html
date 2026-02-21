@@ -443,6 +443,22 @@
             font-size: 16px;
         }
 
+        .notif-avatar-link {
+            display: block;
+            flex-shrink: 0;
+            text-decoration: none;
+        }
+
+        .notif-actor-link {
+            font-weight: 600;
+            color: var(--text-primary);
+            text-decoration: none;
+        }
+
+        .notif-actor-link:hover {
+            text-decoration: underline;
+        }
+
         .notif-content {
             flex: 1;
             min-width: 0;
@@ -3117,9 +3133,13 @@
 
                 function renderAvatarStack(actors, isSingle) {
                     const cls = isSingle ? 'notif-avatars single' : 'notif-avatars';
-                    return `<div class="${cls}">${actors.map(a =>
+                    const primaryUsername = actors.length > 0 ? actors[0].username : '';
+                    const inner = `<div class="${cls}">${actors.map(a =>
                         `<div class="notif-avatar">${renderAvatar(a)}</div>`
                     ).join('')}</div>`;
+                    return primaryUsername
+                        ? `<a href="/accounts/profile/${primaryUsername}/" onclick="event.stopPropagation()" class="notif-avatar-link">${inner}</a>`
+                        : inner;
                 }
 
                 function renderDescriptionBox(description) {
@@ -3179,14 +3199,22 @@
                     const actorUsername = (actors.length > 0 && actors[0].username) ? actors[0].username : '';
                     const contextId = n.context_id || '';
 
-                    // Escape HTML in message
-                    const msg = (n.message || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    // Escape HTML in message, then linkify the actor name at the start
+                    const rawMsg = (n.message || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    let msgHtml = rawMsg;
+                    if (actorUsername && actors.length > 0 && actors[0].display_name) {
+                        const escapedName = actors[0].display_name.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        if (rawMsg.startsWith(escapedName)) {
+                            const rest = rawMsg.slice(escapedName.length);
+                            msgHtml = `<a href="/accounts/profile/${actorUsername}/" onclick="event.stopPropagation()" class="notif-actor-link">${escapedName}</a>${rest}`;
+                        }
+                    }
                     const descHtml = renderDescriptionBox(n.description || '');
 
                     return `<div class="notif-row${unreadCls}" data-ids="${ids}" data-type="${n.type}" data-target-type="${n.target_type || ''}" data-target-id="${n.target_id || ''}" data-context-id="${contextId}" data-actor-id="${actorId}" data-actor-username="${actorUsername}">
                         ${avatarHtml}
                         <div class="notif-content">
-                            <div class="notif-message">${msg}</div>
+                            <div class="notif-message">${msgHtml}</div>
                             <div class="notif-time">${n.time_ago || ''}</div>
                             ${descHtml}
                         </div>
