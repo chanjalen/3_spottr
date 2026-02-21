@@ -15,7 +15,6 @@ class Notification(BaseModel):
         COMMENT = 'comment', 'Comment'
         FOLLOW = 'follow', 'Follow'
         PR = 'pr', 'Personal Record'
-        GROUP_INVITE = 'group_invite', 'Group Invite'
         WORKOUT_INVITE = 'workout_invite', 'Workout Invite'
         JOIN_REQUEST = 'join_request', 'Join Request'
 

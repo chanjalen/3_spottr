@@ -1049,15 +1049,21 @@
 
     let cachedMembers = null;
 
+    function escapeHtml(str) {
+        var d = document.createElement('div');
+        d.textContent = String(str == null ? '' : str);
+        return d.innerHTML;
+    }
+
     function getInitials(name) {
         return (name || '?')[0].toUpperCase();
     }
 
     function avatarHtml(member) {
         if (member.avatar_url) {
-            return `<img src="${member.avatar_url}" alt="${member.username}">`;
+            return `<img src="${escapeHtml(member.avatar_url)}" alt="${escapeHtml(member.username)}">`;
         }
-        return getInitials(member.display_name || member.username);
+        return escapeHtml(getInitials(member.display_name || member.username));
     }
 
     function renderMembers(members) {
@@ -1094,10 +1100,10 @@
             <div class="inactive-row">
                 <div class="inactive-avatar">${avatarHtml(m)}</div>
                 <div class="inactive-info">
-                    <div class="inactive-name">${m.display_name || m.username}</div>
-                    <div class="inactive-username">@${m.username}</div>
+                    <div class="inactive-name">${escapeHtml(m.display_name || m.username)}</div>
+                    <div class="inactive-username">@${escapeHtml(m.username)}</div>
                 </div>
-                <div class="inactive-streak">⚡ ${m.current_streak}d</div>
+                <div class="inactive-streak">⚡ ${escapeHtml(m.current_streak)}d</div>
             </div>`).join('');
     }
 

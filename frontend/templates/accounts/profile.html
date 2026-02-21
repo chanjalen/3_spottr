@@ -3375,10 +3375,17 @@
     window.openUserPreview = function(user) {
         currentPreviewUser = user;
         var avatar = document.getElementById('previewAvatar');
+        avatar.innerHTML = '';
         if (user.avatar_url) {
-            avatar.innerHTML = '<img src="' + user.avatar_url + '" alt="">';
+            var img = document.createElement('img');
+            img.setAttribute('src', user.avatar_url);
+            img.setAttribute('alt', '');
+            avatar.appendChild(img);
         } else {
-            avatar.innerHTML = '<span class="user-preview-avatar-letter">' + user.display_name.charAt(0).toUpperCase() + '</span>';
+            var span = document.createElement('span');
+            span.className = 'user-preview-avatar-letter';
+            span.textContent = user.display_name.charAt(0).toUpperCase();
+            avatar.appendChild(span);
         }
         document.getElementById('previewName').textContent = user.display_name;
         document.getElementById('previewUsername').textContent = '@' + user.username;

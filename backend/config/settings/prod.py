@@ -33,11 +33,38 @@ DATABASES = {
         "PASSWORD": os.getenv('DB_PASSWORD', ''),
         "HOST": os.getenv('DB_HOST', 'localhost'),
         "PORT": os.getenv('DB_PORT', '5432'),
+        "OPTIONS": {
+            # Enforce TLS for all production DB connections
+            "sslmode": os.getenv('DB_SSLMODE', 'require'),
+        },
     }
 }
 
 # Static files
 STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Cache — use Redis in production so cache is shared across all workers.
+# Set REDIS_URL in environment (e.g. redis://localhost:6379/1).
+_redis_url = os.getenv('REDIS_URL')
+if _redis_url:
+    CACHES = {
+        'default': {
+            'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+            'LOCATION': _redis_url,
+        }
+    }
+# If REDIS_URL is not set, base.py LocMemCache is used — acceptable for single-worker deploys.
+
+# Logging — raise all app loggers to WARNING in production to reduce noise.
+LOGGING['loggers'].update({
+    'accounts': {'handlers': ['console'], 'level': 'WARNING', 'propagate': False},
+    'social': {'handlers': ['console'], 'level': 'WARNING', 'propagate': False},
+    'workouts': {'handlers': ['console'], 'level': 'WARNING', 'propagate': False},
+    'groups': {'handlers': ['console'], 'level': 'WARNING', 'propagate': False},
+    'gyms': {'handlers': ['console'], 'level': 'WARNING', 'propagate': False},
+    'notifications': {'handlers': ['console'], 'level': 'WARNING', 'propagate': False},
+    'media': {'handlers': ['console'], 'level': 'WARNING', 'propagate': False},
+})
 
 # Email configuration (configure via environment variables)
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'

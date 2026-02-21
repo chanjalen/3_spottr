@@ -1,9 +1,12 @@
 import base64
 import json
+import logging
 import os
 import uuid
 from collections import defaultdict
 from datetime import timedelta, date, datetime
+
+logger = logging.getLogger(__name__)
 
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import JsonResponse
@@ -719,14 +722,18 @@ def create_checkin_view(request):
 
         # Save the photo if provided
         if photo:
-            path = f'checkins/{checkin.id}.jpg'
-            asset = create_media_asset(request.user, photo, path, 'image')
-            MediaLink.objects.create(
-                asset=asset,
-                destination_type='quick_workout',
-                destination_id=str(checkin.id),
-                type='inline',
-            )
+            from django.core.exceptions import ValidationError as DjangoValidationError
+            try:
+                path = f'checkins/{checkin.id}.jpg'
+                asset = create_media_asset(request.user, photo, path, 'image')
+                MediaLink.objects.create(
+                    asset=asset,
+                    destination_type='quick_workout',
+                    destination_id=str(checkin.id),
+                    type='inline',
+                )
+            except DjangoValidationError as e:
+                return JsonResponse({'success': False, 'error': e.message}, status=400)
 
         return JsonResponse({
             'success': True,
@@ -734,10 +741,11 @@ def create_checkin_view(request):
             'message': 'Check-in posted successfully!'
         })
 
-    except Exception as e:
+    except Exception:
+        logger.exception("Unexpected error in create_checkin_view")
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'An unexpected error occurred. Please try again.'
         }, status=500)
 
 

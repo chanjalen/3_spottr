@@ -534,6 +534,45 @@
             cursor: default;
         }
 
+        .notif-desc-box {
+            margin-top: 8px;
+            padding: 8px 10px;
+            background: var(--bg-elevated);
+            border-radius: var(--radius-sm);
+            border-left: 2px solid var(--brand-purple);
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .notif-desc-text {
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+            overflow: hidden;
+        }
+
+        .notif-desc-box.expanded .notif-desc-text {
+            -webkit-line-clamp: unset;
+            overflow: visible;
+        }
+
+        .notif-show-more {
+            background: none;
+            border: none;
+            color: var(--text-brand);
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 4px 0 0;
+            display: block;
+            font-family: inherit;
+        }
+
+        .notif-show-more:hover {
+            opacity: 0.75;
+        }
+
         .header-login-btn {
             padding: 8px 18px;
             background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
@@ -2768,13 +2807,18 @@
                     let noResultsMsg = document.querySelector('.no-results-message');
 
                     if (visibleCards.length === 0 && searchTerm !== '') {
+                        // Use textContent for the user-supplied search term to prevent XSS
+                        const safeMsg = document.createElement('p');
+                        safeMsg.textContent = 'No gyms found matching "' + searchTerm + '"';
                         if (!noResultsMsg) {
                             noResultsMsg = document.createElement('div');
                             noResultsMsg.className = 'no-results-message empty-state';
-                            noResultsMsg.innerHTML = '<div class="empty-state-icon">🔍</div><p>No gyms found matching "' + searchTerm + '"</p>';
+                            noResultsMsg.innerHTML = '<div class="empty-state-icon">🔍</div>';
+                            noResultsMsg.appendChild(safeMsg);
                             document.querySelector('.gym-list')?.appendChild(noResultsMsg);
                         } else {
-                            noResultsMsg.innerHTML = '<div class="empty-state-icon">🔍</div><p>No gyms found matching "' + searchTerm + '"</p>';
+                            const existingP = noResultsMsg.querySelector('p');
+                            if (existingP) existingP.textContent = 'No gyms found matching "' + searchTerm + '"';
                             noResultsMsg.style.display = '';
                         }
                     } else if (noResultsMsg) {
@@ -3078,22 +3122,42 @@
                     ).join('')}</div>`;
                 }
 
+                function renderDescriptionBox(description) {
+                    if (!description) return '';
+                    const desc = description.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const isLong = description.length > 80;
+                    const showMoreBtn = isLong
+                        ? `<button class="notif-show-more" onclick="event.stopPropagation();var b=this.closest('.notif-desc-box');b.classList.toggle('expanded');this.textContent=b.classList.contains('expanded')?'show less':'show more'">show more</button>`
+                        : '';
+                    return `<div class="notif-desc-box${isLong ? '' : ' expanded'}"><span class="notif-desc-text">${desc}</span>${showMoreBtn}</div>`;
+                }
+
                 function renderActions(n) {
                     const type = n.type;
                     const targetType = n.target_type || '';
                     const actors = n.actors || [];
+                    const actionStatus = n.action_status || 'pending';
                     if (type === 'follow' && actors.length > 0) {
                         const uid = actors[0].id;
                         return `<div class="notif-actions"><button class="notif-action-btn notif-action-accept" onclick="event.stopPropagation();notifFollowBack('${uid}',this)">Follow Back</button></div>`;
                     }
                     if (type === 'workout_invite') {
-                        return `<div class="notif-actions"><button class="notif-action-btn notif-action-accept" onclick="event.stopPropagation();notifAcceptWorkoutInvite('${n.target_id}',this)">Accept</button><button class="notif-action-btn notif-action-dismiss" onclick="event.stopPropagation();notifDismissNotif('${n.id}',this)">&#10005;</button></div>`;
+                        if (actionStatus === 'accepted') {
+                            return `<div class="notif-actions"><button class="notif-action-btn notif-action-done" disabled>Accepted</button></div>`;
+                        }
+                        return `<div class="notif-actions"><button class="notif-action-btn notif-action-accept" onclick="event.stopPropagation();notifAcceptWorkoutInvite('${n.target_id}',this)">Accept</button><button class="notif-action-btn notif-action-dismiss" onclick="event.stopPropagation();notifDeclineWorkoutInvite('${n.target_id}',this)">Decline</button></div>`;
                     }
                     if (type === 'join_request' && targetType === 'group') {
-                        return `<div class="notif-actions"><button class="notif-action-btn notif-action-accept" onclick="event.stopPropagation();notifAcceptGroupJoin('${n.target_id}','${n.context_id}',this)">Accept</button><button class="notif-action-btn notif-action-dismiss" onclick="event.stopPropagation();notifDenyGroupJoin('${n.target_id}','${n.context_id}',this)">&#10005;</button></div>`;
+                        if (actionStatus === 'accepted') {
+                            return `<div class="notif-actions"><button class="notif-action-btn notif-action-done" disabled>Accepted</button></div>`;
+                        }
+                        return `<div class="notif-actions"><button class="notif-action-btn notif-action-accept" onclick="event.stopPropagation();notifAcceptGroupJoin('${n.target_id}','${n.context_id}',this)">Accept</button><button class="notif-action-btn notif-action-dismiss" onclick="event.stopPropagation();notifDenyGroupJoin('${n.target_id}','${n.context_id}',this)">Decline</button></div>`;
                     }
                     if (type === 'join_request' && targetType === 'workout_invite') {
-                        return `<div class="notif-actions"><button class="notif-action-btn notif-action-accept" onclick="event.stopPropagation();notifAcceptWorkoutJoin('${n.context_id}',this)">Accept</button><button class="notif-action-btn notif-action-dismiss" onclick="event.stopPropagation();notifDenyWorkoutJoin('${n.context_id}',this)">&#10005;</button></div>`;
+                        if (actionStatus === 'accepted') {
+                            return `<div class="notif-actions"><button class="notif-action-btn notif-action-done" disabled>Accepted</button></div>`;
+                        }
+                        return `<div class="notif-actions"><button class="notif-action-btn notif-action-accept" onclick="event.stopPropagation();notifAcceptWorkoutJoin('${n.context_id}',this)">Accept</button><button class="notif-action-btn notif-action-dismiss" onclick="event.stopPropagation();notifDenyWorkoutJoin('${n.context_id}',this)">Decline</button></div>`;
                     }
                     return '';
                 }
@@ -3117,12 +3181,14 @@
 
                     // Escape HTML in message
                     const msg = (n.message || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const descHtml = renderDescriptionBox(n.description || '');
 
                     return `<div class="notif-row${unreadCls}" data-ids="${ids}" data-type="${n.type}" data-target-type="${n.target_type || ''}" data-target-id="${n.target_id || ''}" data-context-id="${contextId}" data-actor-id="${actorId}" data-actor-username="${actorUsername}">
                         ${avatarHtml}
                         <div class="notif-content">
                             <div class="notif-message">${msg}</div>
                             <div class="notif-time">${n.time_ago || ''}</div>
+                            ${descHtml}
                         </div>
                         ${renderActions(n)}
                         ${thumbHtml}
@@ -3229,16 +3295,22 @@
                 async function notifAcceptWorkoutInvite(inviteId, btn) {
                     btn.disabled = true;
                     try {
-                        await fetch(`/api/gyms/workout-invites/${inviteId}/join/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, credentials: 'same-origin' });
+                        await fetch(`/api/gyms/invites/${inviteId}/join/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, credentials: 'same-origin' });
                         btn.textContent = 'Accepted'; btn.className = 'notif-action-btn notif-action-done';
+                        const declineBtn = btn.parentElement.querySelector('.notif-action-dismiss');
+                        if (declineBtn) declineBtn.style.display = 'none';
                         const row = btn.closest('.notif-row');
                         if (row) { row.classList.remove('unread'); markRead(row.dataset.ids.split(',')); fetchUnreadCount(); }
                     } catch { btn.disabled = false; }
                 }
 
-                function notifDismissNotif(notifId, btn) {
-                    const row = btn.closest('.notif-row');
-                    if (row) { row.style.transition = 'opacity 0.3s'; row.style.opacity = '0'; setTimeout(() => row.remove(), 300); markRead([notifId]); fetchUnreadCount(); }
+                async function notifDeclineWorkoutInvite(inviteId, btn) {
+                    btn.disabled = true;
+                    try {
+                        await fetch(`/api/gyms/invites/${inviteId}/decline/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, credentials: 'same-origin' });
+                        const row = btn.closest('.notif-row');
+                        if (row) { row.style.transition = 'opacity 0.3s'; row.style.opacity = '0'; setTimeout(() => row.remove(), 300); fetchUnreadCount(); }
+                    } catch { btn.disabled = false; }
                 }
 
                 async function notifAcceptGroupJoin(groupId, requestId, btn) {
@@ -3286,7 +3358,7 @@
                 // Expose action handlers globally for onclick attributes
                 window.notifFollowBack = notifFollowBack;
                 window.notifAcceptWorkoutInvite = notifAcceptWorkoutInvite;
-                window.notifDismissNotif = notifDismissNotif;
+                window.notifDeclineWorkoutInvite = notifDeclineWorkoutInvite;
                 window.notifAcceptGroupJoin = notifAcceptGroupJoin;
                 window.notifDenyGroupJoin = notifDenyGroupJoin;
                 window.notifAcceptWorkoutJoin = notifAcceptWorkoutJoin;

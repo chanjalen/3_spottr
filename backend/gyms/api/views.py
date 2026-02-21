@@ -179,6 +179,29 @@ def invite_detail_cancel(request, invite_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+def invite_decline(request, invite_id):
+    """Invited user declines a personal workout invite."""
+    from gyms.models import WorkoutInvite
+    try:
+        invite = WorkoutInvite.objects.get(id=invite_id, invited_user=request.user)
+    except WorkoutInvite.DoesNotExist:
+        return Response({"error": "Invite not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    invite.invited_user = None
+    invite.save(update_fields=['invited_user', 'updated_at'])
+
+    from notifications.models import Notification
+    Notification.objects.filter(
+        recipient=request.user,
+        type=Notification.Type.WORKOUT_INVITE,
+        target_id=str(invite_id),
+    ).delete()
+
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def join_request_create(request, invite_id):
     """Request to join a workout invite."""
     serializer = JoinRequestCreateSerializer(data=request.data)

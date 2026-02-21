@@ -110,6 +110,19 @@ def notification_list(request):
         for post in Post.objects.filter(id__in=post_ids):
             posts_by_id[str(post.id)] = post
 
+    # Pre-fetch workout join request descriptions (avoid N+1 in the loop below)
+    from gyms.models import JoinRequest as GymJoinRequest
+    workout_jr_context_ids = [
+        n.context_id for n in notifications
+        if n.type == Notification.Type.JOIN_REQUEST
+        and n.target_type == Notification.TargetType.WORKOUT_INVITE
+        and n.context_id
+    ]
+    workout_jr_descriptions = {}
+    if workout_jr_context_ids:
+        for jr in GymJoinRequest.objects.filter(id__in=workout_jr_context_ids).values('id', 'description'):
+            workout_jr_descriptions[str(jr['id'])] = jr['description']
+
     result = []
     for entry_type, entry_data in grouped:
         if entry_type == 'like_group_placeholder':
@@ -216,6 +229,7 @@ def notification_list(request):
                     item['message'] = f"{actor_name} wants to join {group_name}"
                 else:
                     item['message'] = f"{actor_name} requested to join your workout"
+                    item['description'] = workout_jr_descriptions.get(notif.context_id, '')
 
             else:
                 item['message'] = f"{actor_name} sent you a notification"
@@ -225,7 +239,59 @@ def notification_list(request):
             item['total_actors'] = len(item['actors'])
             result.append(item)
 
-    return JsonResponse({'success': True, 'notifications': result})
+    # Batch-look up action statuses for actionable notification types
+    from groups.models import GroupJoinRequest
+
+    group_jr_ids = [
+        item['context_id'] for item in result
+        if item['type'] == 'join_request' and item.get('target_type') == 'group' and item.get('context_id')
+    ]
+    workout_jr_ids = [
+        item['context_id'] for item in result
+        if item['type'] == 'join_request' and item.get('target_type') == 'workout_invite' and item.get('context_id')
+    ]
+    workout_invite_ids = [
+        item['target_id'] for item in result
+        if item['type'] == 'workout_invite' and item.get('target_id')
+    ]
+
+    group_jr_statuses = {}
+    if group_jr_ids:
+        for jr in GroupJoinRequest.objects.filter(id__in=group_jr_ids).values('id', 'status'):
+            group_jr_statuses[str(jr['id'])] = jr['status']
+
+    gym_jr_statuses = {}
+    if workout_jr_ids:
+        for jr in GymJoinRequest.objects.filter(id__in=workout_jr_ids).values('id', 'status'):
+            gym_jr_statuses[str(jr['id'])] = jr['status']
+
+    workout_invite_accepted = set()
+    if workout_invite_ids:
+        for jr_invite_id in GymJoinRequest.objects.filter(
+            workout_invite_id__in=workout_invite_ids,
+            user=request.user,
+        ).exclude(status='deny').values_list('workout_invite_id', flat=True):
+            workout_invite_accepted.add(str(jr_invite_id))
+
+    final_result = []
+    for item in result:
+        t = item['type']
+        tt = item.get('target_type', '')
+        if t == 'join_request' and tt == 'group':
+            jr_status = group_jr_statuses.get(item.get('context_id', ''), 'pending')
+            if jr_status == 'denied':
+                continue
+            item['action_status'] = 'accepted' if jr_status == 'accepted' else 'pending'
+        elif t == 'join_request' and tt == 'workout_invite':
+            jr_status = gym_jr_statuses.get(item.get('context_id', ''), 'pending')
+            if jr_status == 'deny':
+                continue
+            item['action_status'] = 'accepted' if jr_status == 'accept' else 'pending'
+        elif t == 'workout_invite':
+            item['action_status'] = 'accepted' if item.get('target_id') in workout_invite_accepted else 'pending'
+        final_result.append(item)
+
+    return JsonResponse({'success': True, 'notifications': final_result})
 
 
 @login_required
