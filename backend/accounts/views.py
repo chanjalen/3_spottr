@@ -1,3 +1,5 @@
+import json
+
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth import login, authenticate, logout, update_session_auth_hash
 from django.contrib.auth.decorators import login_required
@@ -265,14 +267,29 @@ def search_users_view(request):
 def follow_toggle_view(request):
     """AJAX endpoint: follow/unfollow a user, or remove a follower."""
     user_id = request.POST.get('user_id')
-    if not user_id:
-        return JsonResponse({'error': 'user_id required'}, status=400)
+    username = request.POST.get('username')
+    action_type = request.POST.get('action', '')
 
-    target = get_object_or_404(User, pk=user_id)
+    # Accept JSON body from mobile clients
+    if not user_id and not username:
+        try:
+            body = json.loads(request.body)
+            user_id = body.get('user_id')
+            username = body.get('username')
+            if not action_type:
+                action_type = body.get('action', '')
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
+    if user_id:
+        target = get_object_or_404(User, pk=user_id)
+    elif username:
+        target = get_object_or_404(User, username=username)
+    else:
+        return JsonResponse({'error': 'user_id or username required'}, status=400)
+
     if target.pk == request.user.pk:
         return JsonResponse({'error': 'Cannot follow yourself'}, status=400)
-
-    action_type = request.POST.get('action', '')
 
     if action_type == 'remove_follower':
         # Remove someone who follows you

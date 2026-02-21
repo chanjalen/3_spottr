@@ -17,7 +17,7 @@ from gyms.serializers import (
     WorkoutInviteDetailSerializer,
     JoinRequestCreateSerializer,
     JoinRequestSerializer,
-    LeaderboardEntrySerializer,
+    TopLifterSerializer,
 )
 from gyms.exceptions import (
     GymNotFoundError,
@@ -289,10 +289,10 @@ def join_request_cancel(request, request_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def gym_leaderboard(request, gym_id):
-    """Get the streak leaderboard for a gym. Recalculates on each fetch."""
-    try:
-        entries = services.get_gym_leaderboard(gym_id)
-    except GymNotFoundError as e:
-        return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
-    serializer = LeaderboardEntrySerializer(entries, many=True)
+    """Get top lifters for a gym by PR. Optional ?lift=total|bench|squat|deadlift"""
+    if not Gym.objects.filter(id=gym_id).exists():
+        return Response({"error": "Gym not found."}, status=status.HTTP_404_NOT_FOUND)
+    lift = request.query_params.get('lift', 'total')
+    entries = services.get_top_lifters(gym_id, lift=lift)
+    serializer = TopLifterSerializer(entries, many=True)
     return Response(serializer.data)

@@ -2,10 +2,11 @@ import json
 from collections import OrderedDict
 from datetime import timedelta
 
-from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.utils import timezone
-from django.views.decorators.http import require_GET, require_POST
+
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
 
 from notifications.models import Notification
 from media.utils import get_media_url, build_media_url
@@ -69,8 +70,8 @@ def _build_notification_item(notif, actor):
     }
 
 
-@login_required
-@require_GET
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def notification_list(request):
     """
     GET /api/notifications/
@@ -294,8 +295,8 @@ def notification_list(request):
     return JsonResponse({'success': True, 'notifications': final_result})
 
 
-@login_required
-@require_GET
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def unread_count(request):
     """GET /api/notifications/unread-count/"""
     count = Notification.objects.filter(
@@ -305,11 +306,11 @@ def unread_count(request):
     return JsonResponse({'count': count})
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def mark_read(request):
     """POST /api/notifications/mark-read/ with body {ids: [...]}"""
-    data = json.loads(request.body)
+    data = request.data if hasattr(request, 'data') else json.loads(request.body)
     ids = data.get('ids', [])
     if ids:
         Notification.objects.filter(
@@ -320,8 +321,8 @@ def mark_read(request):
     return JsonResponse({'success': True})
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def mark_all_read(request):
     """POST /api/notifications/mark-all-read/"""
     Notification.objects.filter(

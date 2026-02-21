@@ -8,6 +8,7 @@ import CustomTabBar from '../components/navigation/CustomTabBar';
 import FeedScreen from '../screens/FeedScreen';
 import GymListScreen from '../screens/gyms/GymListScreen';
 import GymDetailScreen from '../screens/gyms/GymDetailScreen';
+import CreateInviteScreen from '../screens/gyms/CreateInviteScreen';
 import SocialScreen from '../screens/social/SocialScreen';
 import ChatScreen from '../screens/messages/ChatScreen';
 import GroupChatScreen from '../screens/messages/GroupChatScreen';
@@ -37,6 +38,7 @@ function GymsStackNavigator() {
     <GymsStack.Navigator id="GymsStack" screenOptions={{ headerShown: false }}>
       <GymsStack.Screen name="GymList" component={GymListScreen} />
       <GymsStack.Screen name="GymDetail" component={GymDetailScreen} />
+      <GymsStack.Screen name="CreateInvite" component={CreateInviteScreen} />
     </GymsStack.Navigator>
   );
 }

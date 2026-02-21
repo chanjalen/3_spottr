@@ -498,7 +498,11 @@ def feed_view(request):
     tag = request.GET.get('tag', '').strip()
 
     cursor = request.GET.get('cursor', None)
-    is_ajax = request.headers.get('X-Requested-With') == 'XMLHttpRequest' or cursor
+    is_ajax = (
+        request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+        or cursor
+        or request.headers.get('Authorization', '').startswith('Token ')
+    )
 
     if is_ajax:
         feed_items, next_cursor = _get_feed_page(request, tab, cursor, tag=tag or None)

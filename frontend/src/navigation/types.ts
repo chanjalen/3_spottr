@@ -15,6 +15,7 @@ export type FeedStackParamList = {
 export type GymsStackParamList = {
   GymList: undefined;
   GymDetail: { gymId: string; gymName: string };
+  CreateInvite: { gymId: string; gymName: string };
 };
 
 // ─── Social Stack ─────────────────────────────────────────────────────────────
