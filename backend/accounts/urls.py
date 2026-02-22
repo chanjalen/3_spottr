@@ -24,4 +24,6 @@ urlpatterns = [
     path('api/signup/', api_views.api_signup_view, name='api_signup'),
     path('api/me/', api_views.api_me_view, name='api_me'),
     path('api/profile/<str:username>/', api_views.api_profile_view, name='api_profile'),
+    path('api/user/<str:username>/posts/', api_views.api_user_posts_view, name='api_user_posts'),
+    path('api/user/<str:username>/prs/', api_views.api_user_prs_view, name='api_user_prs'),
 ]

@@ -129,6 +129,11 @@ def api_profile_view(request, username):
     is_following = Follow.objects.filter(follower=request.user, following=target).exists()
     follower_count = Follow.objects.filter(following=target).count()
     following_count = Follow.objects.filter(follower=target).count()
+    # Friends = mutual follows
+    friend_count = Follow.objects.filter(
+        follower=target,
+        following__in=Follow.objects.filter(following=target).values('follower'),
+    ).count()
 
     return Response({
         'id': str(target.id),
@@ -142,5 +147,48 @@ def api_profile_view(request, username):
         'is_following': is_following,
         'follower_count': follower_count,
         'following_count': following_count,
+        'friend_count': friend_count,
         'member_since': target.member_since,
     })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_user_posts_view(request, username):
+    """Return all posts and check-ins for a given user."""
+    try:
+        target = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    from social.views import get_user_posts, _serialize_feed_items_for_json
+    posts = get_user_posts(target, viewer=request.user)
+    # Inject user object so serializer can handle it
+    for post in posts:
+        post['user'] = target
+    serialized = _serialize_feed_items_for_json(posts)
+    return Response({'items': serialized})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_user_prs_view(request, username):
+    """Return personal records for a given user."""
+    try:
+        target = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    from workouts.models import PersonalRecord
+    prs = PersonalRecord.objects.filter(user=target).order_by('-achieved_date')
+    results = []
+    for pr in prs:
+        results.append({
+            'id': str(pr.id),
+            'exercise_name': pr.exercise_name,
+            'value': pr.value,
+            'unit': pr.unit,
+            'video_url': pr.video.url if pr.video else None,
+            'created_at': pr.achieved_date.isoformat() if pr.achieved_date else None,
+        })
+    return Response(results)

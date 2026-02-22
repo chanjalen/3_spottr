@@ -365,9 +365,19 @@ def block_toggle_view(request):
 
 @login_required
 def followers_list_view(request):
-    """AJAX endpoint: get list of people who follow the current user."""
+    """AJAX endpoint: get list of people who follow a user.
+    Accepts optional ?username= to view another user's followers."""
+    username = request.GET.get('username')
+    if username:
+        try:
+            target = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return JsonResponse({'results': []})
+    else:
+        target = request.user
+
     followers = Follow.objects.filter(
-        following=request.user
+        following=target
     ).select_related('follower').order_by('-created_at')
 
     blocked_ids = set(
@@ -378,7 +388,7 @@ def followers_list_view(request):
     for f in followers:
         u = f.follower
         results.append({
-            'id': u.pk,
+            'id': str(u.pk),
             'username': u.username,
             'display_name': u.display_name,
             'avatar_url': u.avatar_url,
@@ -389,9 +399,19 @@ def followers_list_view(request):
 
 @login_required
 def following_list_view(request):
-    """AJAX endpoint: get list of people the current user follows."""
+    """AJAX endpoint: get list of people a user follows.
+    Accepts optional ?username= to view another user's following."""
+    username = request.GET.get('username')
+    if username:
+        try:
+            target = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return JsonResponse({'results': []})
+    else:
+        target = request.user
+
     following = Follow.objects.filter(
-        follower=request.user
+        follower=target
     ).select_related('following').order_by('-created_at')
 
     blocked_ids = set(
@@ -402,7 +422,7 @@ def following_list_view(request):
     for f in following:
         u = f.following
         results.append({
-            'id': u.pk,
+            'id': str(u.pk),
             'username': u.username,
             'display_name': u.display_name,
             'avatar_url': u.avatar_url,
