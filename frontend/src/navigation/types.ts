@@ -48,4 +48,5 @@ export type RootStackParamList = {
   GroupProfile: { groupId: string };
   Chat: { partnerId: string; partnerName: string; partnerUsername: string; partnerAvatar: string | null };
   GroupChat: { groupId: string; groupName: string; groupAvatar: string | null };
+  UserList: { username: string; type: 'followers' | 'following' | 'friends'; title: string };
 };

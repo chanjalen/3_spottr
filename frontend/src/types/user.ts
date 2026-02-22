@@ -13,6 +13,7 @@ export interface UserProfile extends UserBrief {
   is_following: boolean;
   follower_count: number;
   following_count: number;
+  friend_count?: number;
   member_since: string;
 }
 
