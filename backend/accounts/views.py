@@ -384,6 +384,10 @@ def followers_list_view(request):
         Block.objects.filter(blocker=request.user).values_list('blocked_id', flat=True)
     )
 
+    my_following_ids = set(
+        Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
+    )
+
     results = []
     for f in followers:
         u = f.follower
@@ -392,7 +396,9 @@ def followers_list_view(request):
             'username': u.username,
             'display_name': u.display_name,
             'avatar_url': u.avatar_url,
+            'streak': u.current_streak,
             'is_blocked': u.pk in blocked_ids,
+            'is_following': u.pk in my_following_ids,
         })
     return JsonResponse({'results': results})
 
@@ -418,6 +424,10 @@ def following_list_view(request):
         Block.objects.filter(blocker=request.user).values_list('blocked_id', flat=True)
     )
 
+    my_following_ids = set(
+        Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
+    )
+
     results = []
     for f in following:
         u = f.following
@@ -426,7 +436,9 @@ def following_list_view(request):
             'username': u.username,
             'display_name': u.display_name,
             'avatar_url': u.avatar_url,
+            'streak': u.current_streak,
             'is_blocked': u.pk in blocked_ids,
+            'is_following': u.pk in my_following_ids,
         })
     return JsonResponse({'results': results})
 

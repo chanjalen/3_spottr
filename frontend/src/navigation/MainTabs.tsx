@@ -29,6 +29,8 @@ function FeedStackNavigator() {
   return (
     <FeedStack.Navigator id="FeedStack" screenOptions={{ headerShown: false }}>
       <FeedStack.Screen name="FeedHome" component={FeedScreen} />
+      <FeedStack.Screen name="Profile" component={ProfileScreen} />
+      <FeedStack.Screen name="UserList" component={UserListScreen} />
     </FeedStack.Navigator>
   );
 }
@@ -40,6 +42,8 @@ function GymsStackNavigator() {
       <GymsStack.Screen name="GymList" component={GymListScreen} />
       <GymsStack.Screen name="GymDetail" component={GymDetailScreen} />
       <GymsStack.Screen name="CreateInvite" component={CreateInviteScreen} />
+      <GymsStack.Screen name="Profile" component={ProfileScreen} />
+      <GymsStack.Screen name="UserList" component={UserListScreen} />
     </GymsStack.Navigator>
   );
 }
@@ -49,6 +53,8 @@ function SocialStackNavigator() {
   return (
     <SocialStack.Navigator id="SocialStack" screenOptions={{ headerShown: false }}>
       <SocialStack.Screen name="SocialHome" component={SocialScreen} />
+      <SocialStack.Screen name="Profile" component={ProfileScreen} />
+      <SocialStack.Screen name="UserList" component={UserListScreen} />
     </SocialStack.Navigator>
   );
 }
@@ -58,6 +64,8 @@ function RanksStackNavigator() {
   return (
     <RanksStack.Navigator id="RanksStack" screenOptions={{ headerShown: false }}>
       <RanksStack.Screen name="RanksHome" component={RanksScreen} />
+      <RanksStack.Screen name="Profile" component={ProfileScreen} />
+      <RanksStack.Screen name="UserList" component={UserListScreen} />
     </RanksStack.Navigator>
   );
 }

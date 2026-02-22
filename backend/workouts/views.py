@@ -6,6 +6,9 @@ from django.contrib.auth.decorators import login_required
 from django.views.decorators.http import require_POST, require_GET
 from django.utils import timezone
 from django.db.models import F
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response as DRFResponse
 
 from .models import Workout, Exercise, ExerciseCatalog, ExerciseSet, PersonalRecord, Streak, RestDay
 from social.models import Post
@@ -84,40 +87,36 @@ def active_workout_view(request, workout_id):
     })
 
 
-@login_required
-@require_GET
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def exercise_catalog_view(request):
     """
-    Get the exercise catalog grouped by category.
-    Returns JSON for the Add Exercise modal.
+    Mobile API: get exercise catalog as a flat list.
+    Supports DRF token auth (mobile) and session auth (web).
+    Query params: q (search), category (filter by category slug).
     """
-    search = request.GET.get('search', '').strip()
+    q = request.GET.get('q', '').strip()
+    category = request.GET.get('category', '').strip()
 
     exercises = ExerciseCatalog.objects.all()
 
-    if search:
-        exercises = exercises.filter(name__icontains=search)
+    if q:
+        exercises = exercises.filter(name__icontains=q)
+    if category and category.lower() != 'all':
+        exercises = exercises.filter(category__iexact=category)
 
-    # Group by category
-    catalog = {}
-    for exercise in exercises:
-        category = exercise.get_category_display()
-        if category not in catalog:
-            catalog[category] = []
-        catalog[category].append({
-            'id': exercise.id,
-            'name': exercise.name,
-            'category': exercise.category,
-            'default_sets': exercise.default_sets,
-            'default_reps': exercise.default_reps,
-            'is_bodyweight': exercise.is_bodyweight,
-            'is_cardio': exercise.is_cardio,
-        })
+    results = [
+        {
+            'id': str(e.id),
+            'name': e.name,
+            'category': e.get_category_display(),
+            'muscle_group': e.get_category_display(),
+        }
+        for e in exercises
+    ]
+    return DRFResponse(results)
 
-    return JsonResponse({
-        'success': True,
-        'catalog': catalog,
-    })
+
 
 
 @login_required

@@ -70,7 +70,7 @@ export async function fetchUserPosts(
   username: string,
   cursor?: string,
 ): Promise<{ items: FeedItem[]; nextCursor: string }> {
-  const params: Record<string, string> = {};
+  const params: Record<string, string> = { limit: '9' };
   if (cursor) params.cursor = cursor;
   const response = await apiClient.get(ENDPOINTS.userPosts(username), { params });
   const raw: any[] = Array.isArray(response.data)
