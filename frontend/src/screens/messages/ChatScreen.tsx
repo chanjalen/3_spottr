@@ -15,22 +15,23 @@ import { Feather } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
-import { fetchDMMessages, sendDM } from '../../api/messaging';
+import { fetchDMMessages, sendDM, markMessagesRead } from '../../api/messaging';
 import { Message } from '../../types/messaging';
 import { useAuth } from '../../store/AuthContext';
+import { useUnreadCount } from '../../store/UnreadCountContext';
 import { colors, spacing, typography } from '../../theme';
-import { SocialStackParamList } from '../../navigation/types';
-import { timeAgo } from '../../utils/timeAgo';
+import { RootStackParamList } from '../../navigation/types';
 
 type Props = {
-  navigation: NativeStackNavigationProp<SocialStackParamList, 'Chat'>;
-  route: RouteProp<SocialStackParamList, 'Chat'>;
+  navigation: NativeStackNavigationProp<RootStackParamList, 'Chat'>;
+  route: RouteProp<RootStackParamList, 'Chat'>;
 };
 
 export default function ChatScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { user: me } = useAuth();
-  const { partnerId, partnerName, partnerAvatar } = route.params;
+  const { refresh: refreshUnread } = useUnreadCount();
+  const { partnerId, partnerName, partnerUsername, partnerAvatar } = route.params;
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,12 +41,18 @@ export default function ChatScreen({ navigation, route }: Props) {
 
   const load = useCallback(async () => {
     try {
-      const data = await fetchDMMessages(partnerId);
-      setMessages(data.reverse());
+      const page = await fetchDMMessages(partnerId);
+      // results are oldest-first from the backend; display oldest at top
+      setMessages(page.results);
+      // Mark all unread messages as read
+      const unread = page.results
+        .filter((m) => !m.is_read && String(m.sender) !== String(me?.id))
+        .map((m) => String(m.id));
+      if (unread.length) markMessagesRead(unread).then(refreshUnread).catch(() => {});
     } finally {
       setLoading(false);
     }
-  }, [partnerId]);
+  }, [partnerId, me?.id]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -64,10 +71,18 @@ export default function ChatScreen({ navigation, route }: Props) {
   };
 
   const renderMessage = ({ item }: { item: Message }) => {
-    const isOwn = item.sender.id === me?.id;
+    const isOwn = String(item.sender) === String(me?.id);
     return (
       <View style={[styles.msgWrap, isOwn ? styles.msgWrapOwn : styles.msgWrapOther]}>
-        {!isOwn && <Avatar uri={item.sender?.avatar_url ?? null} name={item.sender?.display_name ?? ''} size={28} />}
+        {!isOwn && (
+          <Pressable onPress={() => navigation.navigate('Profile', { username: partnerUsername })}>
+            <Avatar
+              uri={item.sender_avatar_url}
+              name={item.sender_username ?? '?'}
+              size={28}
+            />
+          </Pressable>
+        )}
         <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
           <Text style={[styles.bubbleText, isOwn ? styles.bubbleTextOwn : styles.bubbleTextOther]}>
             {item.content}
@@ -88,8 +103,13 @@ export default function ChatScreen({ navigation, route }: Props) {
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Feather name="arrow-left" size={22} color={colors.textPrimary} />
         </Pressable>
-        <Avatar uri={partnerAvatar} name={partnerName} size={32} />
-        <Text style={styles.headerTitle} numberOfLines={1}>{partnerName}</Text>
+        <Pressable
+          style={styles.headerInfo}
+          onPress={() => navigation.navigate('Profile', { username: partnerUsername })}
+        >
+          <Avatar uri={partnerAvatar} name={partnerName} size={32} />
+          <Text style={styles.headerTitle} numberOfLines={1}>{partnerName}</Text>
+        </Pressable>
         <View style={{ width: 40 }} />
       </View>
 
@@ -152,10 +172,20 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border.subtle,
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { flex: 1, fontSize: typography.size.base, fontWeight: '600', color: colors.textPrimary },
+  headerInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  headerTitle: {
+    fontSize: typography.size.base,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   emptyText: { fontSize: typography.size.sm, color: colors.textMuted, textAlign: 'center' },
-  msgWrap: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.xs, marginBottom: spacing.xs },
+  msgWrap: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  },
   msgWrapOwn: { justifyContent: 'flex-end' },
   msgWrapOther: { justifyContent: 'flex-start' },
   bubble: {

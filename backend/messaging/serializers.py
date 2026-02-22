@@ -255,6 +255,8 @@ class ConversationSerializer(serializers.Serializer):
     """Represents a conversation preview (latest message + partner info)."""
     partner_id = serializers.CharField()
     partner_username = serializers.CharField()
+    partner_display_name = serializers.CharField()
+    partner_avatar_url = serializers.CharField(allow_null=True)
     latest_message = MessageListSerializer()
     unread_count = serializers.IntegerField()
 
@@ -264,6 +266,8 @@ class GroupConversationSerializer(serializers.Serializer):
     group_id = serializers.CharField()
     group_name = serializers.CharField()
     group_streak = serializers.IntegerField()
+    avatar_url = serializers.CharField(allow_null=True)
+    member_count = serializers.IntegerField()
     latest_message = MessageListSerializer()
     unread_count = serializers.IntegerField()
 

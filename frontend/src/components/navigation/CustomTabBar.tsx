@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
+  Text,
   Pressable,
   StyleSheet,
   Platform,
@@ -16,6 +17,7 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, shadow } from '../../theme';
 import CreateMenuSheet from '../feed/CreateMenuSheet';
+import { useUnreadCount } from '../../store/UnreadCountContext';
 import type BottomSheet from '@gorhom/bottom-sheet';
 
 const TAB_ICONS: Record<string, React.ComponentProps<typeof Feather>['name']> = {
@@ -29,6 +31,7 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
   const insets = useSafeAreaInsets();
   const bottomPad = Math.max(insets.bottom, 16);
   const sheetRef = useRef<BottomSheet>(null);
+  const { total: unreadTotal } = useUnreadCount();
 
   const openCreateMenu = useCallback(() => {
     sheetRef.current?.expand();
@@ -64,6 +67,7 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
                 isActive={isFocused}
                 onPress={onPress}
                 accessibilityLabel={route.name}
+                badgeCount={route.name === 'Social' ? unreadTotal : 0}
               />
             );
           })}
@@ -85,9 +89,10 @@ interface NavItemProps {
   isActive: boolean;
   onPress: () => void;
   accessibilityLabel: string;
+  badgeCount?: number;
 }
 
-function NavItem({ iconName, isActive, onPress, accessibilityLabel }: NavItemProps) {
+function NavItem({ iconName, isActive, onPress, accessibilityLabel, badgeCount = 0 }: NavItemProps) {
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -112,11 +117,18 @@ function NavItem({ iconName, isActive, onPress, accessibilityLabel }: NavItemPro
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
       <Animated.View style={[styles.navItemInner, animStyle]}>
-        <Feather
-          name={iconName}
-          size={24}
-          color={isActive ? colors.iconActive : colors.iconInactive}
-        />
+        <View>
+          <Feather
+            name={iconName}
+            size={24}
+            color={isActive ? colors.iconActive : colors.iconInactive}
+          />
+          {badgeCount > 0 && (
+            <View style={styles.badge}>
+              <Text style={styles.badgeText}>{badgeCount > 99 ? '99+' : badgeCount}</Text>
+            </View>
+          )}
+        </View>
         {isActive && <View style={styles.activeDot} />}
       </Animated.View>
     </Pressable>
@@ -210,6 +222,24 @@ const styles = StyleSheet.create({
     height: 4,
     borderRadius: 2,
     backgroundColor: colors.primary,
+  },
+  badge: {
+    position: 'absolute',
+    top: -5,
+    right: -8,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#EF4444',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  badgeText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#fff',
+    lineHeight: 12,
   },
   fabShadowWrap: {
     ...Platform.select({

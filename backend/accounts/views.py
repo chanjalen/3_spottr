@@ -326,6 +326,12 @@ def block_toggle_view(request):
     """AJAX endpoint: block or unblock a user."""
     user_id = request.POST.get('user_id')
     if not user_id:
+        try:
+            body = json.loads(request.body)
+            user_id = body.get('user_id')
+        except (json.JSONDecodeError, AttributeError):
+            pass
+    if not user_id:
         return JsonResponse({'error': 'user_id required'}, status=400)
 
     target = get_object_or_404(User, pk=user_id)

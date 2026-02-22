@@ -134,6 +134,8 @@ def dm_conversations(request):
         conversations.append({
             'partner_id': str(partner.id),
             'partner_username': partner.username,
+            'partner_display_name': partner.display_name or partner.username,
+            'partner_avatar_url': partner.avatar_url or None,
             'latest_message': msg,
             'unread_count': unread_map.get(str(partner.id), 0),
         })
@@ -165,6 +167,8 @@ def group_conversations(request):
             'group_id': str(msg.group.id),
             'group_name': msg.group.name,
             'group_streak': msg.group.group_streak,
+            'avatar_url': msg.group.avatar_url or None,
+            'member_count': msg.group.members.count(),
             'latest_message': msg,
             'unread_count': unread_map.get(str(msg.group.id), 0),
         })

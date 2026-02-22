@@ -21,8 +21,6 @@ export type GymsStackParamList = {
 // ─── Social Stack ─────────────────────────────────────────────────────────────
 export type SocialStackParamList = {
   SocialHome: undefined;
-  Chat: { partnerId: string; partnerName: string; partnerAvatar: string | null };
-  GroupChat: { groupId: string; groupName: string };
 };
 
 // ─── Ranks Stack ─────────────────────────────────────────────────────────────
@@ -48,4 +46,6 @@ export type RootStackParamList = {
   StreakDetails: undefined;
   EditProfile: undefined;
   GroupProfile: { groupId: string };
+  Chat: { partnerId: string; partnerName: string; partnerUsername: string; partnerAvatar: string | null };
+  GroupChat: { groupId: string; groupName: string; groupAvatar: string | null };
 };

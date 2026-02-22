@@ -13,6 +13,7 @@ import {
   Inter_700Bold,
 } from '@expo-google-fonts/inter';
 import { AuthProvider, useAuth } from './src/store/AuthContext';
+import { UnreadCountProvider } from './src/store/UnreadCountContext';
 import MainTabs from './src/navigation/MainTabs';
 import LoginScreen from './src/screens/auth/LoginScreen';
 import SignupScreen from './src/screens/auth/SignupScreen';
@@ -78,10 +79,12 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <AuthProvider>
-          <NavigationContainer theme={navTheme}>
-            <RootNavigator />
-            <StatusBar style="dark" />
-          </NavigationContainer>
+          <UnreadCountProvider>
+            <NavigationContainer theme={navTheme}>
+              <RootNavigator />
+              <StatusBar style="dark" />
+            </NavigationContainer>
+          </UnreadCountProvider>
         </AuthProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>

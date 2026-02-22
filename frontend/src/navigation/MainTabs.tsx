@@ -48,8 +48,6 @@ function SocialStackNavigator() {
   return (
     <SocialStack.Navigator id="SocialStack" screenOptions={{ headerShown: false }}>
       <SocialStack.Screen name="SocialHome" component={SocialScreen} />
-      <SocialStack.Screen name="Chat" component={ChatScreen} />
-      <SocialStack.Screen name="GroupChat" component={GroupChatScreen} />
     </SocialStack.Navigator>
   );
 }
@@ -94,6 +92,8 @@ export default function MainTabs() {
       <Root.Screen name="StreakDetails" component={StreakDetailsScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="EditProfile" component={EditProfileScreen} options={{ presentation: 'modal' }} />
       <Root.Screen name="GroupProfile" component={GroupProfileScreen} options={{ presentation: 'card' }} />
+      <Root.Screen name="Chat" component={ChatScreen} options={{ presentation: 'card' }} />
+      <Root.Screen name="GroupChat" component={GroupChatScreen} options={{ presentation: 'card' }} />
     </Root.Navigator>
   );
 }
