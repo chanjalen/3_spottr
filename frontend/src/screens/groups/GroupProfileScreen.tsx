@@ -4,20 +4,41 @@ import {
   Text,
   ScrollView,
   TouchableOpacity,
+  Pressable,
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Modal,
+  TextInput,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { Image } from 'expo-image';
+import * as Clipboard from 'expo-clipboard';
 import * as Haptics from 'expo-haptics';
+import * as ImagePicker from 'expo-image-picker';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
 import InactiveStreakSheet from '../../components/groups/InactiveStreakSheet';
-import { fetchGroupDetail, fetchGroupStreakDetail, leaveGroup, GroupDetail, GroupStreakDetail } from '../../api/groups';
+import {
+  fetchGroupDetail,
+  fetchGroupStreakDetail,
+  leaveGroup,
+  promoteMember,
+  demoteMember,
+  kickMember,
+  generateInviteCode,
+  updateGroup,
+  deleteGroup,
+  GroupDetail,
+  GroupMember,
+  GroupStreakDetail,
+} from '../../api/groups';
+import { useAuth } from '../../store/AuthContext';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 
@@ -26,9 +47,12 @@ type Props = {
   route: RouteProp<RootStackParamList, 'GroupProfile'>;
 };
 
+type EditTab = 'info' | 'danger';
+
 export default function GroupProfileScreen({ navigation, route }: Props) {
   const groupId = route.params.groupId;
   const insets = useSafeAreaInsets();
+  const { user: me } = useAuth();
 
   const [group, setGroup] = useState<GroupDetail | null>(null);
   const [streakDetail, setStreakDetail] = useState<GroupStreakDetail | null>(null);
@@ -37,11 +61,25 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
   const [streakSheetVisible, setStreakSheetVisible] = useState(false);
   const [streakLoading, setStreakLoading] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [generatingCode, setGeneratingCode] = useState(false);
+
+  // Edit modal state
+  const [editVisible, setEditVisible] = useState(false);
+  const [editTab, setEditTab] = useState<EditTab>('info');
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+  const [editPrivacy, setEditPrivacy] = useState<'public' | 'private'>('public');
+  const [editAvatarUri, setEditAvatarUri] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const loadGroup = useCallback(async () => {
     try {
       const data = await fetchGroupDetail(groupId);
       setGroup(data);
+      if (data.invite_code) setInviteCode(data.invite_code);
     } catch {
       // handle error
     }
@@ -78,9 +116,7 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
   const handleStreakPress = useCallback(async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setStreakSheetVisible(true);
-    if (!streakDetail) {
-      await loadStreakDetail();
-    }
+    if (!streakDetail) await loadStreakDetail();
   }, [streakDetail, loadStreakDetail]);
 
   const handleLeaveGroup = useCallback(() => {
@@ -109,6 +145,170 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
     );
   }, [groupId, group?.name, navigation]);
 
+  const handleCopyCode = async () => {
+    if (!inviteCode) return;
+    await Clipboard.setStringAsync(inviteCode);
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    Alert.alert('Copied!', 'Invite code copied to clipboard.');
+  };
+
+  const handleGenerateCode = async () => {
+    setGeneratingCode(true);
+    try {
+      const data = await generateInviteCode(groupId);
+      setInviteCode(data.code);
+    } catch {
+      Alert.alert('Error', 'Could not generate invite code.');
+    } finally {
+      setGeneratingCode(false);
+    }
+  };
+
+  const handlePromote = (member: GroupMember) => {
+    const name = member.display_name || member.username;
+    Alert.alert('Promote to Admin', `Make ${name} an admin?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Promote',
+        onPress: async () => {
+          const key = `promote-${member.user}`;
+          setActionLoading(key);
+          try {
+            await promoteMember(groupId, member.user);
+            await loadGroup();
+          } catch {
+            Alert.alert('Error', 'Could not promote member.');
+          } finally {
+            setActionLoading(null);
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleDemote = (member: GroupMember) => {
+    const name = member.display_name || member.username;
+    Alert.alert('Demote to Member', `Remove admin role from ${name}?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Demote',
+        style: 'destructive',
+        onPress: async () => {
+          const key = `demote-${member.user}`;
+          setActionLoading(key);
+          try {
+            await demoteMember(groupId, member.user);
+            await loadGroup();
+          } catch {
+            Alert.alert('Error', 'Could not demote member.');
+          } finally {
+            setActionLoading(null);
+          }
+        },
+      },
+    ]);
+  };
+
+  const handleKick = (member: GroupMember) => {
+    const name = member.display_name || member.username;
+    Alert.alert('Remove Member', `Remove ${name} from the group?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          const key = `kick-${member.user}`;
+          setActionLoading(key);
+          try {
+            await kickMember(groupId, member.user);
+            await loadGroup();
+          } catch {
+            Alert.alert('Error', 'Could not remove member.');
+          } finally {
+            setActionLoading(null);
+          }
+        },
+      },
+    ]);
+  };
+
+  // ── Edit modal handlers ────────────────────────────────────────────────────
+
+  const openEditModal = () => {
+    if (!group) return;
+    setEditName(group.name);
+    setEditDescription(group.description ?? '');
+    setEditPrivacy(group.privacy);
+    setEditAvatarUri(null);
+    setEditTab('info');
+    setEditVisible(true);
+  };
+
+  const handlePickEditAvatar = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Allow photo access to change the group photo.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+    if (!result.canceled) setEditAvatarUri(result.assets[0].uri);
+  };
+
+  const handleSaveChanges = async () => {
+    if (!editName.trim()) {
+      Alert.alert('Required', 'Group name cannot be empty.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const updated = await updateGroup(groupId, {
+        name: editName.trim(),
+        description: editDescription.trim(),
+        privacy: editPrivacy,
+        ...(editAvatarUri ? { avatarUri: editAvatarUri } : {}),
+      });
+      setGroup(updated);
+      setEditVisible(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert('Error', 'Could not save changes. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteGroup = () => {
+    Alert.alert(
+      'Delete Group',
+      `Permanently delete "${group?.name}"? This cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            setIsDeleting(true);
+            try {
+              await deleteGroup(groupId);
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              setEditVisible(false);
+              navigation.goBack();
+            } catch {
+              Alert.alert('Error', 'Could not delete the group. Please try again.');
+            } finally {
+              setIsDeleting(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
   if (isLoading || !group) {
     return (
       <View style={[styles.loader, { paddingTop: insets.top }]}>
@@ -117,13 +317,52 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
     );
   }
 
+  const myRole = group.user_role;
+  const myId = String(me?.id);
+  const isMember = group.is_member;
   const hasActiveStreak = group.group_streak > 0;
+  const canManage = myRole === 'creator' || myRole === 'admin';
+  const isCreator = myRole === 'creator';
+
+  const getActions = (m: GroupMember) => {
+    const isMe = String(m.user) === myId;
+    if (isMe || m.role === 'creator') return { promote: false, demote: false, kick: false };
+    if (myRole === 'creator') {
+      return { promote: m.role === 'member', demote: m.role === 'admin', kick: true };
+    }
+    if (myRole === 'admin') {
+      return { promote: m.role === 'member', demote: false, kick: m.role === 'member' };
+    }
+    return { promote: false, demote: false, kick: false };
+  };
+
+  // Avatar to show in edit modal (newly picked or existing)
+  const editAvatarSource = editAvatarUri
+    ? { uri: editAvatarUri }
+    : group.avatar_url
+    ? { uri: group.avatar_url }
+    : null;
 
   return (
     <View style={styles.root}>
+      {/* ── Header bar ── */}
+      <View style={[styles.headerBar, { paddingTop: insets.top }]}>
+        <Pressable style={styles.headerBtn} onPress={() => navigation.goBack()}>
+          <Feather name="arrow-left" size={22} color={colors.text.primary} />
+        </Pressable>
+        <Text style={styles.headerTitle} numberOfLines={1}>{group.name}</Text>
+        {canManage ? (
+          <Pressable style={styles.headerBtn} onPress={openEditModal}>
+            <Feather name="settings" size={20} color={colors.text.primary} />
+          </Pressable>
+        ) : (
+          <View style={styles.headerBtn} />
+        )}
+      </View>
+
       <ScrollView
         style={styles.container}
-        contentContainerStyle={[styles.content, { paddingTop: insets.top + spacing.base }]}
+        contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -135,7 +374,7 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* Group header */}
+        {/* ── Profile header ── */}
         <View style={styles.header}>
           {group.avatar_url ? (
             <Image
@@ -145,32 +384,58 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
             />
           ) : (
             <View style={styles.groupAvatarFallback}>
-              <Text style={styles.groupAvatarInitial}>
-                {group.name[0].toUpperCase()}
-              </Text>
+              <Text style={styles.groupAvatarInitial}>{group.name[0].toUpperCase()}</Text>
             </View>
           )}
           <Text style={styles.groupName}>{group.name}</Text>
-          {group.description ? (
+          {!!group.description && (
             <Text style={styles.groupDescription}>{group.description}</Text>
-          ) : null}
-          <View style={styles.metaRow}>
-            <Feather name="users" size={14} color={colors.text.muted} />
-            <Text style={styles.metaText}>{group.member_count} members</Text>
-            <Text style={styles.metaDot}>·</Text>
-            <Feather
-              name="lock"
-              size={14}
-              color={colors.text.muted}
-              style={group.privacy === 'public' ? { display: 'none' } : undefined}
-            />
-            <Text style={styles.metaText}>
-              {group.privacy === 'public' ? 'Public' : 'Private'}
-            </Text>
+          )}
+
+          {/* Join code — visible to members only */}
+          {isMember && (
+            inviteCode ? (
+              <View style={styles.codeRow}>
+                <Text style={styles.codeLabel}>JOIN CODE:</Text>
+                <Text style={styles.codeText}>{inviteCode}</Text>
+                <Pressable style={styles.copyBtn} onPress={handleCopyCode}>
+                  <Text style={styles.copyBtnText}>Copy</Text>
+                </Pressable>
+              </View>
+            ) : canManage ? (
+              <Pressable style={styles.generateCodeBtn} onPress={handleGenerateCode} disabled={generatingCode}>
+                {generatingCode ? (
+                  <ActivityIndicator size="small" color={colors.brand.primary} />
+                ) : (
+                  <>
+                    <Feather name="link" size={14} color={colors.brand.primary} />
+                    <Text style={styles.generateCodeText}>Generate Invite Code</Text>
+                  </>
+                )}
+              </Pressable>
+            ) : null
+          )}
+
+          {/* Badge pills */}
+          <View style={styles.badgeRow}>
+            <View style={styles.badge}>
+              <Feather name={group.privacy === 'private' ? 'lock' : 'globe'} size={12} color={colors.text.muted} />
+              <Text style={styles.badgeText}>{group.privacy === 'private' ? 'Private' : 'Public'}</Text>
+            </View>
+            <View style={styles.badge}>
+              <Feather name="users" size={12} color={colors.text.muted} />
+              <Text style={styles.badgeText}>{group.member_count} members</Text>
+            </View>
+            {hasActiveStreak && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeEmoji}>🔥</Text>
+                <Text style={styles.badgeText}>{group.group_streak} day streak</Text>
+              </View>
+            )}
           </View>
         </View>
 
-        {/* Streak section */}
+        {/* ── Streak & Leave ── */}
         <View style={styles.streakSection}>
           <Text style={styles.streakSectionLabel}>Group Streak</Text>
           <View style={styles.streakActionsRow}>
@@ -194,7 +459,7 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
               )}
               <Feather name="chevron-right" size={15} color={hasActiveStreak ? colors.brand.primary : colors.text.muted} />
             </TouchableOpacity>
-            {(group.user_role === 'member' || group.user_role === 'admin') && (
+            {(myRole === 'member' || myRole === 'admin') && (
               <TouchableOpacity
                 style={styles.leaveButton}
                 onPress={handleLeaveGroup}
@@ -202,9 +467,7 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                 disabled={isLeaving}
               >
                 <Feather name="log-out" size={14} color="#ef4444" />
-                <Text style={styles.leaveButtonText}>
-                  {isLeaving ? 'Leaving…' : 'Leave'}
-                </Text>
+                <Text style={styles.leaveButtonText}>{isLeaving ? 'Leaving…' : 'Leave'}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -213,64 +476,288 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
           )}
         </View>
 
-        {/* Members list */}
+        {/* ── Members ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Members</Text>
-          {group.members.map((member) => (
-            <View key={member.id} style={styles.memberRow}>
-              <Avatar
-                uri={member.avatar_url}
-                name={member.display_name || member.username}
-                size={38}
-              />
-              <View style={styles.memberInfo}>
-                <Text style={styles.memberName}>{member.display_name || member.username}</Text>
-                <Text style={styles.memberUsername}>@{member.username}</Text>
-              </View>
-              {member.role !== 'member' && (
-                <View style={styles.roleBadge}>
-                  <Text style={styles.roleText}>{member.role}</Text>
+          <Text style={styles.sectionTitle}>MEMBERS</Text>
+          {group.members.map((member) => {
+            const actions = getActions(member);
+            const loadingKey = actionLoading;
+
+            return (
+              <View key={member.id} style={styles.memberRow}>
+                <Avatar
+                  uri={member.avatar_url}
+                  name={member.display_name || member.username}
+                  size={40}
+                />
+                <View style={styles.memberInfo}>
+                  <Text style={styles.memberName}>{member.display_name || member.username}</Text>
+                  <Text style={styles.memberUsername}>@{member.username}</Text>
                 </View>
-              )}
-            </View>
-          ))}
+
+                <View style={styles.memberActions}>
+                  {member.role === 'creator' ? (
+                    <View style={styles.creatorBadge}>
+                      <Text style={styles.creatorBadgeText}>CREATOR</Text>
+                    </View>
+                  ) : member.role === 'admin' ? (
+                    <View style={styles.adminBadge}>
+                      <Text style={styles.adminBadgeText}>ADMIN</Text>
+                    </View>
+                  ) : (
+                    <Text style={styles.memberRoleText}>MEMBER</Text>
+                  )}
+
+                  {actions.promote && (
+                    <Pressable
+                      style={[styles.actionBtn, styles.promoteBtn]}
+                      onPress={() => handlePromote(member)}
+                      disabled={loadingKey !== null}
+                    >
+                      {loadingKey === `promote-${member.user}` ? (
+                        <ActivityIndicator size="small" color={colors.success} />
+                      ) : (
+                        <Text style={[styles.actionBtnText, styles.promoteBtnText]}>Promote</Text>
+                      )}
+                    </Pressable>
+                  )}
+                  {actions.demote && (
+                    <Pressable
+                      style={[styles.actionBtn, styles.demoteBtn]}
+                      onPress={() => handleDemote(member)}
+                      disabled={loadingKey !== null}
+                    >
+                      {loadingKey === `demote-${member.user}` ? (
+                        <ActivityIndicator size="small" color={colors.warning} />
+                      ) : (
+                        <Text style={[styles.actionBtnText, styles.demoteBtnText]}>Demote</Text>
+                      )}
+                    </Pressable>
+                  )}
+                  {actions.kick && (
+                    <Pressable
+                      style={[styles.actionBtn, styles.kickBtn]}
+                      onPress={() => handleKick(member)}
+                      disabled={loadingKey !== null}
+                    >
+                      {loadingKey === `kick-${member.user}` ? (
+                        <ActivityIndicator size="small" color={colors.error} />
+                      ) : (
+                        <Text style={[styles.actionBtnText, styles.kickBtnText]}>Remove</Text>
+                      )}
+                    </Pressable>
+                  )}
+                </View>
+              </View>
+            );
+          })}
         </View>
       </ScrollView>
 
-      {streakSheetVisible && (
-        <InactiveStreakSheet
-          groupStreak={group.group_streak}
-          members={streakDetail?.members ?? []}
-          isLoading={streakLoading}
-          onClose={() => setStreakSheetVisible(false)}
-        />
-      )}
+      <InactiveStreakSheet
+        isOpen={streakSheetVisible}
+        groupId={groupId}
+        groupStreak={group.group_streak}
+        members={streakDetail?.members ?? []}
+        isLoading={streakLoading}
+        onClose={() => setStreakSheetVisible(false)}
+      />
+
+      {/* ── Group Settings Modal ── */}
+      <Modal
+        visible={editVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setEditVisible(false)}
+      >
+        {/* Tap-outside dismiss */}
+        <Pressable style={styles.modalOverlay} onPress={() => setEditVisible(false)}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            style={styles.modalKAV}
+          >
+            <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
+              {/* Modal header */}
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Group Settings</Text>
+                <Pressable style={styles.modalCloseBtn} onPress={() => setEditVisible(false)}>
+                  <Feather name="x" size={18} color={colors.text.secondary} />
+                </Pressable>
+              </View>
+
+              {/* Tabs */}
+              <View style={styles.modalTabs}>
+                <Pressable
+                  style={styles.modalTabItem}
+                  onPress={() => setEditTab('info')}
+                >
+                  <Text style={[styles.modalTabText, editTab === 'info' && styles.modalTabTextActive]}>
+                    Group Info
+                  </Text>
+                  {editTab === 'info' && <View style={styles.modalTabUnderline} />}
+                </Pressable>
+                {isCreator && (
+                  <Pressable
+                    style={styles.modalTabItem}
+                    onPress={() => setEditTab('danger')}
+                  >
+                    <Text style={[styles.modalTabText, editTab === 'danger' && styles.modalTabTextDanger]}>
+                      Danger Zone
+                    </Text>
+                    {editTab === 'danger' && <View style={[styles.modalTabUnderline, styles.modalTabUnderlineDanger]} />}
+                  </Pressable>
+                )}
+              </View>
+
+              <View>
+                {editTab === 'info' ? (
+                  <View style={styles.modalInfoContent}>
+                    {/* Avatar row */}
+                    <View style={styles.avatarRow}>
+                      {editAvatarSource ? (
+                        <Image
+                          source={editAvatarSource}
+                          style={styles.editAvatar}
+                          contentFit="cover"
+                        />
+                      ) : (
+                        <View style={styles.editAvatarFallback}>
+                          <Text style={styles.editAvatarInitial}>
+                            {(editName || group.name)[0]?.toUpperCase() ?? '?'}
+                          </Text>
+                        </View>
+                      )}
+                      <Pressable style={styles.changePhotoBtn} onPress={handlePickEditAvatar}>
+                        <Text style={styles.changePhotoText}>Change Photo</Text>
+                      </Pressable>
+                    </View>
+
+                    {/* Group Name */}
+                    <Text style={styles.fieldLabel}>Group Name</Text>
+                    <TextInput
+                      style={styles.fieldInput}
+                      value={editName}
+                      onChangeText={setEditName}
+                      placeholder="Group name"
+                      placeholderTextColor={colors.text.muted}
+                      maxLength={100}
+                    />
+
+                    {/* Description */}
+                    <Text style={styles.fieldLabel}>Description</Text>
+                    <TextInput
+                      style={[styles.fieldInput, styles.fieldInputMultiline]}
+                      value={editDescription}
+                      onChangeText={setEditDescription}
+                      placeholder="Describe your group…"
+                      placeholderTextColor={colors.text.muted}
+                      multiline
+                      numberOfLines={2}
+                      maxLength={500}
+                    />
+
+                    {/* Privacy */}
+                    <Text style={styles.fieldLabel}>Privacy</Text>
+                    <Pressable
+                      style={styles.privacyRow}
+                      onPress={() => setEditPrivacy(editPrivacy === 'public' ? 'private' : 'public')}
+                    >
+                      <Text style={styles.privacyText}>
+                        {editPrivacy === 'public' ? 'Public' : 'Private'}
+                      </Text>
+                      <Feather name="chevron-down" size={16} color={colors.text.muted} />
+                    </Pressable>
+
+                    {/* Save */}
+                    <Pressable
+                      style={[styles.saveBtn, isSaving && styles.saveBtnDisabled]}
+                      onPress={handleSaveChanges}
+                      disabled={isSaving}
+                    >
+                      {isSaving ? (
+                        <ActivityIndicator size="small" color="#fff" />
+                      ) : (
+                        <Text style={styles.saveBtnText}>Save Changes</Text>
+                      )}
+                    </Pressable>
+                  </View>
+                ) : (
+                  <View style={styles.modalDangerContent}>
+                    <View style={styles.dangerCard}>
+                      <Feather name="alert-triangle" size={22} color="#ef4444" style={{ marginBottom: spacing.sm }} />
+                      <Text style={styles.dangerTitle}>Delete Group</Text>
+                      <Text style={styles.dangerDescription}>
+                        Permanently delete this group and all its data. This action cannot be undone and all members will be removed.
+                      </Text>
+                      <Pressable
+                        style={[styles.deleteBtn, isDeleting && styles.deleteBtnDisabled]}
+                        onPress={handleDeleteGroup}
+                        disabled={isDeleting}
+                      >
+                        {isDeleting ? (
+                          <ActivityIndicator size="small" color="#fff" />
+                        ) : (
+                          <>
+                            <Feather name="trash-2" size={15} color="#fff" />
+                            <Text style={styles.deleteBtnText}>Delete Group</Text>
+                          </>
+                        )}
+                      </Pressable>
+                    </View>
+                  </View>
+                )}
+              </View>
+            </Pressable>
+          </KeyboardAvoidingView>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: colors.background.base,
-  },
+  root: { flex: 1, backgroundColor: colors.background.base },
   loader: {
     flex: 1,
     backgroundColor: colors.background.base,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  container: {
-    flex: 1,
+
+  // ── Header bar ───────────────────────────────────────────────────────────────
+  headerBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.subtle,
     backgroundColor: colors.background.base,
   },
+  headerBtn: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: typography.size.base,
+    fontFamily: typography.family.semibold,
+    color: colors.text.primary,
+  },
+
+  // ── Scrollable content ────────────────────────────────────────────────────────
+  container: { flex: 1, backgroundColor: colors.background.base },
   content: {
     paddingHorizontal: spacing.xl,
-    paddingBottom: 120, // above bottom nav
+    paddingTop: spacing.lg,
+    paddingBottom: 120,
     gap: spacing.base,
   },
 
-  // Header
+  // ── Profile header ────────────────────────────────────────────────────────────
   header: {
     alignItems: 'center',
     gap: spacing.sm,
@@ -310,36 +797,125 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: spacing['2xl'],
   },
-  metaRow: {
+
+  // Join code
+  codeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.background.elevated,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    alignSelf: 'stretch',
+    marginHorizontal: spacing.md,
+  },
+  codeLabel: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.medium,
+    color: colors.text.muted,
+    letterSpacing: 0.5,
+  },
+  codeText: {
+    flex: 1,
+    fontSize: typography.size.base,
+    fontFamily: typography.family.bold,
+    color: colors.brand.primary,
+    letterSpacing: 2,
+  },
+  copyBtn: {
+    backgroundColor: colors.brand.primary,
+    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+  },
+  copyBtnText: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.bold,
+    color: '#fff',
+  },
+  generateCodeBtn: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.brand.primary,
+    borderRadius: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
   },
-  metaText: {
+  generateCodeText: {
     fontSize: typography.size.sm,
-    fontFamily: typography.family.regular,
-    color: colors.text.muted,
-  },
-  metaDot: {
-    fontSize: typography.size.sm,
-    color: colors.text.muted,
-    marginHorizontal: 2,
+    fontFamily: typography.family.medium,
+    color: colors.brand.primary,
   },
 
-  // Streak section
-  streakSection: {
-    gap: spacing.xs,
+  // Badge pills
+  badgeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    marginTop: spacing.xs,
   },
+  badge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.background.elevated,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  badgeEmoji: { fontSize: 12 },
+  badgeText: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.medium,
+    color: colors.text.muted,
+  },
+
+  // ── Streak section ────────────────────────────────────────────────────────────
+  streakSection: { gap: spacing.xs },
   streakSectionLabel: {
     fontSize: typography.size.sm,
     fontFamily: typography.family.medium,
     color: colors.text.muted,
     marginBottom: 2,
   },
-  streakActionsRow: {
+  streakActionsRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  streakButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    alignSelf: 'flex-start',
+    backgroundColor: colors.background.elevated,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  streakButtonActive: {
+    backgroundColor: colors.brand.primary + '15',
+    borderColor: colors.brand.primary + '40',
+  },
+  streakFlame: { fontSize: typography.size.base },
+  streakButtonText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.semibold,
+    color: colors.brand.primary,
+  },
+  streakButtonTextInactive: { color: colors.text.muted },
+  streakBest: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.text.muted,
+    paddingLeft: spacing.xs,
   },
   leaveButton: {
     flexDirection: 'row',
@@ -357,59 +933,25 @@ const styles = StyleSheet.create({
     fontFamily: typography.family.medium,
     color: '#ef4444',
   },
-  streakButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    alignSelf: 'flex-start',
-    backgroundColor: colors.background.elevated,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border.default,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-  },
-  streakButtonActive: {
-    backgroundColor: colors.brand.primary + '15',
-    borderColor: colors.brand.primary + '40',
-  },
-  streakFlame: {
-    fontSize: typography.size.base,
-  },
-  streakButtonText: {
-    fontSize: typography.size.sm,
-    fontFamily: typography.family.semibold,
-    color: colors.brand.primary,
-  },
-  streakButtonTextInactive: {
-    color: colors.text.muted,
-  },
-  streakBest: {
-    fontSize: typography.size.xs,
-    fontFamily: typography.family.regular,
-    color: colors.text.muted,
-    paddingLeft: spacing.xs,
-  },
 
-  // Members
-  section: {
-    gap: spacing.sm,
-  },
+  // ── Members ───────────────────────────────────────────────────────────────────
+  section: { gap: spacing.sm },
   sectionTitle: {
-    fontSize: typography.size.base,
-    fontFamily: typography.family.semibold,
-    color: colors.text.primary,
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.bold,
+    color: colors.brand.primary,
+    letterSpacing: 0.8,
     marginBottom: spacing.xs,
   },
   memberRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.subtle,
   },
-  memberInfo: {
-    flex: 1,
-  },
+  memberInfo: { flex: 1 },
   memberName: {
     fontSize: typography.size.base,
     fontFamily: typography.family.medium,
@@ -420,16 +962,274 @@ const styles = StyleSheet.create({
     fontFamily: typography.family.regular,
     color: colors.text.muted,
   },
-  roleBadge: {
-    backgroundColor: colors.background.elevated,
-    borderRadius: 8,
-    paddingHorizontal: spacing.sm,
+  memberActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    flexShrink: 0,
+  },
+  creatorBadge: {
+    backgroundColor: 'rgba(245,158,11,0.12)',
+    borderRadius: 6,
+    paddingHorizontal: 7,
     paddingVertical: 3,
   },
-  roleText: {
+  creatorBadgeText: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.bold,
+    color: '#F59E0B',
+    letterSpacing: 0.3,
+  },
+  adminBadge: {
+    backgroundColor: 'rgba(139,92,246,0.12)',
+    borderRadius: 6,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+  },
+  adminBadgeText: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.bold,
+    color: '#8B5CF6',
+    letterSpacing: 0.3,
+  },
+  memberRoleText: {
     fontSize: typography.size.xs,
     fontFamily: typography.family.medium,
+    color: colors.text.muted,
+    letterSpacing: 0.3,
+  },
+  actionBtn: {
+    borderRadius: 6,
+    borderWidth: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 60,
+  },
+  actionBtnText: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.semibold,
+  },
+  promoteBtn: { borderColor: colors.success },
+  promoteBtnText: { color: colors.success },
+  demoteBtn: { borderColor: colors.warning },
+  demoteBtnText: { color: colors.warning },
+  kickBtn: { borderColor: colors.error },
+  kickBtnText: { color: colors.error },
+
+  // ── Edit Modal ────────────────────────────────────────────────────────────────
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  modalKAV: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  modalCard: {
+    width: '100%',
+    backgroundColor: colors.background.elevated,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+  },
+  modalTitle: {
+    fontSize: typography.size.lg,
+    fontFamily: typography.family.bold,
+    color: colors.text.primary,
+  },
+  modalCloseBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.background.base,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Tabs
+  modalTabs: {
+    flexDirection: 'row',
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.subtle,
+    paddingHorizontal: spacing.lg,
+  },
+  modalTabItem: {
+    marginRight: spacing.xl,
+    paddingBottom: spacing.xs,
+    position: 'relative',
+  },
+  modalTabText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.medium,
+    color: colors.text.muted,
+  },
+  modalTabTextActive: {
+    color: colors.brand.primary,
+    fontFamily: typography.family.semibold,
+  },
+  modalTabTextDanger: {
+    color: '#ef4444',
+    fontFamily: typography.family.semibold,
+  },
+  modalTabUnderline: {
+    position: 'absolute',
+    bottom: -1,
+    left: 0,
+    right: 0,
+    height: 2,
+    backgroundColor: colors.brand.primary,
+    borderRadius: 1,
+  },
+  modalTabUnderlineDanger: {
+    backgroundColor: '#ef4444',
+  },
+
+  // Group Info tab
+  modalInfoContent: {
+    padding: spacing.md,
+    paddingBottom: spacing.lg,
+    gap: spacing.sm,
+  },
+  avatarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+  },
+  editAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.background.base,
+  },
+  editAvatarFallback: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.brand.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  editAvatarInitial: {
+    fontSize: typography.size.lg,
+    fontFamily: typography.family.bold,
+    color: '#fff',
+  },
+  changePhotoBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    backgroundColor: colors.background.base,
+  },
+  changePhotoText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.medium,
+    color: colors.text.primary,
+  },
+  fieldLabel: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.medium,
     color: colors.text.secondary,
-    textTransform: 'capitalize',
+  },
+  fieldInput: {
+    borderWidth: 1.5,
+    borderColor: colors.border.default,
+    borderRadius: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 7,
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.text.primary,
+    backgroundColor: colors.background.base,
+  },
+  fieldInputMultiline: {
+    minHeight: 60,
+    textAlignVertical: 'top',
+    paddingTop: 7,
+  },
+  privacyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1.5,
+    borderColor: colors.border.default,
+    borderRadius: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 9,
+    backgroundColor: colors.background.base,
+  },
+  privacyText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.text.primary,
+  },
+  saveBtn: {
+    backgroundColor: colors.brand.primary,
+    borderRadius: 12,
+    paddingVertical: spacing.sm + 2,
+    alignItems: 'center',
+    marginTop: spacing.xs,
+  },
+  saveBtnDisabled: { opacity: 0.6 },
+  saveBtnText: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.bold,
+    color: '#fff',
+  },
+
+  // Danger Zone tab
+  modalDangerContent: {
+    padding: spacing.md,
+    paddingBottom: spacing.lg,
+  },
+  dangerCard: {
+    backgroundColor: 'rgba(239,68,68,0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(239,68,68,0.2)',
+    borderRadius: 14,
+    padding: spacing.md,
+    alignItems: 'center',
+  },
+  dangerTitle: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.bold,
+    color: '#ef4444',
+    marginBottom: spacing.xs,
+  },
+  dangerDescription: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    marginBottom: spacing.lg,
+    lineHeight: 20,
+  },
+  deleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: '#ef4444',
+    borderRadius: 12,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+  },
+  deleteBtnDisabled: { opacity: 0.6 },
+  deleteBtnText: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.bold,
+    color: '#fff',
   },
 });

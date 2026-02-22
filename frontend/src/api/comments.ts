@@ -17,13 +17,13 @@ export async function fetchComments(
 export async function addComment(
   itemId: string | number,
   itemType: 'post' | 'checkin',
-  description: string,
+  text: string,
 ): Promise<Comment> {
   const endpoint =
     itemType === 'post'
       ? ENDPOINTS.addPostComment(itemId)
       : ENDPOINTS.addCheckinComment(itemId);
-  const response = await apiClient.post(endpoint, { description });
+  const response = await apiClient.post(endpoint, { text });
   return response.data;
 }
 
@@ -38,10 +38,10 @@ export async function fetchReplies(commentId: number): Promise<Comment[]> {
 
 export async function addReply(
   commentId: number,
-  description: string,
+  text: string,
 ): Promise<Comment> {
   const response = await apiClient.post(ENDPOINTS.addCommentReply(commentId), {
-    description,
+    text,
   });
   return response.data;
 }
