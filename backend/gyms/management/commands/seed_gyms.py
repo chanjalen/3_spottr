@@ -22,26 +22,26 @@ class Command(BaseCommand):
             {
                 'name': 'Activities and Recreation Center (ARC)',
                 'address': '201 E Peabody Dr, Champaign, IL 61820',
-                'latitude': 40.1020,
-                'longitude': -88.2362,
+                'latitude': 40.1013,
+                'longitude': -88.2365,
             },
             {
                 'name': 'Campus Recreation Center East (CRCE)',
                 'address': '1102 W Gregory Dr, Urbana, IL 61801',
-                'latitude': 40.1044,
+                'latitude': 40.1047,
                 'longitude': -88.2218,
             },
             {
                 'name': 'Crunch Fitness - Champaign',
                 'address': '40 E Anthony Dr, Champaign, IL 61820',
-                'latitude': 40.1280,
-                'longitude': -88.2439,
+                'latitude': 40.1228,
+                'longitude': -88.2384,
             },
             {
                 'name': 'Planet Fitness - Champaign',
                 'address': '1901 N Market St, Champaign, IL 61822',
-                'latitude': 40.1336,
-                'longitude': -88.2445,
+                'latitude': 40.1374,
+                'longitude': -88.2391,
             },
         ]
 

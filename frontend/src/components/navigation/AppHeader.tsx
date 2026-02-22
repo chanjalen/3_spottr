@@ -1,25 +1,32 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Avatar from '../common/Avatar';
 import { useAuth } from '../../store/AuthContext';
+import { fetchUnreadCount } from '../../api/notifications';
 import { colors, spacing, typography, shadow } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 
 type RootNav = NativeStackNavigationProp<RootStackParamList>;
 
-interface AppHeaderProps {
-  notificationCount?: number;
-}
-
-export default function AppHeader({ notificationCount = 0 }: AppHeaderProps) {
+export default function AppHeader() {
   const insets = useSafeAreaInsets();
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const navigation = useNavigation<RootNav>();
+  const [notificationCount, setNotificationCount] = useState(0);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      if (!token) return;
+      fetchUnreadCount()
+        .then(data => setNotificationCount(data.count))
+        .catch(() => {});
+    }, [token]),
+  );
 
   return (
     <View style={{ paddingTop: insets.top }}>

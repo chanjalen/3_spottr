@@ -19,7 +19,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { CompositeNavigationProp } from '@react-navigation/native';
+import { CompositeNavigationProp, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Avatar from '../../components/common/Avatar';
 import { fetchDMConversations, fetchGroupConversations, sendZap } from '../../api/messaging';
@@ -28,6 +28,7 @@ import { searchGroups, createGroup, joinViaCode, joinGroup, requestJoinGroup, Gr
 import { colors, spacing, typography } from '../../theme';
 import { SocialStackParamList, RootStackParamList } from '../../navigation/types';
 import AppHeader from '../../components/navigation/AppHeader';
+import { useUnreadCount } from '../../store/UnreadCountContext';
 import { timeAgo } from '../../utils/timeAgo';
 
 type Props = {
@@ -41,6 +42,7 @@ type SocialTab = 'Messages' | 'Groups';
 
 export default function SocialScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { optimisticDecrement } = useUnreadCount();
   const [activeTab, setActiveTab] = useState<SocialTab>('Messages');
 
   // ── Messages state ────────────────────────────────────────────────────────
@@ -102,10 +104,20 @@ export default function SocialScreen({ navigation }: Props) {
     }
   }, []);
 
-  useEffect(() => { loadMessages(); }, [loadMessages]);
+  // Reload messages every time this screen gains focus (returning from Chat, GroupChat, or other screens)
+  useFocusEffect(
+    useCallback(() => {
+      loadMessages();
+    }, [loadMessages]),
+  );
 
+  // Reload when switching tabs internally
+  const prevTabRef = useRef<SocialTab | null>(null);
   useEffect(() => {
+    if (prevTabRef.current === null) { prevTabRef.current = activeTab; return; }
+    if (activeTab === 'Messages') loadMessages();
     if (activeTab === 'Groups') loadGroups();
+    prevTabRef.current = activeTab;
   }, [activeTab]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
@@ -191,14 +203,20 @@ export default function SocialScreen({ navigation }: Props) {
     <Pressable
       key={item.partner_id}
       style={({ pressed }) => [styles.convoRow, pressed && styles.convoRowPressed]}
-      onPress={() =>
+      onPress={() => {
+        if (item.unread_count > 0) {
+          optimisticDecrement(item.unread_count, 'dm');
+          setDms(prev => prev.map(d =>
+            d.partner_id === item.partner_id ? { ...d, unread_count: 0 } : d,
+          ));
+        }
         navigation.navigate('Chat', {
           partnerId: item.partner_id,
           partnerName: item.partner_display_name,
           partnerUsername: item.partner_username,
           partnerAvatar: item.partner_avatar_url,
-        })
-      }
+        });
+      }}
     >
       <Avatar uri={item.partner_avatar_url} name={item.partner_display_name} size={48} />
       <View style={styles.convoInfo}>
@@ -212,6 +230,11 @@ export default function SocialScreen({ navigation }: Props) {
           {item.latest_message?.content ?? 'No messages yet'}
         </Text>
       </View>
+      {item.unread_count > 0 && (
+        <View style={styles.unreadBadge}>
+          <Text style={styles.unreadBadgeText}>{item.unread_count}</Text>
+        </View>
+      )}
       <Pressable
         style={[styles.zapBtn, zapping === item.partner_id && styles.zapBtnDisabled]}
         onPress={() => handleZap(item.partner_id, item.partner_display_name)}
@@ -231,9 +254,15 @@ export default function SocialScreen({ navigation }: Props) {
     <Pressable
       key={item.group_id}
       style={({ pressed }) => [styles.convoRow, pressed && styles.convoRowPressed]}
-      onPress={() =>
-        navigation.navigate('GroupChat', { groupId: item.group_id, groupName: item.group_name, groupAvatar: item.avatar_url })
-      }
+      onPress={() => {
+        if (item.unread_count > 0) {
+          optimisticDecrement(item.unread_count, 'group');
+          setGroupConvos(prev => prev.map(g =>
+            g.group_id === item.group_id ? { ...g, unread_count: 0 } : g,
+          ));
+        }
+        navigation.navigate('GroupChat', { groupId: item.group_id, groupName: item.group_name, groupAvatar: item.avatar_url });
+      }}
     >
       <Avatar uri={item.avatar_url} name={item.group_name} size={48} />
       <View style={styles.convoInfo}>
