@@ -1,8 +1,19 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
+
+const getToken = async () => {
+  if (Platform.OS === 'web') return localStorage.getItem('auth_token');
+  return SecureStore.getItemAsync('auth_token');
+};
+
+const deleteToken = async () => {
+  if (Platform.OS === 'web') { localStorage.removeItem('auth_token'); return; }
+  return SecureStore.deleteItemAsync('auth_token');
+};
 
 const API_BASE_URL = __DEV__
-  ? 'http://192.168.89.71:8000'
+  ? Platform.OS === 'web' ? 'http://localhost:8000' : 'http://10.192.3.193:8000'
   : 'https://api.spottr.app';
 
 export const apiClient = axios.create({
@@ -15,7 +26,7 @@ export const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use(async (config) => {
-  const token = await SecureStore.getItemAsync('auth_token');
+  const token = await getToken();
   if (token) {
     config.headers.Authorization = `Token ${token}`;
   }
@@ -26,7 +37,7 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      SecureStore.deleteItemAsync('auth_token');
+      deleteToken();
     }
     return Promise.reject(error);
   },

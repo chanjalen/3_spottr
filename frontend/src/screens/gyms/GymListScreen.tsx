@@ -10,12 +10,13 @@ import {
   RefreshControl,
   Platform,
 } from 'react-native';
+import MapView, { Marker } from 'react-native-maps';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { fetchGyms } from '../../api/gyms';
-import { Gym } from '../../types/gym';
-import { colors, spacing, typography, shadow } from '../../theme';
+import { GymListItem } from '../../types/gym';
+import { colors, spacing, typography } from '../../theme';
 import { GymsStackParamList } from '../../navigation/types';
 import AppHeader from '../../components/navigation/AppHeader';
 
@@ -23,17 +24,25 @@ type Props = {
   navigation: NativeStackNavigationProp<GymsStackParamList, 'GymList'>;
 };
 
+const DEFAULT_REGION = {
+  latitude: 40.115,
+  longitude: -88.235,
+  latitudeDelta: 0.15,
+  longitudeDelta: 0.15,
+};
+
 export default function GymListScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const [gyms, setGyms] = useState<Gym[]>([]);
+  const [allGyms, setAllGyms] = useState<GymListItem[]>([]);
+  const [gyms, setGyms] = useState<GymListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [query, setQuery] = useState('');
   const [searchText, setSearchText] = useState('');
 
-  const load = useCallback(async (q = '') => {
+  const load = useCallback(async () => {
     try {
-      const data = await fetchGyms(q || undefined);
+      const data = await fetchGyms();
+      setAllGyms(data);
       setGyms(data);
     } catch {
       // ignore
@@ -47,12 +56,25 @@ export default function GymListScreen({ navigation }: Props) {
     load();
   }, [load]);
 
-  const handleSearch = () => {
-    setLoading(true);
-    load(searchText.trim());
+  const handleSearch = (text: string) => {
+    setSearchText(text);
+    if (!text.trim()) {
+      setGyms(allGyms);
+    } else {
+      const q = text.trim().toLowerCase();
+      setGyms(allGyms.filter(g => g.name.toLowerCase().includes(q) || (g.address ?? '').toLowerCase().includes(q)));
+    }
   };
 
-  const renderGym = ({ item }: { item: Gym }) => (
+  const mapRegion = (() => {
+    const withCoords = gyms.filter(g => g.latitude && g.longitude);
+    if (withCoords.length === 0) return DEFAULT_REGION;
+    const lat = parseFloat(withCoords[0].latitude!);
+    const lng = parseFloat(withCoords[0].longitude!);
+    return { latitude: lat, longitude: lng, latitudeDelta: 0.15, longitudeDelta: 0.15 };
+  })();
+
+  const renderGym = ({ item }: { item: GymListItem }) => (
     <Pressable
       style={({ pressed }) => [styles.gymCard, pressed && styles.gymCardPressed]}
       onPress={() => navigation.navigate('GymDetail', { gymId: item.id, gymName: item.name })}
@@ -62,7 +84,10 @@ export default function GymListScreen({ navigation }: Props) {
       </View>
       <View style={styles.gymInfo}>
         <Text style={styles.gymName} numberOfLines={1}>{item.name}</Text>
-        <Text style={styles.gymAddress} numberOfLines={1}>{item.address}, {item.city}</Text>
+        <Text style={styles.gymAddress} numberOfLines={1}>{item.address || 'No address'}</Text>
+        {item.rating != null && (
+          <Text style={styles.gymRating}>★ {parseFloat(item.rating).toFixed(1)}</Text>
+        )}
       </View>
       <View style={styles.gymRight}>
         {item.is_enrolled && (
@@ -86,14 +111,13 @@ export default function GymListScreen({ navigation }: Props) {
           <TextInput
             style={styles.searchInput}
             value={searchText}
-            onChangeText={setSearchText}
+            onChangeText={handleSearch}
             placeholder="Search gyms…"
             placeholderTextColor={colors.textMuted}
             returnKeyType="search"
-            onSubmitEditing={handleSearch}
           />
           {searchText.length > 0 && (
-            <Pressable onPress={() => { setSearchText(''); load(); }}>
+            <Pressable onPress={() => handleSearch('')}>
               <Feather name="x" size={16} color={colors.textMuted} />
             </Pressable>
           )}
@@ -111,7 +135,35 @@ export default function GymListScreen({ navigation }: Props) {
           renderItem={renderGym}
           contentContainerStyle={{ paddingHorizontal: spacing.base, paddingTop: spacing.sm, paddingBottom: insets.bottom + 100 }}
           ItemSeparatorComponent={() => <View style={{ height: spacing.sm }} />}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(searchText); }} tintColor={colors.primary} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />}
+          ListHeaderComponent={
+            <>
+              {/* Map */}
+              <MapView
+                style={styles.map}
+                initialRegion={mapRegion}
+                region={mapRegion}
+              >
+                {gyms
+                  .filter(g => g.latitude && g.longitude)
+                  .map(g => (
+                    <Marker
+                      key={g.id}
+                      coordinate={{ latitude: parseFloat(g.latitude!), longitude: parseFloat(g.longitude!) }}
+                      title={g.name}
+                      description={g.address ?? undefined}
+                      pinColor={colors.primary}
+                      onCalloutPress={() => navigation.navigate('GymDetail', { gymId: g.id, gymName: g.name })}
+                    />
+                  ))}
+              </MapView>
+
+              {/* Stats row */}
+              <View style={styles.statsRow}>
+                <Text style={styles.statsText}>Showing {gyms.length} / {allGyms.length}</Text>
+              </View>
+            </>
+          }
           ListEmptyComponent={
             <View style={styles.center}>
               <Feather name="activity" size={36} color={colors.textMuted} />
@@ -146,6 +198,21 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: typography.size.sm,
     color: colors.textPrimary,
+  },
+  map: {
+    height: 220,
+    borderRadius: 14,
+    marginBottom: spacing.sm,
+    overflow: 'hidden',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: spacing.sm,
+  },
+  statsText: {
+    fontSize: typography.size.xs,
+    color: colors.textMuted,
   },
   center: {
     flex: 1,
@@ -184,6 +251,7 @@ const styles = StyleSheet.create({
   gymInfo: { flex: 1, gap: 2 },
   gymName: { fontSize: typography.size.base, fontWeight: '600', color: colors.textPrimary },
   gymAddress: { fontSize: typography.size.xs, color: colors.textSecondary },
+  gymRating: { fontSize: typography.size.xs, color: '#F59E0B', fontWeight: '600' },
   gymRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   enrolledBadge: {
     backgroundColor: 'rgba(79,195,224,0.15)',

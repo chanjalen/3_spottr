@@ -2662,7 +2662,9 @@ function votePoll(pollId, optionId, element) {
     }
 })();
 
-// Process server-rendered descriptions to make hashtags clickable
+// Process server-rendered descriptions to make hashtags clickable.
+// Safe: Django auto-escapes all template variables, and linkHashtags only
+// replaces #\w+ patterns (word chars only — no HTML-injectable characters).
 document.querySelectorAll('.feed-description').forEach(el => {
     el.innerHTML = linkHashtags(el.innerHTML);
 });

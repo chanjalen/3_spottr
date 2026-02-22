@@ -17,7 +17,7 @@ from gyms.serializers import (
     WorkoutInviteDetailSerializer,
     JoinRequestCreateSerializer,
     JoinRequestSerializer,
-    LeaderboardEntrySerializer,
+    TopLifterSerializer,
 )
 from gyms.exceptions import (
     GymNotFoundError,
@@ -179,6 +179,29 @@ def invite_detail_cancel(request, invite_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+def invite_decline(request, invite_id):
+    """Invited user declines a personal workout invite."""
+    from gyms.models import WorkoutInvite
+    try:
+        invite = WorkoutInvite.objects.get(id=invite_id, invited_user=request.user)
+    except WorkoutInvite.DoesNotExist:
+        return Response({"error": "Invite not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    invite.invited_user = None
+    invite.save(update_fields=['invited_user', 'updated_at'])
+
+    from notifications.models import Notification
+    Notification.objects.filter(
+        recipient=request.user,
+        type=Notification.Type.WORKOUT_INVITE,
+        target_id=str(invite_id),
+    ).delete()
+
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def join_request_create(request, invite_id):
     """Request to join a workout invite."""
     serializer = JoinRequestCreateSerializer(data=request.data)
@@ -266,10 +289,10 @@ def join_request_cancel(request, request_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def gym_leaderboard(request, gym_id):
-    """Get the streak leaderboard for a gym. Recalculates on each fetch."""
-    try:
-        entries = services.get_gym_leaderboard(gym_id)
-    except GymNotFoundError as e:
-        return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
-    serializer = LeaderboardEntrySerializer(entries, many=True)
+    """Get top lifters for a gym by PR. Optional ?lift=total|bench|squat|deadlift"""
+    if not Gym.objects.filter(id=gym_id).exists():
+        return Response({"error": "Gym not found."}, status=status.HTTP_404_NOT_FOUND)
+    lift = request.query_params.get('lift', 'total')
+    entries = services.get_top_lifters(gym_id, lift=lift)
+    serializer = TopLifterSerializer(entries, many=True)
     return Response(serializer.data)

@@ -1,11 +1,22 @@
+import logging
+
 from django.contrib.auth import authenticate
-from django.views.decorators.http import require_POST
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import AllowAny
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import IntegrityError
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import AnonRateThrottle
 from rest_framework import status
 
 from accounts.models import User
+
+logger = logging.getLogger(__name__)
+
+
+class AuthRateThrottle(AnonRateThrottle):
+    """Strict per-IP throttle for auth endpoints to limit brute-force attempts."""
+    scope = 'auth'
 
 
 def _user_brief(user):
@@ -20,6 +31,7 @@ def _user_brief(user):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([AuthRateThrottle])
 def api_login_view(request):
     """Token-based login for mobile clients."""
     username = request.data.get('username', '').strip()
@@ -35,7 +47,6 @@ def api_login_view(request):
     if not user.is_active:
         return Response({'error': 'Account is deactivated.'}, status=status.HTTP_403_FORBIDDEN)
 
-    # Get or create token
     from rest_framework.authtoken.models import Token
     token, _ = Token.objects.get_or_create(user=user)
 
@@ -47,6 +58,7 @@ def api_login_view(request):
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
+@throttle_classes([AuthRateThrottle])
 def api_signup_view(request):
     """Token-based signup for mobile clients."""
     data = request.data
@@ -78,8 +90,15 @@ def api_signup_view(request):
             birthday=data['birthday'],
             password=password,
         )
-    except Exception as e:
-        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    except IntegrityError:
+        # Race condition: duplicate created between our existence check and insert
+        return Response({'error': 'Account already exists. Please try different credentials.'}, status=status.HTTP_400_BAD_REQUEST)
+    except (DjangoValidationError, ValueError):
+        return Response({'error': 'Invalid data provided.'}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception:
+        # Unexpected error — log internally, never expose details to the client
+        logger.exception("Unexpected error during user creation")
+        return Response({'error': 'Registration failed. Please try again.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     from rest_framework.authtoken.models import Token
     token, _ = Token.objects.get_or_create(user=user)
@@ -91,13 +110,14 @@ def api_signup_view(request):
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def api_me_view(request):
     """Return current authenticated user's profile."""
-    user = request.user
-    return Response(_user_brief(user))
+    return Response(_user_brief(request.user))
 
 
 @api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def api_profile_view(request, username):
     """Return another user's profile."""
     try:

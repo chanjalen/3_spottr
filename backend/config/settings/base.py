@@ -7,6 +7,7 @@ Environment-specific settings are in dev.py and prod.py.
 
 import os
 from pathlib import Path
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 
@@ -17,7 +18,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 load_dotenv(BASE_DIR / "backend" / ".env")
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-fallback-key-change-in-production')
+# Must be set via SECRET_KEY environment variable — no fallback allowed.
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    raise ImproperlyConfigured("SECRET_KEY environment variable is not set.")
 
 # Application definition
 INSTALLED_APPS = [
@@ -27,6 +31,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "corsheaders",
     "rest_framework",
     "rest_framework.authtoken",
     "accounts",
@@ -42,10 +47,12 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    "corsheaders.middleware.CorsMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "common.middleware.TokenAuthMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
@@ -159,13 +166,58 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.TokenAuthentication',
         'rest_framework.authentication.SessionAuthentication',
     ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        # Applied to login/signup via AuthRateThrottle — limits brute-force attempts
+        'auth': '10/minute',
+    },
 }
 
-# Cache
+# Cache — overridden in prod.py to use a shared cache (e.g. Redis).
+# LocMemCache is in-process only and does not share state across workers.
 CACHES = {
     'default': {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'spottr-feed-cache',
         'TIMEOUT': 60,
     }
+}
+
+# Logging
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{levelname}] {asctime} {name} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': 'WARNING',
+    },
+    'loggers': {
+        'django': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        # App loggers — INFO in dev, WARNING+ in prod (overridden in prod.py)
+        'accounts': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'social': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'workouts': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'groups': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'gyms': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'notifications': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'media': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+    },
 }

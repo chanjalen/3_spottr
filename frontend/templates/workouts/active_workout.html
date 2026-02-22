@@ -1037,6 +1037,12 @@ let currentCategoryFilter = 'all';
 // Track new PRs detected during this workout {exerciseName: {value, unit, oldValue}}
 const detectedPrs = {};
 
+function escapeHtml(str) {
+    var d = document.createElement('div');
+    d.textContent = String(str == null ? '' : str);
+    return d.innerHTML;
+}
+
 // Function to get CSRF token from cookies
 function getCookie(name) {
     let cookieValue = null;
@@ -1118,11 +1124,11 @@ function renderExerciseCatalog(catalog) {
 
     for (const [category, exercises] of Object.entries(catalog)) {
         html += `<div class="exercise-category-section">
-            <div class="exercise-category-title">${category}</div>`;
+            <div class="exercise-category-title">${escapeHtml(category)}</div>`;
 
         for (const exercise of exercises) {
-            html += `<div class="exercise-option" onclick="addExercise('${exercise.id}')">
-                <span class="exercise-option-name">${exercise.name}</span>
+            html += `<div class="exercise-option" onclick="addExercise('${escapeHtml(exercise.id)}')">
+                <span class="exercise-option-name">${escapeHtml(exercise.name)}</span>
                 <span class="exercise-option-add">+</span>
             </div>`;
         }
@@ -1351,12 +1357,12 @@ document.getElementById('finishWorkoutBtn').addEventListener('click', function()
         prNames.forEach(name => {
             const pr = detectedPrs[name];
             const detail = pr.oldValue
-                ? `${pr.oldValue} ${pr.unit} → ${pr.value} ${pr.unit}`
-                : `${pr.value} ${pr.unit} (first PR!)`;
+                ? `${escapeHtml(pr.oldValue)} ${escapeHtml(pr.unit)} → ${escapeHtml(pr.value)} ${escapeHtml(pr.unit)}`
+                : `${escapeHtml(pr.value)} ${escapeHtml(pr.unit)} (first PR!)`;
             html += `
-                <div class="finish-pr-item" data-pr-name="${name}">
+                <div class="finish-pr-item" data-pr-name="${escapeHtml(name)}">
                     <div class="finish-pr-info">
-                        <div class="finish-pr-name">${name}</div>
+                        <div class="finish-pr-name">${escapeHtml(name)}</div>
                         <div class="finish-pr-detail">${detail}</div>
                     </div>
                     <div class="finish-pr-toggle">

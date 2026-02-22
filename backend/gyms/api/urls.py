@@ -16,6 +16,8 @@ urlpatterns = [
     path('invites/', views.invite_list_create, name='invite-list-create'),
     path('invites/<str:invite_id>/', views.invite_detail_cancel, name='invite-detail-cancel'),
 
+    path('invites/<str:invite_id>/decline/', views.invite_decline, name='invite-decline'),
+
     # Join Requests
     path('invites/<str:invite_id>/join/', views.join_request_create, name='join-request-create'),
     path('invites/<str:invite_id>/requests/', views.join_request_list, name='join-request-list'),

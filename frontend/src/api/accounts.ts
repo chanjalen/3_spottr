@@ -39,6 +39,11 @@ export async function toggleFollow(targetUsername: string): Promise<{ following:
   return res.data;
 }
 
+export async function followBack(userId: string): Promise<{ action: string }> {
+  const res = await apiClient.post('/accounts/api/follow-toggle/', { user_id: userId });
+  return res.data;
+}
+
 export async function fetchFollowers(username?: string): Promise<UserBrief[]> {
   const res = await apiClient.get('/accounts/api/followers/', username ? { params: { username } } : undefined);
   return res.data;

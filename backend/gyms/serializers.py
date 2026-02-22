@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from .models import Gym, WorkoutInvite, JoinRequest
-from social.models import LeaderboardEntry
 from gyms import services
 
 
@@ -9,7 +8,7 @@ class GymListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Gym
-        fields = ['id', 'name', 'address', 'rating', 'rating_count', 'is_enrolled']
+        fields = ['id', 'name', 'address', 'latitude', 'longitude', 'rating', 'rating_count', 'is_enrolled']
 
     def get_is_enrolled(self, obj):
         request = self.context.get('request')
@@ -130,11 +129,10 @@ class JoinRequestCreateSerializer(serializers.Serializer):
 
 # ---- Leaderboard serializers ----
 
-class LeaderboardEntrySerializer(serializers.ModelSerializer):
-    username = serializers.CharField(source='user.username', read_only=True)
-    current_streak = serializers.IntegerField(source='user.current_streak', read_only=True)
-    longest_streak = serializers.IntegerField(source='user.longest_streak', read_only=True)
-
-    class Meta:
-        model = LeaderboardEntry
-        fields = ['rank', 'username', 'current_streak', 'longest_streak']
+class TopLifterSerializer(serializers.Serializer):
+    rank = serializers.IntegerField()
+    username = serializers.CharField()
+    display_name = serializers.CharField()
+    avatar_url = serializers.CharField(allow_null=True)
+    value = serializers.FloatField()
+    unit = serializers.CharField()

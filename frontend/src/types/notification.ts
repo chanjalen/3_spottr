@@ -1,24 +1,33 @@
-import { UserBrief } from './user';
-
 export type NotificationType =
   | 'like_post'
   | 'comment'
   | 'follow'
   | 'pr'
-  | 'group_invite'
   | 'workout_invite'
   | 'join_request';
 
+export interface NotificationActor {
+  id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+}
+
 export interface Notification {
-  id: number;
+  id: string;
+  ids: string[];
   type: NotificationType;
-  actor: UserBrief;
-  extra_actors: UserBrief[];
-  actor_count: number;
+  grouped: boolean;
+  actors: NotificationActor[];
+  total_actors: number;
   message: string;
-  thumbnail_url: string | null;
+  description?: string;
+  thumbnail: string | null;
   is_read: boolean;
   created_at: string;
   time_ago: string;
-  target_id: string | number | null;
+  target_type: string;
+  target_id: string | null;
+  context_id: string;
+  action_status?: 'pending' | 'accepted';
 }
