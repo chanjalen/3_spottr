@@ -206,7 +206,7 @@ def group_join(request, group_id):
         from messaging.services import send_system_group_message
         send_system_group_message(
             group_id=membership.group.id,
-            content="has joined the group",
+            content=f"{request.user.display_name or request.user.username} has joined the group",
             sender=request.user,
         )
     except Exception:
@@ -235,7 +235,7 @@ def group_leave(request, group_id):
         from messaging.services import send_system_group_message
         send_system_group_message(
             group_id=group_id,
-            content="has left the group",
+            content=f"{request.user.display_name or request.user.username} has left the group",
             sender=request.user,
         )
     except Exception:
@@ -381,7 +381,7 @@ def join_via_code(request):
         from messaging.services import send_system_group_message
         send_system_group_message(
             group_id=membership.group.id,
-            content="has joined the group",
+            content=f"{request.user.display_name or request.user.username} has joined the group",
             sender=request.user,
         )
     except Exception:

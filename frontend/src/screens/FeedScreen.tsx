@@ -96,7 +96,7 @@ export default function FeedScreen() {
         colors={['#4FC3E0', '#6DCFE8', '#A8E2F4', '#D6F2FB', '#FFFFFF']}
         locations={[0, 0.2, 0.5, 0.75, 1]}
       >
-        <AppHeader notificationCount={3} />
+        <AppHeader />
 
         {/* Search bar */}
         <View style={styles.searchRow}>

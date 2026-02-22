@@ -7,6 +7,7 @@ interface UnreadCounts {
   dm: number;
   group: number;
   refresh: () => void;
+  optimisticDecrement: (amount: number, type: 'dm' | 'group') => void;
 }
 
 const UnreadCountContext = createContext<UnreadCounts>({
@@ -14,6 +15,7 @@ const UnreadCountContext = createContext<UnreadCounts>({
   dm: 0,
   group: 0,
   refresh: () => {},
+  optimisticDecrement: () => {},
 });
 
 const POLL_INTERVAL_MS = 30_000;
@@ -48,8 +50,13 @@ export function UnreadCountProvider({ children }: { children: React.ReactNode })
     };
   }, [token, fetch]);
 
+  const optimisticDecrement = useCallback((amount: number, type: 'dm' | 'group') => {
+    if (type === 'dm') setDm(prev => Math.max(0, prev - amount));
+    else setGroup(prev => Math.max(0, prev - amount));
+  }, []);
+
   return (
-    <UnreadCountContext.Provider value={{ total: dm + group, dm, group, refresh: fetch }}>
+    <UnreadCountContext.Provider value={{ total: dm + group, dm, group, refresh: fetch, optimisticDecrement }}>
       {children}
     </UnreadCountContext.Provider>
   );

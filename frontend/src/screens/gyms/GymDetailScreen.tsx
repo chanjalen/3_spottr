@@ -11,12 +11,16 @@ import {
   Platform,
   Modal,
   Linking,
+  KeyboardAvoidingView,
 } from 'react-native';
+import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RouteProp } from '@react-navigation/native';
+import { RouteProp, useNavigation } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
+import { useAuth } from '../../store/AuthContext';
 import {
   fetchGymDetail,
   fetchBusyLevel,
@@ -27,10 +31,13 @@ import {
   fetchWorkoutInvites,
   cancelWorkoutInvite,
   createJoinRequest,
+  createWorkoutInvite,
 } from '../../api/gyms';
 import { Gym, BusyLevel, TopLifter, WorkoutInvite } from '../../types/gym';
 import { colors, spacing, typography } from '../../theme';
-import { GymsStackParamList } from '../../navigation/types';
+import { GymsStackParamList, RootStackParamList } from '../../navigation/types';
+
+type RootNav = NativeStackNavigationProp<RootStackParamList>;
 
 type Props = {
   navigation: NativeStackNavigationProp<GymsStackParamList, 'GymDetail'>;
@@ -46,17 +53,17 @@ const BUSY_COLORS: Record<number, string> = {
 };
 
 const BUSY_OPTIONS: { label: string; value: number }[] = [
-  { label: 'Quiet', value: 1 },
-  { label: 'Moderate', value: 2 },
-  { label: 'Busy', value: 3 },
-  { label: 'Very Busy', value: 4 },
-  { label: 'Packed', value: 5 },
+  { label: 'Not crowded',     value: 1 },
+  { label: 'Not too crowded',  value: 2 },
+  { label: 'Moderately crowded',      value: 3 },
+  { label: 'Crowded', value: 4 },
+  { label: 'Very crowded',    value: 5 },
 ];
 
 const LIFT_OPTIONS = [
-  { label: 'Total', value: 'total' },
-  { label: 'Bench', value: 'bench' },
-  { label: 'Squat', value: 'squat' },
+  { label: 'Total',    value: 'total' },
+  { label: 'Bench',    value: 'bench' },
+  { label: 'Squat',    value: 'squat' },
   { label: 'Deadlift', value: 'deadlift' },
 ];
 
@@ -69,6 +76,8 @@ const RANK_COLORS: Record<number, string> = {
 export default function GymDetailScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { gymId, gymName } = route.params;
+  const { user: me } = useAuth();
+  const rootNav = useNavigation<RootNav>();
 
   const [gym, setGym] = useState<Gym | null>(null);
   const [busyLevel, setBusyLevel] = useState<BusyLevel | null>(null);
@@ -81,11 +90,22 @@ export default function GymDetailScreen({ navigation, route }: Props) {
   const [submittingBusy, setSubmittingBusy] = useState(false);
   const [selectedLift, setSelectedLift] = useState('total');
   const [liftLoading, setLiftLoading] = useState(false);
+  const [showLiftDropdown, setShowLiftDropdown] = useState(false);
   const [showJoinModal, setShowJoinModal] = useState(false);
   const [joiningInviteId, setJoiningInviteId] = useState<string | null>(null);
   const [joinDesc, setJoinDesc] = useState('');
   const [joinLoading, setJoinLoading] = useState(false);
   const [requestedInvites, setRequestedInvites] = useState<Set<string>>(new Set());
+
+  // Post Invite modal
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteWorkoutType, setInviteWorkoutType] = useState('');
+  const [inviteDescription, setInviteDescription] = useState('');
+  const [inviteSpots, setInviteSpots] = useState('1');
+  const [inviteTime, setInviteTime] = useState<Date | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
+  const [inviteLoading, setInviteLoading] = useState(false);
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -97,7 +117,6 @@ export default function GymDetailScreen({ navigation, route }: Props) {
       setGym(gymData);
       setBusyLevel(busy);
       setTopLifters(lifters);
-      // Invites visible to all authenticated users
       const inviteData = await fetchWorkoutInvites(gymId).catch(() => []);
       setInvites(inviteData);
     } catch {
@@ -176,6 +195,50 @@ export default function GymDetailScreen({ navigation, route }: Props) {
     }
   };
 
+  const formatDateTime = (d: Date) =>
+    d.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
+    ' at ' +
+    d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
+  const openInviteModal = () => {
+    setInviteWorkoutType('');
+    setInviteDescription('');
+    setInviteSpots('1');
+    setInviteTime(null);
+    setInviteError(null);
+    setShowPicker(false);
+    setShowInviteModal(true);
+  };
+
+  const handlePostInvite = async () => {
+    const spots = parseInt(inviteSpots, 10);
+    if (!inviteWorkoutType.trim()) { setInviteError('Workout type is required.'); return; }
+    if (!inviteDescription.trim()) { setInviteError('Description is required.'); return; }
+    if (isNaN(spots) || spots < 1) { setInviteError('Spots must be at least 1.'); return; }
+    if (!inviteTime) { setInviteError('Please select a date and time.'); return; }
+    setInviteError(null);
+    setInviteLoading(true);
+    try {
+      const scheduled = inviteTime.toISOString();
+      const expires = new Date(inviteTime.getTime() + 24 * 60 * 60 * 1000).toISOString();
+      const newInvite = await createWorkoutInvite({
+        gym_id: gymId,
+        workout_type: inviteWorkoutType.trim(),
+        description: inviteDescription.trim(),
+        spots_available: spots,
+        scheduled_time: scheduled,
+        type: 'gym',
+        expires_at: expires,
+      });
+      setInvites(prev => [newInvite, ...prev]);
+      setShowInviteModal(false);
+    } catch {
+      setInviteError('Failed to post invite. Please try again.');
+    } finally {
+      setInviteLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <View style={[styles.center, { paddingTop: insets.top }]}>
@@ -186,109 +249,108 @@ export default function GymDetailScreen({ navigation, route }: Props) {
 
   const busyColor = busyLevel?.level ? (BUSY_COLORS[busyLevel.level] ?? colors.primary) : colors.textMuted;
   const busyPct = busyLevel?.level ? (busyLevel.level / 5) * 100 : 0;
+  const busyLabel = busyLevel?.label ?? 'No data';
+  const selectedLiftLabel = LIFT_OPTIONS.find(o => o.value === selectedLift)?.label ?? 'Total';
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background.base }}>
-      {/* Header */}
-      <View style={[styles.headerBar, { paddingTop: insets.top }]}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Feather name="arrow-left" size={22} color={colors.textPrimary} />
-        </Pressable>
-        <Text style={styles.headerTitle} numberOfLines={1}>{gymName}</Text>
-        <View style={{ width: 40 }} />
-      </View>
 
-      <ScrollView
-        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />}
+      {/* ── Gradient header ── */}
+      <LinearGradient
+        colors={['#4FC3E0', '#6DCFE8', '#A8E2F4', '#D6F2FB', '#FFFFFF']}
+        locations={[0, 0.2, 0.5, 0.75, 1]}
       >
-        {/* Hero */}
-        {gym && (
-          <View style={styles.gymHero}>
-            <View style={styles.gymIconLarge}>
-              <Feather name="activity" size={36} color={colors.primary} />
-            </View>
-            <Text style={styles.gymName}>{gym.name}</Text>
-            {gym.address ? <Text style={styles.gymAddress}>{gym.address}</Text> : null}
-            <Text style={styles.memberCount}>{gym.enrolled_users_count} members</Text>
-
+        {/* Back + action buttons */}
+        <View style={[styles.headerRow, { paddingTop: insets.top + 8 }]}>
+          <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Feather name="arrow-left" size={22} color={colors.textPrimary} />
+          </Pressable>
+          <View style={styles.headerActions}>
             <Pressable
-              style={[styles.enrollBtn, gym.is_enrolled && styles.enrollBtnActive]}
+              style={[styles.headerPill, gym?.is_enrolled && styles.headerPillFilled]}
               onPress={handleEnroll}
               disabled={enrollLoading}
             >
               {enrollLoading ? (
-                <ActivityIndicator size="small" color={gym.is_enrolled ? colors.primary : '#fff'} />
+                <ActivityIndicator size="small" color={gym?.is_enrolled ? colors.textOnPrimary : colors.primary} />
               ) : (
-                <Text style={[styles.enrollBtnText, gym.is_enrolled && styles.enrollBtnTextActive]}>
-                  {gym.is_enrolled ? 'Unenroll' : 'Enroll'}
+                <Text style={[styles.headerPillText, gym?.is_enrolled && styles.headerPillTextFilled]}>
+                  {gym?.is_enrolled ? 'Enrolled' : 'Enroll'}
                 </Text>
               )}
             </Pressable>
+            <Pressable style={styles.headerPillOutline} onPress={() => navigation.goBack()}>
+              <Text style={styles.headerPillOutlineText}>View Map</Text>
+            </Pressable>
           </View>
-        )}
+        </View>
 
-        {/* Quick Info */}
-        {gym && (gym.website || gym.phone_number || gym.amenities?.length > 0) && (
-          <View style={styles.card}>
-            <Text style={styles.cardTitle}>Info</Text>
-            {gym.website ? (
-              <Pressable onPress={() => Linking.openURL(gym.website!)} style={styles.infoRow}>
-                <Feather name="globe" size={14} color={colors.primary} />
-                <Text style={[styles.infoText, { color: colors.primary }]} numberOfLines={1}>{gym.website}</Text>
-              </Pressable>
-            ) : null}
-            {gym.phone_number ? (
-              <Pressable onPress={() => Linking.openURL(`tel:${gym.phone_number}`)} style={styles.infoRow}>
-                <Feather name="phone" size={14} color={colors.primary} />
-                <Text style={[styles.infoText, { color: colors.primary }]}>{gym.phone_number}</Text>
-              </Pressable>
-            ) : null}
-            {gym.amenities?.length > 0 && (
-              <View style={styles.amenitiesWrap}>
-                {gym.amenities.map((a, i) => (
-                  <View key={i} style={styles.amenityChip}>
-                    <Text style={styles.amenityText}>{a}</Text>
-                  </View>
-                ))}
-              </View>
-            )}
-          </View>
-        )}
+        {/* Gym name + address + website */}
+        <View style={styles.heroInfo}>
+          <Text style={styles.heroName}>{gym?.name ?? gymName}</Text>
+          {gym?.address ? <Text style={styles.heroAddress}>{gym.address}</Text> : null}
+          {gym?.website ? (
+            <Pressable onPress={() => Linking.openURL(gym.website!)} style={styles.heroWebsiteRow}>
+              <Feather name="globe" size={12} color={colors.primary} />
+              <Text style={styles.heroWebsite} numberOfLines={1}>{gym.website}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </LinearGradient>
 
-        {/* Live Activity Card */}
+      {/* ── Scrollable content ── */}
+      <ScrollView
+        contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => { setRefreshing(true); load(); }}
+            tintColor={colors.primary}
+          />
+        }
+      >
+        {/* ── Live Activity ── */}
         <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardTitle}>Live Activity</Text>
+          <View style={styles.activityHeader}>
+            <Text style={styles.activityLabel}>LIVE ACTIVITY</Text>
+            <View style={styles.activityCenter}>
+              <Text style={[styles.activityValue, { color: busyLevel?.level ? busyColor : colors.textPrimary }]}>
+                {busyLabel}
+              </Text>
+              <Text style={styles.activitySub}>Busy Level</Text>
+            </View>
             <Pressable style={styles.reportBtn} onPress={() => setShowBusyModal(true)}>
               <Feather name="edit-2" size={14} color={colors.primary} />
             </Pressable>
           </View>
-          {busyLevel ? (
+
+          <Text style={[styles.activityBig, { color: busyLevel?.level ? busyColor : colors.textMuted }]}>
+            {busyLabel}
+          </Text>
+
+          {busyLevel?.level ? (
             <>
               <View style={styles.busyBar}>
                 <View style={[styles.busyFill, { width: `${busyPct}%` as any, backgroundColor: busyColor }]} />
               </View>
-              <View style={styles.busyRow}>
-                <Text style={[styles.busyLabel, { color: busyColor }]}>{busyLevel.label ?? 'Unknown'}</Text>
-                <Text style={styles.busyCount}>{busyLevel.total_responses} report{busyLevel.total_responses !== 1 ? 's' : ''}</Text>
-              </View>
+              <Text style={styles.busyCount}>
+                {busyLevel.total_responses} report{busyLevel.total_responses !== 1 ? 's' : ''}
+              </Text>
             </>
-          ) : (
-            <Text style={styles.noDataText}>No reports yet — be the first!</Text>
-          )}
+          ) : null}
         </View>
 
-        {/* Workout Buddies */}
+        {/* ── Workout Buddies ── */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Workout Buddies</Text>
             <Pressable
               style={[styles.postInviteBtn, !gym?.is_enrolled && styles.postInviteBtnDisabled]}
-              onPress={() => gym?.is_enrolled && navigation.navigate('CreateInvite', { gymId, gymName })}
+              onPress={() => gym?.is_enrolled && openInviteModal()}
             >
-              <Feather name="plus" size={14} color={gym?.is_enrolled ? '#fff' : colors.textMuted} />
-              <Text style={[styles.postInviteBtnText, !gym?.is_enrolled && styles.postInviteBtnTextDisabled]}>Post Invite</Text>
+              <Text style={[styles.postInviteBtnText, !gym?.is_enrolled && styles.postInviteBtnTextDisabled]}>
+                Post Invite
+              </Text>
             </Pressable>
           </View>
 
@@ -296,31 +358,46 @@ export default function GymDetailScreen({ navigation, route }: Props) {
             <Text style={styles.noDataText}>No active invites</Text>
           ) : (
             invites.map(invite => {
-              const isOwn = false; // Will be true if invite.username === currentUser — handled via cancel btn
+              const isOwn = invite.username === me?.username;
               const requested = requestedInvites.has(invite.id);
-              const scheduledDate = new Date(invite.scheduled_time);
+              const d = new Date(invite.scheduled_time);
+              const timeStr =
+                d.toLocaleDateString([], { month: 'short', day: 'numeric' }) +
+                ' at ' +
+                d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+
               return (
                 <View key={invite.id} style={styles.inviteCard}>
-                  <View style={styles.inviteAvatar}>
-                    <Text style={styles.inviteAvatarText}>{invite.username[0]?.toUpperCase()}</Text>
-                  </View>
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={styles.inviteUser}>@{invite.username}</Text>
-                    <Text style={styles.inviteType}>{invite.workout_type} · {scheduledDate.toLocaleDateString()} {scheduledDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
-                    {invite.description ? <Text style={styles.inviteDesc} numberOfLines={2}>{invite.description}</Text> : null}
-                    <Text style={styles.inviteSpots}>{invite.spots_available} spot{invite.spots_available !== 1 ? 's' : ''} left</Text>
+                  <Pressable onPress={() => rootNav.navigate('Profile', { username: invite.username })}>
+                    <View style={styles.inviteAvatar}>
+                      <Text style={styles.inviteAvatarText}>{invite.username[0]?.toUpperCase()}</Text>
+                    </View>
+                  </Pressable>
+                  <View style={{ flex: 1, gap: 3 }}>
+                    <Text style={styles.inviteUser} numberOfLines={2}>
+                      <Text
+                        style={styles.inviteUserBold}
+                        onPress={() => rootNav.navigate('Profile', { username: invite.username })}
+                      >@{invite.username}</Text>
+                      {` is looking for ${invite.spots_available} ${invite.spots_available === 1 ? 'person' : 'people'}`}
+                    </Text>
+                    <Text style={styles.inviteMeta}>{invite.workout_type} · {timeStr}</Text>
+                    {invite.description ? (
+                      <Text style={styles.inviteDesc} numberOfLines={2}>{invite.description}</Text>
+                    ) : null}
                   </View>
                   <View style={styles.inviteActions}>
-                    {requested ? (
+                    {isOwn ? (
+                      <Pressable style={styles.cancelInviteBtn} onPress={() => handleCancelInvite(invite.id)}>
+                        <Text style={styles.cancelInviteBtnText}>Cancel Invite</Text>
+                      </Pressable>
+                    ) : requested ? (
                       <Text style={styles.requestedText}>Requested</Text>
                     ) : (
                       <Pressable style={styles.joinBtn} onPress={() => openJoinModal(invite.id)}>
                         <Text style={styles.joinBtnText}>Join</Text>
                       </Pressable>
                     )}
-                    <Pressable style={styles.cancelInviteBtn} onPress={() => handleCancelInvite(invite.id)}>
-                      <Feather name="x" size={14} color={colors.textMuted} />
-                    </Pressable>
                   </View>
                 </View>
               );
@@ -328,23 +405,16 @@ export default function GymDetailScreen({ navigation, route }: Props) {
           )}
         </View>
 
-        {/* Top Lifters */}
+        {/* ── Top Lifters ── */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>Top Lifters</Text>
-
-          {/* Lift picker */}
-          <View style={styles.liftPicker}>
-            {LIFT_OPTIONS.map(opt => (
-              <Pressable
-                key={opt.value}
-                style={[styles.liftOption, selectedLift === opt.value && styles.liftOptionActive]}
-                onPress={() => handleLiftChange(opt.value)}
-              >
-                <Text style={[styles.liftOptionText, selectedLift === opt.value && styles.liftOptionTextActive]}>
-                  {opt.label}
-                </Text>
-              </Pressable>
-            ))}
+          <View style={styles.cardHeader}>
+            <Text style={styles.cardTitle} numberOfLines={2}>
+              Top Lifters at {gym?.name ?? gymName}
+            </Text>
+            <Pressable style={styles.liftDropBtn} onPress={() => setShowLiftDropdown(true)}>
+              <Text style={styles.liftDropText}>{selectedLiftLabel}</Text>
+              <Feather name="chevron-down" size={12} color={colors.textSecondary} />
+            </Pressable>
           </View>
 
           {liftLoading ? (
@@ -352,16 +422,21 @@ export default function GymDetailScreen({ navigation, route }: Props) {
           ) : topLifters.length === 0 ? (
             <Text style={styles.noDataText}>No PR data yet</Text>
           ) : (
-            topLifters.map((entry) => (
+            topLifters.map(entry => (
               <View key={entry.username} style={styles.leaderRow}>
                 <Text style={[styles.rank, { color: RANK_COLORS[entry.rank] ?? colors.textMuted }]}>
                   #{entry.rank}
                 </Text>
-                <Avatar uri={entry.avatar_url} name={entry.display_name} size={32} />
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.leaderName} numberOfLines={1}>{entry.display_name}</Text>
-                  <Text style={styles.leaderUsername}>@{entry.username}</Text>
-                </View>
+                <Pressable
+                  onPress={() => rootNav.navigate('Profile', { username: entry.username })}
+                  style={styles.leaderUser}
+                >
+                  <Avatar uri={entry.avatar_url} name={entry.display_name} size={36} />
+                  <View>
+                    <Text style={styles.leaderName} numberOfLines={1}>{entry.display_name}</Text>
+                    <Text style={styles.leaderUsername}>@{entry.username}</Text>
+                  </View>
+                </Pressable>
                 <Text style={styles.leaderValue}>{entry.value} {entry.unit}</Text>
               </View>
             ))
@@ -369,12 +444,33 @@ export default function GymDetailScreen({ navigation, route }: Props) {
         </View>
       </ScrollView>
 
-      {/* Busy Level Modal */}
+      {/* ── Lift dropdown modal ── */}
+      <Modal visible={showLiftDropdown} transparent animationType="fade">
+        <Pressable style={styles.modalOverlay} onPress={() => setShowLiftDropdown(false)}>
+          <View style={styles.dropdownSheet}>
+            <Text style={styles.dropdownTitle}>Sort by lift</Text>
+            {LIFT_OPTIONS.map(opt => (
+              <Pressable
+                key={opt.value}
+                style={[styles.dropdownOption, selectedLift === opt.value && styles.dropdownOptionActive]}
+                onPress={() => { handleLiftChange(opt.value); setShowLiftDropdown(false); }}
+              >
+                <Text style={[styles.dropdownOptionText, selectedLift === opt.value && styles.dropdownOptionTextActive]}>
+                  {opt.label}
+                </Text>
+                {selectedLift === opt.value && <Feather name="check" size={14} color={colors.primary} />}
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ── Busy Level modal ── */}
       <Modal visible={showBusyModal} transparent animationType="fade">
         <Pressable style={styles.modalOverlay} onPress={() => setShowBusyModal(false)}>
           <View style={styles.modalSheet}>
-            <Text style={styles.modalTitle}>How busy is it?</Text>
-            {BUSY_OPTIONS.map((opt) => (
+            <Text style={styles.modalTitle}>How busy is the gym?</Text>
+            {BUSY_OPTIONS.map(opt => (
               <Pressable
                 key={opt.value}
                 style={({ pressed }) => [styles.busyOption, pressed && styles.busyOptionPressed]}
@@ -389,7 +485,7 @@ export default function GymDetailScreen({ navigation, route }: Props) {
         </Pressable>
       </Modal>
 
-      {/* Join Request Modal */}
+      {/* ── Join Request modal ── */}
       <Modal visible={showJoinModal} transparent animationType="slide">
         <Pressable style={styles.modalOverlay} onPress={() => setShowJoinModal(false)}>
           <View style={styles.modalSheet}>
@@ -408,15 +504,110 @@ export default function GymDetailScreen({ navigation, route }: Props) {
                 <Text style={styles.cancelModalText}>Cancel</Text>
               </Pressable>
               <Pressable style={styles.submitModalBtn} onPress={handleJoinSubmit} disabled={joinLoading}>
-                {joinLoading ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.submitModalText}>Send</Text>
-                )}
+                {joinLoading
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={styles.submitModalText}>Send</Text>
+                }
               </Pressable>
             </View>
           </View>
         </Pressable>
+      </Modal>
+
+      {/* ── Post Invite modal ── */}
+      <Modal visible={showInviteModal} transparent animationType="fade">
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          style={{ flex: 1 }}
+        >
+          <Pressable style={styles.modalOverlay} onPress={() => setShowInviteModal(false)}>
+            <View style={styles.inviteModalSheet}>
+              <ScrollView
+                bounces={false}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ gap: 0 }}
+              >
+                <Pressable onPress={e => e.stopPropagation()}>
+                  <Text style={styles.inviteModalTitle}>Post Workout Invite</Text>
+
+                  <Text style={styles.inviteFieldLabel}>WORKOUT TYPE</Text>
+                  <TextInput
+                    style={styles.inviteInput}
+                    value={inviteWorkoutType}
+                    onChangeText={setInviteWorkoutType}
+                    placeholder="e.g. Leg Day, Basketball"
+                    placeholderTextColor={colors.textMuted}
+                    returnKeyType="next"
+                  />
+
+                  <Text style={[styles.inviteFieldLabel, { marginTop: spacing.sm }]}>DESCRIPTION</Text>
+                  <TextInput
+                    style={styles.inviteInput}
+                    value={inviteDescription}
+                    onChangeText={setInviteDescription}
+                    placeholder="What are you looking for?"
+                    placeholderTextColor={colors.textMuted}
+                    returnKeyType="next"
+                  />
+
+                  <View style={styles.inviteSpotsTimeRow}>
+                    <View style={styles.inviteSpotsCol}>
+                      <Text style={styles.inviteFieldLabel}>SPOTS</Text>
+                      <TextInput
+                        style={styles.inviteInput}
+                        value={inviteSpots}
+                        onChangeText={setInviteSpots}
+                        keyboardType="number-pad"
+                        placeholder="1"
+                        placeholderTextColor={colors.textMuted}
+                      />
+                    </View>
+                    <View style={styles.inviteTimeCol}>
+                      <Text style={styles.inviteFieldLabel}>TIME</Text>
+                      <Pressable
+                        style={[styles.inviteInput, styles.inviteTimeBtn]}
+                        onPress={() => setShowPicker(true)}
+                      >
+                        <Text style={inviteTime ? styles.inviteTimeText : styles.inviteTimePlaceholder}>
+                          {inviteTime ? formatDateTime(inviteTime) : 'Select date & time'}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+
+                  {inviteError ? <Text style={styles.inviteErrorText}>{inviteError}</Text> : null}
+
+                  <View style={[styles.modalActions, { marginTop: spacing.md }]}>
+                    <Pressable style={styles.cancelModalBtn} onPress={() => setShowInviteModal(false)}>
+                      <Text style={styles.cancelModalText}>Cancel</Text>
+                    </Pressable>
+                    <Pressable style={styles.postInviteSubmitBtn} onPress={handlePostInvite} disabled={inviteLoading}>
+                      {inviteLoading
+                        ? <ActivityIndicator size="small" color="#fff" />
+                        : <Text style={styles.submitModalText}>Post</Text>
+                      }
+                    </Pressable>
+                  </View>
+                </Pressable>
+              </ScrollView>
+            </View>
+          </Pressable>
+        </KeyboardAvoidingView>
+
+        <DateTimePickerModal
+          isVisible={showPicker}
+          mode="datetime"
+          minimumDate={new Date()}
+          date={inviteTime ?? new Date()}
+          themeVariant="light"
+          isDarkModeEnabled={false}
+          onConfirm={(selected) => {
+            setInviteTime(selected);
+            setShowPicker(false);
+          }}
+          onCancel={() => setShowPicker(false)}
+        />
       </Modal>
     </View>
   );
@@ -424,44 +615,83 @@ export default function GymDetailScreen({ navigation, route }: Props) {
 
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background.base },
-  headerBar: {
+
+  // ── Gradient header ──
+  headerRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.base,
     paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.subtle,
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { flex: 1, fontSize: typography.size.base, fontWeight: '600', color: colors.textPrimary, textAlign: 'center' },
-
-  gymHero: { alignItems: 'center', padding: spacing.xl, gap: spacing.sm },
-  gymIconLarge: {
-    width: 72,
-    height: 72,
+  headerActions: { flexDirection: 'row', gap: spacing.sm },
+  headerPill: {
     borderRadius: 20,
-    backgroundColor: 'rgba(79,195,224,0.12)',
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    minWidth: 72,
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  gymName: { fontSize: typography.size.xl, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
-  gymAddress: { fontSize: typography.size.sm, color: colors.textSecondary, textAlign: 'center' },
-  memberCount: { fontSize: typography.size.xs, color: colors.textMuted },
-  enrollBtn: {
+  headerPillFilled: {
     backgroundColor: colors.primary,
-    borderRadius: 10,
-    paddingHorizontal: spacing.xl,
-    paddingVertical: spacing.sm + 2,
-    marginTop: spacing.sm,
   },
-  enrollBtnActive: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.primary },
-  enrollBtnText: { fontSize: typography.size.sm, fontWeight: '700', color: '#fff' },
-  enrollBtnTextActive: { color: colors.primary },
+  headerPillText: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.semibold,
+    color: colors.primary,
+  },
+  headerPillTextFilled: {
+    color: colors.textOnPrimary,
+  },
+  headerPillOutline: {
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    alignItems: 'center',
+  },
+  headerPillOutlineText: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.semibold,
+    color: colors.primary,
+  },
+  heroInfo: {
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing.lg,
+    gap: 4,
+  },
+  heroName: {
+    fontSize: typography.size.xl,
+    fontFamily: typography.family.bold,
+    color: colors.textPrimary,
+    lineHeight: 28,
+  },
+  heroAddress: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.textSecondary,
+  },
+  heroWebsiteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 2,
+  },
+  heroWebsite: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.primary,
+    flexShrink: 1,
+  },
 
+  // ── Cards ──
   card: {
     marginHorizontal: spacing.base,
-    marginBottom: spacing.md,
+    marginTop: spacing.md,
     backgroundColor: colors.surface,
     borderRadius: 16,
     padding: spacing.base,
@@ -472,8 +702,15 @@ const styles = StyleSheet.create({
     }),
   },
   cardHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cardTitle: { fontSize: typography.size.base, fontWeight: '700', color: colors.textPrimary },
+  cardTitle: {
+    flex: 1,
+    fontSize: typography.size.base,
+    fontFamily: typography.family.bold,
+    color: colors.textPrimary,
+    marginRight: spacing.sm,
+  },
 
+  // Info
   infoRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   infoText: { fontSize: typography.size.sm, flex: 1 },
   amenitiesWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
@@ -485,6 +722,23 @@ const styles = StyleSheet.create({
   },
   amenityText: { fontSize: typography.size.xs, color: colors.textSecondary },
 
+  // ── Live Activity ──
+  activityHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  activityLabel: {
+    flex: 1,
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.semibold,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  activityCenter: { alignItems: 'flex-end', marginRight: spacing.sm },
+  activityValue: { fontSize: typography.size.sm, fontFamily: typography.family.bold },
+  activitySub: { fontSize: 10, fontFamily: typography.family.regular, color: colors.textMuted },
   reportBtn: {
     width: 32,
     height: 32,
@@ -493,35 +747,28 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(79,195,224,0.12)',
     borderRadius: 8,
   },
-  busyBar: {
-    height: 10,
-    backgroundColor: colors.background.elevated,
-    borderRadius: 5,
-    overflow: 'hidden',
-  },
-  busyFill: { height: '100%', borderRadius: 5 },
-  busyRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  busyLabel: { fontSize: typography.size.sm, fontWeight: '700' },
-  busyCount: { fontSize: typography.size.xs, color: colors.textMuted },
+  activityBig: { fontSize: 28, fontFamily: typography.family.bold },
+  busyBar: { height: 8, backgroundColor: colors.background.elevated, borderRadius: 4, overflow: 'hidden' },
+  busyFill: { height: '100%', borderRadius: 4 },
+  busyCount: { fontSize: typography.size.xs, color: colors.textMuted, textAlign: 'right' },
   noDataText: { fontSize: typography.size.sm, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.md },
 
+  // ── Workout Buddies ──
   postInviteBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingHorizontal: spacing.sm,
+    borderRadius: 20,
+    backgroundColor: '#7C3AED',
+    paddingHorizontal: spacing.md,
     paddingVertical: 6,
   },
   postInviteBtnDisabled: { backgroundColor: colors.background.elevated },
-  postInviteBtnText: { fontSize: typography.size.xs, fontWeight: '700', color: '#fff' },
+  postInviteBtnText: { fontSize: typography.size.xs, fontFamily: typography.family.bold, color: '#fff' },
   postInviteBtnTextDisabled: { color: colors.textMuted },
+
   inviteCard: {
     flexDirection: 'row',
     gap: spacing.sm,
     alignItems: 'flex-start',
-    paddingVertical: spacing.sm,
+    paddingTop: spacing.sm,
     borderTopWidth: 1,
     borderTopColor: colors.border.subtle,
   },
@@ -533,58 +780,91 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  inviteAvatarText: { fontSize: typography.size.sm, fontWeight: '700', color: colors.primary },
-  inviteUser: { fontSize: typography.size.sm, fontWeight: '600', color: colors.textPrimary },
-  inviteType: { fontSize: typography.size.xs, color: colors.textSecondary },
-  inviteDesc: { fontSize: typography.size.xs, color: colors.textMuted },
-  inviteSpots: { fontSize: typography.size.xs, color: colors.primary, fontWeight: '600' },
-  inviteActions: { alignItems: 'center', gap: spacing.xs },
-  joinBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingHorizontal: spacing.md,
+  inviteAvatarText: { fontSize: typography.size.sm, fontFamily: typography.family.bold, color: colors.primary },
+  inviteUser: { fontSize: typography.size.sm, fontFamily: typography.family.regular, color: colors.textPrimary, flexShrink: 1 },
+  inviteUserBold: { fontFamily: typography.family.bold, color: colors.textPrimary },
+  inviteMeta: { fontSize: typography.size.xs, fontFamily: typography.family.regular, color: colors.textSecondary },
+  inviteDesc: { fontSize: typography.size.xs, fontFamily: typography.family.regular, color: colors.textMuted },
+  inviteActions: { alignItems: 'flex-end', justifyContent: 'center', paddingTop: 2 },
+  cancelInviteBtn: {
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: '#EF4444',
+    paddingHorizontal: spacing.sm,
     paddingVertical: 5,
   },
-  joinBtnText: { fontSize: typography.size.xs, fontWeight: '700', color: '#fff' },
+  cancelInviteBtnText: { fontSize: typography.size.xs, fontFamily: typography.family.semibold, color: '#EF4444' },
+  joinBtn: { backgroundColor: colors.primary, borderRadius: 20, paddingHorizontal: spacing.md, paddingVertical: 5 },
+  joinBtnText: { fontSize: typography.size.xs, fontFamily: typography.family.bold, color: '#fff' },
   requestedText: { fontSize: typography.size.xs, color: colors.textMuted, fontStyle: 'italic' },
-  cancelInviteBtn: {
-    width: 28,
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
 
-  liftPicker: {
+  // ── Top Lifters ──
+  liftDropBtn: {
     flexDirection: 'row',
-    backgroundColor: colors.background.elevated,
-    borderRadius: 10,
-    padding: 3,
-  },
-  liftOption: {
-    flex: 1,
-    paddingVertical: 6,
     alignItems: 'center',
-    borderRadius: 8,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    borderRadius: 20,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
   },
-  liftOptionActive: { backgroundColor: colors.surface },
-  liftOptionText: { fontSize: typography.size.xs, color: colors.textMuted, fontWeight: '500' },
-  liftOptionTextActive: { color: colors.textPrimary, fontWeight: '700' },
-
-  leaderRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.xs },
-  rank: { fontSize: typography.size.sm, fontWeight: '700', width: 28 },
-  leaderName: { fontSize: typography.size.sm, fontWeight: '500', color: colors.textPrimary },
+  liftDropText: { fontSize: typography.size.xs, fontFamily: typography.family.semibold, color: colors.textSecondary },
+  leaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.subtle,
+  },
+  rank: { fontSize: typography.size.sm, fontFamily: typography.family.bold, width: 28 },
+  leaderUser: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  leaderName: { fontSize: typography.size.sm, fontFamily: typography.family.semibold, color: colors.textPrimary },
   leaderUsername: { fontSize: typography.size.xs, color: colors.textMuted },
-  leaderValue: { fontSize: typography.size.sm, fontWeight: '700', color: colors.textPrimary },
+  leaderValue: { fontSize: typography.size.sm, fontFamily: typography.family.bold, color: '#F59E0B' },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  // ── Lift dropdown ──
+  dropdownSheet: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    paddingVertical: spacing.sm,
+    marginHorizontal: spacing.xl,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.15, shadowRadius: 20 },
+      android: { elevation: 8 },
+    }),
+  },
+  dropdownTitle: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.semibold,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing.xs,
+  },
+  dropdownOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.base,
+  },
+  dropdownOptionActive: { backgroundColor: 'rgba(79,195,224,0.08)' },
+  dropdownOptionText: { fontSize: typography.size.base, fontFamily: typography.family.regular, color: colors.textPrimary },
+  dropdownOptionTextActive: { fontFamily: typography.family.semibold, color: colors.primary },
+
+  // ── Shared modals ──
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center' },
   modalSheet: {
     backgroundColor: colors.surface,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
+    borderRadius: 20,
+    marginHorizontal: spacing.base,
     padding: spacing.xl,
     gap: spacing.sm,
   },
-  modalTitle: { fontSize: typography.size.lg, fontWeight: '700', color: colors.textPrimary, marginBottom: spacing.sm },
+  modalTitle: { fontSize: typography.size.lg, fontFamily: typography.family.bold, color: colors.textPrimary, marginBottom: spacing.sm },
   busyOption: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -597,8 +877,7 @@ const styles = StyleSheet.create({
   },
   busyOptionPressed: { backgroundColor: colors.background.elevated },
   busyDot: { width: 12, height: 12, borderRadius: 6 },
-  busyOptionText: { fontSize: typography.size.base, color: colors.textPrimary },
-
+  busyOptionText: { fontSize: typography.size.base, fontFamily: typography.family.regular, color: colors.textPrimary },
   descInput: {
     backgroundColor: colors.background.elevated,
     borderRadius: 10,
@@ -611,21 +890,69 @@ const styles = StyleSheet.create({
     borderColor: colors.border.default,
   },
   modalActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
-  cancelModalBtn: {
-    flex: 1,
-    padding: spacing.md,
+  cancelModalBtn: { flex: 1, padding: spacing.md, borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: colors.border.default },
+  cancelModalText: { fontSize: typography.size.sm, fontFamily: typography.family.semibold, color: colors.textSecondary },
+  submitModalBtn: { flex: 1, padding: spacing.md, borderRadius: 10, backgroundColor: colors.primary, alignItems: 'center' },
+  submitModalText: { fontSize: typography.size.sm, fontFamily: typography.family.bold, color: '#fff' },
+
+  // ── Post Invite modal ──
+  inviteModalSheet: {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    marginHorizontal: spacing.base,
+    padding: spacing.xl,
+    maxHeight: '88%',
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.2, shadowRadius: 20 },
+      android: { elevation: 10 },
+    }),
+  },
+  inviteModalTitle: {
+    fontSize: typography.size.lg,
+    fontFamily: typography.family.bold,
+    color: colors.textPrimary,
+    textAlign: 'center',
+    marginBottom: spacing.sm,
+  },
+  inviteFieldLabel: {
+    fontSize: 10,
+    fontFamily: typography.family.semibold,
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginTop: spacing.xs,
+    marginBottom: 4,
+  },
+  inviteInput: {
+    backgroundColor: colors.background.elevated,
     borderRadius: 10,
-    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+    fontSize: typography.size.sm,
+    color: colors.textPrimary,
     borderWidth: 1,
     borderColor: colors.border.default,
   },
-  cancelModalText: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: '600' },
-  submitModalBtn: {
+  inviteSpotsTimeRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  inviteSpotsCol: { flex: 1 },
+  inviteTimeCol: { flex: 1.8 },
+  inviteTimeBtn: { justifyContent: 'center' },
+  inviteTimeText: { fontSize: typography.size.sm, color: colors.textPrimary },
+  inviteTimePlaceholder: { fontSize: typography.size.sm, color: colors.textMuted },
+  inviteErrorText: {
+    fontSize: typography.size.xs,
+    color: '#EF4444',
+    marginTop: spacing.xs,
+  },
+  postInviteSubmitBtn: {
     flex: 1,
     padding: spacing.md,
     borderRadius: 10,
-    backgroundColor: colors.primary,
+    backgroundColor: '#7C3AED',
     alignItems: 'center',
   },
-  submitModalText: { fontSize: typography.size.sm, color: '#fff', fontWeight: '700' },
 });
