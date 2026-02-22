@@ -72,8 +72,26 @@ export async function savePR(data: {
   exercise_name: string;
   value: number;
   unit: string;
+  videoUri?: string;
 }): Promise<PersonalRecord> {
-  const res = await apiClient.post('/accounts/api/pr/save/', data);
+  if (data.videoUri) {
+    const formData = new FormData();
+    formData.append('exercise_name', data.exercise_name);
+    formData.append('value', String(data.value));
+    formData.append('unit', data.unit);
+    const filename = data.videoUri.split('/').pop() ?? 'video.mp4';
+    const fileType = filename.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4';
+    formData.append('video', { uri: data.videoUri, name: filename, type: fileType } as any);
+    const res = await apiClient.post('/accounts/api/pr/save/', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+    return res.data;
+  }
+  const res = await apiClient.post('/accounts/api/pr/save/', {
+    exercise_name: data.exercise_name,
+    value: data.value,
+    unit: data.unit,
+  });
   return res.data;
 }
 

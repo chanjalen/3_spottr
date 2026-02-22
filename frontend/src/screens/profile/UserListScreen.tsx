@@ -60,6 +60,15 @@ export default function UserListScreen({ navigation, route }: Props) {
     navigation.navigate('Profile', { username: u.username });
   };
 
+  const handleMessage = (u: UserBrief) => {
+    navigation.navigate('Chat', {
+      partnerId: u.id,
+      partnerName: u.display_name,
+      partnerUsername: u.username,
+      partnerAvatar: u.avatar_url,
+    });
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background.base }}>
       <View style={[styles.headerBar, { paddingTop: insets.top }]}>
@@ -79,7 +88,12 @@ export default function UserListScreen({ navigation, route }: Props) {
           data={users}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <UserRow user={item} onPress={() => handleUserPress(item)} isMe={me?.username === item.username} />
+            <UserRow
+              user={item}
+              onPress={() => handleUserPress(item)}
+              onMessage={() => handleMessage(item)}
+              isMe={me?.username === item.username}
+            />
           )}
           contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
           refreshControl={
@@ -106,13 +120,16 @@ export default function UserListScreen({ navigation, route }: Props) {
 function UserRow({
   user,
   onPress,
+  onMessage,
   isMe,
 }: {
   user: UserBrief;
   onPress: () => void;
+  onMessage: () => void;
   isMe: boolean;
 }) {
-  const [following, setFollowing] = useState<boolean | null>(null);
+  // Seed from API data so the button reflects real state immediately
+  const [following, setFollowing] = useState<boolean>(user.is_following ?? false);
   const [followLoading, setFollowLoading] = useState(false);
 
   const handleFollow = async (e: any) => {
@@ -137,22 +154,24 @@ function UserRow({
         <Text style={styles.rowUsername} numberOfLines={1}>@{user.username}</Text>
       </View>
       {!isMe && (
-        <Pressable
-          style={[
-            styles.followBtn,
-            (following === true) && styles.followBtnOutline,
-          ]}
-          onPress={handleFollow}
-          disabled={followLoading}
-        >
-          {followLoading ? (
-            <ActivityIndicator size="small" color={following ? colors.textPrimary : colors.textOnPrimary} />
-          ) : (
-            <Text style={[styles.followBtnText, (following === true) && styles.followBtnTextOutline]}>
-              {following === true ? 'Following' : 'Follow'}
-            </Text>
-          )}
-        </Pressable>
+        <View style={styles.rowActions}>
+          <Pressable
+            style={[styles.followBtn, following && styles.followBtnOutline]}
+            onPress={handleFollow}
+            disabled={followLoading}
+          >
+            {followLoading ? (
+              <ActivityIndicator size="small" color={following ? colors.textPrimary : colors.textOnPrimary} />
+            ) : (
+              <Text style={[styles.followBtnText, following && styles.followBtnTextOutline]}>
+                {following ? 'Following' : 'Follow'}
+              </Text>
+            )}
+          </Pressable>
+          <Pressable style={styles.msgBtn} onPress={(e) => { e.stopPropagation?.(); onMessage(); }}>
+            <Feather name="message-circle" size={18} color={colors.textSecondary} />
+          </Pressable>
+        </View>
       )}
     </Pressable>
   );
@@ -217,6 +236,11 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: 1,
   },
+  rowActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   followBtn: {
     backgroundColor: colors.primary,
     borderRadius: 8,
@@ -238,5 +262,15 @@ const styles = StyleSheet.create({
   },
   followBtnTextOutline: {
     color: colors.textPrimary,
+  },
+  msgBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: colors.border.default,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background.elevated,
   },
 });

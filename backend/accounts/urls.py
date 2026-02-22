@@ -17,8 +17,8 @@ urlpatterns = [
     path('api/block-toggle/', views.block_toggle_view, name='block_toggle'),
     path('api/followers/', views.followers_list_view, name='followers_list'),
     path('api/following/', views.following_list_view, name='following_list'),
-    path('api/pr/save/', views.save_pr_view, name='save_pr'),
-    path('api/pr/delete/', views.delete_pr_view, name='delete_pr'),
+    path('api/pr/save/', api_views.api_save_pr_view, name='api_save_pr'),
+    path('api/pr/delete/', api_views.api_delete_pr_view, name='api_delete_pr'),
     # Mobile API endpoints
     path('api/login/', api_views.api_login_view, name='api_login'),
     path('api/signup/', api_views.api_signup_view, name='api_signup'),

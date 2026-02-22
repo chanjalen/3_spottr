@@ -4,6 +4,7 @@ export interface UserBrief {
   display_name: string;
   avatar_url: string | null;
   streak?: number;
+  is_following?: boolean;
 }
 
 export interface UserProfile extends UserBrief {
