@@ -45,13 +45,27 @@ export async function followBack(userId: string): Promise<{ action: string }> {
 }
 
 export async function fetchFollowers(username?: string): Promise<UserBrief[]> {
-  const res = await apiClient.get('/accounts/api/followers/', username ? { params: { username } } : undefined);
-  return res.data;
+  const res = await apiClient.get('/accounts/api/followers/', { params: username ? { username } : undefined });
+  return res.data?.results ?? [];
 }
 
 export async function fetchFollowing(username?: string): Promise<UserBrief[]> {
-  const res = await apiClient.get('/accounts/api/following/', username ? { params: { username } } : undefined);
-  return res.data;
+  const res = await apiClient.get('/accounts/api/following/', { params: username ? { username } : undefined });
+  return res.data?.results ?? [];
+}
+
+export async function fetchUserPRs(username: string): Promise<PersonalRecord[]> {
+  const res = await apiClient.get(`/accounts/api/user/${username}/prs/`);
+  return Array.isArray(res.data) ? res.data : [];
+}
+
+export async function fetchFriends(username?: string): Promise<UserBrief[]> {
+  const [followers, following] = await Promise.all([
+    fetchFollowers(username),
+    fetchFollowing(username),
+  ]);
+  const followerIds = new Set(followers.map((u) => u.id));
+  return following.filter((u) => followerIds.has(u.id));
 }
 
 export async function savePR(data: {

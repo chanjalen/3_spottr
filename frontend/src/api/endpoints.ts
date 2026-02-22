@@ -26,4 +26,6 @@ export const ENDPOINTS = {
   createCheckin: `${BASE}/checkin/create/`,
 
   votePoll: (id: ID) => `${BASE}/poll/${id}/vote/`,
+
+  userPosts: (username: string) => `/accounts/api/user/${username}/posts/`,
 } as const;

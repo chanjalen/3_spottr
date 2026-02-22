@@ -20,6 +20,7 @@ import ActiveWorkoutScreen from '../screens/workouts/ActiveWorkoutScreen';
 import StreakDetailsScreen from '../screens/workouts/StreakDetailsScreen';
 import EditProfileScreen from '../screens/profile/EditProfileScreen';
 import GroupProfileScreen from '../screens/groups/GroupProfileScreen';
+import UserListScreen from '../screens/profile/UserListScreen';
 
 // ─── Stack Navigators ─────────────────────────────────────────────────────────
 
@@ -94,6 +95,7 @@ export default function MainTabs() {
       <Root.Screen name="GroupProfile" component={GroupProfileScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="Chat" component={ChatScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="GroupChat" component={GroupChatScreen} options={{ presentation: 'card' }} />
+      <Root.Screen name="UserList" component={UserListScreen} options={{ presentation: 'card' }} />
     </Root.Navigator>
   );
 }
