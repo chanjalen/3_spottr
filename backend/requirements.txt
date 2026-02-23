@@ -1,6 +1,8 @@
 Django==6.0.2
 djangorestframework==3.16.1
+django-cors-headers==4.7.0
 python-dotenv==1.2.1
+psycopg2-binary==2.9.10
 Pillow==12.1.1
 matplotlib==3.10.8
 django-storages==1.14.6

@@ -16,19 +16,20 @@ A fitness social networking application that helps users find gyms, track workou
 
 ## Tech Stack
 
-- **Backend:** Django 6.0 (Python)
-- **Frontend:** React Native (Mobile App)
-- **Database:** SQLite (dev) / PostgreSQL (prod)
+- **Backend:** Django 6.0 (Python) + Daphne ASGI (HTTP + WebSocket)
+- **Frontend:** React Native / Expo (Mobile App)
+- **Database:** PostgreSQL (Supabase)
+- **Cache / Channels:** Redis
+- **Proxy:** NGINX
 
 ## Getting Started
 
 ### Prerequisites
 
-- Python 3.12+
-- pip
-- virtualenv (recommended)
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+- [Node.js](https://nodejs.org/) + [Expo CLI](https://docs.expo.dev/get-started/installation/) (for the mobile app)
 
-### Installation
+### Backend (Docker)
 
 1. Clone the repository:
    ```bash
@@ -36,50 +37,33 @@ A fitness social networking application that helps users find gyms, track workou
    cd spottr
    ```
 
-2. Create and activate a virtual environment:
+2. Set up environment variables:
    ```bash
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+   cp backend/.env.example backend/.env
+   # Fill in your SECRET_KEY, DB_*, SUPABASE_S3_* values
    ```
 
-3. Install dependencies:
+3. Build and start all backend services:
    ```bash
-   cd backend
-   pip install -r requirements.txt
+   docker compose up --build
    ```
 
-4. Set up environment variables:
+4. On first run, apply migrations:
    ```bash
-   cp .env.example .env
-   # Edit .env with your configuration
+   docker compose exec backend python manage.py migrate
    ```
 
-5. Run migrations:
-   ```bash
-   python manage.py migrate
-   ```
+The API is now available at `http://localhost`.
 
-6. Start the development server:
-   ```bash
-   python manage.py runserver
-   ```
+### Frontend (Expo)
 
-7. Visit http://127.0.0.1:8000/ in your browser
-
-### Running in Different Environments
-
-**Development (default):**
 ```bash
-python manage.py runserver
-# Uses config.settings.dev (DEBUG=True)
+cd frontend
+npm install
+npx expo start --clear
 ```
 
-**Production:**
-```bash
-export DJANGO_SETTINGS_MODULE=config.settings.prod
-python manage.py runserver
-# Uses config.settings.prod (DEBUG=False)
-```
+Point the app at your machine's local IP (e.g. `http://192.168.x.x`) — not `localhost`, since the app runs on your phone/emulator.
 
 ## Project Structure
 
@@ -145,13 +129,5 @@ All API endpoints return JSON via `JsonResponse` or DRF's `Response`. The chart 
 3. Submit a pull request to `dev`
 4. After review, merge to `main`
 
-## License
-
-This project is for educational purposes as part of INFO 490.
 
 
-How to run the app:
-
-From Spottr: wsl redis-server --bind 0.0.0.0 --protected-mode no --port 6380
-From backend run: python manage.py runserver 0.0.0.0:8000
-From frontend run: npx expo start --clear
