@@ -13,7 +13,7 @@ const deleteToken = async () => {
 };
 
 export const API_BASE_URL = __DEV__
-  ? Platform.OS === 'web' ? 'http://localhost:80' : 'http://10.0.0.31:8000'
+  ? Platform.OS === 'web' ? 'http://localhost:80' : 'https://joaquina-noncalculative-overcoolly.ngrok-free.dev'
   : 'https://api.spottr.app';
 
 export const apiClient = axios.create({
@@ -22,6 +22,7 @@ export const apiClient = axios.create({
   headers: {
     'Content-Type': 'application/json',
     'X-Requested-With': 'XMLHttpRequest',
+    'ngrok-skip-browser-warning': 'true',
   },
 });
 
