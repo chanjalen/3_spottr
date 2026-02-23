@@ -5,7 +5,7 @@ from rest_framework.response import Response
 
 from django.shortcuts import get_object_or_404
 
-from gyms.models import Gym
+from gyms.models import Gym, BusyLevel
 from gyms import services
 from gyms.serializers import (
     GymListSerializer,
@@ -285,6 +285,72 @@ def join_request_cancel(request, request_id):
 
 
 # ---- Leaderboard views ----
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def gym_busy_level_hourly(request, gym_id):
+    """GET: 24-hour busy level breakdown for a given date (defaults to today UTC).
+
+    Query params:
+      ?date=YYYY-MM-DD  — specific date (defaults to today)
+
+    Returns a list of 24 objects, one per hour (0–23):
+      { hour, avg_level, rounded_level, label, total_responses, breakdown{1-5} }
+    """
+    from datetime import date as date_cls
+
+    date_str = request.query_params.get('date')
+    if date_str:
+        try:
+            target_date = date_cls.fromisoformat(date_str)
+        except ValueError:
+            return Response({"error": "Invalid date. Use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
+    else:
+        target_date = timezone.now().date()
+
+    if not Gym.objects.filter(id=gym_id).exists():
+        return Response({"error": "Gym not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    qs = BusyLevel.objects.filter(gym_id=gym_id, timestamp__date=target_date)
+
+    LABELS = {
+        1: 'Not crowded',
+        2: 'Not too crowded',
+        3: 'Moderately crowded',
+        4: 'Crowded',
+        5: 'Very crowded',
+    }
+
+    hours_data = []
+    for h in range(24):
+        responses = list(qs.filter(timestamp__hour=h).values_list('survey_response', flat=True))
+        total = len(responses)
+        breakdown = {'1': 0, '2': 0, '3': 0, '4': 0, '5': 0}
+        for r in responses:
+            key = str(r)
+            if key in breakdown:
+                breakdown[key] += 1
+
+        if total > 0:
+            avg = sum(responses) / total
+            rounded = round(avg)
+            label = LABELS.get(rounded)
+        else:
+            avg = None
+            rounded = None
+            label = None
+
+        hours_data.append({
+            'hour': h,
+            'avg_level': round(avg, 2) if avg is not None else None,
+            'rounded_level': rounded,
+            'label': label,
+            'total_responses': total,
+            'breakdown': breakdown,
+        })
+
+    return Response(hours_data)
+
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])

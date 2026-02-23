@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { GymListItem, Gym, BusyLevel, WorkoutInvite, TopLifter } from '../types/gym';
+import { GymListItem, Gym, BusyLevel, WorkoutInvite, TopLifter, HourlyBusyEntry } from '../types/gym';
 
 export async function fetchGyms(q?: string): Promise<GymListItem[]> {
   const res = await apiClient.get('/api/gyms/gyms/', { params: q ? { q } : undefined });
@@ -67,5 +67,12 @@ export async function cancelJoinRequest(requestId: string): Promise<void> {
 
 export async function fetchMyGyms(): Promise<Gym[]> {
   const res = await apiClient.get('/api/gyms/me/gym/');
+  return res.data;
+}
+
+export async function fetchHourlyBusyLevel(gymId: string, date?: string): Promise<HourlyBusyEntry[]> {
+  const res = await apiClient.get(`/api/gyms/gyms/${gymId}/busy-level/hourly/`, {
+    params: date ? { date } : undefined,
+  });
   return res.data;
 }

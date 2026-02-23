@@ -212,6 +212,7 @@ class MessageListSerializer(serializers.ModelSerializer):
 
 class MessageSerializer(serializers.ModelSerializer):
     sender_username = serializers.CharField(source='sender.username', read_only=True)
+    sender_avatar_url = serializers.SerializerMethodField()
     recipient_username = serializers.SerializerMethodField()
     group_name = serializers.SerializerMethodField()
     is_read = serializers.SerializerMethodField()
@@ -221,12 +222,15 @@ class MessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = Message
         fields = [
-            'id', 'sender', 'sender_username',
+            'id', 'sender', 'sender_username', 'sender_avatar_url',
             'recipient', 'recipient_username',
             'group', 'group_name',
             'content', 'shared_post_id', 'shared_post',
             'is_request', 'is_read', 'created_at',
         ]
+
+    def get_sender_avatar_url(self, obj):
+        return obj.sender.avatar_url if obj.sender else None
 
     def get_recipient_username(self, obj):
         return obj.recipient.username if obj.recipient else None

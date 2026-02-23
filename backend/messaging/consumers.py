@@ -60,7 +60,19 @@ class MessagingConsumer(AsyncWebsocketConsumer):
         except json.JSONDecodeError:
             return
 
-        if data.get('type') != 'send_message':
+        msg_type = data.get('type')
+
+        # subscribe_group: client entered a group chat after connecting — join the channel now
+        if msg_type == 'subscribe_group':
+            group_id = data.get('group_id')
+            if group_id and await self._is_group_member(group_id):
+                channel = f"group_{_clean_id(group_id)}"
+                if channel not in getattr(self, 'group_channels', []):
+                    await self.channel_layer.group_add(channel, self.channel_name)
+                    self.group_channels.append(channel)
+            return
+
+        if msg_type != 'send_message':
             return  # silently ignore ping and unknown types
 
         content = (data.get('content') or '').strip()
@@ -138,6 +150,11 @@ class MessagingConsumer(AsyncWebsocketConsumer):
             return Token.objects.select_related('user').get(key=token_key).user
         except Token.DoesNotExist:
             return None
+
+    @database_sync_to_async
+    def _is_group_member(self, group_id):
+        from groups.models import GroupMember
+        return GroupMember.objects.filter(group_id=group_id, user=self.user).exists()
 
     @database_sync_to_async
     def _get_group_channels(self):

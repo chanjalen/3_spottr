@@ -6,8 +6,8 @@
  * `sender_username` and `sender_avatar_url` are denormalized via SerializerMethodField.
  */
 export interface Message {
-  id: number;
-  sender: number;
+  id: string;
+  sender: string;
   sender_username: string | null;
   sender_avatar_url: string | null;
   content: string;

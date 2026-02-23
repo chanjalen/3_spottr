@@ -93,6 +93,13 @@ class WebSocketManager extends SimpleEmitter {
     };
   }
 
+  /** Ensure the consumer is subscribed to a group channel. Call when entering GroupChatScreen. */
+  subscribeGroup(groupId: string): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'subscribe_group', group_id: groupId }));
+    }
+  }
+
   /** Send a message over the WebSocket. Returns false if not connected. */
   sendMessage(payload: { type: 'send_message'; content: string; recipient_id?: string; group_id?: string }): boolean {
     if (this.ws?.readyState === WebSocket.OPEN) {

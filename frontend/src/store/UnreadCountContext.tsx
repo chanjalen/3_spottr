@@ -1,6 +1,8 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { fetchUnreadCount } from '../api/messaging';
 import { useAuth } from './AuthContext';
+import { wsManager } from '../services/websocket';
+import { UnreadCount } from '../types/messaging';
 
 interface UnreadCounts {
   total: number;
@@ -8,6 +10,7 @@ interface UnreadCounts {
   group: number;
   refresh: () => void;
   optimisticDecrement: (amount: number, type: 'dm' | 'group') => void;
+  optimisticIncrement: (amount: number, type: 'dm' | 'group') => void;
 }
 
 const UnreadCountContext = createContext<UnreadCounts>({
@@ -16,6 +19,7 @@ const UnreadCountContext = createContext<UnreadCounts>({
   group: 0,
   refresh: () => {},
   optimisticDecrement: () => {},
+  optimisticIncrement: () => {},
 });
 
 const POLL_INTERVAL_MS = 30_000;
@@ -50,13 +54,30 @@ export function UnreadCountProvider({ children }: { children: React.ReactNode })
     };
   }, [token, fetch]);
 
+  // Server pushes accurate unread counts over WS whenever a message is delivered.
+  // Listening here lets the nav bar badge update instantly without an HTTP round-trip.
+  useEffect(() => {
+    if (!token) return;
+    const handler = (counts: UnreadCount) => {
+      setDm(counts.dm);
+      setGroup(counts.group);
+    };
+    wsManager.on('unread_update', handler);
+    return () => wsManager.off('unread_update', handler);
+  }, [token]);
+
   const optimisticDecrement = useCallback((amount: number, type: 'dm' | 'group') => {
     if (type === 'dm') setDm(prev => Math.max(0, prev - amount));
     else setGroup(prev => Math.max(0, prev - amount));
   }, []);
 
+  const optimisticIncrement = useCallback((amount: number, type: 'dm' | 'group') => {
+    if (type === 'dm') setDm(prev => prev + amount);
+    else setGroup(prev => prev + amount);
+  }, []);
+
   return (
-    <UnreadCountContext.Provider value={{ total: dm + group, dm, group, refresh: fetch, optimisticDecrement }}>
+    <UnreadCountContext.Provider value={{ total: dm + group, dm, group, refresh: fetch, optimisticDecrement, optimisticIncrement }}>
       {children}
     </UnreadCountContext.Provider>
   );

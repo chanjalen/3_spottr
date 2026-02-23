@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
@@ -23,6 +24,9 @@ import { useAuth } from '../../store/AuthContext';
 import { useUnreadCount } from '../../store/UnreadCountContext';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
+
+type NewDivider = { id: '__new_divider__'; isDivider: true };
+type ListItem = Message | NewDivider;
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Chat'>;
@@ -36,7 +40,7 @@ export default function ChatScreen({ navigation, route }: Props) {
   const { partnerId, partnerName, partnerUsername, partnerAvatar } = route.params;
 
   // Stored newest-first so inverted FlatList shows newest at the bottom naturally.
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [oldestId, setOldestId] = useState<string | null>(null);
@@ -54,7 +58,13 @@ export default function ChatScreen({ navigation, route }: Props) {
     try {
       const page = await fetchDMMessages(partnerId);
       // Backend returns oldest-first; reverse so index 0 = newest (required for inverted list).
-      setMessages([...page.results].reverse());
+      const reversed = [...page.results].reverse();
+      // Insert "NEW" divider between unread (front) and read (back) messages on first open.
+      const firstReadIdx = reversed.findIndex((m) => m.is_read);
+      const listItems: ListItem[] = firstReadIdx > 0
+        ? [...reversed.slice(0, firstReadIdx), { id: '__new_divider__', isDivider: true as const }, ...reversed.slice(firstReadIdx)]
+        : reversed;
+      setMessages(listItems);
       setHasMore(page.has_more);
       setOldestId(page.oldest_id ?? null);
       newestIdRef.current = page.newest_id ?? null;
@@ -119,11 +129,17 @@ export default function ChatScreen({ navigation, route }: Props) {
         return [msg, ...prev];
       });
       newestIdRef.current = String(msg.id);
+
+      // Mark incoming messages from the partner as read immediately.
+      // Own echoes are already auto-read by the server (MessageRead created on send).
+      if (String(msg.sender) !== String(me?.id)) {
+        markMessagesRead([String(msg.id)]).then(refreshUnread).catch(() => {});
+      }
     };
 
     wsManager.on('new_message', handler);
     return () => wsManager.off('new_message', handler);
-  }, [partnerId, me?.id]);
+  }, [partnerId, me?.id, refreshUnread]);
 
   // When the WebSocket reconnects after a drop, fetch any messages that arrived
   // during the gap so the chat stays in sync without a full screen refresh.
@@ -135,7 +151,9 @@ export default function ChatScreen({ navigation, route }: Props) {
         if (!page.results.length) return;
         newestIdRef.current = page.newest_id ?? nid;
         setMessages((prev) => {
-          const existingIds = new Set(prev.map((m) => String(m.id)));
+          const existingIds = new Set(
+            prev.filter((m): m is Message => !('isDivider' in m)).map((m) => String(m.id))
+          );
           // after_id returns oldest-first; reverse to newest-first before prepending.
           const fresh = [...page.results].reverse().filter((m) => !existingIds.has(String(m.id)));
           if (!fresh.length) return prev;
@@ -183,7 +201,16 @@ export default function ChatScreen({ navigation, route }: Props) {
     return () => wsManager.off('send_error', handler);
   }, []);
 
-  const renderMessage = ({ item }: { item: Message }) => {
+  const renderItem = ({ item }: { item: ListItem }) => {
+    if ('isDivider' in item) {
+      return (
+        <View style={styles.dividerRow}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerLabel}>NEW</Text>
+          <View style={styles.dividerLine} />
+        </View>
+      );
+    }
     const isOwn = String(item.sender) === String(me?.id);
     return (
       <View style={[styles.msgWrap, isOwn ? styles.msgWrapOwn : styles.msgWrapOther]}>
@@ -212,19 +239,25 @@ export default function ChatScreen({ navigation, route }: Props) {
       keyboardVerticalOffset={0}
     >
       {/* Header */}
-      <View style={[styles.headerBar, { paddingTop: insets.top }]}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Feather name="arrow-left" size={22} color={colors.textPrimary} />
-        </Pressable>
-        <Pressable
-          style={styles.headerInfo}
-          onPress={() => navigation.navigate('Profile', { username: partnerUsername })}
-        >
-          <Avatar uri={partnerAvatar} name={partnerName} size={32} />
-          <Text style={styles.headerTitle} numberOfLines={1}>{partnerName}</Text>
-        </Pressable>
-        <View style={{ width: 40 }} />
-      </View>
+      <LinearGradient
+        colors={['#4FC3E0', '#6DCFE8', '#A8E2F4', '#D6F2FB', '#FFFFFF']}
+        locations={[0, 0.2, 0.5, 0.75, 1]}
+        style={{ paddingBottom: spacing.lg }}
+      >
+        <View style={[styles.headerBar, { paddingTop: insets.top + 8 }]}>
+          <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Feather name="arrow-left" size={22} color={colors.textPrimary} />
+          </Pressable>
+          <Pressable
+            style={styles.headerInfo}
+            onPress={() => navigation.navigate('Profile', { username: partnerUsername })}
+          >
+            <Avatar uri={partnerAvatar} name={partnerName} size={42} />
+            <Text style={styles.headerTitle} numberOfLines={1}>{partnerName}</Text>
+          </Pressable>
+          <View style={{ width: 40 }} />
+        </View>
+      </LinearGradient>
 
       {loading ? (
         <View style={styles.center}>
@@ -236,7 +269,7 @@ export default function ChatScreen({ navigation, route }: Props) {
           inverted
           data={messages}
           keyExtractor={(item) => String(item.id)}
-          renderItem={renderMessage}
+          renderItem={renderItem}
           contentContainerStyle={{ padding: spacing.base, gap: spacing.sm, paddingTop: 16 }}
           onEndReached={loadMore}
           onEndReachedThreshold={0.2}
@@ -288,14 +321,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.base,
-    paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.subtle,
+    paddingBottom: spacing.md,
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  headerInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headerTitle: {
-    fontSize: typography.size.base,
+    fontSize: typography.size.lg,
     fontWeight: '600',
     color: colors.textPrimary,
   },
@@ -351,4 +382,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sendBtnDisabled: { backgroundColor: colors.iconInactive },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.primary,
+    opacity: 0.4,
+  },
+  dividerLabel: {
+    fontSize: typography.size.xs,
+    fontWeight: '700',
+    color: colors.primary,
+    letterSpacing: 1,
+  },
 });

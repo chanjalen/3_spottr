@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Avatar from '../components/common/Avatar';
 import {
@@ -342,20 +343,26 @@ export default function NotificationsScreen({ navigation }: Props) {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background.base }}>
-      <View style={[styles.headerBar, { paddingTop: insets.top }]}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Feather name="arrow-left" size={22} color={colors.textPrimary} />
-        </Pressable>
-        <Text style={styles.headerTitle}>Notifications</Text>
-        <View style={styles.headerActions}>
-          <Pressable onPress={handleMarkAll}>
-            <Text style={styles.markAllText}>Mark all read</Text>
+      <LinearGradient
+        colors={['#4FC3E0', '#6DCFE8', '#A8E2F4', '#D6F2FB', '#FFFFFF']}
+        locations={[0, 0.2, 0.5, 0.75, 1]}
+        style={{ paddingBottom: spacing.lg }}
+      >
+        <View style={[styles.headerBar, { paddingTop: insets.top + 8 }]}>
+          <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Feather name="arrow-left" size={22} color={colors.textPrimary} />
           </Pressable>
-          <Pressable onPress={handleClearAll}>
-            <Text style={styles.clearText}>Clear</Text>
-          </Pressable>
+          <Text style={styles.headerTitle}>Notifications</Text>
+          <View style={styles.headerActions}>
+            <Pressable onPress={handleMarkAll}>
+              <Text style={styles.markAllText}>Mark all read</Text>
+            </Pressable>
+            <Pressable onPress={handleClearAll}>
+              <Text style={styles.clearText}>Clear</Text>
+            </Pressable>
+          </View>
         </View>
-      </View>
+      </LinearGradient>
 
       {loading ? (
         <View style={styles.center}>
@@ -396,15 +403,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.base,
-    paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.subtle,
+    paddingBottom: spacing.base,
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: typography.size.lg, fontWeight: '700', color: colors.textPrimary },
+  headerTitle: { fontSize: typography.size.xl, fontWeight: '700', color: colors.textPrimary },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  markAllText: { fontSize: typography.size.xs, color: colors.primary, fontWeight: '600' },
-  clearText: { fontSize: typography.size.xs, color: colors.error, fontWeight: '600' },
+  markAllText: { fontSize: typography.size.sm, color: colors.primary, fontWeight: '600' },
+  clearText: { fontSize: typography.size.sm, color: colors.error, fontWeight: '600' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, paddingTop: spacing['2xl'] },
   emptyText: { fontSize: typography.size.base, color: colors.textMuted },
 

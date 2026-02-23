@@ -46,7 +46,7 @@ type SocialTab = 'Messages' | 'Groups';
 
 export default function SocialScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { optimisticDecrement, refresh: refreshUnread } = useUnreadCount();
+  const { optimisticDecrement, optimisticIncrement } = useUnreadCount();
   const { user: me } = useAuth();
   const [activeTab, setActiveTab] = useState<SocialTab>('Messages');
 
@@ -125,6 +125,8 @@ export default function SocialScreen({ navigation }: Props) {
   // ── Live WS updates for the chat list ────────────────────────────────────
   useEffect(() => {
     const handler = (msg: MessageType) => {
+      const isOwnMessage = String(msg.sender) === String(me?.id);
+
       if (msg.group_id) {
         // Group message — update that conversation's preview and bubble to top
         setGroupConvos(prev => {
@@ -138,16 +140,16 @@ export default function SocialScreen({ navigation }: Props) {
           const updated: GroupConversation = {
             ...conv,
             latest_message: msg,
-            unread_count: String(msg.sender) !== String(me?.id)
-              ? conv.unread_count + 1
-              : conv.unread_count,
+            unread_count: !isOwnMessage ? conv.unread_count + 1 : conv.unread_count,
           };
           return [updated, ...prev.filter((_, i) => i !== idx)];
         });
+        // Bump the nav bar badge immediately — same event, same render cycle.
+        if (!isOwnMessage) optimisticIncrement(1, 'group');
       } else if (msg.dm_recipient_id) {
         // DM message — figure out who the partner is, update that convo
         setDms(prev => {
-          const partnerId = String(msg.sender) === String(me?.id)
+          const partnerId = isOwnMessage
             ? String(msg.dm_recipient_id)
             : String(msg.sender);
           const idx = prev.findIndex(d => String(d.partner_id) === partnerId);
@@ -160,20 +162,21 @@ export default function SocialScreen({ navigation }: Props) {
           const updated: Conversation = {
             ...conv,
             latest_message: msg,
-            unread_count: String(msg.sender) !== String(me?.id)
-              ? conv.unread_count + 1
-              : conv.unread_count,
+            unread_count: !isOwnMessage ? conv.unread_count + 1 : conv.unread_count,
           };
           return [updated, ...prev.filter((_, i) => i !== idx)];
         });
+        // Bump the nav bar badge immediately — same event, same render cycle.
+        if (!isOwnMessage) optimisticIncrement(1, 'dm');
       }
-      // Keep the global unread badge in sync
-      refreshUnread();
+      // Note: the server also pushes an `unread_update` WS event with the exact
+      // server-computed counts. UnreadCountContext listens to that and will
+      // reconcile the nav bar badge within milliseconds if the optimistic value drifts.
     };
 
     wsManager.on('new_message', handler);
     return () => wsManager.off('new_message', handler);
-  }, [me?.id, loadMessages, refreshUnread]);
+  }, [me?.id, loadMessages, optimisticIncrement]);
 
   // Reload messages every time this screen gains focus (returning from Chat, GroupChat, or other screens)
   useFocusEffect(
