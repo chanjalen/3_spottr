@@ -148,3 +148,10 @@ All API endpoints return JSON via `JsonResponse` or DRF's `Response`. The chart 
 ## License
 
 This project is for educational purposes as part of INFO 490.
+
+
+How to run the app:
+
+From Spottr: wsl redis-server --bind 0.0.0.0 --protected-mode no --port 6380
+From backend run: python manage.py runserver 0.0.0.0:8000
+From frontend run: npx expo start --clear

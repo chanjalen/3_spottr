@@ -13,7 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import Avatar from '../common/Avatar';
 import { GroupStreakMember } from '../../api/groups';
-import { sendGroupMessage } from '../../api/messaging';
+import { sendGroupZap } from '../../api/messaging';
 import { useAuth } from '../../store/AuthContext';
 import { colors, spacing, typography } from '../../theme';
 
@@ -48,13 +48,9 @@ export default function InactiveStreakSheet({
     if (zapping) return;
     setZapping(member.user_id);
     try {
-      const name = member.display_name || member.username;
-      await sendGroupMessage(
-        groupId,
-        `@${member.username} let's go ${name}! 💪 Log a workout and keep the streak alive! 🔥`,
-      );
+      await sendGroupZap(groupId, member.user_id);
     } catch (err: any) {
-      Alert.alert('Error', 'Could not send message to the group chat.');
+      Alert.alert('Error', 'Could not send zap to the group chat.');
     } finally {
       setZapping(null);
     }

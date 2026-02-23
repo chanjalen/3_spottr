@@ -1,7 +1,8 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { UserBrief } from '../types/user';
+import { wsManager } from '../services/websocket';
 
 const getItem = async (key: string) => {
   if (Platform.OS === 'web') return localStorage.getItem(key);
@@ -56,6 +57,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       setIsLoading(false);
     })();
+  }, []);
+
+  // Connect WebSocket when authenticated, disconnect on sign-out.
+  useEffect(() => {
+    if (token) {
+      wsManager.connect();
+    } else {
+      wsManager.disconnect();
+    }
+  }, [token]);
+
+  // Forward AppState changes to the WS manager so it reconnects on foreground
+  // and gracefully disconnects after 30s in the background.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', wsManager.handleAppState);
+    return () => sub.remove();
   }, []);
 
   const signIn = async (newToken: string, newUser: UserBrief) => {

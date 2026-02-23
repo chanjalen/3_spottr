@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { wsManager } from '../../services/websocket';
+import { Message as MessageType } from '../../types/messaging';
 import {
   View,
   Text,
@@ -13,7 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RouteProp } from '@react-navigation/native';
+import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
 import { fetchDMMessages, sendDM, markMessagesRead } from '../../api/messaging';
 import { Message } from '../../types/messaging';
@@ -33,8 +35,12 @@ export default function ChatScreen({ navigation, route }: Props) {
   const { refresh: refreshUnread } = useUnreadCount();
   const { partnerId, partnerName, partnerUsername, partnerAvatar } = route.params;
 
+  // Stored newest-first so inverted FlatList shows newest at the bottom naturally.
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(false);
+  const [oldestId, setOldestId] = useState<string | null>(null);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const flatRef = useRef<FlatList>(null);
@@ -42,9 +48,10 @@ export default function ChatScreen({ navigation, route }: Props) {
   const load = useCallback(async () => {
     try {
       const page = await fetchDMMessages(partnerId);
-      // results are oldest-first from the backend; display oldest at top
-      setMessages(page.results);
-      // Mark all unread messages as read
+      // Backend returns oldest-first; reverse so index 0 = newest (required for inverted list).
+      setMessages([...page.results].reverse());
+      setHasMore(page.has_more);
+      setOldestId(page.oldest_id ?? null);
       const unread = page.results
         .filter((m) => !m.is_read && String(m.sender) !== String(me?.id))
         .map((m) => String(m.id));
@@ -56,6 +63,58 @@ export default function ChatScreen({ navigation, route }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Load older messages when the user scrolls to the visual top (onEndReached in inverted mode).
+  const loadMore = useCallback(async () => {
+    if (!hasMore || loadingMore || !oldestId) return;
+    setLoadingMore(true);
+    try {
+      const page = await fetchDMMessages(partnerId, { before_id: oldestId });
+      // Append to the end of the newest-first array (visually: top of the chat).
+      setMessages((prev) => [...prev, ...[...page.results].reverse()]);
+      setHasMore(page.has_more);
+      setOldestId(page.oldest_id ?? null);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [hasMore, loadingMore, oldestId, partnerId]);
+
+  // Silently refresh when the screen regains focus (e.g. after a zap from another screen).
+  const initialMountRef = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (initialMountRef.current) {
+        initialMountRef.current = false;
+        return;
+      }
+      fetchDMMessages(partnerId).then((page) => {
+        setMessages([...page.results].reverse());
+        setHasMore(page.has_more);
+        setOldestId(page.oldest_id ?? null);
+        const unread = page.results
+          .filter((m) => !m.is_read && String(m.sender) !== String(me?.id))
+          .map((m) => String(m.id));
+        if (unread.length) markMessagesRead(unread).then(refreshUnread).catch(() => {});
+      }).catch(() => {});
+    }, [partnerId, me?.id]),
+  );
+
+  // Prepend incoming WS messages so they appear at the visual bottom (index 0 in newest-first).
+  useEffect(() => {
+    const handler = (msg: MessageType) => {
+      const isFromPartner = String(msg.sender) === String(partnerId);
+      if (!isFromPartner) return;
+      if (String(msg.sender) === String(me?.id)) return;
+
+      setMessages((prev) => {
+        if (prev.some((m) => String(m.id) === String(msg.id))) return prev;
+        return [msg, ...prev];
+      });
+    };
+
+    wsManager.on('new_message', handler);
+    return () => wsManager.off('new_message', handler);
+  }, [partnerId, me?.id]);
+
   const handleSend = async () => {
     const content = text.trim();
     if (!content || sending) return;
@@ -63,8 +122,8 @@ export default function ChatScreen({ navigation, route }: Props) {
     setText('');
     try {
       const msg = await sendDM(partnerId, content);
-      setMessages((prev) => [...prev, msg]);
-      flatRef.current?.scrollToEnd({ animated: true });
+      // Prepend so the new message appears at the visual bottom.
+      setMessages((prev) => [msg, ...prev]);
     } finally {
       setSending(false);
     }
@@ -120,11 +179,19 @@ export default function ChatScreen({ navigation, route }: Props) {
       ) : (
         <FlatList
           ref={flatRef}
+          inverted
           data={messages}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderMessage}
-          contentContainerStyle={{ padding: spacing.base, gap: spacing.sm, paddingBottom: 16 }}
-          onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: false })}
+          contentContainerStyle={{ padding: spacing.base, gap: spacing.sm, paddingTop: 16 }}
+          onEndReached={loadMore}
+          onEndReachedThreshold={0.2}
+          // In inverted mode, ListFooterComponent renders at the visual top (oldest messages).
+          ListFooterComponent={
+            loadingMore
+              ? <ActivityIndicator style={{ paddingVertical: spacing.md }} color={colors.primary} />
+              : null
+          }
           ListEmptyComponent={
             <View style={styles.center}>
               <Text style={styles.emptyText}>Send a message to start the conversation</Text>
