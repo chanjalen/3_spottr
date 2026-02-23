@@ -72,9 +72,28 @@ class MessagingConsumer(AsyncWebsocketConsumer):
 
         try:
             if recipient_id:
-                await self._ws_send_dm(recipient_id, content)
+                result = await self._ws_save_dm(recipient_id, content)
+                # Broadcast directly from async context — no async_to_sync needed.
+                await self.channel_layer.group_send(
+                    result['sender_group'],
+                    {'type': 'new_message', 'message': result['payload']},
+                )
+                await self.channel_layer.group_send(
+                    result['recipient_group'],
+                    {'type': 'new_message', 'message': result['payload']},
+                )
+                await self._push_unread_async(result['recipient_id'])
+
             elif group_id:
-                await self._ws_send_group(group_id, content)
+                result = await self._ws_save_group(group_id, content)
+                # Broadcast to all group members via the shared group channel.
+                await self.channel_layer.group_send(
+                    result['group_channel'],
+                    {'type': 'new_message', 'message': result['payload']},
+                )
+                for uid in result['recipient_ids']:
+                    await self._push_unread_async(uid)
+
         except Exception as exc:
             logger.warning("WS send_message failed for %s: %s", self.user.username, exc)
             await self.send(text_data=json.dumps({
@@ -84,7 +103,7 @@ class MessagingConsumer(AsyncWebsocketConsumer):
             }))
 
     # ── Channel layer event handlers ─────────────────────────────────────────
-    # These are called by channel_layer.group_send() in services.py.
+    # These are called by channel_layer.group_send() above.
     # The method name maps to the "type" field (dots replaced with underscores).
 
     async def new_message(self, event):
@@ -101,17 +120,40 @@ class MessagingConsumer(AsyncWebsocketConsumer):
             'counts': event['counts'],
         }))
 
-    # ── DB helpers (must be async-safe) ──────────────────────────────────────
+    # ── Async helpers ─────────────────────────────────────────────────────────
+
+    async def _push_unread_async(self, user_id):
+        """Recalculate and push unread counts for a user from async context."""
+        counts = await self._get_unread_counts(user_id)
+        if counts:
+            await self.channel_layer.group_send(
+                f"dm_{_clean_id(user_id)}",
+                {'type': 'unread_update', 'counts': counts},
+            )
+
+    # ── DB helpers (sync, run in thread pool via database_sync_to_async) ─────
 
     @database_sync_to_async
-    def _ws_send_dm(self, recipient_id, content):
-        from messaging.services import send_dm
-        return send_dm(self.user, recipient_id, content)
+    def _ws_save_dm(self, recipient_id, content):
+        """Save a DM to DB and return broadcast data. No broadcasting done here."""
+        from messaging.services import send_dm_db_only
+        return send_dm_db_only(self.user, recipient_id, content)
 
     @database_sync_to_async
-    def _ws_send_group(self, group_id, content):
-        from messaging.services import send_group_message
-        return send_group_message(self.user, group_id, content)
+    def _ws_save_group(self, group_id, content):
+        """Save a group message to DB and return broadcast data. No broadcasting done here."""
+        from messaging.services import send_group_message_db_only
+        return send_group_message_db_only(self.user, group_id, content)
+
+    @database_sync_to_async
+    def _get_unread_counts(self, user_id):
+        from accounts.models import User
+        from messaging.services import get_unread_count
+        try:
+            user = User.objects.get(id=user_id)
+            return get_unread_count(user)
+        except User.DoesNotExist:
+            return None
 
     @database_sync_to_async
     def _get_user_from_token(self, token_key):

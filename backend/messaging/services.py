@@ -169,6 +169,84 @@ def _get_quick_workout(qw_id):
 # Send Messages
 # ---------------------------------------------------------------------------
 
+def send_dm_db_only(sender, recipient_id, content, post_id=None, quick_workout_id=None):
+    """
+    Save a DM to the database and return the data needed to broadcast it.
+    Does NOT call _broadcast or async_to_sync — the WS consumer calls
+    channel_layer.group_send directly from its async context instead.
+
+    Returns a dict with keys: payload, sender_group, recipient_group, recipient_id.
+    """
+    _check_not_self(sender, recipient_id)
+    recipient = _get_user(recipient_id)
+    _check_no_block(sender, recipient)
+
+    is_request = not _is_mutual_follow(sender, recipient)
+
+    post = _get_post(post_id) if post_id else None
+    quick_workout = _get_quick_workout(quick_workout_id) if quick_workout_id else None
+
+    message = Message.objects.create(
+        sender=sender,
+        recipient=recipient,
+        content=content,
+        post=post,
+        quick_workout=quick_workout,
+        is_request=is_request,
+    )
+    MessageRead.objects.create(message=message, user=sender)
+
+    payload = _serialize_for_ws(message, recipient_id=recipient.id)
+    return {
+        'payload': payload,
+        'sender_group': f"dm_{_clean_id(sender.id)}",
+        'recipient_group': f"dm_{_clean_id(recipient.id)}",
+        'recipient_id': str(recipient.id),
+    }
+
+
+def send_group_message_db_only(sender, group_id, content, post_id=None, quick_workout_id=None):
+    """
+    Save a group message to the database and return the data needed to broadcast it.
+    Does NOT call _broadcast or async_to_sync — the WS consumer calls
+    channel_layer.group_send directly from its async context instead.
+
+    Returns a dict with keys: payload, group_channel, recipient_ids.
+    """
+    from groups.models import Group, GroupMember
+
+    try:
+        group = Group.objects.get(id=group_id)
+    except Group.DoesNotExist:
+        raise ConversationNotFoundError("Group not found.")
+
+    _check_group_member(group, sender)
+
+    post = _get_post(post_id) if post_id else None
+    quick_workout = _get_quick_workout(quick_workout_id) if quick_workout_id else None
+
+    message = Message.objects.create(
+        sender=sender,
+        group=group,
+        content=content,
+        post=post,
+        quick_workout=quick_workout,
+    )
+    MessageRead.objects.create(message=message, user=sender)
+
+    payload = _serialize_for_ws(message, recipient_id=None)
+    recipient_ids = list(
+        GroupMember.objects.filter(group=group)
+        .exclude(user=sender)
+        .values_list('user_id', flat=True)
+    )
+    return {
+        'payload': payload,
+        'group_channel': f"group_{_clean_id(group.id)}",
+        'recipient_ids': [str(uid) for uid in recipient_ids],
+    }
+
+
 def send_zap(sender, recipient_id):
     """
     Send a zap (gym nudge) to another user via DM.
