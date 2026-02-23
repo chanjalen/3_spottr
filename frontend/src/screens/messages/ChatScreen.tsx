@@ -44,6 +44,9 @@ export default function ChatScreen({ navigation, route }: Props) {
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const flatRef = useRef<FlatList>(null);
+  // Tracks the newest message ID we have locally so we can fetch any messages
+  // that arrived while the WebSocket was disconnected (e.g. after a reconnect).
+  const newestIdRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -52,6 +55,7 @@ export default function ChatScreen({ navigation, route }: Props) {
       setMessages([...page.results].reverse());
       setHasMore(page.has_more);
       setOldestId(page.oldest_id ?? null);
+      newestIdRef.current = page.newest_id ?? null;
       const unread = page.results
         .filter((m) => !m.is_read && String(m.sender) !== String(me?.id))
         .map((m) => String(m.id));
@@ -90,6 +94,7 @@ export default function ChatScreen({ navigation, route }: Props) {
         setMessages([...page.results].reverse());
         setHasMore(page.has_more);
         setOldestId(page.oldest_id ?? null);
+        newestIdRef.current = page.newest_id ?? null;
         const unread = page.results
           .filter((m) => !m.is_read && String(m.sender) !== String(me?.id))
           .map((m) => String(m.id));
@@ -109,10 +114,38 @@ export default function ChatScreen({ navigation, route }: Props) {
         if (prev.some((m) => String(m.id) === String(msg.id))) return prev;
         return [msg, ...prev];
       });
+      newestIdRef.current = String(msg.id);
     };
 
     wsManager.on('new_message', handler);
     return () => wsManager.off('new_message', handler);
+  }, [partnerId, me?.id]);
+
+  // When the WebSocket reconnects after a drop, fetch any messages that arrived
+  // during the gap so the chat stays in sync without a full screen refresh.
+  useEffect(() => {
+    const handler = () => {
+      const nid = newestIdRef.current;
+      if (!nid) return;
+      fetchDMMessages(partnerId, { after_id: nid, limit: 50 }).then((page) => {
+        if (!page.results.length) return;
+        newestIdRef.current = page.newest_id ?? nid;
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => String(m.id)));
+          // after_id returns oldest-first; reverse to newest-first before prepending.
+          const fresh = [...page.results].reverse().filter((m) => !existingIds.has(String(m.id)));
+          if (!fresh.length) return prev;
+          return [...fresh, ...prev];
+        });
+        const unread = page.results
+          .filter((m) => !m.is_read && String(m.sender) !== String(me?.id))
+          .map((m) => String(m.id));
+        if (unread.length) markMessagesRead(unread).then(refreshUnread).catch(() => {});
+      }).catch(() => {});
+    };
+
+    wsManager.on('connected', handler);
+    return () => wsManager.off('connected', handler);
   }, [partnerId, me?.id]);
 
   const handleSend = async () => {

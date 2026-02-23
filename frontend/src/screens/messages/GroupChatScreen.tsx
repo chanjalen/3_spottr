@@ -47,6 +47,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
   const [userRole, setUserRole] = useState<'creator' | 'admin' | 'member' | null>(null);
   const [actingOnRequest, setActingOnRequest] = useState<string | null>(null);
   const flatRef = useRef<FlatList>(null);
+  const newestIdRef = useRef<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -58,6 +59,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
       setMessages([...page.results].reverse());
       setHasMore(page.has_more);
       setOldestId(page.oldest_id ?? null);
+      newestIdRef.current = page.newest_id ?? null;
       if (detail) setUserRole(detail.user_role);
       const unread = page.results
         .filter((m) => !m.is_read && String(m.sender) !== String(me?.id))
@@ -97,6 +99,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
         setMessages([...page.results].reverse());
         setHasMore(page.has_more);
         setOldestId(page.oldest_id ?? null);
+        newestIdRef.current = page.newest_id ?? null;
       }).catch(() => {});
     }, [groupId]),
   );
@@ -111,11 +114,33 @@ export default function GroupChatScreen({ navigation, route }: Props) {
         if (prev.some((m) => String(m.id) === String(msg.id))) return prev;
         return [msg, ...prev];
       });
+      newestIdRef.current = String(msg.id);
     };
 
     wsManager.on('new_message', handler);
     return () => wsManager.off('new_message', handler);
   }, [groupId, me?.id]);
+
+  // Catch up on any messages missed while the WebSocket was reconnecting.
+  useEffect(() => {
+    const handler = () => {
+      const nid = newestIdRef.current;
+      if (!nid) return;
+      fetchGroupMessages(groupId, { after_id: nid, limit: 50 }).then((page) => {
+        if (!page.results.length) return;
+        newestIdRef.current = page.newest_id ?? nid;
+        setMessages((prev) => {
+          const existingIds = new Set(prev.map((m) => String(m.id)));
+          const fresh = [...page.results].reverse().filter((m) => !existingIds.has(String(m.id)));
+          if (!fresh.length) return prev;
+          return [...fresh, ...prev];
+        });
+      }).catch(() => {});
+    };
+
+    wsManager.on('connected', handler);
+    return () => wsManager.off('connected', handler);
+  }, [groupId]);
 
   const handleSend = async () => {
     const content = text.trim();

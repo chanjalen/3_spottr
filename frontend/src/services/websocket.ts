@@ -40,6 +40,7 @@ class WebSocketManager extends SimpleEmitter {
   private ws: WebSocket | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private backgroundTimer: ReturnType<typeof setTimeout> | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private reconnectAttempts = 0;
   private readonly maxBackoffMs = 30_000;
   private closing = false;   // true when we intentionally close (no reconnect)
@@ -57,6 +58,7 @@ class WebSocketManager extends SimpleEmitter {
 
     this.ws.onopen = () => {
       this.reconnectAttempts = 0;
+      this._startHeartbeat();
       this.emit('connected', null);
     };
 
@@ -74,6 +76,7 @@ class WebSocketManager extends SimpleEmitter {
     };
 
     this.ws.onclose = () => {
+      this._stopHeartbeat();
       this.ws = null;
       this.emit('disconnected', null);
       if (!this.closing) {
@@ -92,6 +95,7 @@ class WebSocketManager extends SimpleEmitter {
     this.closing = true;
     this._clearReconnectTimer();
     this._clearBackgroundTimer();
+    this._stopHeartbeat();
     this.ws?.close();
     this.ws = null;
   }
@@ -136,6 +140,25 @@ class WebSocketManager extends SimpleEmitter {
     if (this.backgroundTimer) {
       clearTimeout(this.backgroundTimer);
       this.backgroundTimer = null;
+    }
+  }
+
+  // Send a no-op ping every 25 s so NGINX and home-router NAT tables
+  // don't close the idle TCP connection (NGINX default timeout is 60 s).
+  // The server consumer ignores the message via its `pass` receive handler.
+  private _startHeartbeat() {
+    this._stopHeartbeat();
+    this.heartbeatTimer = setInterval(() => {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'ping' }));
+      }
+    }, 25_000);
+  }
+
+  private _stopHeartbeat() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
     }
   }
 
