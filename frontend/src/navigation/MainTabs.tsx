@@ -21,6 +21,8 @@ import StreakDetailsScreen from '../screens/workouts/StreakDetailsScreen';
 import EditProfileScreen from '../screens/profile/EditProfileScreen';
 import GroupProfileScreen from '../screens/groups/GroupProfileScreen';
 import UserListScreen from '../screens/profile/UserListScreen';
+import CreatePostScreen from '../screens/social/CreatePostScreen';
+import QuickCheckinScreen from '../screens/social/QuickCheckinScreen';
 
 // ─── Stack Navigators ─────────────────────────────────────────────────────────
 
@@ -104,6 +106,8 @@ export default function MainTabs() {
       <Root.Screen name="Chat" component={ChatScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="GroupChat" component={GroupChatScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="UserList" component={UserListScreen} options={{ presentation: 'card' }} />
+      <Root.Screen name="CreatePost" component={CreatePostScreen} options={{ presentation: 'modal', gestureEnabled: true }} />
+      <Root.Screen name="QuickCheckin" component={QuickCheckinScreen} options={{ presentation: 'modal', gestureEnabled: true }} />
     </Root.Navigator>
   );
 }

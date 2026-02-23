@@ -8,6 +8,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Avatar from '../common/Avatar';
 import { useAuth } from '../../store/AuthContext';
 import { fetchUnreadCount } from '../../api/notifications';
+import { fetchStreakInfo } from '../../api/workouts';
 import { colors, spacing, typography, shadow } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 
@@ -15,7 +16,7 @@ type RootNav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function AppHeader() {
   const insets = useSafeAreaInsets();
-  const { user, token } = useAuth();
+  const { user, token, currentStreak, setCurrentStreak } = useAuth();
   const navigation = useNavigation<RootNav>();
   const [notificationCount, setNotificationCount] = useState(0);
 
@@ -24,6 +25,9 @@ export default function AppHeader() {
       if (!token) return;
       fetchUnreadCount()
         .then(data => setNotificationCount(data.count))
+        .catch(() => {});
+      fetchStreakInfo()
+        .then(data => setCurrentStreak(data.current_streak))
         .catch(() => {});
     }, [token]),
   );
@@ -61,8 +65,17 @@ export default function AppHeader() {
         {/* Center: Spottr logo text */}
         <Text style={styles.logoText}>Spottr</Text>
 
-        {/* Right: user avatar → Profile */}
+        {/* Right: streak pill + user avatar */}
         <View style={styles.rightZone}>
+          <Pressable
+            style={styles.streakPill}
+            onPress={() => navigation.navigate('StreakDetails')}
+            accessibilityLabel={`${currentStreak} day streak`}
+            accessibilityRole="button"
+          >
+            <Text style={styles.streakEmoji}>🔥</Text>
+            <Text style={styles.streakNum}>{currentStreak}</Text>
+          </Pressable>
           <Pressable onPress={() => user && navigation.navigate('Profile', { username: user.username })}>
             <StoryRingAvatar uri={user?.avatar_url ?? null} name={user?.display_name ?? 'Me'} />
           </Pressable>
@@ -143,9 +156,25 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   rightZone: {
-    width: 44,
-    alignItems: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
+  streakPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+    ...Platform.select({
+      ios: shadow('sm'),
+      android: { elevation: 1 },
+    }),
+  },
+  streakEmoji: { fontSize: 14 },
+  streakNum: { fontSize: typography.size.sm, fontWeight: '700', color: colors.textPrimary },
   storyRing: {
     width: 44,
     height: 44,

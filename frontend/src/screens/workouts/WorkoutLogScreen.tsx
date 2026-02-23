@@ -14,7 +14,7 @@ import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { startWorkout, fetchActiveWorkout, fetchStreakInfo } from '../../api/workouts';
-import { Workout, StreakInfo } from '../../types/workout';
+import { Workout, StreakDetails } from '../../types/workout';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 
@@ -24,7 +24,7 @@ type Props = {
 
 export default function WorkoutLogScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const [streakInfo, setStreakInfo] = useState<StreakInfo | null>(null);
+  const [streakInfo, setStreakInfo] = useState<StreakDetails | null>(null);
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
   const [loading, setLoading] = useState(true);
   const [startLoading, setStartLoading] = useState(false);
@@ -56,7 +56,6 @@ export default function WorkoutLogScreen({ navigation }: Props) {
     }
   };
 
-  const DAY_LABELS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background.base }}>
@@ -90,25 +89,20 @@ export default function WorkoutLogScreen({ navigation }: Props) {
                     <Text style={styles.streakLabel}>Day Streak 🔥</Text>
                   </View>
                   <View style={styles.weekDays}>
-                    {DAY_LABELS.map((day, i) => {
-                      const dayData = streakInfo.week_days[i];
-                      const isWorkout = dayData?.status === 'workout';
-                      const isRest = dayData?.status === 'rest';
-                      return (
-                        <View key={i} style={styles.dayWrap}>
-                          <Text style={styles.dayLabel}>{day}</Text>
-                          <View style={[
-                            styles.dayDot,
-                            isWorkout && styles.dayDotWorkout,
-                            isRest && styles.dayDotRest,
-                          ]} />
-                        </View>
-                      );
-                    })}
+                    {streakInfo.week_days.map((dayData, i) => (
+                      <View key={i} style={styles.dayWrap}>
+                        <Text style={styles.dayLabel}>{dayData.label}</Text>
+                        <View style={[
+                          styles.dayDot,
+                          dayData.active && styles.dayDotWorkout,
+                          dayData.rest && styles.dayDotRest,
+                        ]} />
+                      </View>
+                    ))}
                   </View>
                 </View>
                 <View style={styles.streakGoalRow}>
-                  <Text style={styles.streakGoalText}>{streakInfo.workouts_this_week}/{streakInfo.weekly_goal} this week</Text>
+                  <Text style={styles.streakGoalText}>{streakInfo.weekly_workout_count}/{streakInfo.weekly_workout_goal} this week</Text>
                   <Feather name="chevron-right" size={16} color="rgba(255,255,255,0.7)" />
                 </View>
               </LinearGradient>

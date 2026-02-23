@@ -23,6 +23,8 @@ interface AuthState {
   token: string | null;
   user: UserBrief | null;
   isLoading: boolean;
+  currentStreak: number;
+  setCurrentStreak: (n: number) => void;
   signIn: (token: string, user: UserBrief) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -31,6 +33,8 @@ const AuthContext = createContext<AuthState>({
   token: null,
   user: null,
   isLoading: true,
+  currentStreak: 0,
+  setCurrentStreak: () => {},
   signIn: async () => {},
   signOut: async () => {},
 });
@@ -39,13 +43,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [user, setUser] = useState<UserBrief | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [currentStreak, setCurrentStreak] = useState(0);
 
   useEffect(() => {
     (async () => {
       const stored = await getItem('auth_token');
       const storedUser = await getItem('auth_user');
       if (stored) setToken(stored);
-      if (storedUser) setUser(JSON.parse(storedUser));
+      if (storedUser) {
+        const parsed: UserBrief = JSON.parse(storedUser);
+        setUser(parsed);
+        setCurrentStreak(parsed.streak ?? 0);
+      }
       setIsLoading(false);
     })();
   }, []);
@@ -71,6 +80,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await setItem('auth_user', JSON.stringify(newUser));
     setToken(newToken);
     setUser(newUser);
+    setCurrentStreak(newUser.streak ?? 0);
   };
 
   const signOut = async () => {
@@ -78,10 +88,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await deleteItem('auth_user');
     setToken(null);
     setUser(null);
+    setCurrentStreak(0);
   };
 
   return (
-    <AuthContext.Provider value={{ token, user, isLoading, signIn, signOut }}>
+    <AuthContext.Provider value={{ token, user, isLoading, currentStreak, setCurrentStreak, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );

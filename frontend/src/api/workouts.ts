@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { Workout, WorkoutExercise, ExerciseCatalogItem, WorkoutTemplate, StreakInfo } from '../types/workout';
+import { Workout, WorkoutExercise, ExerciseCatalogItem, WorkoutTemplate, StreakDetails, CalendarPost, RecentWorkout } from '../types/workout';
 
 export async function startWorkout(): Promise<Workout> {
   const res = await apiClient.post('/workouts/start/');
@@ -83,8 +83,8 @@ export async function deleteTemplate(templateId: string): Promise<void> {
   await apiClient.post(`/workouts/templates/${templateId}/delete/`);
 }
 
-export async function fetchStreakInfo(): Promise<StreakInfo> {
-  const res = await apiClient.get('/workouts/streak/');
+export async function fetchStreakInfo(): Promise<StreakDetails> {
+  const res = await apiClient.get('/workouts/api/streak/');
   return res.data;
 }
 
@@ -92,11 +92,23 @@ export async function updateWorkoutGoal(goal: number): Promise<void> {
   await apiClient.post('/workouts/api/update-workout-goal/', { goal });
 }
 
-export async function takeRestDay(): Promise<void> {
-  await apiClient.post('/workouts/rest-day/');
+export async function takeRestDay(): Promise<{ success: boolean; protected?: boolean; message?: string; error?: string }> {
+  const res = await apiClient.post('/workouts/rest-day/');
+  return res.data;
 }
 
-export async function fetchCalendarPosts(year: number, month: number): Promise<Record<string, number[]>> {
-  const res = await apiClient.get('/workouts/api/calendar/', { params: { year, month } });
+export async function fetchRecentWorkouts(): Promise<RecentWorkout[]> {
+  const res = await apiClient.get('/workouts/api/recent/');
+  return res.data;
+}
+
+export async function fetchCalendarPosts(
+  year: number,
+  month: number,
+  username?: string,
+): Promise<{ success: boolean; posts: CalendarPost[] }> {
+  const params: Record<string, any> = { year, month };
+  if (username) params.username = username;
+  const res = await apiClient.get('/workouts/api/calendar/', { params });
   return res.data;
 }

@@ -107,3 +107,53 @@ export async function deletePost(id: string): Promise<void> {
 export async function deleteCheckin(id: string): Promise<void> {
   await apiClient.post(ENDPOINTS.deleteCheckin(id));
 }
+
+export interface CreatePostPayload {
+  text?: string;
+  photo?: { uri: string; name: string; type: string };
+  video?: { uri: string; name: string; type: string };
+  workout_id?: string;
+  pr_exercise_name?: string;
+  pr_value?: string;
+  pr_unit?: string;
+}
+
+export async function createPost(
+  payload: CreatePostPayload,
+): Promise<{ success: boolean; post_id: string }> {
+  const form = new FormData();
+  if (payload.text) form.append('text', payload.text);
+  if (payload.workout_id) form.append('workout_id', payload.workout_id);
+  if (payload.pr_exercise_name) form.append('pr_exercise_name', payload.pr_exercise_name);
+  if (payload.pr_value) form.append('pr_value', payload.pr_value);
+  if (payload.pr_unit) form.append('pr_unit', payload.pr_unit);
+  if (payload.photo) form.append('photo', payload.photo as any);
+  if (payload.video) form.append('video', payload.video as any);
+  const res = await apiClient.post(ENDPOINTS.createPost, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data;
+}
+
+export interface CreateCheckinPayload {
+  activity: string;
+  description?: string;
+  gym_id?: string;
+  location_name?: string;
+  photo?: { uri: string; name: string; type: string };
+}
+
+export async function createCheckin(
+  payload: CreateCheckinPayload,
+): Promise<{ success: boolean; checkin_id: string }> {
+  const form = new FormData();
+  form.append('activity', payload.activity);
+  if (payload.description) form.append('description', payload.description);
+  if (payload.gym_id) form.append('gym_id', payload.gym_id);
+  if (payload.location_name) form.append('location_name', payload.location_name);
+  if (payload.photo) form.append('photo', payload.photo as any);
+  const res = await apiClient.post(ENDPOINTS.createCheckin, form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  });
+  return res.data;
+}

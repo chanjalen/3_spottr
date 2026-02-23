@@ -807,65 +807,83 @@ def create_personal_record_view(request):
     })
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def rest_day_view(request):
-    """Record a rest day for the current user."""
+    """Record a rest day for the current user. Supports token auth for mobile."""
     from workouts.services.streak_service import record_rest_day
     result = record_rest_day(request.user)
 
     status_code = 200 if result['success'] else 400
-    return JsonResponse(result, status=status_code)
+    return DRFResponse(result, status=status_code)
 
 
 @login_required
 @require_GET
 def streak_details_view(request):
-    """Display the streak details page."""
+    """Display the streak details page (HTML, web only)."""
     from workouts.services.streak_service import get_streak_details
     details = get_streak_details(request.user)
 
     return render(request, 'workouts/streak_details.html', details)
 
 
-@login_required
-@require_POST
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def streak_api_view(request):
+    """Return streak details as JSON for mobile clients."""
+    from workouts.services.streak_service import get_streak_details
+    details = get_streak_details(request.user)
+    return DRFResponse(details)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def update_workout_goal_view(request):
-    """Update the user's weekly workout goal."""
-    import json
+    """Update the user's weekly workout goal. Supports token auth for mobile."""
     try:
-        data = json.loads(request.body)
-        goal = int(data.get('weekly_workout_goal', 0))
-    except (ValueError, TypeError, json.JSONDecodeError):
-        return JsonResponse({'success': False, 'error': 'Invalid data'}, status=400)
+        # Accept 'goal' (mobile) or 'weekly_workout_goal' (web legacy)
+        goal = int(request.data.get('goal') or request.data.get('weekly_workout_goal', 0))
+    except (ValueError, TypeError):
+        return DRFResponse({'success': False, 'error': 'Invalid data'}, status=400)
 
     if goal < 1 or goal > 7:
-        return JsonResponse({'success': False, 'error': 'Goal must be between 1 and 7'}, status=400)
+        return DRFResponse({'success': False, 'error': 'Goal must be between 1 and 7'}, status=400)
 
     request.user.weekly_workout_goal = goal
     request.user.save(update_fields=['weekly_workout_goal'])
 
-    return JsonResponse({'success': True, 'weekly_workout_goal': goal})
+    return DRFResponse({'success': True, 'weekly_workout_goal': goal})
 
 
-@login_required
-@require_GET
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def calendar_posts_view(request):
-    """Return posts and check-ins for the logged-in user for a given month."""
+    """Return posts, check-ins, and rest days for a user for a given month.
+    Accepts an optional `username` query param to view another user's calendar."""
     from social.models import QuickWorkout, Reaction, Comment
     from media.utils import get_media_url, build_media_url
     from django.db.models import Count, Exists, OuterRef
 
     try:
-        year = int(request.GET.get('year', timezone.now().year))
-        month = int(request.GET.get('month', timezone.now().month))
+        year = int(request.query_params.get('year', timezone.now().year))
+        month = int(request.query_params.get('month', timezone.now().month))
     except (ValueError, TypeError):
-        return JsonResponse({'success': False, 'error': 'Invalid year/month'}, status=400)
+        return DRFResponse({'success': False, 'error': 'Invalid year/month'}, status=400)
 
     if not (1 <= month <= 12) or year < 2000:
-        return JsonResponse({'success': False, 'error': 'Invalid year/month'}, status=400)
+        return DRFResponse({'success': False, 'error': 'Invalid year/month'}, status=400)
 
-    user = request.user
+    username = request.query_params.get('username')
+    if username:
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        try:
+            user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return DRFResponse({'success': False, 'error': 'User not found'}, status=404)
+    else:
+        user = request.user
 
     checkins = QuickWorkout.objects.filter(
         user=user,
@@ -956,4 +974,53 @@ def calendar_posts_view(request):
             'emoji': None,
         })
 
-    return JsonResponse({'success': True, 'posts': items})
+    # Append rest days for the month
+    rest_days = RestDay.objects.filter(
+        user=user,
+        streak_date__year=year,
+        streak_date__month=month,
+    )
+    for rd in rest_days:
+        d = rd.streak_date
+        items.append({
+            'id': f'rest-{rd.id}',
+            'type': 'rest',
+            'date': f'{d.year}-{d.month}-{d.day}',
+            'description': '',
+            'photo_url': None,
+            'video_url': None,
+            'location_name': '',
+            'like_count': 0,
+            'comment_count': 0,
+            'user_liked': False,
+            'workout_name': None,
+            'workout_exercises': None,
+            'workout_sets': None,
+            'emoji': None,
+        })
+
+    return DRFResponse({'success': True, 'posts': items})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def recent_workouts_view(request):
+    """Return recent completed workouts for the logged-in user (for sharing in posts)."""
+    from django.db.models import Count
+    workouts = (
+        Workout.objects.filter(user=request.user)
+        .annotate(ex_count=Count('exercises', distinct=True))
+        .order_by('-start_time')[:20]
+    )
+    data = []
+    for w in workouts:
+        dur = int(w.duration.total_seconds() / 60) if w.duration else 0
+        data.append({
+            'id': str(w.id),
+            'name': w.name,
+            'type': w.type,
+            'started_at': w.start_time.isoformat(),
+            'duration_minutes': dur,
+            'exercise_count': w.ex_count,
+        })
+    return DRFResponse(data)

@@ -27,7 +27,7 @@ import FeedCard from '../../components/feed/FeedCard';
 import CommentsSheet from '../../components/comments/CommentsSheet';
 import { useAuth } from '../../store/AuthContext';
 import { fetchProfile, toggleFollow, fetchUserPRs, savePR, deletePR } from '../../api/accounts';
-import { fetchExerciseCatalog } from '../../api/workouts';
+import { fetchExerciseCatalog, fetchCalendarPosts } from '../../api/workouts';
 import { fetchUserPosts } from '../../api/feed';
 import { useToggleLike } from '../../hooks/useToggleLike';
 import { usePollVote } from '../../hooks/usePollVote';
@@ -481,7 +481,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
         )}
 
         {activeTab === 'Calendar' && (
-          <CalendarTab posts={posts} postsLoading={postsLoading} onOpenPost={openPost} />
+          <CalendarTab posts={posts} postsLoading={postsLoading} onOpenPost={openPost} profileUsername={username} />
         )}
 
         {activeTab === 'Records' && (
@@ -856,15 +856,33 @@ function CalendarTab({
   posts,
   postsLoading,
   onOpenPost,
+  profileUsername,
 }: {
   posts: FeedItem[];
   postsLoading: boolean;
   onOpenPost: (item: FeedItem) => void;
+  profileUsername: string;
 }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
+  const [restDayNums, setRestDayNums] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    setRestDayNums(new Set());
+    fetchCalendarPosts(year, month + 1, profileUsername)
+      .then((res) => {
+        const nums = new Set<number>();
+        for (const p of res.posts) {
+          if (p.type === 'rest') {
+            nums.add(parseInt(p.date.split('-')[2], 10));
+          }
+        }
+        setRestDayNums(nums);
+      })
+      .catch(() => {});
+  }, [year, month, profileUsername]);
 
   const workoutDays = new Set<number>();
   posts.forEach((p) => {
@@ -932,21 +950,29 @@ function CalendarTab({
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const day = i + 1;
             const hasWorkout = workoutDays.has(day);
+            const isRest = !hasWorkout && restDayNums.has(day);
             const isSelected = selectedDay === day;
             return (
               <Pressable
                 key={day}
-                style={[styles.calDay, hasWorkout && styles.calDayWorkout, isSelected && styles.calDaySelected]}
+                style={[
+                  styles.calDay,
+                  hasWorkout && styles.calDayWorkout,
+                  isRest && styles.calDayRest,
+                  isSelected && styles.calDaySelected,
+                ]}
                 onPress={() => handleDayPress(day)}
                 disabled={!hasWorkout}
               >
                 <Text style={[
                   styles.calDayText,
                   hasWorkout && styles.calDayTextWorkout,
+                  isRest && styles.calDayTextRest,
                   isSelected && styles.calDayTextSelected,
                 ]}>
                   {day}
                 </Text>
+                {isRest && <Text style={styles.calDayRestMark}>🌙</Text>}
               </Pressable>
             );
           })}
@@ -1199,10 +1225,13 @@ const styles = StyleSheet.create({
   calDays: { flexDirection: 'row', flexWrap: 'wrap' },
   calDay: { width: `${100 / 7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 6 },
   calDayWorkout: { backgroundColor: 'rgba(79,195,224,0.15)' },
+  calDayRest: { backgroundColor: 'rgba(156,163,175,0.15)' },
   calDaySelected: { backgroundColor: colors.primary },
   calDayText: { fontSize: 13, fontWeight: '500', color: colors.textSecondary },
   calDayTextWorkout: { color: colors.primary, fontWeight: '700' },
+  calDayTextRest: { color: colors.textMuted, fontWeight: '500' },
   calDayTextSelected: { color: '#000', fontWeight: '700' },
+  calDayRestMark: { fontSize: 7, lineHeight: 8 },
 
   calDayPostsWrap: { marginTop: spacing.md },
   calDayPostsTitle: { fontSize: 14, fontWeight: '600', color: colors.textPrimary, marginBottom: spacing.sm },
