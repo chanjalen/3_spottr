@@ -47,6 +47,8 @@ export default function ChatScreen({ navigation, route }: Props) {
   // Tracks the newest message ID we have locally so we can fetch any messages
   // that arrived while the WebSocket was disconnected (e.g. after a reconnect).
   const newestIdRef = useRef<string | null>(null);
+  // Holds the last text we tried to send so send_error can restore it.
+  const lastSentRef = useRef<string>('');
 
   const load = useCallback(async () => {
     try {
@@ -106,9 +108,11 @@ export default function ChatScreen({ navigation, route }: Props) {
   // Prepend incoming WS messages so they appear at the visual bottom (index 0 in newest-first).
   useEffect(() => {
     const handler = (msg: MessageType) => {
-      const isFromPartner = String(msg.sender) === String(partnerId);
-      if (!isFromPartner) return;
-      if (String(msg.sender) === String(me?.id)) return;
+      // Accept messages from partner OR own echo (server fans back to sender).
+      const isThisConversation =
+        String(msg.sender) === String(partnerId) ||
+        String(msg.dm_recipient_id) === String(partnerId);
+      if (!isThisConversation) return;
 
       setMessages((prev) => {
         if (prev.some((m) => String(m.id) === String(msg.id))) return prev;
@@ -151,16 +155,33 @@ export default function ChatScreen({ navigation, route }: Props) {
   const handleSend = async () => {
     const content = text.trim();
     if (!content || sending) return;
-    setSending(true);
+    lastSentRef.current = content;
     setText('');
+
+    // Primary path: send via WebSocket — echo arrives via new_message handler.
+    const sent = wsManager.sendMessage({ type: 'send_message', content, recipient_id: partnerId });
+    if (sent) return;
+
+    // Fallback: WS not connected — use REST.
+    setSending(true);
     try {
       const msg = await sendDM(partnerId, content);
-      // Prepend so the new message appears at the visual bottom.
       setMessages((prev) => [msg, ...prev]);
+    } catch {
+      setText(content); // restore on failure
     } finally {
       setSending(false);
     }
   };
+
+  // Restore typed text if the server rejects a WS send.
+  useEffect(() => {
+    const handler = () => {
+      setText(lastSentRef.current);
+    };
+    wsManager.on('send_error', handler);
+    return () => wsManager.off('send_error', handler);
+  }, []);
 
   const renderMessage = ({ item }: { item: Message }) => {
     const isOwn = String(item.sender) === String(me?.id);
