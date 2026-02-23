@@ -13,6 +13,7 @@ A fitness social networking application that helps users find gyms, track workou
 - Track workouts and personal records
 - Connect with friends and fitness groups
 - Share workout achievements
+- Instant message delivery via WebSocket (DMs and group chats)
 
 ## Tech Stack
 
