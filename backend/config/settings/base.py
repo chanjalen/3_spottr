@@ -25,6 +25,7 @@ if not SECRET_KEY:
 
 # Application definition
 INSTALLED_APPS = [
+    "daphne",
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -34,6 +35,7 @@ INSTALLED_APPS = [
     "corsheaders",
     "rest_framework",
     "rest_framework.authtoken",
+    "channels",
     "accounts",
     "workouts",
     "social",
@@ -76,6 +78,7 @@ TEMPLATES = [
 ]
 
 WSGI_APPLICATION = "config.wsgi.application"
+ASGI_APPLICATION = "config.asgi.application"
 
 # Database
 import os
@@ -172,6 +175,10 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         # Applied to login/signup via AuthRateThrottle — limits brute-force attempts
         'auth': '10/minute',
+        # Applied to send_dm / send_group_message — prevents message spam
+        'message': '30/minute',
+        # Applied to send_zap — zaps are a special action, tighter limit
+        'zap': '5/minute',
     },
 }
 
@@ -182,6 +189,16 @@ CACHES = {
         'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
         'LOCATION': 'spottr-feed-cache',
         'TIMEOUT': 60,
+    }
+}
+
+# Django Channels — Redis channel layer for WebSocket broadcasting.
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels_redis.core.RedisChannelLayer',
+        'CONFIG': {
+            'hosts': [os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379')],
+        },
     }
 }
 

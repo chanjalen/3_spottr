@@ -259,6 +259,7 @@ class ConversationSerializer(serializers.Serializer):
     partner_avatar_url = serializers.CharField(allow_null=True)
     latest_message = MessageListSerializer()
     unread_count = serializers.IntegerField()
+    partner_has_activity_today = serializers.BooleanField()
 
 
 class GroupConversationSerializer(serializers.Serializer):

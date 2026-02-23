@@ -12,6 +12,7 @@ import {
   Modal,
   Linking,
   KeyboardAvoidingView,
+  Alert,
 } from 'react-native';
 import DateTimePickerModal from 'react-native-modal-datetime-picker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -319,7 +320,16 @@ export default function GymDetailScreen({ navigation, route }: Props) {
               </Text>
               <Text style={styles.activitySub}>Busy Level</Text>
             </View>
-            <Pressable style={styles.reportBtn} onPress={() => setShowBusyModal(true)}>
+            <Pressable
+              style={styles.reportBtn}
+              onPress={() => {
+                if (!gym?.is_enrolled) {
+                  Alert.alert('Enrolled Members Only', 'Only enrolled members can post a busy level.');
+                  return;
+                }
+                setShowBusyModal(true);
+              }}
+            >
               <Feather name="edit-2" size={14} color={colors.primary} />
             </Pressable>
           </View>

@@ -18,6 +18,9 @@ export interface Message {
   shared_post?: SharedPost | null;
   join_request_id?: string | null;
   join_request_status?: string | null;
+  // Present on WebSocket-delivered messages for client-side routing.
+  dm_recipient_id?: string | null;
+  group_id?: string | null;
 }
 
 /** Embedded shared post/checkin card in a chat message. */
@@ -50,6 +53,7 @@ export interface Conversation {
   partner_avatar_url: string | null;
   latest_message: Message;
   unread_count: number;
+  partner_has_activity_today: boolean;
 }
 
 /**

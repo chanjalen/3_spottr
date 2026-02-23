@@ -23,12 +23,14 @@ import { CompositeNavigationProp, useFocusEffect } from '@react-navigation/nativ
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Avatar from '../../components/common/Avatar';
 import { fetchDMConversations, fetchGroupConversations, sendZap } from '../../api/messaging';
-import { Conversation, GroupConversation } from '../../types/messaging';
+import { Conversation, GroupConversation, Message as MessageType } from '../../types/messaging';
+import { wsManager } from '../../services/websocket';
 import { searchGroups, createGroup, joinViaCode, joinGroup, requestJoinGroup, GroupListItem } from '../../api/groups';
 import { colors, spacing, typography } from '../../theme';
 import { SocialStackParamList, RootStackParamList } from '../../navigation/types';
 import AppHeader from '../../components/navigation/AppHeader';
 import { useUnreadCount } from '../../store/UnreadCountContext';
+import { useAuth } from '../../store/AuthContext';
 import { timeAgo } from '../../utils/timeAgo';
 
 type Props = {
@@ -42,7 +44,8 @@ type SocialTab = 'Messages' | 'Groups';
 
 export default function SocialScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { optimisticDecrement } = useUnreadCount();
+  const { optimisticDecrement, refresh: refreshUnread } = useUnreadCount();
+  const { user: me } = useAuth();
   const [activeTab, setActiveTab] = useState<SocialTab>('Messages');
 
   // ── Messages state ────────────────────────────────────────────────────────
@@ -56,6 +59,7 @@ export default function SocialScreen({ navigation }: Props) {
   const [searchQuery, setSearchQuery] = useState('');
   const [loadingGroups, setLoadingGroups] = useState(false);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const searchGenRef = useRef(0);
 
   // ── Create group modal ────────────────────────────────────────────────────
   const [createVisible, setCreateVisible] = useState(false);
@@ -93,16 +97,72 @@ export default function SocialScreen({ navigation }: Props) {
   }, []);
 
   const loadGroups = useCallback(async (query?: string) => {
+    const gen = ++searchGenRef.current;
     setLoadingGroups(true);
     try {
       const data = await searchGroups(query);
+      if (gen !== searchGenRef.current) return; // stale response, ignore
       setDiscoverGroups(data);
     } catch {
+      if (gen !== searchGenRef.current) return;
       setDiscoverGroups([]);
     } finally {
-      setLoadingGroups(false);
+      if (gen === searchGenRef.current) setLoadingGroups(false);
     }
   }, []);
+
+  // ── Live WS updates for the chat list ────────────────────────────────────
+  useEffect(() => {
+    const handler = (msg: MessageType) => {
+      if (msg.group_id) {
+        // Group message — update that conversation's preview and bubble to top
+        setGroupConvos(prev => {
+          const idx = prev.findIndex(g => String(g.group_id) === String(msg.group_id));
+          if (idx === -1) {
+            // First message in a group we haven't loaded yet — full refresh
+            loadMessages();
+            return prev;
+          }
+          const conv = prev[idx];
+          const updated: GroupConversation = {
+            ...conv,
+            latest_message: msg,
+            unread_count: String(msg.sender) !== String(me?.id)
+              ? conv.unread_count + 1
+              : conv.unread_count,
+          };
+          return [updated, ...prev.filter((_, i) => i !== idx)];
+        });
+      } else if (msg.dm_recipient_id) {
+        // DM message — figure out who the partner is, update that convo
+        setDms(prev => {
+          const partnerId = String(msg.sender) === String(me?.id)
+            ? String(msg.dm_recipient_id)
+            : String(msg.sender);
+          const idx = prev.findIndex(d => String(d.partner_id) === partnerId);
+          if (idx === -1) {
+            // First DM with this person — full refresh to get their profile info
+            loadMessages();
+            return prev;
+          }
+          const conv = prev[idx];
+          const updated: Conversation = {
+            ...conv,
+            latest_message: msg,
+            unread_count: String(msg.sender) !== String(me?.id)
+              ? conv.unread_count + 1
+              : conv.unread_count,
+          };
+          return [updated, ...prev.filter((_, i) => i !== idx)];
+        });
+      }
+      // Keep the global unread badge in sync
+      refreshUnread();
+    };
+
+    wsManager.on('new_message', handler);
+    return () => wsManager.off('new_message', handler);
+  }, [me?.id, loadMessages, refreshUnread]);
 
   // Reload messages every time this screen gains focus (returning from Chat, GroupChat, or other screens)
   useFocusEffect(
@@ -123,6 +183,9 @@ export default function SocialScreen({ navigation }: Props) {
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleSearch = (q: string) => {
     setSearchQuery(q);
+    setDiscoverGroups([]);
+    setLoadingGroups(true);
+    ++searchGenRef.current; // invalidate any in-flight request immediately
     if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
     searchTimeoutRef.current = setTimeout(() => loadGroups(q || undefined), 400);
   };
@@ -235,18 +298,20 @@ export default function SocialScreen({ navigation }: Props) {
           <Text style={styles.unreadBadgeText}>{item.unread_count}</Text>
         </View>
       )}
-      <Pressable
-        style={[styles.zapBtn, zapping === item.partner_id && styles.zapBtnDisabled]}
-        onPress={() => handleZap(item.partner_id, item.partner_display_name)}
-        disabled={zapping !== null}
-        hitSlop={8}
-      >
-        {zapping === item.partner_id ? (
-          <ActivityIndicator size="small" color="#fff" />
-        ) : (
-          <Feather name="zap" size={15} color="#fff" />
-        )}
-      </Pressable>
+      {!item.partner_has_activity_today && (
+        <Pressable
+          style={[styles.zapBtn, zapping === item.partner_id && styles.zapBtnDisabled]}
+          onPress={() => handleZap(item.partner_id, item.partner_display_name)}
+          disabled={zapping !== null}
+          hitSlop={8}
+        >
+          {zapping === item.partner_id ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Feather name="zap" size={15} color="#fff" />
+          )}
+        </Pressable>
+      )}
     </Pressable>
   );
 
@@ -376,7 +441,18 @@ export default function SocialScreen({ navigation }: Props) {
         {/* Tab row */}
         <View style={styles.tabRow}>
           {(['Messages', 'Groups'] as SocialTab[]).map((tab) => (
-            <Pressable key={tab} style={styles.tab} onPress={() => setActiveTab(tab)}>
+            <Pressable
+              key={tab}
+              style={styles.tab}
+              onPress={() => {
+                if (tab === 'Groups' && activeTab !== 'Groups') {
+                  setSearchQuery('');
+                  setDiscoverGroups([]);
+                  setLoadingGroups(true);
+                }
+                setActiveTab(tab);
+              }}
+            >
               <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
               {activeTab === tab && <View style={styles.tabIndicator} />}
             </Pressable>
