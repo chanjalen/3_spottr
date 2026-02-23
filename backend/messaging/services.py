@@ -1,3 +1,5 @@
+import logging
+
 from django.db.models import Q, Max, Count, Subquery, OuterRef
 from django.db.models import Prefetch
 
@@ -13,6 +15,80 @@ from .exceptions import (
     RecipientNotFoundError,
     RecipientAlreadyCheckedInError,
 )
+
+
+logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# WebSocket broadcast helpers
+# ---------------------------------------------------------------------------
+
+def _clean_id(value):
+    """Strip hyphens from UUID strings for use as channel group names."""
+    return str(value).replace('-', '')
+
+
+def _serialize_for_ws(message, recipient_id):
+    """
+    Build a minimal message dict for WebSocket delivery.
+    Shape matches MessageListSerializer so the frontend handles both identically.
+    recipient_id is the ID of the other person in a DM (used for client-side routing).
+    """
+    return {
+        'id': message.id,
+        'sender': message.sender_id,
+        'sender_username': message.sender.username if message.sender else None,
+        'sender_avatar_url': message.sender.avatar_url if message.sender else None,
+        'content': message.content,
+        'created_at': message.created_at.isoformat(),
+        'is_read': False,
+        'is_system': message.is_system,
+        'is_request': message.is_request,
+        'shared_post': None,
+        'join_request_id': None,
+        'join_request_status': None,
+        # Routing fields — used by the client to decide which chat to update.
+        'dm_recipient_id': str(recipient_id) if recipient_id else None,
+        'group_id': str(message.group_id) if message.group_id else None,
+    }
+
+
+def _broadcast(group_name, message_data):
+    """
+    Send a new_message event to a channel layer group.
+    Silently swallowed if Redis is unavailable so a missing WS never breaks a send.
+    """
+    try:
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                group_name,
+                {'type': 'new_message', 'message': message_data},
+            )
+    except Exception as exc:
+        logger.warning("WS broadcast to %s failed: %s", group_name, exc)
+
+
+def _push_unread_update(user):
+    """
+    Recalculate unread counts for user and push to their DM channel group.
+    Called after a message is delivered so the badge/counter updates in real time.
+    """
+    try:
+        counts = get_unread_count(user)
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"dm_{_clean_id(user.id)}",
+                {'type': 'unread_update', 'counts': counts},
+            )
+    except Exception as exc:
+        logger.warning("Unread push to user %s failed: %s", user.id, exc)
 
 
 # ---------------------------------------------------------------------------
@@ -112,6 +188,15 @@ def send_zap(sender, recipient_id):
     )
 
     MessageRead.objects.create(message=message, user=sender)
+
+    # Broadcast to both participants over WebSocket, same as send_dm.
+    payload = _serialize_for_ws(message, recipient_id=recipient.id)
+    _broadcast(f"dm_{_clean_id(sender.id)}", payload)
+    _broadcast(f"dm_{_clean_id(recipient.id)}", payload)
+
+    # Push updated unread count to the recipient.
+    _push_unread_update(recipient)
+
     return message
 
 
@@ -151,6 +236,55 @@ def send_dm(sender, recipient_id, content, post_id=None, quick_workout_id=None):
 
     # Auto-mark as read by sender
     MessageRead.objects.create(message=message, user=sender)
+
+    # Broadcast to both participants over WebSocket.
+    # Sender deduplicates by message ID (they already have it from the REST response).
+    payload = _serialize_for_ws(message, recipient_id=recipient.id)
+    _broadcast(f"dm_{_clean_id(sender.id)}", payload)
+    _broadcast(f"dm_{_clean_id(recipient.id)}", payload)
+
+    # Push updated unread count to the recipient.
+    _push_unread_update(recipient)
+
+    return message
+
+
+def send_group_zap(sender, group_id, target_user_id):
+    """
+    Send a zap to a specific member in a group chat.
+    Both sender and target must be group members.
+    Returns the created Message.
+    """
+    from groups.models import Group
+
+    try:
+        group = Group.objects.get(id=group_id)
+    except Group.DoesNotExist:
+        raise ConversationNotFoundError("Group not found.")
+
+    _check_group_member(group, sender)
+    target = _get_user(target_user_id)
+    _check_group_member(group, target)
+
+    message = Message.objects.create(
+        sender=sender,
+        group=group,
+        content=f"\u26a1 {sender.username} zapped @{target.username}! Let's go {target.display_name or target.username}! \U0001f4aa",
+    )
+
+    MessageRead.objects.create(message=message, user=sender)
+
+    payload = _serialize_for_ws(message, recipient_id=None)
+    _broadcast(f"group_{_clean_id(group.id)}", payload)
+
+    from groups.models import GroupMember
+    member_users = (
+        GroupMember.objects.filter(group=group)
+        .exclude(user=sender)
+        .select_related('user')
+    )
+    for member in member_users:
+        _push_unread_update(member.user)
 
     return message
 
@@ -209,6 +343,20 @@ def send_group_message(sender, group_id, content, post_id=None, quick_workout_id
 
     # Auto-mark as read by sender
     MessageRead.objects.create(message=message, user=sender)
+
+    # Broadcast to all group members over WebSocket.
+    payload = _serialize_for_ws(message, recipient_id=None)
+    _broadcast(f"group_{_clean_id(group.id)}", payload)
+
+    # Push updated unread counts to all group members except the sender.
+    from groups.models import GroupMember
+    member_users = (
+        GroupMember.objects.filter(group=group)
+        .exclude(user=sender)
+        .select_related('user')
+    )
+    for member in member_users:
+        _push_unread_update(member.user)
 
     return message
 

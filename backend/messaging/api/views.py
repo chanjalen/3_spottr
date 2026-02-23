@@ -1,7 +1,18 @@
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.throttling import UserRateThrottle
+
+
+class MessageRateThrottle(UserRateThrottle):
+    """Prevent message spam: max 30 messages per minute per user."""
+    scope = 'message'
+
+
+class ZapRateThrottle(UserRateThrottle):
+    """Prevent zap spam: max 5 zaps per minute per user."""
+    scope = 'zap'
 
 from messaging import services
 from messaging.serializers import (
@@ -33,6 +44,7 @@ from messaging.exceptions import (
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([ZapRateThrottle])
 def send_zap(request, recipient_id):
     """Send a zap (gym nudge) to another user. Creates a special DM message."""
     try:
@@ -56,6 +68,7 @@ def send_zap(request, recipient_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([MessageRateThrottle])
 def send_dm(request):
     """Send a direct message to another user."""
     serializer = SendDMSerializer(data=request.data)
@@ -88,6 +101,27 @@ def send_dm(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([ZapRateThrottle])
+def send_group_zap(request, group_id, target_user_id):
+    """Send a zap to a specific member in a group chat."""
+    try:
+        message = services.send_group_zap(request.user, group_id, target_user_id)
+    except ConversationNotFoundError as e:
+        return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+    except NotGroupMemberError as e:
+        return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+    except RecipientNotFoundError as e:
+        return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+    return Response(
+        MessageSerializer(message, context={'request': request}).data,
+        status=status.HTTP_201_CREATED,
+    )
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([MessageRateThrottle])
 def send_group_message(request, group_id):
     """Send a message in a group chat."""
     serializer = SendGroupMessageSerializer(data=request.data)
@@ -118,6 +152,17 @@ def send_group_message(request, group_id):
 # Conversations
 # ---------------------------------------------------------------------------
 
+def _partner_has_activity_today(partner):
+    """Return True if the partner has already checked in today (workout, check-in, or rest day)."""
+    from workouts.services.streak_service import get_streak_date
+    from workouts.models import Streak, RestDay
+    today = get_streak_date()
+    streak_obj = Streak.objects.filter(user=partner).first()
+    already_active = streak_obj is not None and streak_obj.last_streak_date == today
+    already_rested = RestDay.objects.filter(user=partner, streak_date=today).exists()
+    return already_active or already_rested
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def dm_conversations(request):
@@ -138,6 +183,7 @@ def dm_conversations(request):
             'partner_avatar_url': partner.avatar_url or None,
             'latest_message': msg,
             'unread_count': unread_map.get(str(partner.id), 0),
+            'partner_has_activity_today': _partner_has_activity_today(partner),
         })
 
     serializer = ConversationSerializer(
@@ -192,7 +238,7 @@ def dm_messages(request, partner_id):
     Query params:
       ?before_id=<id>  — load messages older than this (scroll up / infinite scroll)
       ?after_id=<id>   — load messages newer than this (polling / realtime sync)
-      ?limit=<n>       — page size, default 50, max 100
+      ?limit=<n>       — page size, default 10, max 100
 
     Response:
       messages    — newest-first (before_id/default) or oldest-first (after_id)
@@ -200,7 +246,7 @@ def dm_messages(request, partner_id):
       oldest_id   — id of the oldest message in this page (use as before_id to scroll up)
       newest_id   — id of the newest message in this page (use as after_id to poll)
     """
-    limit = min(int(request.query_params.get('limit', 50)), 100)
+    limit = min(int(request.query_params.get('limit', 20)), 100)
     before_id = request.query_params.get('before_id')
     after_id = request.query_params.get('after_id')
 
@@ -243,7 +289,7 @@ def group_messages(request, group_id):
     Query params:
       ?before_id=<id>  — load messages older than this (scroll up / infinite scroll)
       ?after_id=<id>   — load messages newer than this (polling / realtime sync)
-      ?limit=<n>       — page size, default 50, max 100
+      ?limit=<n>       — page size, default 10, max 100
 
     Response:
       messages    — newest-first (before_id/default) or oldest-first (after_id)
@@ -251,7 +297,7 @@ def group_messages(request, group_id):
       oldest_id   — id of the oldest message in this page (use as before_id to scroll up)
       newest_id   — id of the newest message in this page (use as after_id to poll)
     """
-    limit = min(int(request.query_params.get('limit', 50)), 100)
+    limit = min(int(request.query_params.get('limit', 20)), 100)
     before_id = request.query_params.get('before_id')
     after_id = request.query_params.get('after_id')
 

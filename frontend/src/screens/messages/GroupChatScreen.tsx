@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { wsManager } from '../../services/websocket';
+import { Message as MessageType } from '../../types/messaging';
 import {
   View,
   Text,
@@ -13,7 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RouteProp } from '@react-navigation/native';
+import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
 import { fetchGroupMessages, sendGroupMessage, markMessagesRead } from '../../api/messaging';
 import { Message } from '../../types/messaging';
@@ -62,6 +64,42 @@ export default function GroupChatScreen({ navigation, route }: Props) {
   }, [groupId, me?.id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Silently refresh messages when the screen regains focus.
+  // Handles cases where a message was sent from outside this screen
+  // (e.g. a zap sent from InactiveStreakSheet) that bypasses the WS skip-own filter.
+  const initialMountRef = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (initialMountRef.current) {
+        initialMountRef.current = false;
+        return;
+      }
+      fetchGroupMessages(groupId).then((page) => {
+        setMessages(page.results);
+      }).catch(() => {});
+    }, [groupId]),
+  );
+
+  // Listen for incoming WebSocket messages for this group.
+  // Dedup by ID so the sender's REST response and the WS broadcast don't both appear.
+  useEffect(() => {
+    const handler = (msg: MessageType) => {
+      if (String(msg.group_id) !== String(groupId)) return;
+
+      // Skip messages sent by me — they come from the REST response, not WS.
+      if (String(msg.sender) === String(me?.id)) return;
+
+      setMessages((prev) => {
+        if (prev.some((m) => String(m.id) === String(msg.id))) return prev;
+        return [...prev, msg];
+      });
+      flatRef.current?.scrollToEnd({ animated: true });
+    };
+
+    wsManager.on('new_message', handler);
+    return () => wsManager.off('new_message', handler);
+  }, [groupId]);
 
   const handleSend = async () => {
     const content = text.trim();

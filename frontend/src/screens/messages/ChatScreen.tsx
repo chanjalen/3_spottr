@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { wsManager } from '../../services/websocket';
+import { Message as MessageType } from '../../types/messaging';
 import {
   View,
   Text,
@@ -13,7 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RouteProp } from '@react-navigation/native';
+import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
 import { fetchDMMessages, sendDM, markMessagesRead } from '../../api/messaging';
 import { Message } from '../../types/messaging';
@@ -55,6 +57,51 @@ export default function ChatScreen({ navigation, route }: Props) {
   }, [partnerId, me?.id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Silently refresh messages whenever this screen comes back into focus
+  // (e.g. user sent a zap from another screen and navigates here).
+  // Skip on initial mount — the useEffect above already handles that.
+  const initialMountRef = useRef(true);
+  useFocusEffect(
+    useCallback(() => {
+      if (initialMountRef.current) {
+        initialMountRef.current = false;
+        return;
+      }
+      fetchDMMessages(partnerId).then((page) => {
+        setMessages(page.results);
+        const unread = page.results
+          .filter((m) => !m.is_read && String(m.sender) !== String(me?.id))
+          .map((m) => String(m.id));
+        if (unread.length) markMessagesRead(unread).then(refreshUnread).catch(() => {});
+      }).catch(() => {});
+    }, [partnerId, me?.id]),
+  );
+
+  // Listen for incoming WebSocket messages and append to the chat if they
+  // belong to this conversation. Dedup by ID so the sender's own REST response
+  // and the WS broadcast don't both appear.
+  useEffect(() => {
+    const handler = (msg: MessageType) => {
+      // Only handle DM messages for this conversation.
+      const isFromPartner = String(msg.sender) === String(partnerId);
+      if (!isFromPartner) return;
+
+      // Skip messages sent by me — they come from the REST response, not WS.
+      // This avoids a timing duplicate where the WS broadcast arrives before
+      // the REST response and the dedup check finds nothing yet.
+      if (String(msg.sender) === String(me?.id)) return;
+
+      setMessages((prev) => {
+        if (prev.some((m) => String(m.id) === String(msg.id))) return prev;
+        return [...prev, msg];
+      });
+      flatRef.current?.scrollToEnd({ animated: true });
+    };
+
+    wsManager.on('new_message', handler);
+    return () => wsManager.off('new_message', handler);
+  }, [partnerId, me?.id]);
 
   const handleSend = async () => {
     const content = text.trim();

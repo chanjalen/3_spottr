@@ -12,8 +12,8 @@ const deleteToken = async () => {
   return SecureStore.deleteItemAsync('auth_token');
 };
 
-const API_BASE_URL = __DEV__
-  ? Platform.OS === 'web' ? 'http://localhost:8000' : 'http://192.168.5.105:8000'
+export const API_BASE_URL = __DEV__
+  ? Platform.OS === 'web' ? 'http://localhost:8000' : 'http://100.70.65.69:8000'
   : 'https://api.spottr.app';
 
 export const apiClient = axios.create({

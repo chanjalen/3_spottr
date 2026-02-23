@@ -34,14 +34,14 @@ class Command(BaseCommand):
             {
                 'name': 'Crunch Fitness - Champaign',
                 'address': '40 E Anthony Dr, Champaign, IL 61820',
-                'latitude': 40.1228,
-                'longitude': -88.2384,
+                'latitude': 40.1358531,
+                'longitude': -88.2399839,
             },
             {
                 'name': 'Planet Fitness - Champaign',
                 'address': '1901 N Market St, Champaign, IL 61822',
-                'latitude': 40.1374,
-                'longitude': -88.2391,
+                'latitude': 40.1396631,
+                'longitude': -88.2398059,
             },
         ]
 

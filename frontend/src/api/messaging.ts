@@ -41,6 +41,11 @@ export async function sendZap(recipientId: string): Promise<void> {
   await apiClient.post(`/api/messaging/zap/${recipientId}/`);
 }
 
+export async function sendGroupZap(groupId: string, targetUserId: string): Promise<Message> {
+  const res = await apiClient.post(`/api/messaging/groups/${groupId}/zap/${targetUserId}/`);
+  return res.data;
+}
+
 export async function markMessagesRead(messageIds: string[]): Promise<void> {
   await apiClient.post('/api/messaging/read/', { message_ids: messageIds });
 }
