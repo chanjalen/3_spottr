@@ -48,6 +48,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
   const [actingOnRequest, setActingOnRequest] = useState<string | null>(null);
   const flatRef = useRef<FlatList>(null);
   const newestIdRef = useRef<string | null>(null);
+  const lastSentRef = useRef<string>('');
 
   const load = useCallback(async () => {
     try {
@@ -105,10 +106,10 @@ export default function GroupChatScreen({ navigation, route }: Props) {
   );
 
   // Prepend incoming WS messages so they appear at the visual bottom (index 0 in newest-first).
+  // Own echoed messages are accepted here — dedup check prevents duplicates.
   useEffect(() => {
     const handler = (msg: MessageType) => {
       if (String(msg.group_id) !== String(groupId)) return;
-      if (String(msg.sender) === String(me?.id)) return;
 
       setMessages((prev) => {
         if (prev.some((m) => String(m.id) === String(msg.id))) return prev;
@@ -119,7 +120,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
 
     wsManager.on('new_message', handler);
     return () => wsManager.off('new_message', handler);
-  }, [groupId, me?.id]);
+  }, [groupId]);
 
   // Catch up on any messages missed while the WebSocket was reconnecting.
   useEffect(() => {
@@ -145,16 +146,33 @@ export default function GroupChatScreen({ navigation, route }: Props) {
   const handleSend = async () => {
     const content = text.trim();
     if (!content || sending) return;
-    setSending(true);
+    lastSentRef.current = content;
     setText('');
+
+    // Primary path: send via WebSocket — echo arrives via new_message handler.
+    const sent = wsManager.sendMessage({ type: 'send_message', content, group_id: groupId });
+    if (sent) return;
+
+    // Fallback: WS not connected — use REST.
+    setSending(true);
     try {
       const msg = await sendGroupMessage(groupId, content);
-      // Prepend so the new message appears at the visual bottom.
       setMessages((prev) => [msg, ...prev]);
+    } catch {
+      setText(content); // restore on failure
     } finally {
       setSending(false);
     }
   };
+
+  // Restore typed text if the server rejects a WS send.
+  useEffect(() => {
+    const handler = () => {
+      setText(lastSentRef.current);
+    };
+    wsManager.on('send_error', handler);
+    return () => wsManager.off('send_error', handler);
+  }, []);
 
   const handleAccept = async (requestId: string) => {
     if (actingOnRequest) return;

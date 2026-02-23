@@ -12,6 +12,7 @@ type EventMap = {
   unread_update: UnreadCount;
   connected: null;
   disconnected: null;
+  send_error: { code: string; detail: string };
 };
 
 type Handler<T> = (data: T) => void;
@@ -69,6 +70,8 @@ class WebSocketManager extends SimpleEmitter {
           this.emit('new_message', data.message as Message);
         } else if (data.type === 'unread_update') {
           this.emit('unread_update', data.counts as UnreadCount);
+        } else if (data.type === 'error') {
+          this.emit('send_error', { code: data.code, detail: data.detail });
         }
       } catch {
         // malformed frame — ignore
@@ -88,6 +91,15 @@ class WebSocketManager extends SimpleEmitter {
       // onclose fires right after onerror, so reconnect is handled there
       this.ws?.close();
     };
+  }
+
+  /** Send a message over the WebSocket. Returns false if not connected. */
+  sendMessage(payload: { type: 'send_message'; content: string; recipient_id?: string; group_id?: string }): boolean {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(payload));
+      return true;
+    }
+    return false;
   }
 
   /** Call on logout. */

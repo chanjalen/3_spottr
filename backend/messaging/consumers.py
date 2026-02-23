@@ -55,9 +55,33 @@ class MessagingConsumer(AsyncWebsocketConsumer):
         logger.info("WS disconnected: %s (code=%s)", self.user.username, close_code)
 
     async def receive(self, text_data):
-        # All sends go through the REST API.
-        # The WebSocket is receive-only from the client's perspective.
-        pass
+        try:
+            data = json.loads(text_data)
+        except json.JSONDecodeError:
+            return
+
+        if data.get('type') != 'send_message':
+            return  # silently ignore ping and unknown types
+
+        content = (data.get('content') or '').strip()
+        if not content:
+            return
+
+        recipient_id = data.get('recipient_id')
+        group_id     = data.get('group_id')
+
+        try:
+            if recipient_id:
+                await self._ws_send_dm(recipient_id, content)
+            elif group_id:
+                await self._ws_send_group(group_id, content)
+        except Exception as exc:
+            logger.warning("WS send_message failed for %s: %s", self.user.username, exc)
+            await self.send(text_data=json.dumps({
+                'type': 'error',
+                'code': type(exc).__name__,
+                'detail': str(exc),
+            }))
 
     # ── Channel layer event handlers ─────────────────────────────────────────
     # These are called by channel_layer.group_send() in services.py.
@@ -78,6 +102,16 @@ class MessagingConsumer(AsyncWebsocketConsumer):
         }))
 
     # ── DB helpers (must be async-safe) ──────────────────────────────────────
+
+    @database_sync_to_async
+    def _ws_send_dm(self, recipient_id, content):
+        from messaging.services import send_dm
+        return send_dm(self.user, recipient_id, content)
+
+    @database_sync_to_async
+    def _ws_send_group(self, group_id, content):
+        from messaging.services import send_group_message
+        return send_group_message(self.user, group_id, content)
 
     @database_sync_to_async
     def _get_user_from_token(self, token_key):
