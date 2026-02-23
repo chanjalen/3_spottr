@@ -53,3 +53,12 @@ export interface WorkoutInvite {
 
 // busy level option → survey_response integer (1-indexed)
 export type BusyOption = 'quiet' | 'moderate' | 'busy' | 'very_busy' | 'packed';
+
+export interface HourlyBusyEntry {
+  hour: number;
+  avg_level: number | null;
+  rounded_level: number | null;
+  label: string | null;
+  total_responses: number;
+  breakdown: { '1': number; '2': number; '3': number; '4': number; '5': number };
+}

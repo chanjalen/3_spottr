@@ -8,6 +8,7 @@ urlpatterns = [
     path('gyms/<str:gym_id>/', views.gym_detail, name='gym-detail'),
     path('gyms/<str:gym_id>/enroll/', views.gym_enroll, name='gym-enroll'),
     path('gyms/<str:gym_id>/busy-level/', views.gym_busy_level, name='gym-busy-level'),
+    path('gyms/<str:gym_id>/busy-level/hourly/', views.gym_busy_level_hourly, name='gym-busy-level-hourly'),
     path('gyms/<str:gym_id>/leaderboard/', views.gym_leaderboard, name='gym-leaderboard'),
     path('gyms/<str:gym_id>/unenroll/', views.gym_unenroll, name='gym-unenroll'),
     path('me/gym/', views.gym_current, name='gym-current'),

@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
@@ -24,6 +25,9 @@ import { useUnreadCount } from '../../store/UnreadCountContext';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 import { fetchGroupDetail, acceptJoinRequest, denyJoinRequest } from '../../api/groups';
+
+type NewDivider = { id: '__new_divider__'; isDivider: true };
+type ListItem = Message | NewDivider;
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'GroupChat'>;
@@ -37,7 +41,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
   const { groupId, groupName, groupAvatar } = route.params;
 
   // Stored newest-first so inverted FlatList shows newest at the bottom naturally.
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [oldestId, setOldestId] = useState<string | null>(null);
@@ -57,7 +61,13 @@ export default function GroupChatScreen({ navigation, route }: Props) {
         fetchGroupDetail(groupId).catch(() => null),
       ]);
       // Backend returns oldest-first; reverse so index 0 = newest (required for inverted list).
-      setMessages([...page.results].reverse());
+      const reversed = [...page.results].reverse();
+      // Insert "NEW" divider between unread (front) and read (back) messages on first open.
+      const firstReadIdx = reversed.findIndex((m) => m.is_read);
+      const listItems: ListItem[] = firstReadIdx > 0
+        ? [...reversed.slice(0, firstReadIdx), { id: '__new_divider__', isDivider: true as const }, ...reversed.slice(firstReadIdx)]
+        : reversed;
+      setMessages(listItems);
       setHasMore(page.has_more);
       setOldestId(page.oldest_id ?? null);
       newestIdRef.current = page.newest_id ?? null;
@@ -72,6 +82,17 @@ export default function GroupChatScreen({ navigation, route }: Props) {
   }, [groupId, me?.id]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Ensure the WS consumer is subscribed to this group's channel.
+  // Needed when the user joins a group while the WS is already connected —
+  // the initial connect() only subscribes to groups known at that moment.
+  useEffect(() => {
+    wsManager.subscribeGroup(groupId);
+    // Also re-subscribe if the WS reconnects while we're on this screen.
+    const handler = () => wsManager.subscribeGroup(groupId);
+    wsManager.on('connected', handler);
+    return () => wsManager.off('connected', handler);
+  }, [groupId]);
 
   // Load older messages when the user scrolls to the visual top (onEndReached in inverted mode).
   const loadMore = useCallback(async () => {
@@ -101,8 +122,12 @@ export default function GroupChatScreen({ navigation, route }: Props) {
         setHasMore(page.has_more);
         setOldestId(page.oldest_id ?? null);
         newestIdRef.current = page.newest_id ?? null;
+        const unread = page.results
+          .filter((m) => !m.is_read && String(m.sender) !== String(me?.id))
+          .map((m) => String(m.id));
+        if (unread.length) markMessagesRead(unread).then(refreshUnread).catch(() => {});
       }).catch(() => {});
-    }, [groupId]),
+    }, [groupId, me?.id]),
   );
 
   // Prepend incoming WS messages so they appear at the visual bottom (index 0 in newest-first).
@@ -116,11 +141,17 @@ export default function GroupChatScreen({ navigation, route }: Props) {
         return [msg, ...prev];
       });
       newestIdRef.current = String(msg.id);
+
+      // Mark incoming messages from others as read immediately.
+      // Own echoes are already auto-read by the server (MessageRead created on send).
+      if (String(msg.sender) !== String(me?.id)) {
+        markMessagesRead([String(msg.id)]).then(refreshUnread).catch(() => {});
+      }
     };
 
     wsManager.on('new_message', handler);
     return () => wsManager.off('new_message', handler);
-  }, [groupId]);
+  }, [groupId, me?.id, refreshUnread]);
 
   // Catch up on any messages missed while the WebSocket was reconnecting.
   useEffect(() => {
@@ -131,17 +162,23 @@ export default function GroupChatScreen({ navigation, route }: Props) {
         if (!page.results.length) return;
         newestIdRef.current = page.newest_id ?? nid;
         setMessages((prev) => {
-          const existingIds = new Set(prev.map((m) => String(m.id)));
+          const existingIds = new Set(
+            prev.filter((m): m is Message => !('isDivider' in m)).map((m) => String(m.id))
+          );
           const fresh = [...page.results].reverse().filter((m) => !existingIds.has(String(m.id)));
           if (!fresh.length) return prev;
           return [...fresh, ...prev];
         });
+        const unread = page.results
+          .filter((m) => !m.is_read && String(m.sender) !== String(me?.id))
+          .map((m) => String(m.id));
+        if (unread.length) markMessagesRead(unread).then(refreshUnread).catch(() => {});
       }).catch(() => {});
     };
 
     wsManager.on('connected', handler);
     return () => wsManager.off('connected', handler);
-  }, [groupId]);
+  }, [groupId, me?.id, refreshUnread]);
 
   const handleSend = async () => {
     const content = text.trim();
@@ -180,11 +217,12 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     try {
       await acceptJoinRequest(groupId, requestId);
       setMessages((prev) =>
-        prev.map((m) =>
-          m.join_request_id === requestId
+        prev.map((m) => {
+          if ('isDivider' in m) return m;
+          return m.join_request_id === requestId
             ? { ...m, join_request_status: 'accepted' }
-            : m,
-        ),
+            : m;
+        }),
       );
     } finally {
       setActingOnRequest(null);
@@ -197,11 +235,12 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     try {
       await denyJoinRequest(groupId, requestId);
       setMessages((prev) =>
-        prev.map((m) =>
-          m.join_request_id === requestId
+        prev.map((m) => {
+          if ('isDivider' in m) return m;
+          return m.join_request_id === requestId
             ? { ...m, join_request_status: 'denied' }
-            : m,
-        ),
+            : m;
+        }),
       );
     } finally {
       setActingOnRequest(null);
@@ -210,7 +249,16 @@ export default function GroupChatScreen({ navigation, route }: Props) {
 
   const canManageRequests = userRole === 'creator' || userRole === 'admin';
 
-  const renderMessage = ({ item }: { item: Message }) => {
+  const renderItem = ({ item }: { item: ListItem }) => {
+    if ('isDivider' in item) {
+      return (
+        <View style={styles.dividerRow}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerLabel}>NEW</Text>
+          <View style={styles.dividerLine} />
+        </View>
+      );
+    }
     const isOwn = String(item.sender) === String(me?.id);
     const isSystem = item.is_system;
 
@@ -290,26 +338,32 @@ export default function GroupChatScreen({ navigation, route }: Props) {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       {/* Header */}
-      <View style={[styles.headerBar, { paddingTop: insets.top }]}>
-        <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Feather name="arrow-left" size={22} color={colors.textPrimary} />
-        </Pressable>
-        <Pressable
-          style={styles.headerInfo}
-          onPress={() => navigation.navigate('GroupProfile', { groupId })}
-        >
-          <Avatar uri={groupAvatar} name={groupName} size={32} />
-          <Text style={styles.headerTitle} numberOfLines={1}>{groupName}</Text>
-        </Pressable>
-        <Pressable
-          style={styles.infoBtn}
-          onPress={() => navigation.navigate('GroupProfile', { groupId })}
-          accessibilityLabel="Group info"
-          accessibilityRole="button"
-        >
-          <Feather name="info" size={20} color={colors.textPrimary} />
-        </Pressable>
-      </View>
+      <LinearGradient
+        colors={['#4FC3E0', '#6DCFE8', '#A8E2F4', '#D6F2FB', '#FFFFFF']}
+        locations={[0, 0.2, 0.5, 0.75, 1]}
+        style={{ paddingBottom: spacing.lg }}
+      >
+        <View style={[styles.headerBar, { paddingTop: insets.top + 8 }]}>
+          <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Feather name="arrow-left" size={22} color={colors.textPrimary} />
+          </Pressable>
+          <Pressable
+            style={styles.headerInfo}
+            onPress={() => navigation.navigate('GroupProfile', { groupId })}
+          >
+            <Avatar uri={groupAvatar} name={groupName} size={42} />
+            <Text style={styles.headerTitle} numberOfLines={1}>{groupName}</Text>
+          </Pressable>
+          <Pressable
+            style={styles.infoBtn}
+            onPress={() => navigation.navigate('GroupProfile', { groupId })}
+            accessibilityLabel="Group info"
+            accessibilityRole="button"
+          >
+            <Feather name="info" size={20} color={colors.textPrimary} />
+          </Pressable>
+        </View>
+      </LinearGradient>
 
       {loading ? (
         <View style={styles.center}>
@@ -321,7 +375,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
           inverted
           data={messages}
           keyExtractor={(item) => String(item.id)}
-          renderItem={renderMessage}
+          renderItem={renderItem}
           contentContainerStyle={{ padding: spacing.base, gap: spacing.sm, paddingTop: 16 }}
           onEndReached={loadMore}
           onEndReachedThreshold={0.2}
@@ -372,15 +426,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     paddingHorizontal: spacing.base,
-    paddingBottom: spacing.sm,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.subtle,
+    paddingBottom: spacing.md,
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   infoBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  headerInfo: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   headerTitle: {
-    fontSize: typography.size.base,
+    fontSize: typography.size.lg,
     fontWeight: '600',
     color: colors.textPrimary,
   },
@@ -484,4 +536,23 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sendBtnDisabled: { backgroundColor: colors.iconInactive },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.primary,
+    opacity: 0.4,
+  },
+  dividerLabel: {
+    fontSize: typography.size.xs,
+    fontWeight: '700',
+    color: colors.primary,
+    letterSpacing: 1,
+  },
 });

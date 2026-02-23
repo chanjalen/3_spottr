@@ -211,7 +211,11 @@ export default function GymListScreen({ navigation }: Props) {
         {/* Bottom row: activity + top lifter */}
         <View style={styles.cardBottom}>
           {/* Activity block */}
-          <View style={styles.activityBlock}>
+          <Pressable
+            style={styles.activityBlock}
+            onPress={() => navigation.navigate('GymLiveActivity', { gymId: item.id, gymName: item.name })}
+            hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+          >
             <Text style={styles.sectionLabel}>ACTIVITY</Text>
             <View style={styles.busyRow}>
               <View style={[styles.busyDot, { backgroundColor: busyColor }]} />
@@ -219,7 +223,7 @@ export default function GymListScreen({ navigation }: Props) {
                 {busy?.label ?? 'No data'}
               </Text>
             </View>
-          </View>
+          </Pressable>
 
           <View style={styles.cardBottomDivider} />
 

@@ -311,7 +311,10 @@ export default function GymDetailScreen({ navigation, route }: Props) {
         }
       >
         {/* ── Live Activity ── */}
-        <View style={styles.card}>
+        <Pressable
+          style={styles.card}
+          onPress={() => navigation.navigate('GymLiveActivity', { gymId, gymName: gym?.name ?? gymName })}
+        >
           <View style={styles.activityHeader}>
             <Text style={styles.activityLabel}>LIVE ACTIVITY</Text>
             <View style={styles.activityCenter}>
@@ -348,7 +351,12 @@ export default function GymDetailScreen({ navigation, route }: Props) {
               </Text>
             </>
           ) : null}
-        </View>
+
+          <View style={styles.viewChartBtn}>
+            <Text style={styles.viewChartText}>View 24-hour chart</Text>
+            <Feather name="chevron-right" size={14} color={colors.primary} />
+          </View>
+        </Pressable>
 
         {/* ── Workout Buddies ── */}
         <View style={styles.card}>
@@ -761,6 +769,20 @@ const styles = StyleSheet.create({
   busyBar: { height: 8, backgroundColor: colors.background.elevated, borderRadius: 4, overflow: 'hidden' },
   busyFill: { height: '100%', borderRadius: 4 },
   busyCount: { fontSize: typography.size.xs, color: colors.textMuted, textAlign: 'right' },
+  viewChartBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingTop: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.subtle,
+  },
+  viewChartText: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.semibold,
+    color: colors.primary,
+  },
   noDataText: { fontSize: typography.size.sm, color: colors.textMuted, textAlign: 'center', paddingVertical: spacing.md },
 
   // ── Workout Buddies ──
