@@ -314,6 +314,74 @@ def send_system_group_message(group_id, content, join_request=None, sender=None)
     )
 
 
+def ws_send_dm(sender, recipient_id, content):
+    """
+    WebSocket-consumer variant of send_dm.
+    Performs only DB work and returns (payload, sender_group, recipient_group, recipient_unread)
+    so the async consumer can call channel_layer.group_send directly, avoiding the
+    async_to_sync-inside-sync_to_async nesting that silently breaks real-time delivery.
+    """
+    _check_not_self(sender, recipient_id)
+    recipient = _get_user(recipient_id)
+    _check_no_block(sender, recipient)
+
+    is_request = not _is_mutual_follow(sender, recipient)
+
+    message = Message.objects.create(
+        sender=sender,
+        recipient=recipient,
+        content=content,
+        is_request=is_request,
+    )
+    MessageRead.objects.create(message=message, user=sender)
+
+    payload = _serialize_for_ws(message, recipient_id=recipient.id)
+    sender_group = f"dm_{_clean_id(sender.id)}"
+    recipient_group = f"dm_{_clean_id(recipient.id)}"
+    recipient_unread = get_unread_count(recipient)
+
+    return payload, sender_group, recipient_group, recipient_unread
+
+
+def ws_send_group_message(sender, group_id, content):
+    """
+    WebSocket-consumer variant of send_group_message.
+    Returns (payload, group_channel, member_dm_groups) where member_dm_groups is a dict
+    mapping each non-sender member's personal DM group name to their new unread counts,
+    so the async consumer can push unread_update events without async_to_sync nesting.
+    """
+    from groups.models import Group, GroupMember
+
+    try:
+        group = Group.objects.get(id=group_id)
+    except Group.DoesNotExist:
+        raise ConversationNotFoundError("Group not found.")
+
+    _check_group_member(group, sender)
+
+    message = Message.objects.create(
+        sender=sender,
+        group=group,
+        content=content,
+    )
+    MessageRead.objects.create(message=message, user=sender)
+
+    payload = _serialize_for_ws(message, recipient_id=None)
+    group_channel = f"group_{_clean_id(group.id)}"
+
+    members = (
+        GroupMember.objects.filter(group=group)
+        .exclude(user=sender)
+        .select_related('user')
+    )
+    member_dm_groups = {
+        f"dm_{_clean_id(member.user.id)}": get_unread_count(member.user)
+        for member in members
+    }
+
+    return payload, group_channel, member_dm_groups
+
+
 def send_group_message(sender, group_id, content, post_id=None, quick_workout_id=None):
     """
     Send a message in a group chat.

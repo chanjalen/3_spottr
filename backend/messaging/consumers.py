@@ -72,9 +72,27 @@ class MessagingConsumer(AsyncWebsocketConsumer):
 
         try:
             if recipient_id:
-                await self._ws_send_dm(recipient_id, content)
+                payload, sender_group, recipient_group, recipient_unread = \
+                    await self._ws_send_dm(recipient_id, content)
+                msg_event = {'type': 'new_message', 'message': payload}
+                await self.channel_layer.group_send(sender_group, msg_event)
+                await self.channel_layer.group_send(recipient_group, msg_event)
+                await self.channel_layer.group_send(
+                    recipient_group,
+                    {'type': 'unread_update', 'counts': recipient_unread},
+                )
             elif group_id:
-                await self._ws_send_group(group_id, content)
+                payload, group_channel, member_dm_groups = \
+                    await self._ws_send_group(group_id, content)
+                await self.channel_layer.group_send(
+                    group_channel,
+                    {'type': 'new_message', 'message': payload},
+                )
+                for dm_group, counts in member_dm_groups.items():
+                    await self.channel_layer.group_send(
+                        dm_group,
+                        {'type': 'unread_update', 'counts': counts},
+                    )
         except Exception as exc:
             logger.warning("WS send_message failed for %s: %s", self.user.username, exc)
             await self.send(text_data=json.dumps({
@@ -105,13 +123,13 @@ class MessagingConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def _ws_send_dm(self, recipient_id, content):
-        from messaging.services import send_dm
-        return send_dm(self.user, recipient_id, content)
+        from messaging.services import ws_send_dm
+        return ws_send_dm(self.user, recipient_id, content)
 
     @database_sync_to_async
     def _ws_send_group(self, group_id, content):
-        from messaging.services import send_group_message
-        return send_group_message(self.user, group_id, content)
+        from messaging.services import ws_send_group_message
+        return ws_send_group_message(self.user, group_id, content)
 
     @database_sync_to_async
     def _get_user_from_token(self, token_key):
