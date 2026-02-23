@@ -19,6 +19,10 @@ export async function markAllRead(): Promise<void> {
   await apiClient.post('/api/notifications/mark-all-read/');
 }
 
+export async function clearAllNotifications(): Promise<void> {
+  await apiClient.post('/api/notifications/clear-all/');
+}
+
 export async function acceptWorkoutInvite(inviteId: string): Promise<void> {
   await apiClient.post(`/api/gyms/invites/${inviteId}/join/`);
 }
