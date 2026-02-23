@@ -7,6 +7,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
+  Alert,
   Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +18,7 @@ import {
   fetchNotifications,
   markAllRead,
   markRead,
+  clearAllNotifications,
   acceptWorkoutInvite,
   declineWorkoutInvite,
   acceptGroupJoinRequest,
@@ -289,6 +291,24 @@ export default function NotificationsScreen({ navigation }: Props) {
     setNotifications((ns) => ns.map((n) => ({ ...n, is_read: true })));
   };
 
+  const handleClearAll = () => {
+    Alert.alert(
+      'Clear Notifications',
+      'Are you sure you want to delete all notifications?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: async () => {
+            await clearAllNotifications();
+            setNotifications([]);
+          },
+        },
+      ],
+    );
+  };
+
   const handlePress = async (item: Notification) => {
     // Mark as read
     const ids = item.ids?.length ? item.ids : [item.id];
@@ -327,9 +347,14 @@ export default function NotificationsScreen({ navigation }: Props) {
           <Feather name="arrow-left" size={22} color={colors.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>Notifications</Text>
-        <Pressable onPress={handleMarkAll} style={styles.markAllBtn}>
-          <Text style={styles.markAllText}>Mark all read</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable onPress={handleMarkAll}>
+            <Text style={styles.markAllText}>Mark all read</Text>
+          </Pressable>
+          <Pressable onPress={handleClearAll}>
+            <Text style={styles.clearText}>Clear</Text>
+          </Pressable>
+        </View>
       </View>
 
       {loading ? (
@@ -377,8 +402,9 @@ const styles = StyleSheet.create({
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: typography.size.lg, fontWeight: '700', color: colors.textPrimary },
-  markAllBtn: { paddingHorizontal: spacing.sm },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   markAllText: { fontSize: typography.size.xs, color: colors.primary, fontWeight: '600' },
+  clearText: { fontSize: typography.size.xs, color: colors.error, fontWeight: '600' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, paddingTop: spacing['2xl'] },
   emptyText: { fontSize: typography.size.base, color: colors.textMuted },
 

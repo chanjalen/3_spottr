@@ -26,6 +26,8 @@ import { fetchDMConversations, fetchGroupConversations, sendZap } from '../../ap
 import { Conversation, GroupConversation, Message as MessageType } from '../../types/messaging';
 import { wsManager } from '../../services/websocket';
 import { searchGroups, createGroup, joinViaCode, joinGroup, requestJoinGroup, GroupListItem } from '../../api/groups';
+import { fetchFriends, searchUsers } from '../../api/accounts';
+import { UserBrief } from '../../types/user';
 import { colors, spacing, typography } from '../../theme';
 import { SocialStackParamList, RootStackParamList } from '../../navigation/types';
 import AppHeader from '../../components/navigation/AppHeader';
@@ -75,6 +77,15 @@ export default function SocialScreen({ navigation }: Props) {
 
   // ── Group join/request ────────────────────────────────────────────────────
   const [joining, setJoining] = useState<string | null>(null); // group_id being joined/requested
+
+  // ── New message modal ─────────────────────────────────────────────────────
+  const [newMsgVisible, setNewMsgVisible] = useState(false);
+  const [newMsgQuery, setNewMsgQuery] = useState('');
+  const [newMsgFriends, setNewMsgFriends] = useState<UserBrief[]>([]);
+  const [newMsgResults, setNewMsgResults] = useState<UserBrief[]>([]);
+  const [loadingNewMsg, setLoadingNewMsg] = useState(false);
+  const newMsgSearchGenRef = useRef(0);
+  const newMsgSearchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Join via code ─────────────────────────────────────────────────────────
   const [joinModalVisible, setJoinModalVisible] = useState(false);
@@ -231,17 +242,68 @@ export default function SocialScreen({ navigation }: Props) {
     }
   };
 
-  const handleZap = async (partnerId: string, partnerName: string) => {
+  const handleZap = async (partnerId: string) => {
     if (zapping) return;
     setZapping(partnerId);
     try {
       await sendZap(partnerId);
-      Alert.alert('Zapped!', `You zapped ${partnerName}!`);
-    } catch (e: any) {
-      Alert.alert('Cannot zap', e?.response?.data?.error ?? 'Something went wrong');
+    } catch {
+      // silently ignore
     } finally {
       setZapping(null);
     }
+  };
+
+  const openNewMessage = async () => {
+    setNewMsgVisible(true);
+    setNewMsgQuery('');
+    setNewMsgResults([]);
+    setLoadingNewMsg(true);
+    try {
+      const friends = await fetchFriends();
+      setNewMsgFriends(friends);
+    } catch {
+      setNewMsgFriends([]);
+    } finally {
+      setLoadingNewMsg(false);
+    }
+  };
+
+  const closeNewMessage = () => {
+    setNewMsgVisible(false);
+    setNewMsgQuery('');
+    setNewMsgResults([]);
+    if (newMsgSearchTimeoutRef.current) clearTimeout(newMsgSearchTimeoutRef.current);
+  };
+
+  const handleNewMsgSearch = (q: string) => {
+    setNewMsgQuery(q);
+    if (newMsgSearchTimeoutRef.current) clearTimeout(newMsgSearchTimeoutRef.current);
+    const gen = ++newMsgSearchGenRef.current;
+    if (!q.trim()) {
+      setNewMsgResults([]);
+      return;
+    }
+    newMsgSearchTimeoutRef.current = setTimeout(async () => {
+      try {
+        const results = await searchUsers(q);
+        if (gen !== newMsgSearchGenRef.current) return;
+        setNewMsgResults(results);
+      } catch {
+        if (gen !== newMsgSearchGenRef.current) return;
+        setNewMsgResults([]);
+      }
+    }, 300);
+  };
+
+  const handleSelectNewMsgUser = (user: UserBrief) => {
+    closeNewMessage();
+    navigation.navigate('Chat', {
+      partnerId: String(user.id),
+      partnerName: user.display_name,
+      partnerUsername: user.username,
+      partnerAvatar: user.avatar_url,
+    });
   };
 
   const handleJoinViaCode = async () => {
@@ -301,7 +363,7 @@ export default function SocialScreen({ navigation }: Props) {
       {!item.partner_has_activity_today && (
         <Pressable
           style={[styles.zapBtn, zapping === item.partner_id && styles.zapBtnDisabled]}
-          onPress={() => handleZap(item.partner_id, item.partner_display_name)}
+          onPress={() => handleZap(item.partner_id)}
           disabled={zapping !== null}
           hitSlop={8}
         >
@@ -482,7 +544,7 @@ export default function SocialScreen({ navigation }: Props) {
               <Text style={styles.sectionTitle}>MESSAGES</Text>
               <Pressable
                 style={styles.addBtn}
-                onPress={() => Alert.alert('New Message', 'Coming soon')}
+                onPress={openNewMessage}
               >
                 <Feather name="plus" size={18} color="#fff" />
               </Pressable>
@@ -568,6 +630,74 @@ export default function SocialScreen({ navigation }: Props) {
           </Pressable>
         </View>
       )}
+
+      {/* ── New Message Modal ── */}
+      <Modal
+        visible={newMsgVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeNewMessage}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeNewMessage} />
+          <View style={[styles.modalCard, styles.newMsgCard]}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.modalTitle}>New Message</Text>
+              <Pressable style={styles.modalCloseBtn} onPress={closeNewMessage}>
+                <Feather name="x" size={16} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+
+            {/* Search bar */}
+            <View style={styles.newMsgSearchWrap}>
+              <Feather name="search" size={15} color={colors.textMuted} />
+              <TextInput
+                style={styles.newMsgSearchInput}
+                placeholder="Search friends..."
+                placeholderTextColor={colors.textMuted}
+                value={newMsgQuery}
+                onChangeText={handleNewMsgSearch}
+                autoFocus
+                returnKeyType="search"
+              />
+            </View>
+
+            {/* Results list */}
+            {loadingNewMsg ? (
+              <ActivityIndicator color={colors.primary} style={{ marginVertical: 24 }} />
+            ) : (
+              <FlatList
+                data={newMsgQuery.trim() ? newMsgResults : newMsgFriends}
+                keyExtractor={(item) => String(item.id)}
+                style={styles.newMsgList}
+                keyboardShouldPersistTaps="handled"
+                renderItem={({ item }) => (
+                  <Pressable
+                    style={({ pressed }) => [styles.newMsgRow, pressed && styles.convoRowPressed]}
+                    onPress={() => handleSelectNewMsgUser(item)}
+                  >
+                    <Avatar uri={item.avatar_url} name={item.display_name} size={44} />
+                    <View style={styles.newMsgRowInfo}>
+                      <Text style={styles.newMsgName}>{item.display_name}</Text>
+                      <Text style={styles.newMsgUsername}>@{item.username}</Text>
+                    </View>
+                  </Pressable>
+                )}
+                ListEmptyComponent={
+                  <View style={styles.newMsgEmpty}>
+                    <Text style={styles.emptyText}>
+                      {newMsgQuery.trim() ? 'No users found' : 'No friends yet'}
+                    </Text>
+                  </View>
+                }
+              />
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
 
       {/* ── Join via Code Modal ── */}
       <Modal
@@ -1087,5 +1217,53 @@ const styles = StyleSheet.create({
     fontSize: typography.size.base,
     fontWeight: '700',
     color: '#fff',
+  },
+
+  // ── New Message Modal ─────────────────────────────────────────────────────
+  newMsgCard: {
+    maxHeight: '70%',
+  },
+  newMsgSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.background.elevated,
+  },
+  newMsgSearchInput: {
+    flex: 1,
+    fontSize: typography.size.sm,
+    color: colors.textPrimary,
+  },
+  newMsgList: {
+    flexGrow: 0,
+  },
+  newMsgRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.xs,
+    borderRadius: 10,
+  },
+  newMsgRowInfo: {
+    gap: 2,
+  },
+  newMsgName: {
+    fontSize: typography.size.base,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  newMsgUsername: {
+    fontSize: typography.size.sm,
+    color: colors.textMuted,
+  },
+  newMsgEmpty: {
+    paddingVertical: spacing.lg,
+    alignItems: 'center',
   },
 });

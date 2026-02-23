@@ -242,6 +242,21 @@ def notification_list(request):
 
     # Batch-look up action statuses for actionable notification types
     from groups.models import GroupJoinRequest
+    from social.models import Follow
+
+    # Pre-fetch which follow-notification actors the current user already follows
+    follow_actor_ids = [
+        item['actors'][0]['id'] for item in result
+        if item['type'] == 'follow' and item.get('actors')
+    ]
+    already_following_ids = set()
+    if follow_actor_ids:
+        already_following_ids = set(
+            str(fid) for fid in Follow.objects.filter(
+                follower=request.user,
+                following_id__in=follow_actor_ids,
+            ).values_list('following_id', flat=True)
+        )
 
     group_jr_ids = [
         item['context_id'] for item in result
@@ -290,6 +305,9 @@ def notification_list(request):
             item['action_status'] = 'accepted' if jr_status == 'accept' else 'pending'
         elif t == 'workout_invite':
             item['action_status'] = 'accepted' if item.get('target_id') in workout_invite_accepted else 'pending'
+        elif t == 'follow':
+            actor_id = item['actors'][0]['id'] if item.get('actors') else None
+            item['action_status'] = 'accepted' if actor_id in already_following_ids else 'pending'
         final_result.append(item)
 
     return JsonResponse({'success': True, 'notifications': final_result})
@@ -329,4 +347,12 @@ def mark_all_read(request):
         recipient=request.user,
         read_at__isnull=True,
     ).update(read_at=timezone.now())
+    return JsonResponse({'success': True})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def clear_all(request):
+    """POST /api/notifications/clear-all/ — delete all notifications for the user."""
+    Notification.objects.filter(recipient=request.user).delete()
     return JsonResponse({'success': True})
