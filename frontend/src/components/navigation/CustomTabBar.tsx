@@ -17,6 +17,8 @@ import Animated, {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors, shadow } from '../../theme';
 import CreateMenuSheet from '../feed/CreateMenuSheet';
+import CheckInSheet from '../feed/CheckInSheet';
+import CreatePostSheet from '../feed/CreatePostSheet';
 import { useUnreadCount } from '../../store/UnreadCountContext';
 import type BottomSheet from '@gorhom/bottom-sheet';
 
@@ -31,10 +33,20 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
   const insets = useSafeAreaInsets();
   const bottomPad = Math.max(insets.bottom, 16);
   const sheetRef = useRef<BottomSheet>(null);
+  const checkInSheetRef = useRef<BottomSheet>(null);
+  const createPostSheetRef = useRef<BottomSheet>(null);
   const { total: unreadTotal } = useUnreadCount();
 
   const openCreateMenu = useCallback(() => {
     sheetRef.current?.expand();
+  }, []);
+
+  const openCheckIn = useCallback(() => {
+    checkInSheetRef.current?.expand();
+  }, []);
+
+  const openCreatePost = useCallback(() => {
+    createPostSheetRef.current?.expand();
   }, []);
 
   return (
@@ -77,7 +89,9 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
         <FabButton onPress={openCreateMenu} />
       </View>
 
-      <CreateMenuSheet sheetRef={sheetRef} />
+      <CreateMenuSheet sheetRef={sheetRef} onCheckIn={openCheckIn} onCreatePost={openCreatePost} />
+      <CheckInSheet sheetRef={checkInSheetRef} />
+      <CreatePostSheet sheetRef={createPostSheetRef} />
     </>
   );
 }

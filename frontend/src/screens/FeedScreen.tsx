@@ -63,7 +63,7 @@ export default function FeedScreen() {
         index={index}
         onLike={() => handleLike(item)}
         onComment={() => setCommentItem(item)}
-        onPollVote={(optionId) => handlePollVote(item, optionId)}
+        onPollVote={(optionId: number | string) => handlePollVote(item, optionId)}
       />
     ),
     [handleLike, handlePollVote],
@@ -216,7 +216,7 @@ export default function FeedScreen() {
                         clearSearch();
                         setCommentItem(item);
                       }}
-                      onPollVote={(optionId) => handlePollVote(item, optionId)}
+                      onPollVote={(optionId: number | string) => handlePollVote(item, optionId)}
                     />
                   ))}
                 </View>

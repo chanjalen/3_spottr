@@ -6,7 +6,7 @@ export function usePollVote(
   updateItem: (id: string, updates: Partial<FeedItem>) => void,
 ) {
   const handleVote = useCallback(
-    async (item: FeedItem, optionId: number) => {
+    async (item: FeedItem, optionId: number | string) => {
       if (!item.poll) return;
 
       const poll = item.poll;

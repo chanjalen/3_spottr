@@ -12,7 +12,7 @@ interface FeedCardProps {
   index: number;
   onLike: () => void;
   onComment: () => void;
-  onPollVote: (optionId: number) => void;
+  onPollVote: (optionId: number | string) => void;
 }
 
 export default function FeedCard({

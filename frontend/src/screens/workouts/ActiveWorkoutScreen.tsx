@@ -11,6 +11,8 @@ import {
   Platform,
   Modal,
   FlatList,
+  Switch,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -21,13 +23,14 @@ import {
   finishWorkout,
   deleteWorkout,
   addExercise,
+  addCustomExercise,
   deleteExercise,
   addSet,
   updateSet,
   deleteSet,
   fetchExerciseCatalog,
 } from '../../api/workouts';
-import { Workout, WorkoutExercise, ExerciseSet, ExerciseCatalogItem } from '../../types/workout';
+import { Workout, WorkoutExercise, ExerciseSet, ExerciseCatalogItem, NewPR } from '../../types/workout';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 
@@ -36,6 +39,8 @@ type Props = {
   route: RouteProp<RootStackParamList, 'ActiveWorkout'>;
 };
 
+const CATEGORIES = ['All', 'Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Core', 'Cardio'];
+
 export default function ActiveWorkoutScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { workoutId } = route.params;
@@ -43,21 +48,45 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [loading, setLoading] = useState(true);
   const [seconds, setSeconds] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Catalog modal state
   const [showCatalog, setShowCatalog] = useState(false);
   const [catalog, setCatalog] = useState<ExerciseCatalogItem[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogQuery, setCatalogQuery] = useState('');
+  const [activeCategory, setActiveCategory] = useState('All');
+  const [customExerciseName, setCustomExerciseName] = useState('');
+
+  // Finish modal state
+  const [showFinish, setShowFinish] = useState(false);
   const [finishLoading, setFinishLoading] = useState(false);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const [workoutName, setWorkoutName] = useState('Workout');
+  const [notes, setNotes] = useState('');
+  const [postToFeed, setPostToFeed] = useState(true);
+  const [feedVisibility, setFeedVisibility] = useState<'main' | 'friends'>('main');
+  const [saveAsTemplate, setSaveAsTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+
+  // PR state
+  const [pendingPRs, setPendingPRs] = useState<NewPR[]>([]);
+
+  // ─── Load workout ────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    fetchWorkout(workoutId).then((w) => {
-      setWorkout(w);
-      if (w.started_at) {
-        const elapsed = Math.floor((Date.now() - new Date(w.started_at).getTime()) / 1000);
-        setSeconds(elapsed);
-      }
-    }).finally(() => setLoading(false));
+    fetchWorkout(workoutId)
+      .then((w) => {
+        setWorkout(w);
+        setWorkoutName(w.name || 'Workout');
+        if (w.started_at) {
+          const elapsed = Math.floor((Date.now() - new Date(w.started_at).getTime()) / 1000);
+          setSeconds(Math.max(0, elapsed));
+        }
+      })
+      .finally(() => setLoading(false));
   }, [workoutId]);
+
+  // ─── Timer ───────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
@@ -65,28 +94,62 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
   }, []);
 
   const formatTime = (s: number) => {
-    const m = Math.floor(s / 60);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
     const sec = s % 60;
+    if (h > 0) return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
     return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
   };
 
-  const handleAddExercise = async (name: string) => {
+  // ─── Catalog ─────────────────────────────────────────────────────────────────
+
+  const openCatalog = async () => {
+    setShowCatalog(true);
+    setCatalogQuery('');
+    setCustomExerciseName('');
+    setActiveCategory('All');
+    if (catalog.length === 0) {
+      setCatalogLoading(true);
+      const data = await fetchExerciseCatalog().catch(() => []);
+      setCatalog(data);
+      setCatalogLoading(false);
+    }
+  };
+
+  const filteredCatalog = catalog.filter((e) => {
+    const matchesQuery = !catalogQuery || e.name.toLowerCase().includes(catalogQuery.toLowerCase());
+    const matchesCategory = activeCategory === 'All' || e.category.toLowerCase() === activeCategory.toLowerCase();
+    return matchesQuery && matchesCategory;
+  });
+
+  const handleAddFromCatalog = async (item: ExerciseCatalogItem) => {
     setShowCatalog(false);
     try {
-      const ex = await addExercise(workoutId, name);
+      const ex = await addExercise(workoutId, item.id);
       setWorkout((w) => w ? { ...w, exercises: [...w.exercises, ex] } : w);
     } catch {
       Alert.alert('Error', 'Could not add exercise.');
     }
   };
 
-  const handleDeleteExercise = async (exerciseId: string) => {
+  const handleAddCustom = async () => {
+    const name = customExerciseName.trim();
+    if (!name) return;
+    setShowCatalog(false);
+    setCustomExerciseName('');
     try {
-      await deleteExercise(exerciseId);
-      setWorkout((w) => w ? { ...w, exercises: w.exercises.filter((e) => e.id !== exerciseId) } : w);
+      const ex = await addCustomExercise(workoutId, name);
+      setWorkout((w) => w ? { ...w, exercises: [...w.exercises, ex] } : w);
     } catch {
-      Alert.alert('Error', 'Could not delete exercise.');
+      Alert.alert('Error', 'Could not add custom exercise.');
     }
+  };
+
+  // ─── Exercise / set mutations ─────────────────────────────────────────────────
+
+  const handleDeleteExercise = async (exerciseId: string) => {
+    await deleteExercise(exerciseId).catch(() => {});
+    setWorkout((w) => w ? { ...w, exercises: w.exercises.filter((e) => e.id !== exerciseId) } : w);
   };
 
   const handleAddSet = async (exerciseId: string) => {
@@ -97,7 +160,7 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
         return {
           ...w,
           exercises: w.exercises.map((e) =>
-            e.id === exerciseId ? { ...e, sets: [...e.sets, { ...set, completed: false }] } : e,
+            e.id === exerciseId ? { ...e, sets: [...e.sets, set] } : e,
           ),
         };
       });
@@ -106,29 +169,79 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
     }
   };
 
-  const handleUpdateSet = async (exerciseId: string, setId: string, field: 'reps' | 'weight' | 'completed', value: any) => {
+  const handleDeleteSet = async (exerciseId: string, setId: string) => {
+    await deleteSet(setId).catch(() => {});
     setWorkout((w) => {
       if (!w) return w;
       return {
         ...w,
         exercises: w.exercises.map((e) =>
-          e.id === exerciseId
-            ? { ...e, sets: e.sets.map((s) => s.id === setId ? { ...s, [field]: value } : s) }
-            : e,
+          e.id === exerciseId ? { ...e, sets: e.sets.filter((s) => s.id !== setId) } : e,
         ),
       };
     });
-    try {
-      await updateSet(setId, { [field]: value });
-    } catch {
-      // revert on error in real app
-    }
+  };
+
+  const handleUpdateSet = useCallback(
+    async (exerciseId: string, setId: string, field: 'reps' | 'weight' | 'completed', value: any) => {
+      // Optimistic update
+      setWorkout((w) => {
+        if (!w) return w;
+        return {
+          ...w,
+          exercises: w.exercises.map((e) =>
+            e.id === exerciseId
+              ? { ...e, sets: e.sets.map((s) => s.id === setId ? { ...s, [field]: value } : s) }
+              : e,
+          ),
+        };
+      });
+      // Persist
+      try {
+        const result = await updateSet(setId, { [field]: value });
+        if (result.is_new_pr && result.pr_exercise) {
+          const pr: NewPR = {
+            exercise_name: result.pr_exercise,
+            value: result.pr_value ?? '',
+            unit: result.pr_unit ?? 'lbs',
+          };
+          setPendingPRs((prev) => {
+            const without = prev.filter((p) => p.exercise_name !== pr.exercise_name);
+            return [...without, pr];
+          });
+        }
+      } catch {
+        // Revert not implemented — server is source of truth on next fetch
+      }
+    },
+    [],
+  );
+
+  // ─── Finish ───────────────────────────────────────────────────────────────────
+
+  const openFinishDialog = () => {
+    setWorkoutName(workout?.name || 'Workout');
+    setNotes('');
+    setPostToFeed(true);
+    setFeedVisibility('main');
+    setSaveAsTemplate(false);
+    setTemplateName(workout?.name || 'Workout');
+    setShowFinish(true);
   };
 
   const handleFinish = async () => {
     setFinishLoading(true);
     try {
-      await finishWorkout(workoutId, { visibility: 'friends' });
+      await finishWorkout(workoutId, {
+        name: workoutName.trim() || 'Workout',
+        notes,
+        post_to_feed: postToFeed,
+        visibility: feedVisibility,
+        save_template: saveAsTemplate,
+        template_name: saveAsTemplate ? (templateName.trim() || workoutName) : '',
+        pr_data: pendingPRs.map((p) => ({ exercise_name: p.exercise_name, value: p.value, unit: p.unit })),
+      });
+      setShowFinish(false);
       navigation.goBack();
     } catch {
       Alert.alert('Error', 'Could not finish workout.');
@@ -151,17 +264,7 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
     ]);
   };
 
-  const openCatalog = async () => {
-    setShowCatalog(true);
-    if (catalog.length === 0) {
-      const data = await fetchExerciseCatalog().catch(() => []);
-      setCatalog(data);
-    }
-  };
-
-  const filteredCatalog = catalogQuery
-    ? catalog.filter((e) => e.name.toLowerCase().includes(catalogQuery.toLowerCase()))
-    : catalog;
+  // ─── Render ───────────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -182,20 +285,41 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
           <Text style={styles.timer}>{formatTime(seconds)}</Text>
         </View>
         <Pressable
-          style={[styles.finishBtn, finishLoading && styles.finishBtnDisabled]}
-          onPress={handleFinish}
-          disabled={finishLoading}
+          style={styles.finishBtn}
+          onPress={openFinishDialog}
         >
-          {finishLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.finishText}>Finish</Text>}
+          <Text style={styles.finishText}>Finish</Text>
         </Pressable>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: spacing.base, gap: spacing.md, paddingBottom: insets.bottom + 120 }}>
+      {/* PR banner */}
+      {pendingPRs.length > 0 && (
+        <View style={styles.prBanner}>
+          <Feather name="award" size={14} color="#fff" />
+          <Text style={styles.prBannerText}>
+            New PR{pendingPRs.length > 1 ? 's' : ''}: {pendingPRs.map((p) => `${p.exercise_name} (${p.value} ${p.unit})`).join(', ')}
+          </Text>
+        </View>
+      )}
+
+      <ScrollView
+        contentContainerStyle={{ padding: spacing.base, gap: spacing.md, paddingBottom: insets.bottom + 120 }}
+        keyboardShouldPersistTaps="handled"
+      >
+        {workout?.exercises.length === 0 && (
+          <View style={styles.emptyState}>
+            <Feather name="zap-off" size={32} color={colors.textMuted} />
+            <Text style={styles.emptyTitle}>No exercises yet</Text>
+            <Text style={styles.emptySubtitle}>Tap "Add Exercise" below to get started</Text>
+          </View>
+        )}
+
         {workout?.exercises.map((exercise) => (
           <ExerciseCard
             key={exercise.id}
             exercise={exercise}
             onAddSet={() => handleAddSet(exercise.id)}
+            onDeleteSet={(setId) => handleDeleteSet(exercise.id, setId)}
             onUpdateSet={(setId, field, value) => handleUpdateSet(exercise.id, setId, field, value)}
             onDeleteExercise={() => handleDeleteExercise(exercise.id)}
           />
@@ -207,7 +331,7 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
         </Pressable>
       </ScrollView>
 
-      {/* Catalog Modal */}
+      {/* ── Catalog Modal ─────────────────────────────────────────────── */}
       <Modal visible={showCatalog} animationType="slide" presentationStyle="pageSheet">
         <View style={[styles.catalogWrap, { paddingTop: insets.top }]}>
           <View style={styles.catalogHeader}>
@@ -216,6 +340,8 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
               <Feather name="x" size={22} color={colors.textPrimary} />
             </Pressable>
           </View>
+
+          {/* Search */}
           <View style={styles.catalogSearch}>
             <Feather name="search" size={16} color={colors.textMuted} />
             <TextInput
@@ -226,27 +352,210 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
               placeholderTextColor={colors.textMuted}
               autoFocus
             />
-          </View>
-          <FlatList
-            data={filteredCatalog}
-            keyExtractor={(item) => item.id}
-            renderItem={({ item }) => (
-              <Pressable
-                style={({ pressed }) => [styles.catalogItem, pressed && styles.catalogItemPressed]}
-                onPress={() => handleAddExercise(item.name)}
-              >
-                <Text style={styles.catalogItemName}>{item.name}</Text>
-                <Text style={styles.catalogItemCategory}>{item.category}</Text>
+            {catalogQuery.length > 0 && (
+              <Pressable onPress={() => setCatalogQuery('')}>
+                <Feather name="x" size={14} color={colors.textMuted} />
               </Pressable>
             )}
-            contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
-            ListEmptyComponent={
-              <View style={styles.center}>
-                <Text style={styles.emptyText}>No exercises found</Text>
-              </View>
-            }
-          />
+          </View>
+
+          {/* Category chips */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.categoryChips}
+          >
+            {CATEGORIES.map((cat) => (
+              <Pressable
+                key={cat}
+                style={[styles.chip, activeCategory === cat && styles.chipActive]}
+                onPress={() => setActiveCategory(cat)}
+              >
+                <Text style={[styles.chipText, activeCategory === cat && styles.chipTextActive]}>
+                  {cat}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          {/* Custom exercise entry */}
+          <View style={styles.customRow}>
+            <TextInput
+              style={styles.customInput}
+              value={customExerciseName}
+              onChangeText={setCustomExerciseName}
+              placeholder="Can't find it? Enter custom name…"
+              placeholderTextColor={colors.textMuted}
+              returnKeyType="done"
+              onSubmitEditing={handleAddCustom}
+            />
+            {customExerciseName.trim().length > 0 && (
+              <Pressable style={styles.customAddBtn} onPress={handleAddCustom}>
+                <Text style={styles.customAddText}>Add</Text>
+              </Pressable>
+            )}
+          </View>
+
+          {/* Exercise list */}
+          {catalogLoading ? (
+            <View style={styles.center}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : (
+            <FlatList
+              data={filteredCatalog}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <Pressable
+                  style={({ pressed }) => [styles.catalogItem, pressed && styles.catalogItemPressed]}
+                  onPress={() => handleAddFromCatalog(item)}
+                >
+                  <Text style={styles.catalogItemName}>{item.name}</Text>
+                  <Text style={styles.catalogItemCategory}>{item.category}</Text>
+                </Pressable>
+              )}
+              contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
+              ListEmptyComponent={
+                <View style={[styles.center, { paddingTop: 48 }]}>
+                  <Text style={styles.emptyText}>No exercises found</Text>
+                  <Text style={styles.emptySubtitleSmall}>Use the custom field above</Text>
+                </View>
+              }
+            />
+          )}
         </View>
+      </Modal>
+
+      {/* ── Finish Modal ──────────────────────────────────────────────── */}
+      <Modal visible={showFinish} animationType="slide" presentationStyle="pageSheet">
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <View style={[styles.finishWrap, { paddingTop: insets.top }]}>
+            <View style={styles.finishHeader}>
+              <Pressable onPress={() => setShowFinish(false)}>
+                <Feather name="x" size={22} color={colors.textPrimary} />
+              </Pressable>
+              <Text style={styles.finishHeaderTitle}>Finish Workout</Text>
+              <View style={{ width: 22 }} />
+            </View>
+
+            <ScrollView
+              contentContainerStyle={{ padding: spacing.base, gap: spacing.md, paddingBottom: insets.bottom + 40 }}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* Workout name */}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Workout Name</Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={workoutName}
+                  onChangeText={setWorkoutName}
+                  placeholder="Workout"
+                  placeholderTextColor={colors.textMuted}
+                />
+              </View>
+
+              {/* Notes */}
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Notes (optional)</Text>
+                <TextInput
+                  style={[styles.fieldInput, styles.fieldInputMulti]}
+                  value={notes}
+                  onChangeText={setNotes}
+                  placeholder="How did it go?"
+                  placeholderTextColor={colors.textMuted}
+                  multiline
+                  numberOfLines={3}
+                />
+              </View>
+
+              {/* Post to feed toggle */}
+              <View style={styles.toggleRow}>
+                <View>
+                  <Text style={styles.toggleLabel}>Post to Feed</Text>
+                  <Text style={styles.toggleSub}>Share your workout</Text>
+                </View>
+                <Switch
+                  value={postToFeed}
+                  onValueChange={setPostToFeed}
+                  trackColor={{ true: colors.primary }}
+                />
+              </View>
+
+              {postToFeed && (
+                <View style={styles.visibilityRow}>
+                  <Text style={styles.fieldLabel}>Visibility</Text>
+                  <View style={styles.visibilityBtns}>
+                    {(['main', 'friends'] as const).map((v) => (
+                      <Pressable
+                        key={v}
+                        style={[styles.visibilityBtn, feedVisibility === v && styles.visibilityBtnActive]}
+                        onPress={() => setFeedVisibility(v)}
+                      >
+                        <Text style={[styles.visibilityBtnText, feedVisibility === v && styles.visibilityBtnTextActive]}>
+                          {v === 'main' ? 'Everyone' : 'Friends'}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* Save as template toggle */}
+              <View style={styles.toggleRow}>
+                <View>
+                  <Text style={styles.toggleLabel}>Save as Template</Text>
+                  <Text style={styles.toggleSub}>Reuse this workout later</Text>
+                </View>
+                <Switch
+                  value={saveAsTemplate}
+                  onValueChange={setSaveAsTemplate}
+                  trackColor={{ true: colors.primary }}
+                />
+              </View>
+
+              {saveAsTemplate && (
+                <View style={styles.field}>
+                  <Text style={styles.fieldLabel}>Template Name</Text>
+                  <TextInput
+                    style={styles.fieldInput}
+                    value={templateName}
+                    onChangeText={setTemplateName}
+                    placeholder="My Template"
+                    placeholderTextColor={colors.textMuted}
+                  />
+                </View>
+              )}
+
+              {/* PR summary */}
+              {pendingPRs.length > 0 && (
+                <View style={styles.prSummary}>
+                  <Text style={styles.prSummaryTitle}>New PRs detected</Text>
+                  {pendingPRs.map((pr) => (
+                    <Text key={pr.exercise_name} style={styles.prSummaryItem}>
+                      🏆 {pr.exercise_name} — {pr.value} {pr.unit}
+                    </Text>
+                  ))}
+                </View>
+              )}
+
+              {/* Confirm button */}
+              <Pressable
+                style={[styles.confirmBtn, finishLoading && styles.confirmBtnDisabled]}
+                onPress={handleFinish}
+                disabled={finishLoading}
+              >
+                {finishLoading ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.confirmBtnText}>Save Workout</Text>
+                )}
+              </Pressable>
+            </ScrollView>
+          </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );
@@ -257,26 +566,39 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
 interface ExerciseCardProps {
   exercise: WorkoutExercise;
   onAddSet: () => void;
+  onDeleteSet: (setId: string) => void;
   onUpdateSet: (setId: string, field: 'reps' | 'weight' | 'completed', value: any) => void;
   onDeleteExercise: () => void;
 }
 
-function ExerciseCard({ exercise, onAddSet, onUpdateSet, onDeleteExercise }: ExerciseCardProps) {
+function ExerciseCard({ exercise, onAddSet, onDeleteSet, onUpdateSet, onDeleteExercise }: ExerciseCardProps) {
   return (
     <View style={styles.exCard}>
       <View style={styles.exHeader}>
-        <Text style={styles.exName}>{exercise.name}</Text>
-        <Pressable onPress={onDeleteExercise} style={styles.exDeleteBtn}>
+        <View>
+          <Text style={styles.exName}>{exercise.name}</Text>
+          {exercise.category ? (
+            <Text style={styles.exCategory}>{exercise.category}</Text>
+          ) : null}
+        </View>
+        <Pressable
+          onPress={() =>
+            Alert.alert('Delete Exercise', `Remove "${exercise.name}"?`, [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Remove', style: 'destructive', onPress: onDeleteExercise },
+            ])
+          }
+          style={styles.exDeleteBtn}
+        >
           <Feather name="trash-2" size={16} color={colors.error} />
         </Pressable>
       </View>
 
-      {/* Set headers */}
       <View style={styles.setHeader}>
         <Text style={[styles.setHeaderText, { width: 32 }]}>Set</Text>
         <Text style={[styles.setHeaderText, { flex: 1 }]}>Reps</Text>
-        <Text style={[styles.setHeaderText, { flex: 1 }]}>Weight</Text>
-        <View style={{ width: 32 }} />
+        <Text style={[styles.setHeaderText, { flex: 1.2 }]}>Weight (lbs)</Text>
+        <View style={{ width: 32 + 24 }} />
       </View>
 
       {exercise.sets.map((set, i) => (
@@ -285,6 +607,7 @@ function ExerciseCard({ exercise, onAddSet, onUpdateSet, onDeleteExercise }: Exe
           set={set}
           index={i}
           onUpdate={(field, value) => onUpdateSet(set.id, field, value)}
+          onDelete={() => onDeleteSet(set.id)}
         />
       ))}
 
@@ -300,27 +623,39 @@ interface SetRowProps {
   set: ExerciseSet;
   index: number;
   onUpdate: (field: 'reps' | 'weight' | 'completed', value: any) => void;
+  onDelete: () => void;
 }
 
-function SetRow({ set, index, onUpdate }: SetRowProps) {
+function SetRow({ set, index, onUpdate, onDelete }: SetRowProps) {
+  const [localReps, setLocalReps] = useState(() =>
+    set.reps != null && set.reps !== 0 ? String(set.reps) : ''
+  );
+  const [localWeight, setLocalWeight] = useState(() =>
+    set.weight != null && set.weight !== 0 ? String(set.weight) : ''
+  );
+
   return (
     <View style={[styles.setRow, set.completed && styles.setRowCompleted]}>
       <Text style={[styles.setNum, { width: 32 }]}>{index + 1}</Text>
       <TextInput
         style={[styles.setInput, { flex: 1 }]}
-        value={set.reps != null ? String(set.reps) : ''}
-        onChangeText={(v) => onUpdate('reps', v ? parseInt(v, 10) : null)}
-        keyboardType="numeric"
+        value={localReps}
+        onChangeText={setLocalReps}
+        onEndEditing={() => onUpdate('reps', localReps ? parseInt(localReps, 10) : 0)}
+        keyboardType="number-pad"
         placeholder="—"
         placeholderTextColor={colors.textMuted}
+        selectTextOnFocus
       />
       <TextInput
-        style={[styles.setInput, { flex: 1 }]}
-        value={set.weight != null ? String(set.weight) : ''}
-        onChangeText={(v) => onUpdate('weight', v ? parseFloat(v) : null)}
+        style={[styles.setInput, { flex: 1.2 }]}
+        value={localWeight}
+        onChangeText={setLocalWeight}
+        onEndEditing={() => onUpdate('weight', localWeight ? parseFloat(localWeight) : 0)}
         keyboardType="decimal-pad"
         placeholder="—"
         placeholderTextColor={colors.textMuted}
+        selectTextOnFocus
       />
       <Pressable
         style={[styles.checkBox, set.completed && styles.checkBoxDone]}
@@ -328,12 +663,19 @@ function SetRow({ set, index, onUpdate }: SetRowProps) {
       >
         {set.completed && <Feather name="check" size={14} color="#fff" />}
       </Pressable>
+      <Pressable onPress={onDelete} style={styles.setDeleteBtn}>
+        <Feather name="minus" size={14} color={colors.textMuted} />
+      </Pressable>
     </View>
   );
 }
 
+// ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+
+  // Header
   headerBar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -344,9 +686,18 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border.subtle,
   },
   headerBtn: { paddingHorizontal: spacing.sm },
-  discardText: { fontSize: typography.size.sm, color: colors.error, fontWeight: '600' },
+  discardText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.semibold,
+    color: colors.error,
+  },
   timerWrap: { alignItems: 'center' },
-  timer: { fontSize: typography.size.xl, fontWeight: '700', color: colors.textPrimary, fontVariant: ['tabular-nums'] },
+  timer: {
+    fontSize: typography.size.xl,
+    fontFamily: typography.family.bold,
+    color: colors.textPrimary,
+    fontVariant: ['tabular-nums'],
+  },
   finishBtn: {
     backgroundColor: colors.primary,
     borderRadius: 10,
@@ -355,8 +706,48 @@ const styles = StyleSheet.create({
     minWidth: 70,
     alignItems: 'center',
   },
-  finishBtnDisabled: { opacity: 0.6 },
-  finishText: { fontSize: typography.size.sm, fontWeight: '700', color: '#fff' },
+  finishText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.bold,
+    color: '#fff',
+  },
+
+  // PR banner
+  prBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: '#f59e0b',
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.xs,
+  },
+  prBannerText: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.medium,
+    color: '#fff',
+    flex: 1,
+  },
+
+  // Empty state
+  emptyState: { alignItems: 'center', paddingVertical: 48, gap: spacing.sm },
+  emptyTitle: {
+    fontSize: typography.size.lg,
+    fontFamily: typography.family.semibold,
+    color: colors.textSecondary,
+  },
+  emptySubtitle: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+  },
+  emptySubtitleSmall: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+    marginTop: 4,
+  },
+
+  // Add exercise button
   addExerciseBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -368,8 +759,13 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     borderStyle: 'dashed',
   },
-  addExerciseBtnText: { fontSize: typography.size.base, fontWeight: '600', color: colors.primary },
-  emptyText: { fontSize: typography.size.sm, color: colors.textMuted },
+  addExerciseBtnText: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.semibold,
+    color: colors.primary,
+  },
+
+  // Exercise card
   exCard: {
     backgroundColor: colors.surface,
     borderRadius: 14,
@@ -380,20 +776,44 @@ const styles = StyleSheet.create({
       android: { elevation: 2 },
     }),
   },
-  exHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  exName: { fontSize: typography.size.base, fontWeight: '700', color: colors.textPrimary },
+  exHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  exName: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.bold,
+    color: colors.textPrimary,
+  },
+  exCategory: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+    marginTop: 2,
+    textTransform: 'capitalize',
+  },
   exDeleteBtn: { padding: spacing.xs },
-  setHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  setHeaderText: { fontSize: typography.size.xs, fontWeight: '600', color: colors.textMuted, textAlign: 'center' },
+
+  // Set row
+  setHeader: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: 2 },
+  setHeaderText: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.semibold,
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
   setRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     paddingVertical: 4,
     borderRadius: 8,
+    paddingHorizontal: 2,
   },
-  setRowCompleted: { backgroundColor: 'rgba(16,185,129,0.06)' },
-  setNum: { fontSize: typography.size.sm, fontWeight: '600', color: colors.textMuted, textAlign: 'center' },
+  setRowCompleted: { backgroundColor: 'rgba(16,185,129,0.07)' },
+  setNum: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.semibold,
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
   setInput: {
     borderWidth: 1,
     borderColor: colors.borderColor,
@@ -401,6 +821,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.xs,
     fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
     color: colors.textPrimary,
     textAlign: 'center',
     backgroundColor: colors.background.elevated,
@@ -415,6 +836,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkBoxDone: { backgroundColor: colors.success, borderColor: colors.success },
+  setDeleteBtn: {
+    width: 24,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   addSetBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -422,7 +849,18 @@ const styles = StyleSheet.create({
     gap: spacing.xs,
     paddingVertical: spacing.sm,
   },
-  addSetText: { fontSize: typography.size.sm, color: colors.primary, fontWeight: '600' },
+  addSetText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.semibold,
+    color: colors.primary,
+  },
+  emptyText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+  },
+
+  // Catalog modal
   catalogWrap: { flex: 1, backgroundColor: colors.background.base },
   catalogHeader: {
     flexDirection: 'row',
@@ -433,12 +871,17 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border.subtle,
   },
-  catalogTitle: { fontSize: typography.size.lg, fontWeight: '700', color: colors.textPrimary },
+  catalogTitle: {
+    fontSize: typography.size.lg,
+    fontFamily: typography.family.bold,
+    color: colors.textPrimary,
+  },
   catalogSearch: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     margin: spacing.base,
+    marginBottom: spacing.sm,
     backgroundColor: colors.background.elevated,
     borderRadius: 12,
     paddingHorizontal: spacing.md,
@@ -446,7 +889,62 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border.default,
   },
-  catalogSearchInput: { flex: 1, fontSize: typography.size.sm, color: colors.textPrimary },
+  catalogSearchInput: {
+    flex: 1,
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.textPrimary,
+  },
+  categoryChips: {
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing.sm,
+    gap: spacing.xs,
+  },
+  chip: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: 20,
+    backgroundColor: colors.background.elevated,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+  },
+  chipActive: { backgroundColor: colors.primary, borderColor: colors.primary },
+  chipText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.medium,
+    color: colors.textSecondary,
+  },
+  chipTextActive: { color: '#fff' },
+  customRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing.sm,
+  },
+  customInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    borderRadius: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.textPrimary,
+    backgroundColor: colors.background.elevated,
+  },
+  customAddBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  customAddText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.semibold,
+    color: '#fff',
+  },
   catalogItem: {
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.base,
@@ -454,6 +952,118 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border.subtle,
   },
   catalogItemPressed: { backgroundColor: colors.background.elevated },
-  catalogItemName: { fontSize: typography.size.base, fontWeight: '500', color: colors.textPrimary },
-  catalogItemCategory: { fontSize: typography.size.xs, color: colors.textSecondary, marginTop: 2 },
+  catalogItemName: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.medium,
+    color: colors.textPrimary,
+  },
+  catalogItemCategory: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.textSecondary,
+    marginTop: 2,
+    textTransform: 'capitalize',
+  },
+
+  // Finish modal
+  finishWrap: { flex: 1, backgroundColor: colors.background.base },
+  finishHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.subtle,
+  },
+  finishHeaderTitle: {
+    fontSize: typography.size.lg,
+    fontFamily: typography.family.bold,
+    color: colors.textPrimary,
+  },
+  field: { gap: 6 },
+  fieldLabel: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.semibold,
+    color: colors.textSecondary,
+  },
+  fieldInput: {
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    borderRadius: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: typography.size.base,
+    fontFamily: typography.family.regular,
+    color: colors.textPrimary,
+    backgroundColor: colors.background.elevated,
+  },
+  fieldInputMulti: { minHeight: 80, textAlignVertical: 'top' },
+  toggleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.sm,
+  },
+  toggleLabel: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.semibold,
+    color: colors.textPrimary,
+  },
+  toggleSub: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+  },
+  visibilityRow: { gap: 6 },
+  visibilityBtns: { flexDirection: 'row', gap: spacing.sm },
+  visibilityBtn: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.border.default,
+    alignItems: 'center',
+  },
+  visibilityBtnActive: { borderColor: colors.primary, backgroundColor: 'rgba(79,195,224,0.08)' },
+  visibilityBtnText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.medium,
+    color: colors.textSecondary,
+  },
+  visibilityBtnTextActive: { color: colors.primary },
+  prSummary: {
+    backgroundColor: 'rgba(245,158,11,0.1)',
+    borderRadius: 12,
+    padding: spacing.md,
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: 'rgba(245,158,11,0.3)',
+  },
+  prSummaryTitle: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.semibold,
+    color: '#d97706',
+  },
+  prSummaryItem: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.textPrimary,
+  },
+  confirmBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    paddingVertical: spacing.base,
+    alignItems: 'center',
+    ...Platform.select({
+      ios: { shadowColor: 'rgba(79,195,224,0.4)', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 1, shadowRadius: 12 },
+      android: { elevation: 4 },
+    }),
+  },
+  confirmBtnDisabled: { opacity: 0.6 },
+  confirmBtnText: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.bold,
+    color: '#fff',
+  },
 });

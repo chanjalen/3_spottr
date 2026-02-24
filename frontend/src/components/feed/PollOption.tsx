@@ -30,15 +30,17 @@ export default function PollOption({
 }: PollOptionProps) {
   const percentage = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
   const barWidth = useSharedValue(0);
+  // Show results if the user voted OR if the poll has ended
+  const showResults = hasVoted || !isActive;
 
   useEffect(() => {
-    if (hasVoted) {
+    if (showResults) {
       barWidth.value = withTiming(percentage, {
         duration: 600,
         easing: Easing.out(Easing.cubic),
       });
     }
-  }, [hasVoted, percentage]);
+  }, [showResults, percentage]);
 
   const barStyle = useAnimatedStyle(() => ({
     width: `${barWidth.value}%`,
@@ -57,7 +59,7 @@ export default function PollOption({
       accessibilityLabel={`${text}, ${percentage}%`}
       accessibilityState={{ selected: isSelected }}
     >
-      {hasVoted && (
+      {showResults && (
         <Animated.View
           style={[
             styles.bar,
@@ -75,7 +77,7 @@ export default function PollOption({
             {text}
           </Text>
         </View>
-        {hasVoted && (
+        {showResults && (
           <Text style={[styles.percent, isSelected && styles.percentSelected]}>
             {percentage}%
           </Text>

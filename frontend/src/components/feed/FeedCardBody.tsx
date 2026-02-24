@@ -7,13 +7,17 @@ import PersonalRecordCard from './PersonalRecordCard';
 import LinkPreview from './LinkPreview';
 import PollCard from './PollCard';
 import { colors, spacing, typography } from '../../theme';
+import { useAuth } from '../../store/AuthContext';
 
 interface FeedCardBodyProps {
   item: FeedItem;
-  onPollVote: (optionId: number) => void;
+  onPollVote: (optionId: number | string) => void;
 }
 
 export default function FeedCardBody({ item, onPollVote }: FeedCardBodyProps) {
+  const { user } = useAuth();
+  const isOwner = !!user && user.username === item.user.username;
+
   return (
     <View>
       {item.description !== '' && (
@@ -30,7 +34,7 @@ export default function FeedCardBody({ item, onPollVote }: FeedCardBodyProps) {
 
       {item.link_url && <LinkPreview url={item.link_url} />}
 
-      {item.poll && <PollCard poll={item.poll} onVote={onPollVote} />}
+      {item.poll && <PollCard poll={item.poll} onVote={onPollVote} isOwner={isOwner} />}
     </View>
   );
 }

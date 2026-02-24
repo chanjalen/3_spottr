@@ -108,52 +108,74 @@ export async function deleteCheckin(id: string): Promise<void> {
   await apiClient.post(ENDPOINTS.deleteCheckin(id));
 }
 
-export interface CreatePostPayload {
+export async function createPost(params: {
   text?: string;
+  linkUrl?: string;
+  visibility?: 'main' | 'friends';
+  replyRestriction?: 'everyone' | 'friends' | 'mentions';
   photo?: { uri: string; name: string; type: string };
   video?: { uri: string; name: string; type: string };
-  workout_id?: string;
-  pr_exercise_name?: string;
-  pr_value?: string;
-  pr_unit?: string;
-}
-
-export async function createPost(
-  payload: CreatePostPayload,
-): Promise<{ success: boolean; post_id: string }> {
-  const form = new FormData();
-  if (payload.text) form.append('text', payload.text);
-  if (payload.workout_id) form.append('workout_id', payload.workout_id);
-  if (payload.pr_exercise_name) form.append('pr_exercise_name', payload.pr_exercise_name);
-  if (payload.pr_value) form.append('pr_value', payload.pr_value);
-  if (payload.pr_unit) form.append('pr_unit', payload.pr_unit);
-  if (payload.photo) form.append('photo', payload.photo as any);
-  if (payload.video) form.append('video', payload.video as any);
-  const res = await apiClient.post(ENDPOINTS.createPost, form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+  poll?: { question: string; options: string[]; duration: number };
+  pr?: { exerciseName: string; value: string; unit: string };
+}): Promise<{ post_id: string }> {
+  const formData = new FormData();
+  if (params.text) formData.append('text', params.text);
+  if (params.linkUrl) formData.append('link_url', params.linkUrl);
+  formData.append('visibility', params.visibility ?? 'main');
+  formData.append('reply_restriction', params.replyRestriction ?? 'everyone');
+  if (params.photo) formData.append('photo', params.photo as any);
+  if (params.video) formData.append('video', params.video as any);
+  if (params.poll) {
+    formData.append('poll_question', params.poll.question);
+    params.poll.options.forEach(o => formData.append('poll_options[]', o));
+    formData.append('poll_duration', String(params.poll.duration));
+  }
+  if (params.pr) {
+    formData.append('pr_exercise_name', params.pr.exerciseName);
+    formData.append('pr_value', params.pr.value);
+    formData.append('pr_unit', params.pr.unit);
+  }
+  const response = await apiClient.post(ENDPOINTS.createPost, formData, {
+    headers: { 'Content-Type': undefined },
   });
-  return res.data;
+  return response.data;
 }
 
-export interface CreateCheckinPayload {
-  activity: string;
+export interface Liker {
+  id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+}
+
+export async function fetchLikers(
+  itemId: string,
+  itemType: 'post' | 'checkin',
+): Promise<Liker[]> {
+  const endpoint =
+    itemType === 'post'
+      ? ENDPOINTS.postLikers(itemId)
+      : ENDPOINTS.checkinLikers(itemId);
+  const response = await apiClient.get(endpoint);
+  return response.data?.likers ?? [];
+}
+
+export async function createCheckin(params: {
+  gymId?: string;
+  activity?: string;
   description?: string;
-  gym_id?: string;
-  location_name?: string;
-  photo?: { uri: string; name: string; type: string };
-}
+  photo: { uri: string; name: string; type: string };
+}): Promise<{ checkin_id: string }> {
+  const formData = new FormData();
+  if (params.gymId) formData.append('gym', params.gymId);
+  if (params.activity) formData.append('activity', params.activity);
+  if (params.description) formData.append('description', params.description);
+  formData.append('photo', params.photo as any);
 
-export async function createCheckin(
-  payload: CreateCheckinPayload,
-): Promise<{ success: boolean; checkin_id: string }> {
-  const form = new FormData();
-  form.append('activity', payload.activity);
-  if (payload.description) form.append('description', payload.description);
-  if (payload.gym_id) form.append('gym_id', payload.gym_id);
-  if (payload.location_name) form.append('location_name', payload.location_name);
-  if (payload.photo) form.append('photo', payload.photo as any);
-  const res = await apiClient.post(ENDPOINTS.createCheckin, form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+  // Do NOT set Content-Type manually — React Native's XHR sets it automatically
+  // with the correct multipart boundary when the body is FormData.
+  const response = await apiClient.post(ENDPOINTS.createCheckin, formData, {
+    headers: { 'Content-Type': undefined },
   });
-  return res.data;
+  return response.data;
 }

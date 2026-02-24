@@ -23,6 +23,8 @@ type Level = 'root' | 'checkin';
 
 interface Props {
   sheetRef: React.RefObject<BottomSheet>;
+  onCheckIn: () => void;
+  onCreatePost: () => void;
 }
 
 export default function CreateMenuSheet({ sheetRef }: Props) {
