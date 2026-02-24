@@ -18,6 +18,10 @@ class TokenAuthMiddleware:
                 try:
                     token = Token.objects.select_related('user').get(key=key)
                     request.user = token.user
+                    # Tell Django's CsrfViewMiddleware to skip CSRF for token-authenticated
+                    # requests. Token auth is CSRF-safe by design (tokens aren't sent
+                    # automatically by browsers like cookies are).
+                    request._dont_enforce_csrf_checks = True
                 except Token.DoesNotExist:
                     pass
 

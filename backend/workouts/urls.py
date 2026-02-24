@@ -21,6 +21,10 @@ urlpatterns = [
     # Active workout page
     path('<str:workout_id>/', views.active_workout_view, name='active_workout'),
 
+    # Mobile API — active workout + log stats
+    path('api/active/', views.api_active_workout_view, name='api_active_workout'),
+    path('api/log/', views.log_workout_view, name='api_log_workout'),
+
     # Exercise catalog (for Add Exercise modal)
     path('api/catalog/', views.exercise_catalog_view, name='exercise_catalog'),
 

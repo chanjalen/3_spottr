@@ -50,6 +50,7 @@ urlpatterns = [
 
     # Poll voting
     path('poll/<str:poll_id>/vote/', views.vote_poll_view, name='vote_poll'),
+    path('poll/<str:poll_id>/voters/', views.poll_voters_view, name='poll_voters'),
 
     # Share
     path('share/recipients/', views.share_recipients_view, name='share_recipients'),

@@ -8,13 +8,20 @@ import {
   ActivityIndicator,
   RefreshControl,
   Platform,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { startWorkout, fetchActiveWorkout, fetchStreakInfo } from '../../api/workouts';
-import { Workout, StreakDetails } from '../../types/workout';
+import {
+  startWorkout,
+  fetchActiveWorkout,
+  fetchLogStats,
+  fetchTemplates,
+  startFromTemplate,
+  deleteTemplate,
+} from '../../api/workouts';
+import { Workout, WorkoutLogStats, WorkoutTemplate } from '../../types/workout';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 
@@ -24,20 +31,23 @@ type Props = {
 
 export default function WorkoutLogScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const [streakInfo, setStreakInfo] = useState<StreakDetails | null>(null);
+  const [stats, setStats] = useState<WorkoutLogStats | null>(null);
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
+  const [templates, setTemplates] = useState<WorkoutTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [startLoading, setStartLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const [streak, active] = await Promise.all([
-        fetchStreakInfo().catch(() => null),
+      const [logStats, active, tmplList] = await Promise.all([
+        fetchLogStats().catch(() => null),
         fetchActiveWorkout().catch(() => null),
+        fetchTemplates().catch(() => []),
       ]);
-      setStreakInfo(streak);
+      setStats(logStats);
       setActiveWorkout(active);
+      setTemplates(tmplList);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -51,11 +61,39 @@ export default function WorkoutLogScreen({ navigation }: Props) {
     try {
       const workout = await startWorkout();
       navigation.navigate('ActiveWorkout', { workoutId: workout.id });
+    } catch {
+      Alert.alert('Error', 'Could not start workout.');
     } finally {
       setStartLoading(false);
     }
   };
 
+  const handleStartTemplate = async (template: WorkoutTemplate) => {
+    try {
+      const workout = await startFromTemplate(template.id);
+      navigation.navigate('ActiveWorkout', { workoutId: workout.id });
+    } catch {
+      Alert.alert('Error', 'Could not start workout from template.');
+    }
+  };
+
+  const handleDeleteTemplate = (template: WorkoutTemplate) => {
+    Alert.alert(
+      'Delete Template',
+      `Delete "${template.name}"?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            await deleteTemplate(template.id).catch(() => {});
+            setTemplates((prev) => prev.filter((t) => t.id !== template.id));
+          },
+        },
+      ],
+    );
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background.base }}>
@@ -77,36 +115,21 @@ export default function WorkoutLogScreen({ navigation }: Props) {
       ) : (
         <ScrollView
           contentContainerStyle={{ padding: spacing.base, gap: spacing.md, paddingBottom: insets.bottom + 100 }}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(); }} tintColor={colors.primary} />}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => { setRefreshing(true); load(); }}
+              tintColor={colors.primary}
+            />
+          }
         >
-          {/* Streak card */}
-          {streakInfo && (
-            <Pressable onPress={() => navigation.navigate('StreakDetails')}>
-              <LinearGradient colors={['#4FC3E0', '#2FA4C7']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.streakCard}>
-                <View style={styles.streakRow}>
-                  <View>
-                    <Text style={styles.streakNum}>{streakInfo.current_streak}</Text>
-                    <Text style={styles.streakLabel}>Day Streak 🔥</Text>
-                  </View>
-                  <View style={styles.weekDays}>
-                    {streakInfo.week_days.map((dayData, i) => (
-                      <View key={i} style={styles.dayWrap}>
-                        <Text style={styles.dayLabel}>{dayData.label}</Text>
-                        <View style={[
-                          styles.dayDot,
-                          dayData.active && styles.dayDotWorkout,
-                          dayData.rest && styles.dayDotRest,
-                        ]} />
-                      </View>
-                    ))}
-                  </View>
-                </View>
-                <View style={styles.streakGoalRow}>
-                  <Text style={styles.streakGoalText}>{streakInfo.weekly_workout_count}/{streakInfo.weekly_workout_goal} this week</Text>
-                  <Feather name="chevron-right" size={16} color="rgba(255,255,255,0.7)" />
-                </View>
-              </LinearGradient>
-            </Pressable>
+          {/* Weekly stats tiles */}
+          {stats && (
+            <View style={styles.statsRow}>
+              <StatTile label="Workouts" value={String(stats.workouts_count)} icon="activity" />
+              <StatTile label="Total Time" value={stats.total_time} icon="clock" />
+              <StatTile label="Total Sets" value={String(stats.total_sets)} icon="layers" />
+            </View>
           )}
 
           {/* Resume active workout */}
@@ -119,14 +142,16 @@ export default function WorkoutLogScreen({ navigation }: Props) {
                 <Feather name="activity" size={20} color={colors.primary} />
                 <View>
                   <Text style={styles.resumeTitle}>Resume Workout</Text>
-                  <Text style={styles.resumeSub}>{activeWorkout.exercise_count} exercises · {activeWorkout.total_sets} sets</Text>
+                  <Text style={styles.resumeSub}>
+                    {activeWorkout.exercise_count} exercises · {activeWorkout.total_sets} sets
+                  </Text>
                 </View>
               </View>
               <Feather name="chevron-right" size={20} color={colors.textMuted} />
             </Pressable>
           )}
 
-          {/* Start buttons */}
+          {/* Start empty button */}
           <Pressable
             style={({ pressed }) => [styles.startBtn, pressed && styles.startBtnPressed]}
             onPress={handleStart}
@@ -142,21 +167,112 @@ export default function WorkoutLogScreen({ navigation }: Props) {
             )}
           </Pressable>
 
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or choose template</Text>
-            <View style={styles.dividerLine} />
+          {/* Templates section */}
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>My Templates</Text>
           </View>
 
-          <Pressable style={styles.templateBtn}>
-            <Feather name="copy" size={18} color={colors.primary} />
-            <Text style={styles.templateBtnText}>Browse Templates</Text>
-          </Pressable>
+          {templates.length === 0 ? (
+            <View style={styles.emptyTemplates}>
+              <Text style={styles.emptyTemplatesText}>
+                No templates yet. Finish a workout and save it as a template.
+              </Text>
+            </View>
+          ) : (
+            templates.map((tmpl) => (
+              <TemplateCard
+                key={tmpl.id}
+                template={tmpl}
+                onStart={() => handleStartTemplate(tmpl)}
+                onDelete={() => handleDeleteTemplate(tmpl)}
+              />
+            ))
+          )}
+
+          {/* Recent workouts */}
+          {stats && stats.recent_workouts.filter((w) => !w.is_active).length > 0 && (
+            <>
+              <View style={styles.sectionHeader}>
+                <Text style={styles.sectionTitle}>Recent Workouts</Text>
+              </View>
+              {stats.recent_workouts
+                .filter((w) => !w.is_active)
+                .map((w) => (
+                  <View key={w.id} style={styles.recentCard}>
+                    <View style={styles.recentLeft}>
+                      <Text style={styles.recentName}>{w.name}</Text>
+                      <Text style={styles.recentMeta}>
+                        {w.time_ago} · {w.duration} · {w.exercise_count} exercises
+                      </Text>
+                    </View>
+                    <Text style={styles.recentSets}>{w.total_sets} sets</Text>
+                  </View>
+                ))}
+            </>
+          )}
         </ScrollView>
       )}
     </View>
   );
 }
+
+// ─── Stat tile ────────────────────────────────────────────────────────────────
+
+function StatTile({
+  label,
+  value,
+  icon,
+}: {
+  label: string;
+  value: string;
+  icon: React.ComponentProps<typeof Feather>['name'];
+}) {
+  return (
+    <View style={styles.statTile}>
+      <Feather name={icon} size={16} color={colors.primary} />
+      <Text style={styles.statValue}>{value}</Text>
+      <Text style={styles.statLabel}>{label}</Text>
+    </View>
+  );
+}
+
+// ─── Template card ────────────────────────────────────────────────────────────
+
+function TemplateCard({
+  template,
+  onStart,
+  onDelete,
+}: {
+  template: WorkoutTemplate;
+  onStart: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <View style={styles.templateCard}>
+      <View style={styles.templateLeft}>
+        <Text style={styles.templateName}>{template.name}</Text>
+        <Text style={styles.templateMeta}>
+          {template.exercise_count} exercises
+          {template.exercises.length > 0 &&
+            ` · ${template.exercises
+              .slice(0, 3)
+              .map((e) => e.name)
+              .join(', ')}${template.exercise_count > 3 ? ' +more' : ''}`}
+        </Text>
+      </View>
+      <View style={styles.templateActions}>
+        <Pressable onPress={onDelete} style={styles.templateDeleteBtn} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Feather name="trash-2" size={14} color={colors.error} />
+        </Pressable>
+        <Pressable style={styles.templateStartBtn} onPress={onStart}>
+          <Text style={styles.templateStartText}>Start</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
   headerBar: {
@@ -169,24 +285,42 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border.subtle,
   },
   backBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: typography.size.lg, fontWeight: '700', color: colors.textPrimary },
+  headerTitle: {
+    fontSize: typography.size.lg,
+    fontFamily: typography.family.bold,
+    color: colors.textPrimary,
+  },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  streakCard: {
-    borderRadius: 16,
-    padding: spacing.base,
+
+  // Stats row
+  statsRow: {
+    flexDirection: 'row',
     gap: spacing.sm,
   },
-  streakRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  streakNum: { fontSize: 40, fontWeight: '800', color: '#fff' },
-  streakLabel: { fontSize: typography.size.sm, color: 'rgba(255,255,255,0.8)', fontWeight: '500' },
-  weekDays: { flexDirection: 'row', gap: spacing.xs },
-  dayWrap: { alignItems: 'center', gap: 4 },
-  dayLabel: { fontSize: 10, color: 'rgba(255,255,255,0.7)', fontWeight: '600' },
-  dayDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.3)' },
-  dayDotWorkout: { backgroundColor: '#fff' },
-  dayDotRest: { backgroundColor: 'rgba(255,255,255,0.5)' },
-  streakGoalRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  streakGoalText: { fontSize: typography.size.sm, color: 'rgba(255,255,255,0.8)' },
+  statTile: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: spacing.md,
+    alignItems: 'center',
+    gap: 4,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
+      android: { elevation: 2 },
+    }),
+  },
+  statValue: {
+    fontSize: typography.size.lg,
+    fontFamily: typography.family.bold,
+    color: colors.textPrimary,
+  },
+  statLabel: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+  },
+
+  // Resume card
   resumeCard: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -198,8 +332,18 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
   },
   resumeLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  resumeTitle: { fontSize: typography.size.base, fontWeight: '600', color: colors.textPrimary },
-  resumeSub: { fontSize: typography.size.xs, color: colors.textSecondary },
+  resumeTitle: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.semibold,
+    color: colors.textPrimary,
+  },
+  resumeSub: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.textSecondary,
+  },
+
+  // Start button
   startBtn: {
     backgroundColor: colors.primary,
     borderRadius: 14,
@@ -214,20 +358,97 @@ const styles = StyleSheet.create({
     }),
   },
   startBtnPressed: { opacity: 0.85 },
-  startBtnText: { fontSize: typography.size.base, fontWeight: '700', color: '#fff' },
-  divider: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border.default },
-  dividerText: { fontSize: typography.size.xs, color: colors.textMuted },
-  templateBtn: {
+  startBtnText: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.bold,
+    color: '#fff',
+  },
+
+  // Section
+  sectionHeader: { marginTop: spacing.sm },
+  sectionTitle: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.semibold,
+    color: colors.textPrimary,
+  },
+
+  // Empty templates
+  emptyTemplates: {
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: spacing.base,
+    alignItems: 'center',
+  },
+  emptyTemplatesText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
+
+  // Template card
+  templateCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: spacing.md,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    borderRadius: 14,
-    paddingVertical: spacing.base,
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(79,195,224,0.06)',
+    gap: spacing.md,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
+      android: { elevation: 2 },
+    }),
   },
-  templateBtnText: { fontSize: typography.size.base, fontWeight: '600', color: colors.primary },
+  templateLeft: { flex: 1 },
+  templateName: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.semibold,
+    color: colors.textPrimary,
+  },
+  templateMeta: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  templateActions: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  templateDeleteBtn: { padding: spacing.xs },
+  templateStartBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 8,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+  },
+  templateStartText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.semibold,
+    color: '#fff',
+  },
+
+  // Recent workouts
+  recentCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: spacing.md,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  recentLeft: { flex: 1 },
+  recentName: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.semibold,
+    color: colors.textPrimary,
+  },
+  recentMeta: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  recentSets: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.medium,
+    color: colors.textSecondary,
+  },
 });

@@ -26,6 +26,13 @@ export const ENDPOINTS = {
   createCheckin: '/api/social/checkin/create/',
 
   votePoll: (id: ID) => `${BASE}/poll/${id}/vote/`,
+  pollVoters: (id: ID) => `${BASE}/poll/${id}/voters/`,
 
   userPosts: (username: string) => `/accounts/api/user/${username}/posts/`,
+
+  postLikers: (id: ID) => `${BASE}/post/${id}/likers/`,
+  checkinLikers: (id: ID) => `${BASE}/checkin/${id}/likers/`,
+
+  shareRecipients: `${BASE}/share/recipients/`,
+  sendShare: `${BASE}/share/send/`,
 } as const;

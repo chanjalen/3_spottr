@@ -4,7 +4,7 @@ from django.core.files.storage import default_storage
 
 from .models import MediaAsset, MediaLink
 
-ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
+ALLOWED_IMAGE_TYPES = {'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/heic', 'image/heif'}
 ALLOWED_VIDEO_TYPES = {'video/mp4', 'video/quicktime', 'video/webm'}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 

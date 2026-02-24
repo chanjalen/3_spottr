@@ -1,28 +1,50 @@
 export interface ExerciseSet {
   id: string;
+  set_number: number;
   reps: number | null;
   weight: number | null;
   completed: boolean;
-  order: number;
 }
 
 export interface WorkoutExercise {
   id: string;
   name: string;
   category: string;
+  order: number;
   sets: ExerciseSet[];
 }
 
 export interface Workout {
   id: string;
+  name: string;
   started_at: string;
   finished_at: string | null;
-  duration: number | null;
+  duration: number | null; // seconds, null while active
   notes: string;
   exercises: WorkoutExercise[];
   exercise_count: number;
   total_sets: number;
   is_active: boolean;
+}
+
+export interface RecentWorkout {
+  id: string;
+  name: string;
+  duration: string; // "45m" or "1h 20m"
+  duration_seconds: number;
+  exercise_count: number;
+  total_sets: number;
+  started_at: string;
+  time_ago: string;
+  is_active: boolean;
+}
+
+export interface WorkoutLogStats {
+  workouts_count: number;
+  total_time: string; // "2h 30m"
+  total_time_seconds: number;
+  total_sets: number;
+  recent_workouts: RecentWorkout[];
 }
 
 export interface ExerciseCatalogItem {
@@ -35,8 +57,9 @@ export interface ExerciseCatalogItem {
 export interface WorkoutTemplate {
   id: string;
   name: string;
+  description?: string;
   exercise_count: number;
-  exercises: Array<{ name: string; sets: number }>;
+  exercises: Array<{ name: string; sets: number; reps?: number }>;
   created_at: string;
 }
 
@@ -83,18 +106,10 @@ export interface CalendarPost {
 // Legacy alias kept for any remaining references
 export type StreakInfo = StreakDetails;
 
-export interface RecentWorkout {
-  id: string;
-  name: string;
-  type: string;
-  started_at: string;
-  duration_minutes: number;
-  exercise_count: number;
-}
-
 export interface NewPR {
   exercise_name: string;
-  value: number;
+  value: string;
   unit: string;
-  previous_value: number | null;
+  pr_value?: string;
+  pr_unit?: string;
 }
