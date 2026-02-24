@@ -177,7 +177,7 @@ export async function deleteTemplate(templateId: string): Promise<void> {
 // ─── Streak ───────────────────────────────────────────────────────────────────
 
 export async function fetchStreakInfo(): Promise<StreakInfo> {
-  const res = await apiClient.get('/workouts/streak/');
+  const res = await apiClient.get('/workouts/api/streak/');
   return res.data;
 }
 
