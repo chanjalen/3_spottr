@@ -39,6 +39,7 @@ export default function StreakDetailsScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [restLoading, setRestLoading] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
+  const [showGoalPicker, setShowGoalPicker] = useState(false);
 
   // Calendar state
   const now = new Date();
@@ -84,31 +85,43 @@ export default function StreakDetailsScreen({ navigation }: Props) {
   useEffect(() => { loadStreak(); }, [loadStreak]);
   useEffect(() => { loadCalendar(calYear, calMonth); }, [loadCalendar, calYear, calMonth]);
 
-  const handleRestDay = async () => {
-    setRestLoading(true);
-    try {
-      await takeRestDay();
-      loadStreak();
-    } catch (err: any) {
-      const msg = err?.response?.data?.error ?? 'Could not take rest day.';
-      Alert.alert('Rest Day', msg);
-    } finally {
-      setRestLoading(false);
-    }
+  const handleRestDay = () => {
+    if (!streakData) return;
+    const used = streakData.rest_info.rest_days_used;
+    const remaining = streakData.rest_info.rest_days_remaining;
+    const allowed = streakData.rest_info.rest_days_allowed;
+
+    Alert.alert(
+      'Take a Rest Day?',
+      `You've used ${used} of ${allowed} rest days this week.\n${remaining - 1 >= 0 ? remaining - 1 : 0} will remain after this.\n\nRest days protect your streak on recovery days.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Log Rest Day',
+          style: 'default',
+          onPress: async () => {
+            setRestLoading(true);
+            try {
+              await takeRestDay();
+              loadStreak();
+            } catch (err: any) {
+              const msg = err?.response?.data?.error ?? 'Could not take rest day.';
+              Alert.alert('Rest Day', msg);
+            } finally {
+              setRestLoading(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
-  const handleGoalChange = () => {
-    Alert.alert(
-      'Weekly Goal',
-      'How many days per week do you want to work out?',
-      [1, 2, 3, 4, 5, 6, 7].map((n) => ({
-        text: `${n} day${n > 1 ? 's' : ''}`,
-        onPress: async () => {
-          await updateWorkoutGoal(n).catch(() => {});
-          loadStreak();
-        },
-      })),
-    );
+  const handleGoalChange = () => setShowGoalPicker(true);
+
+  const handleGoalSelect = async (n: number) => {
+    setShowGoalPicker(false);
+    await updateWorkoutGoal(n).catch(() => {});
+    loadStreak();
   };
 
   const prevMonth = () => {
@@ -138,6 +151,7 @@ export default function StreakDetailsScreen({ navigation }: Props) {
 
   const streak = streakData!;
   const isActive = streak.current_streak > 0;
+  const goalHit = streak.weekly_workout_count >= streak.weekly_workout_goal;
   const canRestDay = !streak.has_activity_today && !streak.has_rest_today;
 
   return (
@@ -165,21 +179,36 @@ export default function StreakDetailsScreen({ navigation }: Props) {
       >
         {/* Hero card */}
         <LinearGradient
-          colors={isActive ? ['#4FC3E0', '#2FA4C7'] : ['#9CA3AF', '#6B7280']}
+          colors={
+            goalHit
+              ? ['#F59E0B', '#D97706']
+              : isActive
+                ? ['#4FC3E0', '#2FA4C7']
+                : ['#9CA3AF', '#6B7280']
+          }
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.heroCard}
         >
-          <Text style={styles.heroEmoji}>{isActive ? '🔥' : '❄️'}</Text>
+          {goalHit && (
+            <Text style={styles.goalBannerText}>
+              Weekly Goal Achieved!
+            </Text>
+          )}
+          <Text style={styles.heroEmoji}>
+            {goalHit ? '🏆' : isActive ? '🔥' : '❄️'}
+          </Text>
           <Text style={styles.heroNum}>{streak.current_streak}</Text>
           <Text style={styles.heroLabel}>Day Streak</Text>
           <View style={[styles.statusBadge, isActive ? styles.statusActive : styles.statusInactive]}>
             <Text style={styles.statusText}>
-              {streak.has_activity_today
-                ? 'Completed today!'
-                : isActive
-                  ? 'Keep it going!'
-                  : 'Start your streak!'}
+              {goalHit
+                ? `${streak.weekly_workout_count}/${streak.weekly_workout_goal} workouts done!`
+                : streak.has_activity_today
+                  ? 'Completed today!'
+                  : isActive
+                    ? 'Keep it going!'
+                    : 'Start your streak!'}
             </Text>
           </View>
         </LinearGradient>
@@ -274,6 +303,30 @@ export default function StreakDetailsScreen({ navigation }: Props) {
           )}
         </View>
       </ScrollView>
+
+      {/* Goal picker modal */}
+      <Modal visible={showGoalPicker} transparent animationType="fade" onRequestClose={() => setShowGoalPicker(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowGoalPicker(false)}>
+          <Pressable style={styles.infoModal} onPress={() => {}}>
+            <View style={styles.goalHeader}>
+              <Text style={styles.infoTitle}>Weekly Goal</Text>
+              <Pressable onPress={() => setShowGoalPicker(false)} hitSlop={8}>
+                <Feather name="x" size={20} color={colors.textMuted} />
+              </Pressable>
+            </View>
+            <Text style={styles.goalSubtitle}>How many days per week do you want to work out?</Text>
+            {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+              <Pressable
+                key={n}
+                style={({ pressed }) => [styles.goalOption, pressed && { opacity: 0.6 }]}
+                onPress={() => handleGoalSelect(n)}
+              >
+                <Text style={styles.goalOptionText}>{n} day{n > 1 ? 's' : ''}</Text>
+              </Pressable>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Info modal */}
       <Modal visible={showInfo} transparent animationType="fade" onRequestClose={() => setShowInfo(false)}>
@@ -391,6 +444,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
+  goalBannerText: {
+    fontSize: typography.size.sm,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.9)',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
   heroEmoji: { fontSize: 36 },
   heroNum: { fontSize: 72, fontWeight: '800', color: '#fff', lineHeight: 80 },
   heroLabel: { fontSize: typography.size.lg, fontWeight: '600', color: 'rgba(255,255,255,0.85)' },
@@ -447,6 +507,16 @@ const styles = StyleSheet.create({
 
   calNavBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   calLoadingRow: { alignItems: 'center', paddingVertical: spacing.xl },
+
+  // Goal picker modal
+  goalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  goalSubtitle: { fontSize: typography.size.sm, color: colors.textSecondary, marginBottom: spacing.xs },
+  goalOption: {
+    paddingVertical: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.subtle,
+  },
+  goalOptionText: { fontSize: typography.size.base, color: colors.textPrimary, fontWeight: '500' },
 
   // Info modal
   modalOverlay: {

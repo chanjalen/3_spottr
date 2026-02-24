@@ -41,6 +41,14 @@ type Props = {
 
 const CATEGORIES = ['All', 'Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Core', 'Cardio'];
 
+// Only show live PR notifications for major compound lifts.
+const BIG_LIFT_KEYWORDS = ['bench', 'squat', 'deadlift', 'run', 'clean', 'snatch'];
+
+function isBigLift(exerciseName: string): boolean {
+  const lower = exerciseName.toLowerCase();
+  return BIG_LIFT_KEYWORDS.some((kw) => lower.includes(kw));
+}
+
 export default function ActiveWorkoutScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { workoutId } = route.params;
@@ -199,7 +207,7 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
       // Persist
       try {
         const result = await updateSet(setId, { [field]: value });
-        if (result.is_new_pr && result.pr_exercise) {
+        if (result.is_new_pr && result.pr_exercise && isBigLift(result.pr_exercise)) {
           const pr: NewPR = {
             exercise_name: result.pr_exercise,
             value: result.pr_value ?? '',
