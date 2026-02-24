@@ -1,0 +1,103 @@
+{% extends 'gyms/base.html' %}
+{% load static %}
+
+{% block title %}Bar Chart — Gym Ratings{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex;align-items:center;gap:12px;">
+    <a href="{% url 'gyms:reports' %}" class="back-arrow">&larr;</a>
+    <h1>Bar Chart — Gym Ratings</h1>
+</div>
+
+<p style="color:#94a3b8;margin-bottom:24px;font-size:14px;">
+    Data source: <code style="background:#16161f;padding:2px 6px;border-radius:6px;color:#7c3aed;">/api/summary/</code>
+</p>
+
+<!-- Vega-Lite chart container -->
+<div id="chart1" style="background:#16161f;border-radius:16px;padding:24px;margin-bottom:32px;"></div>
+
+<!-- Vega-Lite JSON Spec (for submission) -->
+<details style="background:#16161f;border-radius:12px;padding:16px;margin-bottom:24px;">
+    <summary style="color:#94a3b8;font-size:13px;cursor:pointer;font-weight:600;">View Vega-Lite Spec</summary>
+    <pre style="color:#e2e8f0;font-size:12px;margin-top:12px;overflow:auto;">{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": "Gym Ratings",
+  "width": "container",
+  "height": 350,
+  "data": { "url": "/api/summary/" },
+  "mark": { "type": "bar", "color": "#7c3aed", "cornerRadiusTopLeft": 4, "cornerRadiusTopRight": 4 },
+  "encoding": {
+    "x": {
+      "field": "name",
+      "type": "nominal",
+      "axis": { "labelAngle": -40, "labelColor": "#94a3b8", "titleColor": "#94a3b8" },
+      "title": "Gym"
+    },
+    "y": {
+      "field": "rating",
+      "type": "quantitative",
+      "scale": { "domain": [0, 5] },
+      "axis": { "labelColor": "#94a3b8", "titleColor": "#94a3b8" },
+      "title": "Rating (out of 5)"
+    },
+    "tooltip": [
+      { "field": "name", "type": "nominal", "title": "Gym" },
+      { "field": "rating", "type": "quantitative", "title": "Rating" },
+      { "field": "rating_count", "type": "quantitative", "title": "Reviews" }
+    ]
+  },
+  "config": {
+    "background": "#16161f",
+    "view": { "stroke": "transparent" },
+    "axis": { "gridColor": "#252530", "domainColor": "#252530" }
+  }
+}</pre>
+</details>
+
+<script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+<script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
+<script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+<script>
+  const spec = {
+    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+    "title": { "text": "Gym Ratings", "color": "#e2e8f0" },
+    "width": "container",
+    "height": 350,
+    "data": { "url": "/api/summary/" },
+    "mark": {
+      "type": "bar",
+      "color": "#7c3aed",
+      "cornerRadiusTopLeft": 4,
+      "cornerRadiusTopRight": 4
+    },
+    "encoding": {
+      "x": {
+        "field": "name",
+        "type": "nominal",
+        "axis": { "labelAngle": -40, "labelColor": "#94a3b8", "titleColor": "#94a3b8" },
+        "title": "Gym"
+      },
+      "y": {
+        "field": "rating",
+        "type": "quantitative",
+        "scale": { "domain": [0, 5] },
+        "axis": { "labelColor": "#94a3b8", "titleColor": "#94a3b8" },
+        "title": "Rating (out of 5)"
+      },
+      "tooltip": [
+        { "field": "name", "type": "nominal", "title": "Gym" },
+        { "field": "rating", "type": "quantitative", "title": "Rating" },
+        { "field": "rating_count", "type": "quantitative", "title": "Reviews" }
+      ]
+    },
+    "config": {
+      "background": "#16161f",
+      "view": { "stroke": "transparent" },
+      "axis": { "gridColor": "#252530", "domainColor": "#252530" },
+      "title": { "color": "#e2e8f0" }
+    }
+  };
+
+  vegaEmbed('#chart1', spec, { actions: false, renderer: 'svg' });
+</script>
+{% endblock %}

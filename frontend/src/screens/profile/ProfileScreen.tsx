@@ -29,16 +29,17 @@ import { useAuth } from '../../store/AuthContext';
 import { fetchProfile, toggleFollow, fetchUserPRs, savePR, deletePR } from '../../api/accounts';
 import { fetchExerciseCatalog, fetchCalendarPosts } from '../../api/workouts';
 import { fetchUserPosts } from '../../api/feed';
+import { fetchMyGyms } from '../../api/gyms';
+import { listMyOrgs, OrgListItem } from '../../api/organizations';
 import { useToggleLike } from '../../hooks/useToggleLike';
 import { usePollVote } from '../../hooks/usePollVote';
 import { UserProfile, PersonalRecord } from '../../types/user';
 import { ExerciseCatalogItem } from '../../types/workout';
 import { FeedItem } from '../../types/feed';
+import { Gym } from '../../types/gym';
 import { colors, spacing, typography } from '../../theme';
 
 type Props = {
-  // Uses `any` so this screen can live in any tab stack while still calling
-  // root-stack screens (EditProfile, Chat, etc.) via navigator traversal at runtime.
   navigation: any;
   route: RouteProp<{ Profile: { username: string } }, 'Profile'>;
 };
@@ -48,8 +49,9 @@ type ProfileTab = 'Posts' | 'Calendar' | 'Records';
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const GRID_PADDING = spacing.xl * 2;
-const THUMB_GAP = 2;
+const THUMB_GAP = 1;
 const THUMB_SIZE = (SCREEN_WIDTH - GRID_PADDING - THUMB_GAP * 2) / 3;
+
 
 export default function ProfileScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
@@ -76,6 +78,14 @@ export default function ProfileScreen({ navigation, route }: Props) {
   const [prsLoading, setPrsLoading] = useState(false);
   const prsLoaded = useRef(false);
 
+  // Gyms + Orgs (own profile only)
+  const [gyms, setGyms] = useState<Gym[]>([]);
+  const [orgs, setOrgs] = useState<OrgListItem[]>([]);
+
+  // View toggles
+  const [showAllPRs, setShowAllPRs] = useState(false);
+  const [allPostsModalVisible, setAllPostsModalVisible] = useState(false);
+
   // Add PR modal
   const [prModalVisible, setPrModalVisible] = useState(false);
   const [prExercise, setPrExercise] = useState('');
@@ -84,7 +94,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
   const [prVideoUri, setPrVideoUri] = useState<string | null>(null);
   const [prSaving, setPrSaving] = useState(false);
 
-  // Exercise catalog picker — shown inline inside the PR modal (avoids nested-modal focus bug)
+  // Exercise catalog picker — shown inline inside the PR modal
   const [catalogVisible, setCatalogVisible] = useState(false);
   const [catalogQuery, setCatalogQuery] = useState('');
   const [catalogCategory, setCatalogCategory] = useState('All');
@@ -138,6 +148,13 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
+  // Load gyms + orgs for own profile
+  useEffect(() => {
+    if (!isOwn) return;
+    fetchMyGyms().then(setGyms).catch(() => {});
+    listMyOrgs().then(setOrgs).catch(() => {});
+  }, [isOwn]);
+
   // ── Load posts ────────────────────────────────────────────────────────────────
 
   const loadPosts = useCallback(async (cursor?: string) => {
@@ -172,7 +189,6 @@ export default function ProfileScreen({ navigation, route }: Props) {
   }, [username]);
 
   useEffect(() => {
-    // Posts are needed for both Posts and Calendar tabs
     if ((activeTab === 'Posts' || activeTab === 'Calendar') && !postsLoaded.current) {
       postsLoaded.current = true;
       loadPosts();
@@ -214,7 +230,6 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
   // ── Exercise catalog ──────────────────────────────────────────────────────────
 
-  // Load full catalog once when picker opens; filtering is done client-side
   const loadCatalog = useCallback(async () => {
     if (catalogAllItems.length > 0) return;
     setCatalogLoading(true);
@@ -320,6 +335,11 @@ export default function ProfileScreen({ navigation, route }: Props) {
     navigation.navigate('UserList', { username, type, title: titles[type] });
   };
 
+  const switchTab = (tab: ProfileTab) => {
+    setActiveTab(tab);
+    setShowAllPRs(false);
+  };
+
   // ── Loading/error ─────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -368,7 +388,12 @@ export default function ProfileScreen({ navigation, route }: Props) {
               prsLoaded.current = false;
               setPosts([]);
               setPrs([]);
+              setShowAllPRs(false);
               load();
+              if (isOwn) {
+                fetchMyGyms().then(setGyms).catch(() => {});
+                listMyOrgs().then(setOrgs).catch(() => {});
+              }
             }}
             tintColor={colors.primary}
           />
@@ -377,12 +402,29 @@ export default function ProfileScreen({ navigation, route }: Props) {
         onScroll={handleScroll}
         scrollEventThrottle={400}
       >
-        {/* ── Profile header (centered) ───────────────────────────────────── */}
-        <View style={styles.profileHeader}>
+        {/* ── Instagram-style summary row ─────────────────────────────────────── */}
+        <View style={styles.summaryRow}>
           <View style={styles.avatarWrap}>
-            <Avatar uri={profile.avatar_url} name={profile.display_name} size={80} />
+            <Avatar uri={profile.avatar_url} name={profile.display_name} size={76} />
           </View>
+          <View style={styles.summaryStats}>
+            <View style={styles.summaryStatItem}>
+              <Text style={styles.summaryStatValue}>{profile.total_workouts}</Text>
+              <Text style={styles.summaryStatLabel}>Workouts</Text>
+            </View>
+            <Pressable style={styles.summaryStatItem} onPress={() => goToList('following')}>
+              <Text style={styles.summaryStatValue}>{profile.following_count}</Text>
+              <Text style={[styles.summaryStatLabel, styles.clickable]}>Following</Text>
+            </Pressable>
+            <Pressable style={styles.summaryStatItem} onPress={() => goToList('followers')}>
+              <Text style={styles.summaryStatValue}>{profile.follower_count}</Text>
+              <Text style={[styles.summaryStatLabel, styles.clickable]}>Followers</Text>
+            </Pressable>
+          </View>
+        </View>
 
+        {/* ── Name, username, bio ──────────────────────────────────────────────── */}
+        <View style={styles.nameBlock}>
           <Text style={styles.displayName}>
             {profile.display_name}
             {currentStreak > 0
@@ -391,109 +433,96 @@ export default function ProfileScreen({ navigation, route }: Props) {
           </Text>
           <Text style={styles.usernameText}>@{profile.username}</Text>
           {profile.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
-
-          {/* Social stats */}
-          <View style={styles.socialStats}>
-            <View style={styles.socialStat}>
-              <Text style={styles.socialStatValue}>{profile.total_workouts}</Text>
-              <Text style={styles.socialStatLabel}>Workouts</Text>
-            </View>
-            <Pressable style={styles.socialStat} onPress={() => goToList('following')}>
-              <Text style={styles.socialStatValue}>{profile.following_count}</Text>
-              <Text style={[styles.socialStatLabel, styles.clickable]}>Following</Text>
-            </Pressable>
-            <Pressable style={styles.socialStat} onPress={() => goToList('followers')}>
-              <Text style={styles.socialStatValue}>{profile.follower_count}</Text>
-              <Text style={[styles.socialStatLabel, styles.clickable]}>Followers</Text>
-            </Pressable>
-          </View>
-
-          {/* Metric cards */}
-          <View style={styles.metricCards}>
-            <View style={styles.metricCard}>
-              <Text style={styles.metricLabel}>💪 Total Workouts</Text>
-              <Text style={[styles.metricValue, { color: colors.primary }]}>
-                {profile.total_workouts}
-              </Text>
-            </View>
-            <View style={styles.metricCard}>
-              <Text style={styles.metricLabel}>🔥 Best Streak</Text>
-              <Text style={[styles.metricValue, { color: '#fb923c' }]}>
-                {profile.longest_streak}
-              </Text>
-            </View>
-            <Pressable style={styles.metricCard} onPress={() => goToList('friends')}>
-              <Text style={styles.metricLabel}>👥 Friends</Text>
-              <Text style={[styles.metricValue, { color: '#a78bfa' }]}>
-                {profile.friend_count ?? 0}
-              </Text>
-            </Pressable>
-          </View>
-
-          {/* Action buttons — only for other users */}
-          {!isOwn && (
-            <View style={styles.actionRow}>
-              <Pressable
-                style={[styles.actionBtn, styles.actionBtnFlex, profile.is_following && styles.actionBtnOutline]}
-                onPress={handleFollow}
-                disabled={followLoading}
-              >
-                {followLoading
-                  ? <ActivityIndicator size="small" color={profile.is_following ? colors.textPrimary : colors.textOnPrimary} />
-                  : <Text style={[styles.actionBtnText, profile.is_following && styles.actionBtnTextOutline]}>
-                      {profile.is_following ? 'Following' : 'Follow'}
-                    </Text>}
-              </Pressable>
-              <Pressable
-                style={[styles.actionBtn, styles.actionBtnFlex, styles.actionBtnOutline]}
-                onPress={() => navigation.navigate('Chat', {
-                  partnerId: profile.id,
-                  partnerName: profile.display_name,
-                  partnerUsername: profile.username,
-                  partnerAvatar: profile.avatar_url,
-                })}
-              >
-                <Text style={styles.actionBtnTextOutline}>Message</Text>
-              </Pressable>
-            </View>
-          )}
         </View>
 
-        {/* ── Tab bar ──────────────────────────────────────────────────────── */}
+        {/* ── Stats chips ──────────────────────────────────────────────────────── */}
+        <View style={styles.chipRow}>
+          <Pressable style={styles.statChip} onPress={() => navigation.navigate('StreakDetails')}>
+            <Text style={styles.chipEmoji}>🔥</Text>
+            <Text style={styles.chipVal}>{profile.longest_streak}</Text>
+            <Text style={styles.chipLbl}> longest streak</Text>
+          </Pressable>
+          <Pressable style={styles.statChip} onPress={() => goToList('friends')}>
+            <Text style={styles.chipEmoji}>👥</Text>
+            <Text style={styles.chipVal}>{profile.friend_count ?? 0}</Text>
+            <Text style={styles.chipLbl}> friends</Text>
+          </Pressable>
+        </View>
+
+        {/* ── Action buttons (other users only) ───────────────────────────────── */}
+        {!isOwn && (
+          <View style={styles.actionRow}>
+            <Pressable
+              style={[styles.actionBtn, styles.actionBtnFlex, profile.is_following && styles.actionBtnOutline]}
+              onPress={handleFollow}
+              disabled={followLoading}
+            >
+              {followLoading
+                ? <ActivityIndicator size="small" color={profile.is_following ? colors.textPrimary : colors.textOnPrimary} />
+                : <Text style={[styles.actionBtnText, profile.is_following && styles.actionBtnTextOutline]}>
+                    {profile.is_following ? 'Following' : 'Follow'}
+                  </Text>}
+            </Pressable>
+            <Pressable
+              style={[styles.actionBtn, styles.actionBtnFlex, styles.actionBtnOutline]}
+              onPress={() => navigation.navigate('Chat', {
+                partnerId: profile.id,
+                partnerName: profile.display_name,
+                partnerUsername: profile.username,
+                partnerAvatar: profile.avatar_url,
+              })}
+            >
+              <Text style={styles.actionBtnTextOutline}>Message</Text>
+            </Pressable>
+          </View>
+        )}
+
+        {/* ── Tab bar ──────────────────────────────────────────────────────────── */}
         <View style={styles.tabBar}>
           {(['Posts', 'Calendar', 'Records'] as ProfileTab[]).map((tab) => (
             <Pressable
               key={tab}
               style={[styles.tabBtn, activeTab === tab && styles.tabBtnActive]}
-              onPress={() => setActiveTab(tab)}
+              onPress={() => switchTab(tab)}
             >
               <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
             </Pressable>
           ))}
         </View>
 
-        {activeTab === 'Posts' && (
-          <PostsTab
-            posts={posts}
-            loading={postsLoading}
-            onOpenPost={openPost}
-          />
-        )}
+        <View style={styles.tabContent}>
+          {activeTab === 'Posts' && (
+            <PostsTab
+              posts={posts}
+              loading={postsLoading}
+              onOpenPost={openPost}
+              onViewAllPosts={() => setAllPostsModalVisible(true)}
+            />
+          )}
 
-        {activeTab === 'Calendar' && (
-          <CalendarTab posts={posts} postsLoading={postsLoading} onOpenPost={openPost} profileUsername={username} />
-        )}
+          {activeTab === 'Calendar' && (
+            <CalendarTab posts={posts} postsLoading={postsLoading} onOpenPost={openPost} profileUsername={username} />
+          )}
 
-        {activeTab === 'Records' && (
-          <RecordsTab
-            prs={prs}
-            loading={prsLoading}
-            isOwn={isOwn}
-            onAdd={() => setPrModalVisible(true)}
-            onDelete={handleDeletePR}
-            onViewVideo={(url) => setVideoViewerUrl(url)}
-          />
-        )}
+          {activeTab === 'Records' && (
+            <RecordsTab
+              prs={prs}
+              loading={prsLoading}
+              isOwn={isOwn}
+              onAdd={() => setPrModalVisible(true)}
+              onDelete={handleDeletePR}
+              onViewVideo={(url) => setVideoViewerUrl(url)}
+              showAll={showAllPRs}
+              onToggleShowAll={setShowAllPRs}
+            />
+          )}
+        </View>
+
+        {/* ── Gyms section (own profile only) ─────────────────────────────────── */}
+        {isOwn && gyms.length > 0 && <GymsSection gyms={gyms} />}
+
+        {/* ── Orgs section (own profile only) ─────────────────────────────────── */}
+        {isOwn && orgs.length > 0 && <OrgsSection orgs={orgs} navigation={navigation} />}
       </ScrollView>
 
       {/* ── Post viewer modal (horizontal pager) ────────────────────────────── */}
@@ -546,7 +575,50 @@ export default function ProfileScreen({ navigation, route }: Props) {
         <CommentsSheet item={commentItem} onClose={() => setCommentItem(null)} />
       </Modal>
 
-      {/* ── Add PR modal (with inline catalog picker to avoid nested-modal focus issues) ── */}
+      {/* ── All Posts grid modal ─────────────────────────────────────────── */}
+      <Modal
+        visible={allPostsModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setAllPostsModalVisible(false)}
+      >
+        <View style={{ flex: 1, backgroundColor: colors.background.base }}>
+          <View style={[styles.viewerHeader, { paddingTop: insets.top > 0 ? insets.top : 16 }]}>
+            <View style={styles.viewerUserRow}>
+              <Avatar uri={profile.avatar_url} name={profile.display_name} size={32} />
+              <Text style={styles.viewerName}>{profile.display_name}</Text>
+            </View>
+            <Pressable style={styles.viewerClose} onPress={() => setAllPostsModalVisible(false)}>
+              <Feather name="x" size={22} color={colors.textPrimary} />
+            </Pressable>
+          </View>
+          <FlatList
+            data={posts}
+            keyExtractor={(item) => item.id}
+            numColumns={3}
+            contentContainerStyle={styles.allPostsGrid}
+            columnWrapperStyle={styles.allPostsRow}
+            renderItem={({ item }) => (
+              <PostThumbnail
+                key={item.id}
+                item={item}
+                onPress={() => {
+                  setAllPostsModalVisible(false);
+                  openPost(item);
+                }}
+              />
+            )}
+            ListEmptyComponent={
+              <View style={styles.emptyTab}>
+                <Feather name="image" size={36} color={colors.textMuted} />
+                <Text style={styles.emptyText}>No posts yet</Text>
+              </View>
+            }
+          />
+        </View>
+      </Modal>
+
+      {/* ── Add PR modal (with inline catalog picker) ── */}
       <Modal
         visible={prModalVisible}
         animationType="slide"
@@ -557,7 +629,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
         }}
       >
         <View style={[styles.prModal, { paddingTop: insets.top > 0 ? insets.top : 20 }]}>
-          {/* ── Catalog search view (slides in over the form) ── */}
+          {/* ── Catalog search view ── */}
           {catalogVisible ? (
             <>
               <View style={styles.prModalHeader}>
@@ -568,7 +640,6 @@ export default function ProfileScreen({ navigation, route }: Props) {
                 <View style={{ width: 40 }} />
               </View>
 
-              {/* Search bar */}
               <View style={styles.catalogSearchWrap}>
                 <Feather name="search" size={16} color={colors.textMuted} />
                 <TextInput
@@ -589,7 +660,6 @@ export default function ProfileScreen({ navigation, route }: Props) {
                 )}
               </View>
 
-              {/* Category chips */}
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catalogCategoryScroll} contentContainerStyle={styles.catalogCategoryContent}>
                 {CATALOG_CATEGORIES.map((cat) => (
                   <Pressable
@@ -602,7 +672,6 @@ export default function ProfileScreen({ navigation, route }: Props) {
                 ))}
               </ScrollView>
 
-              {/* Exercise list */}
               {catalogLoading ? (
                 <ActivityIndicator color={colors.primary} style={{ marginTop: 24 }} />
               ) : (
@@ -744,14 +813,92 @@ function VideoPlayerModal({ url, onClose, topInset }: { url: string | null; onCl
   );
 }
 
+// ─── Gyms Section (LinkedIn-style) ───────────────────────────────────────────
+
+function GymsSection({ gyms }: { gyms: Gym[] }) {
+  return (
+    <View style={styles.experienceSection}>
+      <View style={styles.experienceSectionHeader}>
+        <Feather name="map-pin" size={15} color={colors.textSecondary} />
+        <Text style={styles.experienceSectionTitle}>Gyms</Text>
+      </View>
+      {gyms.map((gym, index) => (
+        <View
+          key={gym.id}
+          style={[styles.experienceItem, index < gyms.length - 1 && styles.experienceItemBorder]}
+        >
+          <View style={styles.experienceIconWrap}>
+            <Feather name="home" size={18} color="white" />
+          </View>
+          <View style={styles.experienceInfo}>
+            <Text style={styles.experienceName} numberOfLines={1}>{gym.name}</Text>
+            {gym.address ? (
+              <Text style={styles.experienceSub} numberOfLines={1}>{gym.address}</Text>
+            ) : null}
+            {gym.rating ? (
+              <Text style={styles.experienceRating}>⭐ {parseFloat(gym.rating).toFixed(1)}</Text>
+            ) : null}
+          </View>
+          {gym.is_enrolled && (
+            <View style={styles.enrolledBadge}>
+              <Text style={styles.enrolledBadgeText}>Member</Text>
+            </View>
+          )}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+// ─── Orgs Section (LinkedIn-style) ───────────────────────────────────────────
+
+function OrgsSection({ orgs, navigation }: { orgs: OrgListItem[]; navigation: any }) {
+  return (
+    <View style={styles.experienceSection}>
+      <View style={styles.experienceSectionHeader}>
+        <Feather name="users" size={15} color={colors.textSecondary} />
+        <Text style={styles.experienceSectionTitle}>Organizations</Text>
+      </View>
+      {orgs.map((org, index) => (
+        <Pressable
+          key={org.id}
+          style={({ pressed }) => [
+            styles.experienceItem,
+            index < orgs.length - 1 && styles.experienceItemBorder,
+            pressed && { opacity: 0.7 },
+          ]}
+          onPress={() => navigation.navigate('OrgProfile', { orgId: org.id })}
+        >
+          <View style={styles.experienceIconWrap}>
+            {org.avatar_url ? (
+              <Image source={{ uri: org.avatar_url }} style={styles.orgAvatar} contentFit="cover" />
+            ) : (
+              <Feather name="users" size={18} color="white" />
+            )}
+          </View>
+          <View style={styles.experienceInfo}>
+            <Text style={styles.experienceName} numberOfLines={1}>{org.name}</Text>
+            <Text style={styles.experienceSub}>
+              {org.member_count} member{org.member_count !== 1 ? 's' : ''}
+              {org.user_role ? ` · ${org.user_role}` : ''}
+            </Text>
+          </View>
+          <Feather name="chevron-right" size={15} color={colors.textMuted} />
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 // ─── Posts Tab ────────────────────────────────────────────────────────────────
 
 function PostsTab({
-  posts, loading, onOpenPost,
+  posts, loading, onOpenPost, onViewAllPosts,
 }: {
   posts: FeedItem[];
   loading: boolean;
   onOpenPost: (item: FeedItem) => void;
+  onViewAllPosts: () => void;
 }) {
   if (loading && posts.length === 0) {
     return <View style={styles.emptyTab}><ActivityIndicator color={colors.primary} /></View>;
@@ -765,13 +912,12 @@ function PostsTab({
     );
   }
 
-  const rows: FeedItem[][] = [];
-  for (let i = 0; i < posts.length; i += 3) rows.push(posts.slice(i, i + 3));
-
+  const preview = posts.slice(0, 9);
+  const rows = [preview.slice(0, 3), preview.slice(3, 6), preview.slice(6, 9)];
   return (
     <View style={styles.postsGrid}>
-      {rows.map((row, ri) => (
-        <View key={ri} style={styles.postsRow}>
+      {rows.map((row, rowIndex) => (
+        <View key={rowIndex} style={styles.postsRow}>
           {row.map((item) => (
             <PostThumbnail key={item.id} item={item} onPress={() => onOpenPost(item)} />
           ))}
@@ -780,8 +926,12 @@ function PostsTab({
           ))}
         </View>
       ))}
-      {loading && posts.length > 0 && (
-        <ActivityIndicator color={colors.primary} style={{ paddingVertical: spacing.md }} />
+      {posts.length > 0 && (
+        <Pressable style={styles.toggleBtn} onPress={onViewAllPosts}>
+          <Feather name="grid" size={14} color={colors.primary} />
+          <Text style={styles.toggleBtnText}>View All Posts</Text>
+          <Feather name="chevron-right" size={14} color={colors.primary} />
+        </Pressable>
       )}
     </View>
   );
@@ -789,14 +939,19 @@ function PostsTab({
 
 // ─── Post Thumbnail ───────────────────────────────────────────────────────────
 
-function PostThumbnail({ item, onPress }: { item: FeedItem; onPress: () => void }) {
+function PostThumbnail({ item, onPress, size }: { item: FeedItem; onPress: () => void; size?: number }) {
+  const s = size ?? THUMB_SIZE;
   return (
-    <Pressable style={({ pressed }) => [styles.thumb, pressed && styles.thumbPressed]} onPress={onPress}>
+    <Pressable
+      style={({ pressed }) => [
+        { width: s, height: s, backgroundColor: colors.background.elevated, borderRadius: 4, overflow: 'hidden', borderWidth: 1, borderColor: colors.border.subtle },
+        pressed && { opacity: 0.75 },
+      ]}
+      onPress={onPress}
+    >
       {item.photo_url ? (
-        /* Photo post — show the actual image */
-        <Image source={{ uri: item.photo_url }} style={styles.thumbImage} contentFit="cover" />
+        <Image source={{ uri: item.photo_url }} style={{ width: s, height: s }} contentFit="cover" />
       ) : item.workout ? (
-        /* Workout post — type badge + name + stats */
         <LinearGradient colors={['rgba(124,58,237,0.14)', 'rgba(6,182,212,0.14)']} style={styles.thumbContent}>
           <View style={styles.thumbBadge}>
             <Feather name="activity" size={10} color="#7c3aed" />
@@ -810,7 +965,6 @@ function PostThumbnail({ item, onPress }: { item: FeedItem; onPress: () => void 
           </Text>
         </LinearGradient>
       ) : item.personal_record ? (
-        /* PR post — exercise + value */
         <LinearGradient colors={['rgba(16,185,129,0.14)', 'rgba(6,182,212,0.10)']} style={styles.thumbContent}>
           <View style={styles.thumbBadge}>
             <Feather name="award" size={10} color="#10b981" />
@@ -824,7 +978,6 @@ function PostThumbnail({ item, onPress }: { item: FeedItem; onPress: () => void 
           </Text>
         </LinearGradient>
       ) : item.poll ? (
-        /* Poll post — question text */
         <LinearGradient colors={['rgba(59,130,246,0.14)', 'rgba(124,58,237,0.10)']} style={styles.thumbContent}>
           <View style={styles.thumbBadge}>
             <Feather name="bar-chart-2" size={10} color="#3b82f6" />
@@ -833,12 +986,10 @@ function PostThumbnail({ item, onPress }: { item: FeedItem; onPress: () => void 
           <Text style={styles.thumbTitle} numberOfLines={3}>{item.poll.question}</Text>
         </LinearGradient>
       ) : item.description ? (
-        /* Text / caption post — show the actual text */
         <View style={[styles.thumbContent, styles.thumbTextBg]}>
           <Text style={styles.thumbTextContent} numberOfLines={4}>{item.description}</Text>
         </View>
       ) : (
-        /* Fallback */
         <LinearGradient colors={['rgba(124,58,237,0.10)', 'rgba(6,182,212,0.10)']} style={styles.thumbContent}>
           <Feather name="zap" size={20} color={colors.primary} />
         </LinearGradient>
@@ -1026,7 +1177,7 @@ function CalendarTab({
 // ─── Records Tab ──────────────────────────────────────────────────────────────
 
 function RecordsTab({
-  prs, loading, isOwn, onAdd, onDelete, onViewVideo,
+  prs, loading, isOwn, onAdd, onDelete, onViewVideo, showAll, onToggleShowAll,
 }: {
   prs: PersonalRecord[];
   loading: boolean;
@@ -1034,10 +1185,14 @@ function RecordsTab({
   onAdd: () => void;
   onDelete: (pr: PersonalRecord) => void;
   onViewVideo: (url: string) => void;
+  showAll: boolean;
+  onToggleShowAll: (val: boolean) => void;
 }) {
   if (loading) {
     return <View style={styles.emptyTab}><ActivityIndicator color={colors.primary} /></View>;
   }
+
+  const displayed = showAll ? prs : prs.slice(0, 4);
 
   return (
     <View style={styles.prWrap}>
@@ -1063,31 +1218,40 @@ function RecordsTab({
           )}
         </View>
       ) : (
-        <View style={styles.prGrid}>
-          {prs.map((pr) => (
-            <View key={pr.id} style={styles.prCard}>
-              <View style={styles.prCardHeader}>
-                <Text style={styles.prCardName} numberOfLines={1}>{pr.exercise_name}</Text>
-                {isOwn && (
-                  <Pressable onPress={() => onDelete(pr)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                    <Feather name="trash-2" size={14} color={colors.textMuted} />
+        <>
+          <View style={styles.prGrid}>
+            {displayed.map((pr) => (
+              <View key={pr.id} style={styles.prCard}>
+                <View style={styles.prCardHeader}>
+                  <Text style={styles.prCardName} numberOfLines={1}>{pr.exercise_name}</Text>
+                  {isOwn && (
+                    <Pressable onPress={() => onDelete(pr)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                      <Feather name="trash-2" size={14} color={colors.textMuted} />
+                    </Pressable>
+                  )}
+                </View>
+                <Text style={styles.prCardValue}>
+                  {pr.value} <Text style={styles.prCardUnit}>{pr.unit}</Text>
+                </Text>
+                {pr.video_url ? (
+                  <Pressable style={styles.prVerified} onPress={() => onViewVideo(pr.video_url!)}>
+                    <Feather name="check-circle" size={12} color={colors.semantic.prGreen} />
+                    <Text style={styles.prVerifiedText}>Verified · Tap to watch</Text>
                   </Pressable>
+                ) : (
+                  <Text style={styles.prUnverified}>Unverified</Text>
                 )}
               </View>
-              <Text style={styles.prCardValue}>
-                {pr.value} <Text style={styles.prCardUnit}>{pr.unit}</Text>
-              </Text>
-              {pr.video_url ? (
-                <Pressable style={styles.prVerified} onPress={() => onViewVideo(pr.video_url!)}>
-                  <Feather name="check-circle" size={12} color={colors.semantic.prGreen} />
-                  <Text style={styles.prVerifiedText}>Verified · Tap to watch</Text>
-                </Pressable>
-              ) : (
-                <Text style={styles.prUnverified}>Unverified</Text>
-              )}
-            </View>
-          ))}
-        </View>
+            ))}
+          </View>
+
+          {prs.length > 4 && (
+            <Pressable style={styles.toggleBtn} onPress={() => onToggleShowAll(!showAll)}>
+              <Text style={styles.toggleBtnText}>{showAll ? 'See Less' : `See All ${prs.length} PRs`}</Text>
+              <Feather name={showAll ? 'chevron-up' : 'chevron-down'} size={14} color={colors.primary} />
+            </Pressable>
+          )}
+        </>
       )}
     </View>
   );
@@ -1114,62 +1278,155 @@ const styles = StyleSheet.create({
   iconBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: typography.size.base, fontWeight: '600', color: colors.textPrimary },
 
-  profileHeader: {
+  // ── Instagram-style summary row ──
+  summaryRow: {
+    flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.xl,
-    paddingBottom: spacing.base,
-    gap: spacing.sm,
+    paddingBottom: spacing.sm,
+    gap: spacing.xl,
   },
   avatarWrap: {
-    width: 86,
-    height: 86,
-    borderRadius: 43,
+    width: 82,
+    height: 82,
+    borderRadius: 41,
     borderWidth: 3,
     borderColor: colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: spacing.xs,
   },
-  displayName: { fontSize: 22, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
-  streakInline: { fontSize: 18, fontWeight: '700', color: '#fb923c' },
-  usernameText: { fontSize: typography.size.sm, color: colors.textMuted },
-  bio: { fontSize: typography.size.sm, color: colors.textSecondary, textAlign: 'center', lineHeight: 20 },
-
-  socialStats: {
-    flexDirection: 'row', gap: 32,
-    paddingVertical: spacing.md,
-    borderTopWidth: 1, borderBottomWidth: 1, borderColor: colors.border.subtle,
-    marginTop: spacing.sm, width: '100%', justifyContent: 'center',
+  summaryStats: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
   },
-  socialStat: { alignItems: 'center' },
-  socialStatValue: { fontSize: 18, fontWeight: '700', color: colors.textPrimary },
-  socialStatLabel: { fontSize: 12, color: colors.textMuted, marginTop: 2 },
+  summaryStatItem: { alignItems: 'center' },
+  summaryStatValue: { fontSize: 20, fontWeight: '700', color: colors.textPrimary },
+  summaryStatLabel: { fontSize: 11, color: colors.textMuted, marginTop: 2 },
   clickable: { color: colors.primary },
 
-  metricCards: { flexDirection: 'row', gap: 8, width: '100%', marginTop: spacing.sm },
-  metricCard: {
-    flex: 1, backgroundColor: colors.background.elevated,
-    borderRadius: 10, borderWidth: 1, borderColor: colors.border.subtle, padding: 12,
+  // ── Name block ──
+  nameBlock: {
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.sm,
+    gap: 2,
   },
-  metricLabel: { fontSize: 10, color: colors.textMuted, marginBottom: 6 },
-  metricValue: { fontSize: 22, fontWeight: '700', letterSpacing: -0.5 },
+  displayName: { fontSize: 17, fontWeight: '700', color: colors.textPrimary },
+  streakInline: { fontSize: 15, fontWeight: '700', color: '#fb923c' },
+  usernameText: { fontSize: typography.size.sm, color: colors.textMuted },
+  bio: { fontSize: typography.size.sm, color: colors.textSecondary, lineHeight: 20, marginTop: 2 },
 
-  actionRow: { flexDirection: 'row', gap: spacing.sm, width: '100%', marginTop: spacing.sm },
-  actionBtn: {
-    backgroundColor: colors.primary, borderRadius: 10,
-    paddingHorizontal: spacing.xl, paddingVertical: spacing.sm + 2,
-    alignItems: 'center', justifyContent: 'center', marginTop: spacing.sm,
+  // ── Stats chips ──
+  chipRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.sm,
   },
-  actionBtnFlex: { flex: 1, marginTop: 0 },
+  statChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background.elevated,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+  },
+  chipEmoji: { fontSize: 13 },
+  chipVal: { fontSize: 13, fontWeight: '700', color: colors.textPrimary, marginLeft: 4 },
+  chipLbl: { fontSize: 12, color: colors.textMuted },
+
+  // ── Action buttons ──
+  actionRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing.md,
+  },
+  actionBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 10,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.sm + 2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionBtnFlex: { flex: 1 },
   actionBtnOutline: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: colors.borderColor },
   actionBtnText: { fontSize: typography.size.sm, fontWeight: '600', color: colors.textOnPrimary },
   actionBtnTextOutline: { fontSize: typography.size.sm, fontWeight: '600', color: colors.textPrimary },
 
+  // ── LinkedIn-style experience sections ──
+  experienceSection: {
+    marginBottom: spacing.md,
+    backgroundColor: colors.background.base,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: colors.border.subtle,
+  },
+  experienceSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.subtle,
+  },
+  experienceSectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  experienceItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    gap: spacing.md,
+  },
+  experienceItemBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.subtle,
+  },
+  experienceIconWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  orgAvatar: { width: 38, height: 38 },
+  experienceInfo: { flex: 1 },
+  experienceName: { fontSize: typography.size.sm, fontWeight: '600', color: colors.textPrimary },
+  experienceSub: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
+  experienceRating: { fontSize: 11, color: colors.textSecondary, marginTop: 2 },
+  enrolledBadge: {
+    backgroundColor: 'rgba(79,195,224,0.12)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderWidth: 1,
+    borderColor: 'rgba(79,195,224,0.3)',
+  },
+  enrolledBadgeText: { fontSize: 11, fontWeight: '600', color: colors.primary },
+
+  // ── Tab bar ──
   tabBar: {
-    flexDirection: 'row', backgroundColor: colors.surface, borderRadius: 12,
-    padding: 4, marginHorizontal: spacing.xl, marginBottom: spacing.md,
-    borderWidth: 1, borderColor: colors.border.default,
+    flexDirection: 'row',
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    padding: 4,
+    marginHorizontal: spacing.xl,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border.default,
     ...Platform.select({
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 },
       android: { elevation: 1 },
@@ -1180,16 +1437,33 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 13, fontWeight: '500', color: colors.textMuted },
   tabTextActive: { fontWeight: '600', color: '#000' },
 
-  postsGrid: { paddingHorizontal: spacing.xl },
-  postsRow: { flexDirection: 'row', gap: THUMB_GAP, marginBottom: THUMB_GAP },
-  thumb: {
-    width: THUMB_SIZE, height: THUMB_SIZE,
-    backgroundColor: colors.background.elevated, borderRadius: 4,
-    overflow: 'hidden', borderWidth: 1, borderColor: colors.border.subtle,
+  // ── Tab content wrapper (fixed height so tabs don't resize) ──
+  tabContent: { minHeight: 340 },
+
+  // ── All posts modal grid ──
+  allPostsGrid: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: 60 },
+  allPostsRow: { gap: THUMB_GAP, marginBottom: THUMB_GAP },
+
+  // ── View All / See All toggle button ──
+  toggleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.sm,
+    paddingVertical: spacing.sm + 2,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    backgroundColor: colors.background.elevated,
   },
-  thumbPressed: { opacity: 0.75 },
+  toggleBtnText: { fontSize: typography.size.sm, fontWeight: '600', color: colors.primary },
+
+  // ── Posts full grid ──
+  postsGrid: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
+  postsRow: { flexDirection: 'row', gap: THUMB_GAP, marginBottom: THUMB_GAP },
   thumbEmpty: { width: THUMB_SIZE, height: THUMB_SIZE },
-  thumbImage: { width: '100%', height: '100%' },
   thumbContent: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 6 },
   thumbBadge: { flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 5 },
   thumbBadgeText: { fontSize: 7, fontWeight: '700', letterSpacing: 0.5 },
@@ -1197,17 +1471,19 @@ const styles = StyleSheet.create({
   thumbSub: { fontSize: 9, color: colors.textMuted, marginTop: 2, textAlign: 'center' },
   thumbTextBg: { backgroundColor: colors.background.elevated },
   thumbTextContent: { fontSize: 9, color: colors.textPrimary, lineHeight: 12 },
-  loadMoreBtn: { alignItems: 'center', paddingVertical: spacing.md },
-  loadMoreText: { fontSize: typography.size.sm, color: colors.primary, fontWeight: '600' },
 
   emptyTab: { alignItems: 'center', gap: spacing.md, paddingTop: 48, paddingHorizontal: spacing.xl },
   emptyText: { fontSize: typography.size.base, color: colors.textMuted, textAlign: 'center' },
 
+  // ── Calendar ──
   calendarWrap: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
   calendarTitle: { fontSize: 16, fontWeight: '600', color: colors.textPrimary, marginBottom: spacing.md },
   calendarCard: {
-    backgroundColor: colors.surface, borderRadius: 16,
-    borderWidth: 1, borderColor: colors.border.default, padding: spacing.base,
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    padding: spacing.base,
     ...Platform.select({
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 4 },
       android: { elevation: 1 },
@@ -1255,6 +1531,7 @@ const styles = StyleSheet.create({
   },
   calPostDesc: { fontSize: 13, color: colors.textPrimary, lineHeight: 17 },
 
+  // ── PRs ──
   prWrap: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm },
   prHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md },
   prTitle: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
@@ -1264,7 +1541,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md, paddingVertical: 6,
   },
   addPrBtnText: { fontSize: typography.size.sm, fontWeight: '600', color: '#000' },
-  prGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  prGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: spacing.sm },
   prCard: {
     width: '47%', backgroundColor: colors.background.elevated,
     borderRadius: 12, borderWidth: 1, borderColor: colors.border.subtle, padding: 12,
@@ -1277,6 +1554,7 @@ const styles = StyleSheet.create({
   prVerifiedText: { fontSize: 10, color: colors.semantic.prGreen, fontWeight: '600' },
   prUnverified: { fontSize: 10, color: colors.textMuted, marginTop: 4 },
 
+  // ── Post viewer modal ──
   viewerHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: spacing.base, paddingBottom: spacing.md,
@@ -1287,6 +1565,7 @@ const styles = StyleSheet.create({
   viewerClose: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   viewerScroll: { paddingHorizontal: spacing.xl, paddingTop: spacing.md, paddingBottom: 80 },
 
+  // ── PR modal ──
   prModal: { flex: 1, backgroundColor: colors.background.base, paddingHorizontal: spacing.xl },
   prModalHeader: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -1333,7 +1612,7 @@ const styles = StyleSheet.create({
   },
   prSaveBtnText: { fontSize: typography.size.base, fontWeight: '700', color: '#000' },
 
-  catalogModal: { flex: 1, backgroundColor: colors.background.base, paddingHorizontal: spacing.xl },
+  // ── Catalog ──
   catalogSearchWrap: {
     flexDirection: 'row', alignItems: 'center',
     backgroundColor: colors.background.elevated,
@@ -1361,9 +1640,9 @@ const styles = StyleSheet.create({
     paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border.subtle,
   },
   catalogItemName: { fontSize: typography.size.base, fontWeight: '500', color: colors.textPrimary, flex: 1 },
-  catalogItemMeta: { fontSize: typography.size.sm, color: colors.textMuted, marginTop: 2 },
   catalogEmpty: { alignItems: 'center', paddingTop: 40 },
 
+  // ── Video viewer ──
   videoViewer: { flex: 1, backgroundColor: '#000', alignItems: 'center', justifyContent: 'center' },
   videoViewerClose: {
     position: 'absolute', right: 20, zIndex: 10,
