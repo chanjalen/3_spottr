@@ -3,7 +3,7 @@ import logging
 from django.db.models import Q
 from django.db.models import Prefetch
 
-from .models import Message, MessageRead, InboxEntry
+from .models import Message, MessageRead, InboxEntry, MessageReaction
 from .exceptions import (
     NotMutualFollowError,
     UserBlockedError,
@@ -14,6 +14,7 @@ from .exceptions import (
     CannotMessageSelfError,
     RecipientNotFoundError,
     RecipientAlreadyCheckedInError,
+    MediaAssetNotFoundError,
 )
 
 
@@ -217,6 +218,24 @@ def _get_quick_workout(qw_id):
         raise PostNotFoundError("Check-in not found.")
 
 
+def _attach_media_to_message(message, media_id, owner):
+    """Link a MediaAsset to a message via MediaLink. Owner must match uploader."""
+    if not media_id:
+        return
+    from media.models import MediaAsset, MediaLink
+    try:
+        asset = MediaAsset.objects.get(id=media_id, user=owner)
+    except MediaAsset.DoesNotExist:
+        raise MediaAssetNotFoundError("Media asset not found or does not belong to you.")
+    MediaLink.objects.get_or_create(
+        asset=asset,
+        destination_type='message',
+        destination_id=str(message.id),
+        type='inline',
+        defaults={'position': 0},
+    )
+
+
 # ---------------------------------------------------------------------------
 # Send Messages
 # ---------------------------------------------------------------------------
@@ -262,7 +281,7 @@ def _is_mutual_follow(user_a, user_b):
     return count == 2
 
 
-def send_dm(sender, recipient_id, content, post_id=None, quick_workout_id=None):
+def send_dm(sender, recipient_id, content, post_id=None, quick_workout_id=None, media_id=None):
     """
     Send a direct message to another user.
     If users mutually follow each other, message is sent normally.
@@ -287,6 +306,8 @@ def send_dm(sender, recipient_id, content, post_id=None, quick_workout_id=None):
         quick_workout=quick_workout,
         is_request=is_request,
     )
+
+    _attach_media_to_message(message, media_id, owner=sender)
 
     # Auto-mark as read by sender
     MessageRead.objects.create(message=message, user=sender)
@@ -432,7 +453,7 @@ def ws_send_group_message(sender, group_id, content, client_msg_id=None):
     return payload, group_channel, member_dm_groups
 
 
-def send_group_message(sender, group_id, content, post_id=None, quick_workout_id=None):
+def send_group_message(sender, group_id, content, post_id=None, quick_workout_id=None, media_id=None):
     """
     Send a message in a group chat.
     Sender must be a group member.
@@ -458,6 +479,8 @@ def send_group_message(sender, group_id, content, post_id=None, quick_workout_id
         post=post,
         quick_workout=quick_workout,
     )
+
+    _attach_media_to_message(message, media_id, owner=sender)
 
     # Auto-mark as read by sender
     MessageRead.objects.create(message=message, user=sender)
@@ -717,3 +740,61 @@ def get_unread_count(user):
     dm = result['dm'] or 0
     group = result['group'] or 0
     return {'dm': dm, 'group': group, 'total': dm + group}
+
+
+# ---------------------------------------------------------------------------
+# Message Reactions
+# ---------------------------------------------------------------------------
+
+def toggle_message_reaction(user, message_id, emoji):
+    """
+    Toggle an emoji reaction on a message.
+    The user must be the sender, recipient, or a group member.
+    Returns (reaction_or_None, created: bool).
+    """
+    from django.db.models import Q as DQ
+    try:
+        message = Message.objects.get(id=message_id)
+    except Message.DoesNotExist:
+        raise MessageNotFoundError("Message not found.")
+
+    # Access check: must be sender, recipient (DM), or a group member
+    is_sender = message.sender_id and str(message.sender_id) == str(user.id)
+    is_recipient = message.recipient_id and str(message.recipient_id) == str(user.id)
+    is_group_member = False
+    if message.group_id:
+        from groups.models import GroupMember
+        is_group_member = GroupMember.objects.filter(group_id=message.group_id, user=user).exists()
+
+    if not (is_sender or is_recipient or is_group_member):
+        raise ConversationNotFoundError("You do not have access to this message.")
+
+    reaction, created = MessageReaction.objects.get_or_create(
+        message=message, user=user, emoji=emoji,
+    )
+    if not created:
+        reaction.delete()
+        return None, False
+
+    return reaction, True
+
+
+def get_message_reactions(message, user):
+    """Return grouped reaction summary for a message."""
+    from django.db.models import Count
+    rows = (
+        MessageReaction.objects
+        .filter(message=message)
+        .values('emoji')
+        .annotate(count=Count('id'))
+        .order_by('-count', 'emoji')
+    )
+    user_emojis = set(
+        MessageReaction.objects
+        .filter(message=message, user=user)
+        .values_list('emoji', flat=True)
+    )
+    return [
+        {'emoji': r['emoji'], 'count': r['count'], 'user_reacted': r['emoji'] in user_emojis}
+        for r in rows
+    ]

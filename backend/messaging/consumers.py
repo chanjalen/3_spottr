@@ -37,9 +37,14 @@ class MessagingConsumer(AsyncWebsocketConsumer):
         # Group chat channels — one per group the user belongs to.
         self.group_channels = await self._get_group_channels()
 
+        # Org announcement channels — one per org the user belongs to.
+        self.org_channels = await self._get_org_channels()
+
         await self.channel_layer.group_add(self.dm_group, self.channel_name)
         for gc in self.group_channels:
             await self.channel_layer.group_add(gc, self.channel_name)
+        for oc in self.org_channels:
+            await self.channel_layer.group_add(oc, self.channel_name)
 
         await self.accept()
         logger.info("WS connected: %s", self.user.username)
@@ -51,6 +56,8 @@ class MessagingConsumer(AsyncWebsocketConsumer):
         await self.channel_layer.group_discard(self.dm_group, self.channel_name)
         for gc in getattr(self, 'group_channels', []):
             await self.channel_layer.group_discard(gc, self.channel_name)
+        for oc in getattr(self, 'org_channels', []):
+            await self.channel_layer.group_discard(oc, self.channel_name)
 
         logger.info("WS disconnected: %s (code=%s)", self.user.username, close_code)
 
@@ -70,6 +77,16 @@ class MessagingConsumer(AsyncWebsocketConsumer):
                 if channel not in getattr(self, 'group_channels', []):
                     await self.channel_layer.group_add(channel, self.channel_name)
                     self.group_channels.append(channel)
+            return
+
+        # subscribe_org: client entered an org announcements screen after connecting
+        if msg_type == 'subscribe_org':
+            org_id = data.get('org_id')
+            if org_id and await self._is_org_member(org_id):
+                channel = f"org_{_clean_id(org_id)}"
+                if channel not in getattr(self, 'org_channels', []):
+                    await self.channel_layer.group_add(channel, self.channel_name)
+                    self.org_channels.append(channel)
             return
 
         if msg_type != 'send_message':
@@ -139,6 +156,13 @@ class MessagingConsumer(AsyncWebsocketConsumer):
             'counts': event['counts'],
         }))
 
+    async def new_announcement(self, event):
+        """Forward a new org announcement to this WebSocket client."""
+        await self.send(text_data=json.dumps({
+            'type': 'new_announcement',
+            'announcement': event['announcement'],
+        }))
+
     # ── DB helpers (must be async-safe) ──────────────────────────────────────
 
     @database_sync_to_async
@@ -171,3 +195,16 @@ class MessagingConsumer(AsyncWebsocketConsumer):
             user=self.user
         ).values_list('group_id', flat=True)
         return [f"group_{_clean_id(gid)}" for gid in group_ids]
+
+    @database_sync_to_async
+    def _is_org_member(self, org_id):
+        from organizations.models import OrgMember
+        return OrgMember.objects.filter(org_id=org_id, user=self.user).exists()
+
+    @database_sync_to_async
+    def _get_org_channels(self):
+        from organizations.models import OrgMember
+        org_ids = OrgMember.objects.filter(
+            user=self.user
+        ).values_list('org_id', flat=True)
+        return [f"org_{_clean_id(oid)}" for oid in org_ids]

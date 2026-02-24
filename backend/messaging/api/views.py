@@ -24,6 +24,7 @@ from messaging.serializers import (
     SendDMSerializer,
     SendGroupMessageSerializer,
     MarkReadSerializer,
+    ReactMessageSerializer,
 )
 from messaging.exceptions import (
     NotMutualFollowError,
@@ -35,6 +36,7 @@ from messaging.exceptions import (
     CannotMessageSelfError,
     RecipientNotFoundError,
     RecipientAlreadyCheckedInError,
+    MediaAssetNotFoundError,
 )
 
 
@@ -81,6 +83,7 @@ def send_dm(request):
             content=serializer.validated_data['content'],
             post_id=serializer.validated_data.get('post_id'),
             quick_workout_id=serializer.validated_data.get('quick_workout_id'),
+            media_id=serializer.validated_data.get('media_id'),
         )
     except CannotMessageSelfError as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
@@ -92,6 +95,8 @@ def send_dm(request):
         return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
     except PostNotFoundError as e:
         return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+    except MediaAssetNotFoundError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     return Response(
         MessageSerializer(message, context={'request': request}).data,
@@ -134,6 +139,7 @@ def send_group_message(request, group_id):
             content=serializer.validated_data['content'],
             post_id=serializer.validated_data.get('post_id'),
             quick_workout_id=serializer.validated_data.get('quick_workout_id'),
+            media_id=serializer.validated_data.get('media_id'),
         )
     except ConversationNotFoundError as e:
         return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
@@ -141,6 +147,8 @@ def send_group_message(request, group_id):
         return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
     except PostNotFoundError as e:
         return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+    except MediaAssetNotFoundError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     return Response(
         MessageSerializer(message, context={'request': request}).data,
@@ -343,3 +351,33 @@ def unread_count(request):
     counts = services.get_unread_count(request.user)
     serializer = UnreadCountSerializer(counts)
     return Response(serializer.data)
+
+
+# ---------------------------------------------------------------------------
+# Message Reactions
+# ---------------------------------------------------------------------------
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def react_to_message(request, message_id):
+    """
+    Toggle an emoji reaction on a message.
+    Body: {"emoji": "👍"}
+    Returns updated grouped reaction list for that message.
+    """
+    serializer = ReactMessageSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+
+    try:
+        services.toggle_message_reaction(
+            request.user, message_id, serializer.validated_data['emoji']
+        )
+        from messaging.models import Message
+        message = Message.objects.get(id=message_id)
+        reactions = services.get_message_reactions(message, request.user)
+    except MessageNotFoundError as e:
+        return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
+    except ConversationNotFoundError as e:
+        return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+
+    return Response({"reactions": reactions})

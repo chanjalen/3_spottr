@@ -41,3 +41,8 @@ class RecipientNotFoundError(Exception):
 class RecipientAlreadyCheckedInError(Exception):
     """Raised when trying to zap a user who has already checked in today."""
     pass
+
+
+class MediaAssetNotFoundError(Exception):
+    """Raised when a media_id does not resolve to an accessible MediaAsset."""
+    pass
