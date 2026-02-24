@@ -178,9 +178,6 @@ class MessageReaction(BaseModel):
                 name='unique_message_reaction',
             )
         ]
-        indexes = [
-            models.Index(fields=['message'], name='idx_message_reaction_message'),
-        ]
 
     def __str__(self):
         return f"{self.user.username} reacted {self.emoji} to message {self.message_id}"

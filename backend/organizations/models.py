@@ -331,9 +331,6 @@ class AnnouncementReaction(BaseModel):
                 name='unique_announcement_reaction',
             )
         ]
-        indexes = [
-            models.Index(fields=['announcement'], name='idx_ann_reaction_announcement'),
-        ]
 
     def __str__(self):
         return f"{self.user.username} reacted {self.emoji} to announcement {self.announcement_id}"

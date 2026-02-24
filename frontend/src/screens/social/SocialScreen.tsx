@@ -487,7 +487,7 @@ export default function SocialScreen({ navigation }: Props) {
       <View style={styles.convoInfo}>
         <View style={styles.convoTopRow}>
           <Text style={styles.convoName} numberOfLines={1}>{item.partner_display_name}</Text>
-          {item.latest_message?.created_at && (
+          {!!item.latest_message?.created_at && (
             <Text style={styles.convoTime}>{timeAgo(item.latest_message.created_at)}</Text>
           )}
         </View>
@@ -542,7 +542,7 @@ export default function SocialScreen({ navigation }: Props) {
               </View>
             )}
           </View>
-          {item.latest_message?.created_at && (
+          {!!item.latest_message?.created_at && (
             <Text style={styles.convoTime}>{timeAgo(item.latest_message.created_at)}</Text>
           )}
         </View>
@@ -1241,7 +1241,8 @@ export default function SocialScreen({ navigation }: Props) {
             </Pressable>
           </View>
         </KeyboardAvoidingView>
-      </Modal>    </View>
+      </Modal>
+      </View>
   );
 }
 
