@@ -15,7 +15,7 @@ from django.views.decorators.http import require_POST, require_GET
 from django.conf import settings
 from django.core.cache import cache
 from django.core.files.storage import default_storage
-from django.db.models import F, Q, Max, Subquery, OuterRef, Exists, Count, Value, CharField
+from django.db.models import F, Q, Max, Subquery, OuterRef, Exists, Count, Value, CharField, IntegerField
 
 from .models import QuickWorkout, Post, Comment, Reaction, Poll, PollOption, PollVote, Follow
 from media.models import MediaLink
@@ -249,14 +249,41 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
         qw_qs = qw_qs.filter(description__icontains=tag_filter)
         post_qs = post_qs.filter(description__icontains=tag_filter)
 
-    # Annotate counts (eliminates N+1)
+    # Annotate counts using subqueries to avoid JOIN row-multiplication.
+    # Count('reactions', distinct=True) does LEFT JOIN + GROUP BY which explodes
+    # rows (posts × reactions × comments). Subquery emits a correlated
+    # SELECT COUNT(*) per row, using existing indexes with no GROUP BY overhead.
     qw_qs = qw_qs.select_related('user', 'location').annotate(
-        like_count=Count('reactions', distinct=True),
-        comment_count=Count('comments', distinct=True),
+        like_count=Subquery(
+            Reaction.objects.filter(quick_workout=OuterRef('pk'))
+            .values('quick_workout')
+            .annotate(c=Count('id'))
+            .values('c'),
+            output_field=IntegerField(),
+        ),
+        comment_count=Subquery(
+            Comment.objects.filter(quick_workout=OuterRef('pk'))
+            .values('quick_workout')
+            .annotate(c=Count('id'))
+            .values('c'),
+            output_field=IntegerField(),
+        ),
     )
     post_qs = post_qs.select_related('user', 'location', 'workout').annotate(
-        like_count=Count('reactions', distinct=True),
-        comment_count=Count('comments', distinct=True),
+        like_count=Subquery(
+            Reaction.objects.filter(post=OuterRef('pk'))
+            .values('post')
+            .annotate(c=Count('id'))
+            .values('c'),
+            output_field=IntegerField(),
+        ),
+        comment_count=Subquery(
+            Comment.objects.filter(post=OuterRef('pk'))
+            .values('post')
+            .annotate(c=Count('id'))
+            .values('c'),
+            output_field=IntegerField(),
+        ),
     )
 
     if user:
@@ -1374,8 +1401,16 @@ def search_feed_view(request):
     post_qs = Post.objects.filter(
         description__icontains=search_term,
     ).select_related('user', 'location', 'workout').annotate(
-        like_count=Count('reactions', distinct=True),
-        comment_count=Count('comments', distinct=True),
+        like_count=Subquery(
+            Reaction.objects.filter(post=OuterRef('pk'))
+            .values('post').annotate(c=Count('id')).values('c'),
+            output_field=IntegerField(),
+        ),
+        comment_count=Subquery(
+            Comment.objects.filter(post=OuterRef('pk'))
+            .values('post').annotate(c=Count('id')).values('c'),
+            output_field=IntegerField(),
+        ),
         user_liked=Exists(Reaction.objects.filter(post=OuterRef('pk'), user=user)),
     ).order_by('-created_at')[:20]
 
@@ -1383,8 +1418,16 @@ def search_feed_view(request):
     qw_qs = QuickWorkout.objects.filter(
         description__icontains=search_term,
     ).select_related('user', 'location').annotate(
-        like_count=Count('reactions', distinct=True),
-        comment_count=Count('comments', distinct=True),
+        like_count=Subquery(
+            Reaction.objects.filter(quick_workout=OuterRef('pk'))
+            .values('quick_workout').annotate(c=Count('id')).values('c'),
+            output_field=IntegerField(),
+        ),
+        comment_count=Subquery(
+            Comment.objects.filter(quick_workout=OuterRef('pk'))
+            .values('quick_workout').annotate(c=Count('id')).values('c'),
+            output_field=IntegerField(),
+        ),
         user_liked=Exists(Reaction.objects.filter(quick_workout=OuterRef('pk'), user=user)),
     ).order_by('-created_at')[:20]
 

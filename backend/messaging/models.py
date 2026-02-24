@@ -100,6 +100,7 @@ class MessageRead(BaseModel):
         ordering = ['-read_at']
         indexes = [
             models.Index(fields=['user', '-read_at'], name='idx_read_receipt_user'),
+            models.Index(fields=['user', 'message'], name='idx_messageread_user_message'),
         ]
         constraints = [
             models.UniqueConstraint(

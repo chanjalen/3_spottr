@@ -502,15 +502,31 @@ def update_group_streaks_for_user(user):
             membership.save(update_fields=['last_checkin_date', 'updated_at'])
 
         # Backfill last_checkin_date for other members who have a streak today
-        # but whose last_checkin_date is stale or null (logged before this field existed)
-        stale_members = GroupMember.objects.filter(
-            group=membership.group
-        ).exclude(user=user).exclude(last_checkin_date=today)
-
-        for other_m in stale_members:
-            if Streak.objects.filter(user=other_m.user, last_streak_date=today).exists():
-                other_m.last_checkin_date = today
-                other_m.save(update_fields=['last_checkin_date', 'updated_at'])
+        # but whose last_checkin_date is stale or null (logged before this field existed).
+        # Use a single batch query instead of N+1 per stale member.
+        stale_members = list(
+            GroupMember.objects.filter(group=membership.group)
+            .exclude(user=user)
+            .exclude(last_checkin_date=today)
+            .values_list('id', 'user_id')
+        )
+        if stale_members:
+            stale_member_map = {user_id: member_id for member_id, user_id in stale_members}
+            checked_in_user_ids = set(
+                Streak.objects.filter(
+                    user_id__in=stale_member_map.keys(),
+                    last_streak_date=today,
+                ).values_list('user_id', flat=True)
+            )
+            ids_to_update = [
+                stale_member_map[uid] for uid in checked_in_user_ids
+            ]
+            if ids_to_update:
+                from django.utils import timezone as tz
+                GroupMember.objects.filter(id__in=ids_to_update).update(
+                    last_checkin_date=today,
+                    updated_at=tz.now(),
+                )
 
         _try_advance_group_streak(membership.group, today)
 
@@ -524,10 +540,16 @@ def _try_advance_group_streak(group, today):
     from django.db import transaction
     from datetime import timedelta
 
+    # Fast path: skip acquiring the lock if already advanced today.
+    # This avoids lock contention when multiple users in the same group
+    # log activity concurrently — only the first one needs the lock.
+    if Group.objects.filter(id=group.id, last_streak_date=today).exists():
+        return
+
     with transaction.atomic():
         group = Group.objects.select_for_update().get(id=group.id)
 
-        # Already advanced today
+        # Double-check after acquiring the lock (another worker may have advanced it)
         if group.last_streak_date == today:
             return
 
