@@ -1,6 +1,7 @@
 import { AppState, AppStateStatus } from 'react-native';
 import { getToken, API_BASE_URL } from '../api/client';
 import { Message, UnreadCount } from '../types/messaging';
+import { Announcement } from '../api/organizations';
 
 // ── Derive WS URL from API URL ────────────────────────────────────────────
 const WS_BASE_URL = API_BASE_URL.replace(/^http/, 'ws');
@@ -11,6 +12,7 @@ const QUEUE_TTL_MS = 60_000;
 // ── Minimal event emitter ─────────────────────────────────────────────────
 type EventMap = {
   new_message: Message;
+  new_announcement: Announcement;
   unread_update: UnreadCount;
   connected: null;
   disconnected: null;
@@ -83,6 +85,8 @@ class WebSocketManager extends SimpleEmitter {
         const data = JSON.parse(event.data as string);
         if (data.type === 'new_message') {
           this.emit('new_message', data.message as Message);
+        } else if (data.type === 'new_announcement') {
+          this.emit('new_announcement', data.announcement as Announcement);
         } else if (data.type === 'unread_update') {
           this.emit('unread_update', data.counts as UnreadCount);
         } else if (data.type === 'error') {
@@ -116,6 +120,13 @@ class WebSocketManager extends SimpleEmitter {
   subscribeGroup(groupId: string): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ type: 'subscribe_group', group_id: groupId }));
+    }
+  }
+
+  /** Ensure the consumer is subscribed to an org announcements channel. Call when entering OrgAnnouncementsScreen. */
+  subscribeOrg(orgId: string): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ type: 'subscribe_org', org_id: orgId }));
     }
   }
 

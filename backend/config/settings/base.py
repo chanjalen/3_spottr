@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "groups",
     "messaging",
     "notifications",
+    "organizations",
     "storages",
 ]
 

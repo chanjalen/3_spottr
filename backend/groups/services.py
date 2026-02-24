@@ -14,7 +14,7 @@ from .exceptions import (
     GroupFullError,
 )
 
-GROUP_MEMBER_CAP = 250
+GROUP_MEMBER_CAP = 50
 
 
 def _check_group_capacity(group):

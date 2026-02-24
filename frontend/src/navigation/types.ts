@@ -61,6 +61,8 @@ export type RootStackParamList = {
   GroupProfile: { groupId: string };
   Chat: { partnerId: string; partnerName: string; partnerUsername: string; partnerAvatar: string | null };
   GroupChat: { groupId: string; groupName: string; groupAvatar: string | null };
+  OrgAnnouncements: { orgId: string; orgName: string; orgAvatar: string | null };
+  OrgProfile: { orgId: string };
   UserList: UserListParams;
   CreatePost: undefined;
   QuickCheckin: undefined;

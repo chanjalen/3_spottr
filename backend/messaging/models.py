@@ -51,7 +51,7 @@ class Message(BaseModel):
         related_name='system_messages',
     )
 
-    content = models.TextField()
+    content = models.TextField(blank=True, default='')
     is_request = models.BooleanField(default=False)
     is_system = models.BooleanField(default=False)
 
@@ -151,3 +151,33 @@ class InboxEntry(BaseModel):
                 name='unique_inbox_group',
             ),
         ]
+
+
+class MessageReaction(BaseModel):
+    """
+    An emoji reaction from a user on a message (DM or group chat).
+    A user can react with multiple different emojis on the same message,
+    but cannot use the same emoji twice on the same message.
+    """
+    message = models.ForeignKey(
+        Message,
+        on_delete=models.CASCADE,
+        related_name='reactions',
+    )
+    user = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.CASCADE,
+        related_name='message_reactions',
+    )
+    emoji = models.CharField(max_length=16)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=['message', 'user', 'emoji'],
+                name='unique_message_reaction',
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user.username} reacted {self.emoji} to message {self.message_id}"

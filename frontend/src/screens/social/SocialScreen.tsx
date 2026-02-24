@@ -26,6 +26,7 @@ import { fetchDMConversations, fetchGroupConversations, sendZap } from '../../ap
 import { Conversation, GroupConversation, Message as MessageType } from '../../types/messaging';
 import { wsManager } from '../../services/websocket';
 import { searchGroups, createGroup, joinViaCode, joinGroup, requestJoinGroup, GroupListItem } from '../../api/groups';
+import { listMyOrgs, discoverOrgs, createOrg, joinOrgViaCode, OrgListItem } from '../../api/organizations';
 import { fetchFriends, searchUsers } from '../../api/accounts';
 import { UserBrief } from '../../types/user';
 import { colors, spacing, typography } from '../../theme';
@@ -42,7 +43,7 @@ type Props = {
   >;
 };
 
-type SocialTab = 'Messages' | 'Groups';
+type SocialTab = 'Messages' | 'Groups' | 'Orgs';
 
 export default function SocialScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
@@ -62,6 +63,26 @@ export default function SocialScreen({ navigation }: Props) {
   const [loadingGroups, setLoadingGroups] = useState(false);
   const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const searchGenRef = useRef(0);
+
+  // ── Orgs tab state ────────────────────────────────────────────────────────
+  const [myOrgs, setMyOrgs] = useState<OrgListItem[]>([]);
+  const [discoverOrgsList, setDiscoverOrgsList] = useState<OrgListItem[]>([]);
+  const [orgsView, setOrgsView] = useState<'Mine' | 'Discover'>('Mine');
+  const [orgSearchQuery, setOrgSearchQuery] = useState('');
+  const [loadingOrgs, setLoadingOrgs] = useState(false);
+  const orgSearchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const orgSearchGenRef = useRef(0);
+  // ── Create org modal ──────────────────────────────────────────────────────
+  const [createOrgVisible, setCreateOrgVisible] = useState(false);
+  const [newOrgName, setNewOrgName] = useState('');
+  const [newOrgDesc, setNewOrgDesc] = useState('');
+  const [newOrgPrivacy, setNewOrgPrivacy] = useState<'public' | 'private'>('public');
+  const [newOrgPrivacyOpen, setNewOrgPrivacyOpen] = useState(false);
+  const [creatingOrg, setCreatingOrg] = useState(false);
+  // ── Org join code modal ───────────────────────────────────────────────────
+  const [orgJoinModalVisible, setOrgJoinModalVisible] = useState(false);
+  const [orgInviteCode, setOrgInviteCode] = useState('');
+  const [joiningOrgCode, setJoiningOrgCode] = useState(false);
 
   // ── Create group modal ────────────────────────────────────────────────────
   const [createVisible, setCreateVisible] = useState(false);
@@ -119,6 +140,33 @@ export default function SocialScreen({ navigation }: Props) {
       setDiscoverGroups([]);
     } finally {
       if (gen === searchGenRef.current) setLoadingGroups(false);
+    }
+  }, []);
+
+  const loadMyOrgs = useCallback(async () => {
+    setLoadingOrgs(true);
+    try {
+      const data = await listMyOrgs();
+      setMyOrgs(data);
+    } catch {
+      setMyOrgs([]);
+    } finally {
+      setLoadingOrgs(false);
+    }
+  }, []);
+
+  const loadDiscoverOrgs = useCallback(async (query?: string) => {
+    const gen = ++orgSearchGenRef.current;
+    setLoadingOrgs(true);
+    try {
+      const data = await discoverOrgs(query);
+      if (gen !== orgSearchGenRef.current) return;
+      setDiscoverOrgsList(data);
+    } catch {
+      if (gen !== orgSearchGenRef.current) return;
+      setDiscoverOrgsList([]);
+    } finally {
+      if (gen === orgSearchGenRef.current) setLoadingOrgs(false);
     }
   }, []);
 
@@ -191,6 +239,7 @@ export default function SocialScreen({ navigation }: Props) {
     if (prevTabRef.current === null) { prevTabRef.current = activeTab; return; }
     if (activeTab === 'Messages') loadMessages();
     if (activeTab === 'Groups') loadGroups();
+    if (activeTab === 'Orgs') loadMyOrgs();
     prevTabRef.current = activeTab;
   }, [activeTab]);
 
@@ -326,6 +375,94 @@ export default function SocialScreen({ navigation }: Props) {
     }
   };
 
+  // ── Orgs handlers ─────────────────────────────────────────────────────────
+  const handleOrgSearch = (q: string) => {
+    setOrgSearchQuery(q);
+    setDiscoverOrgsList([]);
+    setLoadingOrgs(true);
+    ++orgSearchGenRef.current;
+    if (orgSearchTimeoutRef.current) clearTimeout(orgSearchTimeoutRef.current);
+    orgSearchTimeoutRef.current = setTimeout(() => loadDiscoverOrgs(q || undefined), 400);
+  };
+
+  const handleSwitchOrgsView = (view: 'Mine' | 'Discover') => {
+    setOrgsView(view);
+    setOrgSearchQuery('');
+    if (view === 'Mine') loadMyOrgs();
+    else loadDiscoverOrgs();
+  };
+
+  const handleCreateOrg = async () => {
+    if (!newOrgName.trim()) return;
+    setCreatingOrg(true);
+    try {
+      await createOrg({
+        name: newOrgName.trim(),
+        description: newOrgDesc.trim(),
+        privacy: newOrgPrivacy,
+      });
+      setCreateOrgVisible(false);
+      setNewOrgName('');
+      setNewOrgDesc('');
+      setNewOrgPrivacy('public');
+      setNewOrgPrivacyOpen(false);
+      loadMyOrgs();
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.error ?? 'Failed to create organization');
+    } finally {
+      setCreatingOrg(false);
+    }
+  };
+
+  // ── Org card renderer ─────────────────────────────────────────────────────
+  const renderOrgCard = ({ item }: { item: OrgListItem }) => {
+    const roleBg = item.user_role === 'creator'
+      ? 'rgba(234,179,8,0.15)'
+      : item.user_role === 'admin'
+      ? 'rgba(79,195,224,0.15)'
+      : 'rgba(0,0,0,0.06)';
+    return (
+      <Pressable
+        style={({ pressed }) => [styles.discoverRow, pressed && styles.convoRowPressed]}
+        onPress={() => navigation.navigate('OrgAnnouncements', {
+          orgId: item.id,
+          orgName: item.name,
+          orgAvatar: item.avatar_url,
+        })}
+      >
+        <Avatar uri={item.avatar_url} name={item.name} size={44} />
+        <View style={styles.convoInfo}>
+          <View style={styles.convoTopRow}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1 }}>
+              <Text style={styles.convoName} numberOfLines={1}>{item.name}</Text>
+              {item.privacy === 'private' && (
+                <Feather name="lock" size={12} color={colors.textMuted} />
+              )}
+            </View>
+            <Text style={styles.memberCount}>{item.member_count} members</Text>
+          </View>
+          {!!item.description && (
+            <Text style={styles.convoLast} numberOfLines={1}>{item.description}</Text>
+          )}
+        </View>
+        {item.user_role ? (
+          <View style={[styles.joinedBadge, { backgroundColor: roleBg }]}>
+            <Text style={styles.joinedBadgeText}>{item.user_role}</Text>
+          </View>
+        ) : (
+          <Pressable
+            style={[styles.joinBtn, item.privacy === 'private' && styles.requestBtn]}
+            onPress={() => navigation.navigate('OrgProfile', { orgId: item.id })}
+          >
+            <Text style={[styles.joinBtnText, item.privacy === 'private' && styles.requestBtnText]}>
+              {item.privacy === 'public' ? 'View' : 'Request'}
+            </Text>
+          </Pressable>
+        )}
+      </Pressable>
+    );
+  };
+
   // ── Row renderers ─────────────────────────────────────────────────────────
   const renderDM = (item: Conversation) => (
     <Pressable
@@ -350,7 +487,7 @@ export default function SocialScreen({ navigation }: Props) {
       <View style={styles.convoInfo}>
         <View style={styles.convoTopRow}>
           <Text style={styles.convoName} numberOfLines={1}>{item.partner_display_name}</Text>
-          {item.latest_message?.created_at && (
+          {!!item.latest_message?.created_at && (
             <Text style={styles.convoTime}>{timeAgo(item.latest_message.created_at)}</Text>
           )}
         </View>
@@ -405,7 +542,7 @@ export default function SocialScreen({ navigation }: Props) {
               </View>
             )}
           </View>
-          {item.latest_message?.created_at && (
+          {!!item.latest_message?.created_at && (
             <Text style={styles.convoTime}>{timeAgo(item.latest_message.created_at)}</Text>
           )}
         </View>
@@ -505,7 +642,7 @@ export default function SocialScreen({ navigation }: Props) {
 
         {/* Tab row */}
         <View style={styles.tabRow}>
-          {(['Messages', 'Groups'] as SocialTab[]).map((tab) => (
+          {(['Messages', 'Groups', 'Orgs'] as SocialTab[]).map((tab) => (
             <Pressable
               key={tab}
               style={styles.tab}
@@ -514,6 +651,11 @@ export default function SocialScreen({ navigation }: Props) {
                   setSearchQuery('');
                   setDiscoverGroups([]);
                   setLoadingGroups(true);
+                }
+                if (tab === 'Orgs' && activeTab !== 'Orgs') {
+                  setOrgsView('Mine');
+                  setOrgSearchQuery('');
+                  setLoadingOrgs(true);
                 }
                 setActiveTab(tab);
               }}
@@ -573,7 +715,7 @@ export default function SocialScreen({ navigation }: Props) {
             )}
           </ScrollView>
         )
-      ) : (
+      ) : activeTab === 'Groups' ? (
         // ────────────────── Groups tab ──────────────────
         <View style={{ flex: 1 }}>
           {/* Header */}
@@ -629,6 +771,86 @@ export default function SocialScreen({ navigation }: Props) {
               <Feather name="key" size={16} color={colors.primary} />
             </View>
             <Text style={styles.joinRowText}>Join with Invite Code</Text>
+            <Feather name="chevron-right" size={16} color={colors.textMuted} />
+          </Pressable>
+        </View>
+      ) : (
+        // ────────────────── Orgs tab ──────────────────
+        <View style={{ flex: 1 }}>
+          {/* Header */}
+          <View style={styles.groupsHeader}>
+            <Text style={styles.sectionTitle}>ORGANIZATIONS</Text>
+            <Pressable style={styles.createBtn} onPress={() => setCreateOrgVisible(true)}>
+              <Feather name="plus" size={14} color="#fff" />
+              <Text style={styles.createBtnText}>Create Org</Text>
+            </Pressable>
+          </View>
+
+          {/* Mine / Discover toggle */}
+          <View style={styles.orgsToggleRow}>
+            {(['Mine', 'Discover'] as const).map((v) => (
+              <Pressable
+                key={v}
+                style={[styles.orgsToggleBtn, orgsView === v && styles.orgsToggleBtnActive]}
+                onPress={() => handleSwitchOrgsView(v)}
+              >
+                <Text style={[styles.orgsToggleText, orgsView === v && styles.orgsToggleTextActive]}>
+                  {v}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+
+          {/* Search bar (Discover only) */}
+          {orgsView === 'Discover' && (
+            <View style={styles.searchContainer}>
+              <Feather name="search" size={16} color={colors.textMuted} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search organizations..."
+                placeholderTextColor={colors.textMuted}
+                value={orgSearchQuery}
+                onChangeText={handleOrgSearch}
+                returnKeyType="search"
+              />
+            </View>
+          )}
+
+          {/* Orgs list */}
+          {loadingOrgs ? (
+            <View style={styles.center}>
+              <ActivityIndicator color={colors.primary} />
+            </View>
+          ) : (
+            <FlatList
+              data={orgsView === 'Mine' ? myOrgs : discoverOrgsList}
+              keyExtractor={(item) => item.id}
+              renderItem={renderOrgCard}
+              style={{ flex: 1 }}
+              contentContainerStyle={{ flexGrow: 1, paddingBottom: spacing.md }}
+              ListEmptyComponent={
+                <View style={styles.center}>
+                  <Feather name="award" size={44} color={colors.textMuted} />
+                  <Text style={styles.emptyTitle}>
+                    {orgsView === 'Mine' ? 'No organizations yet' : 'No organizations found'}
+                  </Text>
+                  <Text style={styles.emptySubtitle}>
+                    {orgsView === 'Mine' ? 'Create one to get started!' : 'Try a different search'}
+                  </Text>
+                </View>
+              }
+            />
+          )}
+
+          {/* Join with invite code */}
+          <Pressable
+            style={[styles.joinRow, { marginBottom: Math.max(insets.bottom, 16) + 100 }]}
+            onPress={() => setOrgJoinModalVisible(true)}
+          >
+            <View style={styles.joinIconWrap}>
+              <Feather name="key" size={16} color={colors.primary} />
+            </View>
+            <Text style={styles.joinRowText}>Join Org with Invite Code</Text>
             <Feather name="chevron-right" size={16} color={colors.textMuted} />
           </Pressable>
         </View>
@@ -863,7 +1085,164 @@ export default function SocialScreen({ navigation }: Props) {
           </View>
         </KeyboardAvoidingView>
       </Modal>
-    </View>
+
+      {/* ── Create Org Modal ── */}
+      <Modal
+        visible={createOrgVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setCreateOrgVisible(false)}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setCreateOrgVisible(false)} />
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.modalTitle}>Create Organization</Text>
+              <Pressable style={styles.modalCloseBtn} onPress={() => setCreateOrgVisible(false)}>
+                <Feather name="x" size={16} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+
+            <View style={styles.inputBlock}>
+              <Text style={styles.inputLabel}>Organization Name</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="e.g., CrossFit Crew"
+                placeholderTextColor={colors.textMuted}
+                value={newOrgName}
+                onChangeText={setNewOrgName}
+                maxLength={100}
+              />
+            </View>
+
+            <View style={styles.inputBlock}>
+              <Text style={styles.inputLabel}>Description (Optional)</Text>
+              <TextInput
+                style={[styles.modalInput, styles.modalInputMulti]}
+                placeholder="Describe your organization..."
+                placeholderTextColor={colors.textMuted}
+                value={newOrgDesc}
+                onChangeText={setNewOrgDesc}
+                multiline
+                maxLength={500}
+                textAlignVertical="top"
+              />
+            </View>
+
+            <View style={styles.inputBlock}>
+              <Text style={styles.inputLabel}>Privacy</Text>
+              <Pressable style={styles.dropdown} onPress={() => setNewOrgPrivacyOpen(!newOrgPrivacyOpen)}>
+                <Text style={styles.dropdownValue}>
+                  {newOrgPrivacy === 'public' ? 'Public — Anyone can join' : 'Private — Approval required'}
+                </Text>
+                <Feather
+                  name={newOrgPrivacyOpen ? 'chevron-up' : 'chevron-down'}
+                  size={16}
+                  color={colors.textSecondary}
+                />
+              </Pressable>
+              {newOrgPrivacyOpen && (
+                <View style={styles.dropdownMenu}>
+                  {([
+                    { value: 'public', label: 'Public — Anyone can join' },
+                    { value: 'private', label: 'Private — Approval required' },
+                  ] as const).map((opt) => (
+                    <Pressable
+                      key={opt.value}
+                      style={[styles.dropdownItem, newOrgPrivacy === opt.value && styles.dropdownItemActive]}
+                      onPress={() => { setNewOrgPrivacy(opt.value); setNewOrgPrivacyOpen(false); }}
+                    >
+                      <Text style={[styles.dropdownItemText, newOrgPrivacy === opt.value && styles.dropdownItemTextActive]}>
+                        {opt.label}
+                      </Text>
+                      {newOrgPrivacy === opt.value && (
+                        <Feather name="check" size={14} color={colors.primary} />
+                      )}
+                    </Pressable>
+                  ))}
+                </View>
+              )}
+            </View>
+
+            <Pressable
+              style={[styles.createGroupBtn, (!newOrgName.trim() || creatingOrg) && styles.createGroupBtnDisabled]}
+              onPress={handleCreateOrg}
+              disabled={!newOrgName.trim() || creatingOrg}
+            >
+              {creatingOrg ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.createGroupBtnText}>Create Organization</Text>
+              )}
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      {/* ── Join Org via Code Modal ── */}
+      <Modal
+        visible={orgJoinModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { setOrgJoinModalVisible(false); setOrgInviteCode(''); }}
+      >
+        <KeyboardAvoidingView
+          style={styles.modalOverlay}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => { setOrgJoinModalVisible(false); setOrgInviteCode(''); }} />
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={styles.modalTitle}>Join with Invite Code</Text>
+              <Pressable style={styles.modalCloseBtn} onPress={() => { setOrgJoinModalVisible(false); setOrgInviteCode(''); }}>
+                <Feather name="x" size={16} color={colors.textSecondary} />
+              </Pressable>
+            </View>
+            <Text style={styles.joinModalSubtitle}>Enter the 8-character org invite code.</Text>
+            <TextInput
+              style={styles.joinModalInput}
+              placeholder="e.g. ABC12345"
+              placeholderTextColor={colors.textMuted}
+              value={orgInviteCode}
+              onChangeText={setOrgInviteCode}
+              autoCapitalize="characters"
+              autoFocus
+              maxLength={8}
+              returnKeyType="done"
+            />
+            <Pressable
+              style={[styles.createGroupBtn, (!orgInviteCode.trim() || joiningOrgCode) && styles.createGroupBtnDisabled]}
+              onPress={async () => {
+                const code = orgInviteCode.trim();
+                if (!code) return;
+                setJoiningOrgCode(true);
+                try {
+                  await joinOrgViaCode(code);
+                  setOrgInviteCode('');
+                  setOrgJoinModalVisible(false);
+                  Alert.alert('Joined!', 'You have joined the organization.');
+                  loadMyOrgs();
+                } catch (e: any) {
+                  Alert.alert('Error', e?.response?.data?.error ?? 'Invalid or expired invite code');
+                } finally {
+                  setJoiningOrgCode(false);
+                }
+              }}
+              disabled={!orgInviteCode.trim() || joiningOrgCode}
+            >
+              {joiningOrgCode ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.createGroupBtnText}>Join Organization</Text>
+              )}
+            </Pressable>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+      </View>
   );
 }
 
@@ -1269,4 +1648,23 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.lg,
     alignItems: 'center',
   },
+
+  // ── Orgs tab ──────────────────────────────────────────────────────────────
+  orgsToggleRow: {
+    flexDirection: 'row',
+    marginHorizontal: spacing.base,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.background.elevated,
+    borderRadius: 10,
+    padding: 3,
+  },
+  orgsToggleBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 6,
+    borderRadius: 8,
+  },
+  orgsToggleBtnActive: { backgroundColor: '#fff' },
+  orgsToggleText: { fontSize: typography.size.sm, fontWeight: '500', color: colors.textMuted },
+  orgsToggleTextActive: { fontWeight: '700', color: colors.textPrimary },
 });

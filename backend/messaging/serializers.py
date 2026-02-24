@@ -166,6 +166,8 @@ class MessageListSerializer(serializers.ModelSerializer):
     shared_post = serializers.SerializerMethodField()
     join_request_id = serializers.SerializerMethodField()
     join_request_status = serializers.SerializerMethodField()
+    media = serializers.SerializerMethodField()
+    reactions = serializers.SerializerMethodField()
 
     class Meta:
         model = Message
@@ -174,6 +176,7 @@ class MessageListSerializer(serializers.ModelSerializer):
             'content', 'is_request', 'is_system', 'is_read',
             'created_at', 'shared_post_id', 'shared_post',
             'join_request_id', 'join_request_status',
+            'media', 'reactions',
         ]
 
     def get_sender_username(self, obj):
@@ -208,6 +211,53 @@ class MessageListSerializer(serializers.ModelSerializer):
         except Exception:
             return None
         return None
+
+    def get_media(self, obj):
+        from media.models import MediaLink
+        from django.conf import settings
+        links = (
+            MediaLink.objects
+            .filter(destination_type='message', destination_id=str(obj.id), type='inline')
+            .select_related('asset')
+            .order_by('position')
+        )
+        result = []
+        for link in links:
+            asset = link.asset
+            thumbnail_url = (
+                f"{settings.MEDIA_URL}{asset.thumbnail_key}" if asset.thumbnail_key else None
+            )
+            result.append({
+                'url': asset.url,
+                'kind': asset.kind,
+                'thumbnail_url': thumbnail_url,
+                'width': asset.width,
+                'height': asset.height,
+            })
+        return result
+
+    def get_reactions(self, obj):
+        from django.db.models import Count
+        from messaging.models import MessageReaction
+        rows = (
+            MessageReaction.objects
+            .filter(message=obj)
+            .values('emoji')
+            .annotate(count=Count('id'))
+            .order_by('-count', 'emoji')
+        )
+        request = self.context.get('request')
+        user_emojis = set()
+        if request and request.user.is_authenticated:
+            user_emojis = set(
+                MessageReaction.objects
+                .filter(message=obj, user=request.user)
+                .values_list('emoji', flat=True)
+            )
+        return [
+            {'emoji': r['emoji'], 'count': r['count'], 'user_reacted': r['emoji'] in user_emojis}
+            for r in rows
+        ]
 
 
 class MessageSerializer(serializers.ModelSerializer):
@@ -289,15 +339,31 @@ class UnreadCountSerializer(serializers.Serializer):
 
 class SendDMSerializer(serializers.Serializer):
     recipient_id = serializers.CharField()
-    content = serializers.CharField(max_length=5000)
+    content = serializers.CharField(max_length=5000, required=False, default='')
     post_id = serializers.CharField(required=False, default=None)
     quick_workout_id = serializers.CharField(required=False, default=None)
+    media_id = serializers.CharField(required=False, default=None)
+
+    def validate(self, data):
+        if not data.get('content') and not data.get('media_id') and not data.get('post_id') and not data.get('quick_workout_id'):
+            raise serializers.ValidationError("A message must have content, media, or a shared post.")
+        return data
 
 
 class SendGroupMessageSerializer(serializers.Serializer):
-    content = serializers.CharField(max_length=5000)
+    content = serializers.CharField(max_length=5000, required=False, default='')
     post_id = serializers.CharField(required=False, default=None)
     quick_workout_id = serializers.CharField(required=False, default=None)
+    media_id = serializers.CharField(required=False, default=None)
+
+    def validate(self, data):
+        if not data.get('content') and not data.get('media_id') and not data.get('post_id') and not data.get('quick_workout_id'):
+            raise serializers.ValidationError("A message must have content, media, or a shared post.")
+        return data
+
+
+class ReactMessageSerializer(serializers.Serializer):
+    emoji = serializers.CharField(max_length=16)
 
 
 class MarkReadSerializer(serializers.Serializer):

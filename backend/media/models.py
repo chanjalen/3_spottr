@@ -74,6 +74,7 @@ class MediaLink(BaseModel):
         PERSONAL_RECORD = 'personal_record', 'Personal Record'
         MESSAGE = 'message', 'Message'
         QUICK_WORKOUT = 'quick_workout', 'Quick Workout'
+        ANNOUNCEMENT = 'announcement', 'Announcement'
 
     class Type(models.TextChoices):
         AVATAR = 'avatar', 'Avatar'

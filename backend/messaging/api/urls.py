@@ -21,4 +21,7 @@ urlpatterns = [
     # Read receipts
     path('read/', views.mark_read, name='mark-read'),
     path('unread-count/', views.unread_count, name='unread-count'),
+
+    # Reactions
+    path('messages/<str:message_id>/react/', views.react_to_message, name='react-to-message'),
 ]
