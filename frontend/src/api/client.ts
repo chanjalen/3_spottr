@@ -2,12 +2,21 @@ import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
-const getToken = async () => {
-  if (Platform.OS === 'web') return localStorage.getItem('auth_token');
-  return SecureStore.getItemAsync('auth_token');
+// In-memory cache so the SecureStore bridge is only crossed once per session.
+// undefined = not yet read; null would mean "no token" but we only cache truthy values.
+let _tokenCache: string | undefined = undefined;
+
+export const getToken = async (): Promise<string | null> => {
+  if (_tokenCache !== undefined) return _tokenCache;
+  const token = Platform.OS === 'web'
+    ? localStorage.getItem('auth_token')
+    : await SecureStore.getItemAsync('auth_token');
+  if (token) _tokenCache = token;
+  return token ?? null;
 };
 
 const deleteToken = async () => {
+  _tokenCache = undefined; // invalidate cache so next login re-reads from store
   if (Platform.OS === 'web') { localStorage.removeItem('auth_token'); return; }
   return SecureStore.deleteItemAsync('auth_token');
 };
@@ -26,7 +35,7 @@ export const apiClient = axios.create({
 });
 
 apiClient.interceptors.request.use(async (config) => {
-  const token = await getToken();
+  const token = await getToken(); // uses in-memory cache after first call
   if (token) {
     config.headers.Authorization = `Token ${token}`;
   }

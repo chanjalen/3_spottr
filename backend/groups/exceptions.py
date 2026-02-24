@@ -41,3 +41,8 @@ class CannotRemoveCreatorError(Exception):
 class InviteCodeNotFoundError(Exception):
     """Raised when an invite code cannot be found."""
     pass
+
+
+class GroupFullError(Exception):
+    """Raised when a group has reached its maximum member capacity."""
+    pass

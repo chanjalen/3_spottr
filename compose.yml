@@ -25,6 +25,21 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  celery:
+    build: ./backend
+    command: celery -A config worker --loglevel=info --concurrency=2
+    volumes:
+      - ./backend:/app
+    env_file:
+      - ./backend/.env
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.dev
+      - REDIS_URL=redis://redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
   proxy:
     build: ./proxy
     ports:

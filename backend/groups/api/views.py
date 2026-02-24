@@ -28,6 +28,7 @@ from groups.exceptions import (
     InvalidInviteCodeError,
     CannotRemoveCreatorError,
     InviteCodeNotFoundError,
+    GroupFullError,
 )
 
 
@@ -201,6 +202,8 @@ def group_join(request, group_id):
         return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
     except AlreadyGroupMemberError as e:
         return Response({"error": str(e)}, status=status.HTTP_409_CONFLICT)
+    except GroupFullError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         from messaging.services import send_system_group_message
@@ -256,6 +259,8 @@ def member_add(request, group_id, user_id):
         return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
     except AlreadyGroupMemberError as e:
         return Response({"error": str(e)}, status=status.HTTP_409_CONFLICT)
+    except GroupFullError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     return Response(
         GroupMemberSerializer(membership).data,
@@ -376,6 +381,8 @@ def join_via_code(request):
         return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
     except AlreadyGroupMemberError as e:
         return Response({"error": str(e)}, status=status.HTTP_409_CONFLICT)
+    except GroupFullError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         from messaging.services import send_system_group_message
@@ -462,6 +469,8 @@ def join_request_accept(request, group_id, request_id):
         return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
     except (NotGroupMemberError, NotGroupAdminError) as e:
         return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
+    except GroupFullError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     return Response(GroupJoinRequestSerializer(join_request).data)
 

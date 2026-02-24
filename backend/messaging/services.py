@@ -1,9 +1,9 @@
 import logging
 
-from django.db.models import Q, Max, Count, Subquery, OuterRef
+from django.db.models import Q
 from django.db.models import Prefetch
 
-from .models import Message, MessageRead
+from .models import Message, MessageRead, InboxEntry
 from .exceptions import (
     NotMutualFollowError,
     UserBlockedError,
@@ -29,13 +29,15 @@ def _clean_id(value):
     return str(value).replace('-', '')
 
 
-def _serialize_for_ws(message, recipient_id):
+def _serialize_for_ws(message, recipient_id, client_msg_id=None):
     """
     Build a minimal message dict for WebSocket delivery.
     Shape matches MessageListSerializer so the frontend handles both identically.
     recipient_id is the ID of the other person in a DM (used for client-side routing).
+    client_msg_id, if provided, is echoed back so the sender can reconcile their
+    optimistic (pending) message with the confirmed server message.
     """
-    return {
+    payload = {
         'id': message.id,
         'sender': message.sender_id,
         'sender_username': message.sender.username if message.sender else None,
@@ -52,6 +54,9 @@ def _serialize_for_ws(message, recipient_id):
         'dm_recipient_id': str(recipient_id) if recipient_id else None,
         'group_id': str(message.group_id) if message.group_id else None,
     }
+    if client_msg_id:
+        payload['client_msg_id'] = client_msg_id
+    return payload
 
 
 def _broadcast(group_name, message_data):
@@ -92,6 +97,52 @@ def _push_unread_update(user):
 
 
 # ---------------------------------------------------------------------------
+# InboxEntry helpers
+# ---------------------------------------------------------------------------
+
+def _update_inbox_dm(message, sender, recipient):
+    """Update InboxEntry for both DM participants. Called inline on every send."""
+    from django.db.models import F
+
+    # Sender: latest message updated, unread stays 0
+    InboxEntry.objects.update_or_create(
+        user=sender, conversation_type='dm', partner=recipient,
+        defaults={
+            'latest_message': message,
+            'latest_message_at': message.created_at,
+            'unread_count': 0,
+        },
+    )
+    # Recipient: latest message updated, unread incremented atomically
+    entry, created = InboxEntry.objects.get_or_create(
+        user=recipient, conversation_type='dm', partner=sender,
+        defaults={
+            'latest_message': message,
+            'latest_message_at': message.created_at,
+            'unread_count': 1,
+        },
+    )
+    if not created:
+        InboxEntry.objects.filter(pk=entry.pk).update(
+            latest_message=message,
+            latest_message_at=message.created_at,
+            unread_count=F('unread_count') + 1,
+        )
+
+
+def _update_inbox_group_sender(message, sender, group):
+    """Synchronously update just the sender's group InboxEntry. Celery handles the rest."""
+    InboxEntry.objects.update_or_create(
+        user=sender, conversation_type='group', group=group,
+        defaults={
+            'latest_message': message,
+            'latest_message_at': message.created_at,
+            'unread_count': 0,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -109,11 +160,12 @@ def _check_not_self(sender, recipient_id):
 
 
 def _check_mutual_follow(user_a, user_b):
-    """Verify both users follow each other."""
+    """Verify both users follow each other (1 query instead of 2)."""
     from social.models import Follow
-    a_follows_b = Follow.objects.filter(follower=user_a, following=user_b).exists()
-    b_follows_a = Follow.objects.filter(follower=user_b, following=user_a).exists()
-    if not (a_follows_b and b_follows_a):
+    count = Follow.objects.filter(
+        Q(follower=user_a, following=user_b) | Q(follower=user_b, following=user_a)
+    ).count()
+    if count < 2:
         raise NotMutualFollowError("You can only message users you mutually follow.")
 
 
@@ -188,6 +240,7 @@ def send_zap(sender, recipient_id):
     )
 
     MessageRead.objects.create(message=message, user=sender)
+    _update_inbox_dm(message, sender, recipient)
 
     # Broadcast to both participants over WebSocket, same as send_dm.
     payload = _serialize_for_ws(message, recipient_id=recipient.id)
@@ -201,11 +254,12 @@ def send_zap(sender, recipient_id):
 
 
 def _is_mutual_follow(user_a, user_b):
-    """Check if both users follow each other."""
+    """Check if both users follow each other (1 query instead of 2)."""
     from social.models import Follow
-    a_follows_b = Follow.objects.filter(follower=user_a, following=user_b).exists()
-    b_follows_a = Follow.objects.filter(follower=user_b, following=user_a).exists()
-    return a_follows_b and b_follows_a
+    count = Follow.objects.filter(
+        Q(follower=user_a, following=user_b) | Q(follower=user_b, following=user_a)
+    ).count()
+    return count == 2
 
 
 def send_dm(sender, recipient_id, content, post_id=None, quick_workout_id=None):
@@ -236,6 +290,7 @@ def send_dm(sender, recipient_id, content, post_id=None, quick_workout_id=None):
 
     # Auto-mark as read by sender
     MessageRead.objects.create(message=message, user=sender)
+    _update_inbox_dm(message, sender, recipient)
 
     # Broadcast to both participants over WebSocket.
     # Sender deduplicates by message ID (they already have it from the REST response).
@@ -273,18 +328,13 @@ def send_group_zap(sender, group_id, target_user_id):
     )
 
     MessageRead.objects.create(message=message, user=sender)
+    _update_inbox_group_sender(message, sender, group)
 
     payload = _serialize_for_ws(message, recipient_id=None)
     _broadcast(f"group_{_clean_id(group.id)}", payload)
 
-    from groups.models import GroupMember
-    member_users = (
-        GroupMember.objects.filter(group=group)
-        .exclude(user=sender)
-        .select_related('user')
-    )
-    for member in member_users:
-        _push_unread_update(member.user)
+    from messaging.tasks import fanout_group_inbox
+    fanout_group_inbox.delay(str(message.id), str(group.id), str(sender.id))
 
     return message
 
@@ -314,12 +364,13 @@ def send_system_group_message(group_id, content, join_request=None, sender=None)
     )
 
 
-def ws_send_dm(sender, recipient_id, content):
+def ws_send_dm(sender, recipient_id, content, client_msg_id=None):
     """
     WebSocket-consumer variant of send_dm.
     Performs only DB work and returns (payload, sender_group, recipient_group, recipient_unread)
     so the async consumer can call channel_layer.group_send directly, avoiding the
     async_to_sync-inside-sync_to_async nesting that silently breaks real-time delivery.
+    client_msg_id, if provided, is echoed in the payload for optimistic-render reconciliation.
     """
     _check_not_self(sender, recipient_id)
     recipient = _get_user(recipient_id)
@@ -334,8 +385,9 @@ def ws_send_dm(sender, recipient_id, content):
         is_request=is_request,
     )
     MessageRead.objects.create(message=message, user=sender)
+    _update_inbox_dm(message, sender, recipient)
 
-    payload = _serialize_for_ws(message, recipient_id=recipient.id)
+    payload = _serialize_for_ws(message, recipient_id=recipient.id, client_msg_id=client_msg_id)
     sender_group = f"dm_{_clean_id(sender.id)}"
     recipient_group = f"dm_{_clean_id(recipient.id)}"
     recipient_unread = get_unread_count(recipient)
@@ -343,12 +395,13 @@ def ws_send_dm(sender, recipient_id, content):
     return payload, sender_group, recipient_group, recipient_unread
 
 
-def ws_send_group_message(sender, group_id, content):
+def ws_send_group_message(sender, group_id, content, client_msg_id=None):
     """
     WebSocket-consumer variant of send_group_message.
     Returns (payload, group_channel, member_dm_groups) where member_dm_groups is a dict
     mapping each non-sender member's personal DM group name to their new unread counts,
     so the async consumer can push unread_update events without async_to_sync nesting.
+    client_msg_id, if provided, is echoed in the payload for optimistic-render reconciliation.
     """
     from groups.models import Group, GroupMember
 
@@ -365,19 +418,16 @@ def ws_send_group_message(sender, group_id, content):
         content=content,
     )
     MessageRead.objects.create(message=message, user=sender)
+    _update_inbox_group_sender(message, sender, group)
 
-    payload = _serialize_for_ws(message, recipient_id=None)
+    payload = _serialize_for_ws(message, recipient_id=None, client_msg_id=client_msg_id)
     group_channel = f"group_{_clean_id(group.id)}"
 
-    members = (
-        GroupMember.objects.filter(group=group)
-        .exclude(user=sender)
-        .select_related('user')
-    )
-    member_dm_groups = {
-        f"dm_{_clean_id(member.user.id)}": get_unread_count(member.user)
-        for member in members
-    }
+    from messaging.tasks import fanout_group_inbox
+    fanout_group_inbox.delay(str(message.id), str(group.id), str(sender.id))
+
+    # Return empty dict — Celery now handles the per-member unread pushes
+    member_dm_groups = {}
 
     return payload, group_channel, member_dm_groups
 
@@ -411,20 +461,14 @@ def send_group_message(sender, group_id, content, post_id=None, quick_workout_id
 
     # Auto-mark as read by sender
     MessageRead.objects.create(message=message, user=sender)
+    _update_inbox_group_sender(message, sender, group)
 
     # Broadcast to all group members over WebSocket.
     payload = _serialize_for_ws(message, recipient_id=None)
     _broadcast(f"group_{_clean_id(group.id)}", payload)
 
-    # Push updated unread counts to all group members except the sender.
-    from groups.models import GroupMember
-    member_users = (
-        GroupMember.objects.filter(group=group)
-        .exclude(user=sender)
-        .select_related('user')
-    )
-    for member in member_users:
-        _push_unread_update(member.user)
+    from messaging.tasks import fanout_group_inbox
+    fanout_group_inbox.delay(str(message.id), str(group.id), str(sender.id))
 
     return message
 
@@ -435,82 +479,30 @@ def send_group_message(sender, group_id, content, post_id=None, quick_workout_id
 
 def list_dm_conversations(user):
     """
-    Return a list of users the authenticated user has DM conversations with,
-    along with the latest message in each conversation.
-
-    Uses a correlated subquery per partner so the DB does the work in one
-    round-trip instead of firing one query per conversation partner.
+    Return InboxEntry queryset for all DM conversations, ordered by latest_message_at.
+    O(conversations) read — no correlated subqueries.
     """
-    from accounts.models import User
-
-    # Collect all unique partner IDs (one query each direction, both cheap)
-    sent_partner_ids = set(
-        Message.objects.filter(sender=user, recipient__isnull=False)
-        .values_list('recipient_id', flat=True)
-    )
-    recv_partner_ids = set(
-        Message.objects.filter(recipient=user)
-        .values_list('sender_id', flat=True)
-    )
-    partner_ids = sent_partner_ids | recv_partner_ids
-
-    if not partner_ids:
-        return Message.objects.none()
-
-    # For each partner, get the id of the most recent message using a
-    # correlated subquery — one server-side index scan per partner.
-    latest_msg_subq = Message.objects.filter(
-        Q(sender=user, recipient=OuterRef('pk'))
-        | Q(sender=OuterRef('pk'), recipient=user)
-    ).order_by('-created_at', '-id').values('id')[:1]
-
-    latest_msg_ids = list(
-        User.objects.filter(id__in=partner_ids)
-        .annotate(latest_msg_id=Subquery(latest_msg_subq))
-        .values_list('latest_msg_id', flat=True)
-    )
-    latest_msg_ids = [mid for mid in latest_msg_ids if mid is not None]
-
     return (
-        Message.objects.filter(id__in=latest_msg_ids)
-        .select_related('sender', 'recipient', 'post', 'quick_workout')
-        .order_by('-created_at')
+        InboxEntry.objects
+        .filter(user=user, conversation_type='dm', latest_message__isnull=False)
+        .select_related('partner', 'latest_message__sender',
+                        'latest_message__post', 'latest_message__quick_workout')
+        .order_by('-latest_message_at')
     )
 
 
 def list_group_conversations(user):
     """
-    Return groups the user is a member of that have messages,
-    along with the latest message per group.
-
-    Uses a correlated subquery so one DB round-trip replaces the previous
-    Max('id') approach (which was wrong for UUID strings).
+    Return InboxEntry queryset for all group conversations, ordered by latest_message_at.
+    O(conversations) read — no correlated subqueries.
     """
-    from groups.models import Group, GroupMember
-
-    group_ids = list(
-        GroupMember.objects.filter(user=user).values_list('group_id', flat=True)
-    )
-
-    if not group_ids:
-        return Message.objects.none()
-
-    # For each group, get the id of the most recent message
-    latest_msg_subq = Message.objects.filter(
-        group_id=OuterRef('id')
-    ).order_by('-created_at', '-id').values('id')[:1]
-
-    latest_msg_ids = list(
-        Group.objects.filter(id__in=group_ids)
-        .annotate(latest_msg_id=Subquery(latest_msg_subq))
-        .values_list('latest_msg_id', flat=True)
-    )
-    latest_msg_ids = [mid for mid in latest_msg_ids if mid is not None]
-
+    from django.db.models import Count
     return (
-        Message.objects.filter(id__in=latest_msg_ids)
-        .select_related('sender', 'group', 'post', 'quick_workout')
-        .order_by('-created_at')
+        InboxEntry.objects
+        .filter(user=user, conversation_type='group', latest_message__isnull=False)
+        .select_related('group', 'latest_message__sender')
+        .annotate(member_count=Count('group__members'))
+        .order_by('-latest_message_at')
     )
 
 
@@ -520,31 +512,24 @@ def list_group_conversations(user):
 
 def get_dm_unread_map(user):
     """
-    Return a dict of {sender_id (str): unread_count} for DM messages.
-    Single aggregation query replaces the per-conversation count loop.
+    Return a dict of {partner_id (str): unread_count} from InboxEntry.
     """
-    rows = (
-        Message.objects.filter(recipient=user)
-        .exclude(read_receipts__user=user)
-        .values('sender_id')
-        .annotate(count=Count('id'))
-    )
-    return {str(row['sender_id']): row['count'] for row in rows}
+    return {
+        str(row['partner_id']): row['unread_count']
+        for row in InboxEntry.objects.filter(user=user, conversation_type='dm')
+                              .values('partner_id', 'unread_count')
+    }
 
 
 def get_group_unread_map(user, group_ids):
     """
-    Return a dict of {group_id (str): unread_count} for group messages.
-    Single aggregation query replaces the per-group count loop.
+    Return a dict of {group_id (str): unread_count} from InboxEntry.
     """
-    rows = (
-        Message.objects.filter(group_id__in=group_ids)
-        .exclude(sender=user)
-        .exclude(read_receipts__user=user)
-        .values('group_id')
-        .annotate(count=Count('id'))
-    )
-    return {str(row['group_id']): row['count'] for row in rows}
+    return {
+        str(row['group_id']): row['unread_count']
+        for row in InboxEntry.objects.filter(user=user, group_id__in=group_ids)
+                              .values('group_id', 'unread_count')
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -702,32 +687,33 @@ def mark_messages_as_read(user, message_ids):
     if to_create:
         MessageRead.objects.bulk_create(to_create, ignore_conflicts=True)
 
+    # Zero out InboxEntry unread for affected conversations
+    accessible_ids = list(accessible)
+    rows = list(Message.objects.filter(id__in=accessible_ids)
+                .values('sender_id', 'recipient_id', 'group_id'))
+    partner_ids = {row['sender_id'] for row in rows
+                   if row.get('recipient_id') and str(row['recipient_id']) == str(user.id)}
+    group_ids = {row['group_id'] for row in rows if row.get('group_id')}
+    if partner_ids:
+        InboxEntry.objects.filter(user=user, conversation_type='dm',
+                                  partner_id__in=partner_ids).update(unread_count=0)
+    if group_ids:
+        InboxEntry.objects.filter(user=user, conversation_type='group',
+                                  group_id__in=group_ids).update(unread_count=0)
+
     return len(to_create)
 
 
 def get_unread_count(user):
     """
     Get total unread message count for the user (DMs + group messages).
+    Reads directly from InboxEntry — O(1) aggregation.
     """
-    dm_unread = Message.objects.filter(
-        recipient=user,
-    ).exclude(
-        read_receipts__user=user,
-    ).count()
-
-    from groups.models import GroupMember
-    group_ids = GroupMember.objects.filter(user=user).values_list('group_id', flat=True)
-
-    group_unread = Message.objects.filter(
-        group_id__in=group_ids,
-    ).exclude(
-        sender=user,
-    ).exclude(
-        read_receipts__user=user,
-    ).count()
-
-    return {
-        'dm': dm_unread,
-        'group': group_unread,
-        'total': dm_unread + group_unread,
-    }
+    from django.db.models import Sum, Q as DQ
+    result = InboxEntry.objects.filter(user=user).aggregate(
+        dm=Sum('unread_count', filter=DQ(conversation_type='dm'), default=0),
+        group=Sum('unread_count', filter=DQ(conversation_type='group'), default=0),
+    )
+    dm = result['dm'] or 0
+    group = result['group'] or 0
+    return {'dm': dm, 'group': group, 'total': dm + group}

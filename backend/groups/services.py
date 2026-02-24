@@ -11,7 +11,18 @@ from .exceptions import (
     InvalidInviteCodeError,
     CannotRemoveCreatorError,
     InviteCodeNotFoundError,
+    GroupFullError,
 )
+
+GROUP_MEMBER_CAP = 250
+
+
+def _check_group_capacity(group):
+    count = GroupMember.objects.filter(group=group).count()
+    if count >= GROUP_MEMBER_CAP:
+        raise GroupFullError(
+            f"This group has reached the maximum of {GROUP_MEMBER_CAP} members."
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -186,6 +197,8 @@ def add_member(admin_user, group_id, user_id):
     if GroupMember.objects.filter(group=group, user=target_user).exists():
         raise AlreadyGroupMemberError("User is already a member of this group.")
 
+    _check_group_capacity(group)
+
     return GroupMember.objects.create(
         group=group,
         user=target_user,
@@ -210,6 +223,9 @@ def remove_member(admin_user, group_id, user_id):
 
     target.delete()
 
+    from messaging.models import InboxEntry
+    InboxEntry.objects.filter(user=target.user, conversation_type='group', group=group).delete()
+
 
 def leave_group(user, group_id):
     """
@@ -224,6 +240,9 @@ def leave_group(user, group_id):
         )
 
     membership.delete()
+
+    from messaging.models import InboxEntry
+    InboxEntry.objects.filter(user=user, conversation_type='group', group=group).delete()
 
 
 def promote_member(admin_user, group_id, user_id):
@@ -280,6 +299,8 @@ def join_public_group(user, group_id):
 
     if GroupMember.objects.filter(group=group, user=user).exists():
         raise AlreadyGroupMemberError("You are already a member of this group.")
+
+    _check_group_capacity(group)
 
     return GroupMember.objects.create(
         group=group,
@@ -364,6 +385,8 @@ def join_via_code(user, code):
     if GroupMember.objects.filter(group=group, user=user).exists():
         raise AlreadyGroupMemberError("You are already a member of this group.")
 
+    _check_group_capacity(group)
+
     return GroupMember.objects.create(
         group=group,
         user=user,
@@ -423,6 +446,8 @@ def accept_join_request(admin_user, request_id):
 
     join_request.status = GroupJoinRequest.Status.ACCEPTED
     join_request.save(update_fields=['status', 'updated_at'])
+
+    _check_group_capacity(join_request.group)
 
     # Create membership (ignore if already exists, e.g. joined via code in the meantime)
     GroupMember.objects.get_or_create(
