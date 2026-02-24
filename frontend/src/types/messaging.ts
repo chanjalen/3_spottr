@@ -21,6 +21,9 @@ export interface Message {
   // Present on WebSocket-delivered messages for client-side routing.
   dm_recipient_id?: string | null;
   group_id?: string | null;
+  // Optimistic rendering fields — client-side only, not persisted.
+  status?: 'sending' | 'sent' | 'failed' | 'waiting';
+  client_msg_id?: string;
 }
 
 /** Embedded shared post/checkin card in a chat message. */

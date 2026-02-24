@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { wsManager } from '../../services/websocket';
-import { Message as MessageType } from '../../types/messaging';
 import {
+  Alert,
   View,
   Text,
   FlatList,
@@ -18,13 +18,22 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
-import { fetchGroupMessages, sendGroupMessage, markMessagesRead } from '../../api/messaging';
+import { fetchGroupMessages, markMessagesRead } from '../../api/messaging';
 import { Message } from '../../types/messaging';
 import { useAuth } from '../../store/AuthContext';
 import { useUnreadCount } from '../../store/UnreadCountContext';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 import { fetchGroupDetail, acceptJoinRequest, denyJoinRequest } from '../../api/groups';
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+const genClientMsgId = (): string =>
+  `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
+
+const SEND_TIMEOUT_MS = 12_000;
+
+// ── Types ────────────────────────────────────────────────────────────────────
 
 type NewDivider = { id: '__new_divider__'; isDivider: true };
 type ListItem = Message | NewDivider;
@@ -34,25 +43,49 @@ type Props = {
   route: RouteProp<RootStackParamList, 'GroupChat'>;
 };
 
+// ── Status icon ───────────────────────────────────────────────────────────────
+
+function MsgStatusIcon({ status }: { status: NonNullable<Message['status']> }) {
+  if (status === 'sending' || status === 'waiting') {
+    return <Feather name="clock" size={10} color="rgba(255,255,255,0.65)" />;
+  }
+  if (status === 'sent') {
+    return <Feather name="check" size={10} color="rgba(255,255,255,0.85)" />;
+  }
+  if (status === 'failed') {
+    return <Feather name="alert-circle" size={10} color="#ff6b6b" />;
+  }
+  return null;
+}
+
+// ── Screen ───────────────────────────────────────────────────────────────────
+
 export default function GroupChatScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { user: me } = useAuth();
   const { refresh: refreshUnread } = useUnreadCount();
   const { groupId, groupName, groupAvatar } = route.params;
 
-  // Stored newest-first so inverted FlatList shows newest at the bottom naturally.
   const [messages, setMessages] = useState<ListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [oldestId, setOldestId] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [text, setText] = useState('');
-  const [sending, setSending] = useState(false);
   const [userRole, setUserRole] = useState<'creator' | 'admin' | 'member' | null>(null);
   const [actingOnRequest, setActingOnRequest] = useState<string | null>(null);
   const flatRef = useRef<FlatList>(null);
   const newestIdRef = useRef<string | null>(null);
-  const lastSentRef = useRef<string>('');
+  const pendingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+
+  // ── Cleanup timers on unmount ──────────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      pendingTimers.current.forEach(t => clearTimeout(t));
+    };
+  }, []);
+
+  // ── Initial load ──────────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
     try {
@@ -60,9 +93,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
         fetchGroupMessages(groupId),
         fetchGroupDetail(groupId).catch(() => null),
       ]);
-      // Backend returns oldest-first; reverse so index 0 = newest (required for inverted list).
       const reversed = [...page.results].reverse();
-      // Insert "NEW" divider between unread (front) and read (back) messages on first open.
       const firstReadIdx = reversed.findIndex((m) => m.is_read);
       const listItems: ListItem[] = firstReadIdx > 0
         ? [...reversed.slice(0, firstReadIdx), { id: '__new_divider__', isDivider: true as const }, ...reversed.slice(firstReadIdx)]
@@ -83,24 +114,19 @@ export default function GroupChatScreen({ navigation, route }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
-  // Ensure the WS consumer is subscribed to this group's channel.
-  // Needed when the user joins a group while the WS is already connected —
-  // the initial connect() only subscribes to groups known at that moment.
+  // Subscribe to the group's WS channel.
   useEffect(() => {
     wsManager.subscribeGroup(groupId);
-    // Also re-subscribe if the WS reconnects while we're on this screen.
     const handler = () => wsManager.subscribeGroup(groupId);
     wsManager.on('connected', handler);
     return () => wsManager.off('connected', handler);
   }, [groupId]);
 
-  // Load older messages when the user scrolls to the visual top (onEndReached in inverted mode).
   const loadMore = useCallback(async () => {
     if (!hasMore || loadingMore || !oldestId) return;
     setLoadingMore(true);
     try {
       const page = await fetchGroupMessages(groupId, { before_id: oldestId });
-      // Append to the end of the newest-first array (visually: top of the chat).
       setMessages((prev) => [...prev, ...[...page.results].reverse()]);
       setHasMore(page.has_more);
       setOldestId(page.oldest_id ?? null);
@@ -109,7 +135,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     }
   }, [hasMore, loadingMore, oldestId, groupId]);
 
-  // Silently refresh when the screen regains focus (e.g. after a zap from InactiveStreakSheet).
+  // Silently refresh on focus (e.g. after zap from InactiveStreakSheet).
   const initialMountRef = useRef(true);
   useFocusEffect(
     useCallback(() => {
@@ -130,20 +156,35 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     }, [groupId, me?.id]),
   );
 
-  // Prepend incoming WS messages so they appear at the visual bottom (index 0 in newest-first).
-  // Own echoed messages are accepted here — dedup check prevents duplicates.
+  // ── WS: incoming messages ─────────────────────────────────────────────────
+
   useEffect(() => {
-    const handler = (msg: MessageType) => {
+    const handler = (msg: Message) => {
       if (String(msg.group_id) !== String(groupId)) return;
 
       setMessages((prev) => {
-        if (prev.some((m) => String(m.id) === String(msg.id))) return prev;
+        // Reconcile optimistic message by client_msg_id.
+        if (msg.client_msg_id) {
+          const pendingIdx = prev.findIndex(
+            (m) => !('isDivider' in m) && m.id === msg.client_msg_id,
+          );
+          if (pendingIdx !== -1) {
+            const timer = pendingTimers.current.get(msg.client_msg_id);
+            if (timer) {
+              clearTimeout(timer);
+              pendingTimers.current.delete(msg.client_msg_id);
+            }
+            const updated = [...prev];
+            updated[pendingIdx] = { ...msg, status: 'sent' as const };
+            return updated;
+          }
+        }
+        if (prev.some((m) => !('isDivider' in m) && String(m.id) === String(msg.id))) return prev;
         return [msg, ...prev];
       });
+
       newestIdRef.current = String(msg.id);
 
-      // Mark incoming messages from others as read immediately.
-      // Own echoes are already auto-read by the server (MessageRead created on send).
       if (String(msg.sender) !== String(me?.id)) {
         markMessagesRead([String(msg.id)]).then(refreshUnread).catch(() => {});
       }
@@ -153,7 +194,8 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     return () => wsManager.off('new_message', handler);
   }, [groupId, me?.id, refreshUnread]);
 
-  // Catch up on any messages missed while the WebSocket was reconnecting.
+  // ── WS: gap-sync on reconnect ─────────────────────────────────────────────
+
   useEffect(() => {
     const handler = () => {
       const nid = newestIdRef.current;
@@ -180,36 +222,169 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     return () => wsManager.off('connected', handler);
   }, [groupId, me?.id, refreshUnread]);
 
-  const handleSend = async () => {
-    const content = text.trim();
-    if (!content || sending) return;
-    lastSentRef.current = content;
-    setText('');
+  // ── WS: send error ────────────────────────────────────────────────────────
 
-    // Primary path: send via WebSocket — echo arrives via new_message handler.
-    const sent = wsManager.sendMessage({ type: 'send_message', content, group_id: groupId });
-    if (sent) return;
-
-    // Fallback: WS not connected — use REST.
-    setSending(true);
-    try {
-      const msg = await sendGroupMessage(groupId, content);
-      setMessages((prev) => [msg, ...prev]);
-    } catch {
-      setText(content); // restore on failure
-    } finally {
-      setSending(false);
-    }
-  };
-
-  // Restore typed text if the server rejects a WS send.
   useEffect(() => {
-    const handler = () => {
-      setText(lastSentRef.current);
+    const handler = ({ client_msg_id }: { code: string; detail: string; client_msg_id?: string }) => {
+      if (!client_msg_id) return;
+      const timer = pendingTimers.current.get(client_msg_id);
+      if (timer) {
+        clearTimeout(timer);
+        pendingTimers.current.delete(client_msg_id);
+      }
+      setMessages((prev) =>
+        prev.map((m) =>
+          !('isDivider' in m) && m.id === client_msg_id
+            ? { ...m, status: 'failed' as const }
+            : m,
+        ),
+      );
     };
     wsManager.on('send_error', handler);
     return () => wsManager.off('send_error', handler);
   }, []);
+
+  // ── WS: queue item flushed ────────────────────────────────────────────────
+
+  useEffect(() => {
+    const handler = ({ client_msg_id }: { client_msg_id: string }) => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          !('isDivider' in m) && m.id === client_msg_id && m.status === 'waiting'
+            ? { ...m, status: 'sending' as const }
+            : m,
+        ),
+      );
+      const timeout = setTimeout(() => {
+        setMessages((prev) =>
+          prev.map((m) =>
+            !('isDivider' in m) && m.id === client_msg_id && m.status === 'sending'
+              ? { ...m, status: 'failed' as const }
+              : m,
+          ),
+        );
+        pendingTimers.current.delete(client_msg_id);
+      }, SEND_TIMEOUT_MS);
+      pendingTimers.current.set(client_msg_id, timeout);
+    };
+    wsManager.on('queue_item_flushed', handler);
+    return () => wsManager.off('queue_item_flushed', handler);
+  }, []);
+
+  // ── Send helpers ──────────────────────────────────────────────────────────
+
+  const _startSendTimer = (clientMsgId: string) => {
+    const timeout = setTimeout(() => {
+      setMessages((prev) =>
+        prev.map((m) =>
+          !('isDivider' in m) && m.id === clientMsgId && m.status === 'sending'
+            ? { ...m, status: 'failed' as const }
+            : m,
+        ),
+      );
+      pendingTimers.current.delete(clientMsgId);
+    }, SEND_TIMEOUT_MS);
+    pendingTimers.current.set(clientMsgId, timeout);
+  };
+
+  const handleSend = () => {
+    const content = text.trim();
+    if (!content) return;
+
+    const clientMsgId = genClientMsgId();
+    setText('');
+
+    const optimisticMsg: Message = {
+      id: clientMsgId,
+      sender: String(me?.id ?? ''),
+      sender_username: null,
+      sender_avatar_url: null,
+      content,
+      created_at: new Date().toISOString(),
+      is_read: true,
+      group_id: groupId,
+      client_msg_id: clientMsgId,
+      status: 'sending',
+    };
+    setMessages((prev) => [optimisticMsg, ...prev]);
+
+    const result = wsManager.sendMessage({
+      type: 'send_message',
+      content,
+      group_id: groupId,
+      client_msg_id: clientMsgId,
+    });
+
+    if (result === 'queued') {
+      setMessages((prev) =>
+        prev.map((m) =>
+          !('isDivider' in m) && m.id === clientMsgId
+            ? { ...m, status: 'waiting' as const }
+            : m,
+        ),
+      );
+      return;
+    }
+
+    _startSendTimer(clientMsgId);
+  };
+
+  const handleRetry = useCallback((msg: Message) => {
+    const clientMsgId = msg.client_msg_id;
+    if (!clientMsgId || !msg.content) return;
+
+    const existing = pendingTimers.current.get(clientMsgId);
+    if (existing) {
+      clearTimeout(existing);
+      pendingTimers.current.delete(clientMsgId);
+    }
+
+    wsManager.removeFromQueue(clientMsgId);
+
+    const result = wsManager.sendMessage({
+      type: 'send_message',
+      content: msg.content,
+      group_id: groupId,
+      client_msg_id: clientMsgId,
+    });
+
+    setMessages((prev) =>
+      prev.map((m) =>
+        !('isDivider' in m) && m.id === clientMsgId
+          ? { ...m, status: result === 'queued' ? 'waiting' as const : 'sending' as const }
+          : m,
+      ),
+    );
+
+    if (result === 'sent') {
+      _startSendTimer(clientMsgId);
+    }
+  }, [groupId]);
+
+  const handleLongPress = useCallback((msg: Message) => {
+    if (msg.status !== 'failed') return;
+    Alert.alert(
+      'Message Options',
+      undefined,
+      [
+        {
+          text: 'Retry',
+          onPress: () => handleRetry(msg),
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            if (msg.client_msg_id) wsManager.removeFromQueue(msg.client_msg_id);
+            setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+          },
+        },
+        { text: 'Cancel', style: 'cancel' },
+      ],
+    );
+  }, [handleRetry]);
+
+  // ── Join request handlers ─────────────────────────────────────────────────
 
   const handleAccept = async (requestId: string) => {
     if (actingOnRequest) return;
@@ -249,7 +424,9 @@ export default function GroupChatScreen({ navigation, route }: Props) {
 
   const canManageRequests = userRole === 'creator' || userRole === 'admin';
 
-  const renderItem = ({ item }: { item: ListItem }) => {
+  // ── Render ────────────────────────────────────────────────────────────────
+
+  const renderItem = useCallback(({ item }: { item: ListItem }) => {
     if ('isDivider' in item) {
       return (
         <View style={styles.dividerRow}>
@@ -259,8 +436,10 @@ export default function GroupChatScreen({ navigation, route }: Props) {
         </View>
       );
     }
+
     const isOwn = String(item.sender) === String(me?.id);
     const isSystem = item.is_system;
+    const isFailed = item.status === 'failed';
 
     if (isSystem) {
       const hasRequest = !!item.join_request_id;
@@ -318,19 +497,51 @@ export default function GroupChatScreen({ navigation, route }: Props) {
             />
           </Pressable>
         )}
-        <View style={styles.msgContent}>
-          {!isOwn && (
-            <Text style={styles.senderName}>{item.sender_username ?? ''}</Text>
-          )}
-          <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
-            <Text style={[styles.bubbleText, isOwn ? styles.bubbleTextOwn : styles.bubbleTextOther]}>
-              {item.content}
-            </Text>
+        {isFailed ? (
+          <Pressable
+            style={{ maxWidth: '75%' }}
+            onPress={() => handleRetry(item)}
+            onLongPress={() => handleLongPress(item)}
+            delayLongPress={400}
+          >
+            <View style={styles.msgContent}>
+              {!isOwn && (
+                <Text style={styles.senderName}>{item.sender_username ?? ''}</Text>
+              )}
+              <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther, styles.bubbleFailed]}>
+                <Text style={[styles.bubbleText, isOwn ? styles.bubbleTextOwn : styles.bubbleTextOther]}>
+                  {item.content}
+                </Text>
+              </View>
+              {isOwn && item.status != null && (
+                <View style={styles.msgStatus}>
+                  <MsgStatusIcon status={item.status} />
+                </View>
+              )}
+            </View>
+          </Pressable>
+        ) : (
+          <View style={{ maxWidth: '75%' }}>
+            <View style={styles.msgContent}>
+              {!isOwn && (
+                <Text style={styles.senderName}>{item.sender_username ?? ''}</Text>
+              )}
+              <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
+                <Text style={[styles.bubbleText, isOwn ? styles.bubbleTextOwn : styles.bubbleTextOther]}>
+                  {item.content}
+                </Text>
+              </View>
+              {isOwn && item.status != null && (
+                <View style={styles.msgStatus}>
+                  <MsgStatusIcon status={item.status} />
+                </View>
+              )}
+            </View>
           </View>
-        </View>
+        )}
       </View>
     );
-  };
+  }, [me?.id, actingOnRequest, canManageRequests, navigation, handleRetry, handleLongPress]);
 
   return (
     <KeyboardAvoidingView
@@ -379,7 +590,6 @@ export default function GroupChatScreen({ navigation, route }: Props) {
           contentContainerStyle={{ padding: spacing.base, gap: spacing.sm, paddingTop: 16 }}
           onEndReached={loadMore}
           onEndReachedThreshold={0.2}
-          // In inverted mode, ListFooterComponent renders at the visual top (oldest messages).
           ListFooterComponent={
             loadingMore
               ? <ActivityIndicator style={{ paddingVertical: spacing.md }} color={colors.primary} />
@@ -405,15 +615,11 @@ export default function GroupChatScreen({ navigation, route }: Props) {
           maxLength={2000}
         />
         <Pressable
-          style={[styles.sendBtn, (!text.trim() || sending) && styles.sendBtnDisabled]}
+          style={[styles.sendBtn, !text.trim() && styles.sendBtnDisabled]}
           onPress={handleSend}
-          disabled={!text.trim() || sending}
+          disabled={!text.trim()}
         >
-          {sending ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Feather name="send" size={18} color="#fff" />
-          )}
+          <Feather name="send" size={18} color="#fff" />
         </Pressable>
       </View>
     </KeyboardAvoidingView>
@@ -489,7 +695,7 @@ const styles = StyleSheet.create({
   },
   msgWrapOwn: { justifyContent: 'flex-end' },
   msgWrapOther: { justifyContent: 'flex-start' },
-  msgContent: { maxWidth: '75%', gap: 2 },
+  msgContent: { gap: 2 },
   senderName: {
     fontSize: typography.size.xs,
     color: colors.textSecondary,
@@ -502,9 +708,15 @@ const styles = StyleSheet.create({
   },
   bubbleOwn: { backgroundColor: colors.primary, borderBottomRightRadius: 4 },
   bubbleOther: { backgroundColor: colors.background.elevated, borderBottomLeftRadius: 4 },
+  bubbleFailed: { opacity: 0.7 },
   bubbleText: { fontSize: typography.size.sm, lineHeight: 20 },
   bubbleTextOwn: { color: '#fff' },
   bubbleTextOther: { color: colors.textPrimary },
+  msgStatus: {
+    alignSelf: 'flex-end',
+    marginTop: 2,
+    marginRight: 4,
+  },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'flex-end',

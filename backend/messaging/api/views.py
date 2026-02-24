@@ -168,22 +168,20 @@ def _partner_has_activity_today(partner):
 def dm_conversations(request):
     """
     List all DM conversations with the latest message per partner.
-    Unread counts are fetched in a single batch query instead of per-conversation.
+    Reads directly from InboxEntry — no correlated subqueries or separate unread query.
     """
-    latest_messages = services.list_dm_conversations(request.user)
-    unread_map = services.get_dm_unread_map(request.user)
+    entries = services.list_dm_conversations(request.user)
 
     conversations = []
-    for msg in latest_messages:
-        partner = msg.recipient if msg.sender == request.user else msg.sender
+    for entry in entries:
         conversations.append({
-            'partner_id': str(partner.id),
-            'partner_username': partner.username,
-            'partner_display_name': partner.display_name or partner.username,
-            'partner_avatar_url': partner.avatar_url or None,
-            'latest_message': msg,
-            'unread_count': unread_map.get(str(partner.id), 0),
-            'partner_has_activity_today': _partner_has_activity_today(partner),
+            'partner_id': str(entry.partner_id),
+            'partner_username': entry.partner.username,
+            'partner_display_name': entry.partner.display_name or entry.partner.username,
+            'partner_avatar_url': entry.partner.avatar_url or None,
+            'latest_message': entry.latest_message,
+            'unread_count': entry.unread_count,
+            'partner_has_activity_today': _partner_has_activity_today(entry.partner),
         })
 
     serializer = ConversationSerializer(
@@ -197,26 +195,20 @@ def dm_conversations(request):
 def group_conversations(request):
     """
     List all group conversations with the latest message per group.
-    Unread counts are fetched in a single batch query instead of per-group.
+    Reads directly from InboxEntry — no correlated subqueries or separate unread query.
     """
-    from groups.models import GroupMember
-    group_ids = list(
-        GroupMember.objects.filter(user=request.user).values_list('group_id', flat=True)
-    )
-
-    latest_messages = services.list_group_conversations(request.user)
-    unread_map = services.get_group_unread_map(request.user, group_ids)
+    entries = services.list_group_conversations(request.user)
 
     conversations = []
-    for msg in latest_messages:
+    for entry in entries:
         conversations.append({
-            'group_id': str(msg.group.id),
-            'group_name': msg.group.name,
-            'group_streak': msg.group.group_streak,
-            'avatar_url': msg.group.avatar_url or None,
-            'member_count': msg.group.members.count(),
-            'latest_message': msg,
-            'unread_count': unread_map.get(str(msg.group.id), 0),
+            'group_id': str(entry.group_id),
+            'group_name': entry.group.name,
+            'group_streak': entry.group.group_streak,
+            'avatar_url': entry.group.avatar_url or None,
+            'member_count': entry.member_count,
+            'latest_message': entry.latest_message,
+            'unread_count': entry.unread_count,
         })
 
     serializer = GroupConversationSerializer(

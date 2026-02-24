@@ -91,6 +91,7 @@ DATABASES = {
         "PASSWORD": os.environ.get("DB_PASSWORD"),
         "HOST": os.environ.get("DB_HOST"),
         "PORT": os.environ.get("DB_PORT", "6543"),
+        "CONN_MAX_AGE": 60,  # reuse connections for up to 60 s (eliminates per-request TCP handshake)
         "OPTIONS": {
             "sslmode": os.environ.get("DB_SSLMODE", "require"),
         },
@@ -201,6 +202,17 @@ CHANNEL_LAYERS = {
         },
     }
 }
+
+# Celery — uses Redis DB 1 (channel layer uses DB 0)
+_redis_base = os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379')
+CELERY_BROKER_URL = _redis_base + '/1'
+CELERY_RESULT_BACKEND = _redis_base + '/2'
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = 'UTC'
+CELERY_TASK_TRACK_STARTED = True
+# Set CELERY_TASK_ALWAYS_EAGER = True in test settings to run tasks inline
 
 # Logging
 LOGGING = {

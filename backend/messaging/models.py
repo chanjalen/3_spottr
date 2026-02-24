@@ -110,3 +110,43 @@ class MessageRead(BaseModel):
 
     def __str__(self):
         return f"{self.user.username} read message {self.message.id}"
+
+
+class InboxEntry(BaseModel):
+    """
+    Denormalized inbox row per (user, conversation).
+    Maintained incrementally on every send/read — never recomputed.
+    Read: SELECT * WHERE user_id=X ORDER BY latest_message_at DESC LIMIT 50
+    """
+    CONV_DM = 'dm'
+    CONV_GROUP = 'group'
+    CONV_CHOICES = [(CONV_DM, 'DM'), (CONV_GROUP, 'Group')]
+
+    user = models.ForeignKey('accounts.User', on_delete=models.CASCADE,
+                             related_name='inbox_entries')
+    conversation_type = models.CharField(max_length=5, choices=CONV_CHOICES)
+    partner = models.ForeignKey('accounts.User', on_delete=models.CASCADE,
+                                null=True, blank=True, related_name='+')
+    group = models.ForeignKey('groups.Group', on_delete=models.CASCADE,
+                              null=True, blank=True, related_name='inbox_entries')
+    latest_message = models.ForeignKey('messaging.Message', on_delete=models.SET_NULL,
+                                       null=True, blank=True, related_name='+')
+    latest_message_at = models.DateTimeField(null=True, blank=True, db_index=False)
+    unread_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['user', '-latest_message_at'], name='idx_inbox_user_time'),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['user', 'partner'],
+                condition=Q(partner__isnull=False),
+                name='unique_inbox_dm',
+            ),
+            models.UniqueConstraint(
+                fields=['user', 'group'],
+                condition=Q(group__isnull=False),
+                name='unique_inbox_group',
+            ),
+        ]

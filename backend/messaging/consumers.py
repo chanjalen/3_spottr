@@ -82,10 +82,15 @@ class MessagingConsumer(AsyncWebsocketConsumer):
         recipient_id = data.get('recipient_id')
         group_id     = data.get('group_id')
 
+        # client_msg_id: opaque string the client uses to reconcile optimistic messages.
+        # Sanitised to a plain string, capped at 64 chars to prevent injection or overflow.
+        raw_cmid = data.get('client_msg_id')
+        client_msg_id = str(raw_cmid)[:64] if raw_cmid is not None else None
+
         try:
             if recipient_id:
                 payload, sender_group, recipient_group, recipient_unread = \
-                    await self._ws_send_dm(recipient_id, content)
+                    await self._ws_send_dm(recipient_id, content, client_msg_id)
                 msg_event = {'type': 'new_message', 'message': payload}
                 await self.channel_layer.group_send(sender_group, msg_event)
                 await self.channel_layer.group_send(recipient_group, msg_event)
@@ -95,7 +100,7 @@ class MessagingConsumer(AsyncWebsocketConsumer):
                 )
             elif group_id:
                 payload, group_channel, member_dm_groups = \
-                    await self._ws_send_group(group_id, content)
+                    await self._ws_send_group(group_id, content, client_msg_id)
                 await self.channel_layer.group_send(
                     group_channel,
                     {'type': 'new_message', 'message': payload},
@@ -107,11 +112,14 @@ class MessagingConsumer(AsyncWebsocketConsumer):
                     )
         except Exception as exc:
             logger.warning("WS send_message failed for %s: %s", self.user.username, exc)
-            await self.send(text_data=json.dumps({
+            err_payload: dict = {
                 'type': 'error',
                 'code': type(exc).__name__,
                 'detail': str(exc),
-            }))
+            }
+            if client_msg_id:
+                err_payload['client_msg_id'] = client_msg_id
+            await self.send(text_data=json.dumps(err_payload))
 
     # ── Channel layer event handlers ─────────────────────────────────────────
     # These are called by channel_layer.group_send() in services.py.
@@ -134,14 +142,14 @@ class MessagingConsumer(AsyncWebsocketConsumer):
     # ── DB helpers (must be async-safe) ──────────────────────────────────────
 
     @database_sync_to_async
-    def _ws_send_dm(self, recipient_id, content):
+    def _ws_send_dm(self, recipient_id, content, client_msg_id=None):
         from messaging.services import ws_send_dm
-        return ws_send_dm(self.user, recipient_id, content)
+        return ws_send_dm(self.user, recipient_id, content, client_msg_id=client_msg_id)
 
     @database_sync_to_async
-    def _ws_send_group(self, group_id, content):
+    def _ws_send_group(self, group_id, content, client_msg_id=None):
         from messaging.services import ws_send_group_message
-        return ws_send_group_message(self.user, group_id, content)
+        return ws_send_group_message(self.user, group_id, content, client_msg_id=client_msg_id)
 
     @database_sync_to_async
     def _get_user_from_token(self, token_key):
