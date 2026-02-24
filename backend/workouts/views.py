@@ -14,11 +14,57 @@ from .models import Workout, Exercise, ExerciseCatalog, ExerciseSet, PersonalRec
 from social.models import Post
 
 
+def _is_api_request(request):
+    """Return True when the caller is a mobile token-auth client."""
+    return request.headers.get('Authorization', '').startswith('Token ')
+
+
+def _serialize_workout(workout):
+    """Return a JSON-safe dict for one Workout with its exercises + sets."""
+    exercises = Exercise.objects.filter(workout=workout).prefetch_related('exercise_sets').order_by('order')
+    exercises_data = []
+    for ex in exercises:
+        sets_data = [
+            {
+                'id': str(s.id),
+                'set_number': s.set_number,
+                'reps': s.reps,
+                'weight': float(s.weight),
+                'completed': s.completed,
+            }
+            for s in ex.exercise_sets.all()
+        ]
+        exercises_data.append({
+            'id': str(ex.id),
+            'name': ex.name,
+            'category': ex.category,
+            'order': ex.order,
+            'sets': sets_data,
+        })
+
+    duration_secs = workout.duration.total_seconds() if workout.duration else 0
+    is_active = duration_secs <= 2
+
+    return {
+        'id': str(workout.id),
+        'name': workout.name,
+        'started_at': workout.start_time.isoformat() if workout.start_time else None,
+        'finished_at': None if is_active else (workout.end_time.isoformat() if workout.end_time else None),
+        'duration': None if is_active else duration_secs,
+        'notes': workout.notes or '',
+        'exercises': exercises_data,
+        'exercise_count': len(exercises_data),
+        'total_sets': sum(len(e['sets']) for e in exercises_data),
+        'is_active': is_active,
+    }
+
+
 @login_required
 def log_workout_view(request):
     """
     Display the Log Workout page with options to start empty workout or choose template.
     Also shows this week's stats and recent workouts.
+    When called by mobile (Token auth) returns JSON.
     """
     user = request.user
 
@@ -26,20 +72,57 @@ def log_workout_view(request):
     today = timezone.now().date()
     week_start = today - timedelta(days=today.weekday())
 
-    week_workouts = Workout.objects.filter(
+    week_workouts = list(Workout.objects.filter(
         user=user,
         start_time__date__gte=week_start
-    )
+    ))
 
-    workouts_count = week_workouts.count()
-    total_time = sum((w.duration.total_seconds() for w in week_workouts), 0)
+    workouts_count = len(week_workouts)
+    total_time = sum((w.duration.total_seconds() for w in week_workouts if w.duration), 0)
     total_sets = sum(
         ExerciseSet.objects.filter(exercise__workout=w).count()
         for w in week_workouts
     )
 
-    # Get recent workouts
-    recent_workouts = Workout.objects.filter(user=user)[:5]
+    # Get recent workouts (exclude active placeholder workouts from the history list)
+    recent_workouts = list(Workout.objects.filter(
+        user=user,
+    ).order_by('-start_time')[:10])
+
+    if _is_api_request(request):
+        from social.views import get_time_ago
+
+        hours_total = int(total_time) // 3600
+        mins_total = (int(total_time) % 3600) // 60
+        total_time_str = f"{hours_total}h {mins_total}m" if hours_total > 0 else f"{mins_total}m"
+
+        recent_list = []
+        for w in recent_workouts:
+            dur_secs = int(w.duration.total_seconds()) if w.duration else 0
+            h = dur_secs // 3600
+            m = (dur_secs % 3600) // 60
+            dur_str = f"{h}h {m}m" if h > 0 else f"{m}m"
+            ex_count = Exercise.objects.filter(workout=w).count()
+            s_count = ExerciseSet.objects.filter(exercise__workout=w).count()
+            recent_list.append({
+                'id': str(w.id),
+                'name': w.name,
+                'duration': dur_str,
+                'duration_seconds': dur_secs,
+                'exercise_count': ex_count,
+                'total_sets': s_count,
+                'started_at': w.start_time.isoformat() if w.start_time else None,
+                'time_ago': get_time_ago(w.start_time) if w.start_time else '',
+                'is_active': dur_secs <= 2,
+            })
+
+        return JsonResponse({
+            'workouts_count': workouts_count,
+            'total_time': total_time_str,
+            'total_time_seconds': int(total_time),
+            'total_sets': total_sets,
+            'recent_workouts': recent_list,
+        })
 
     return render(request, 'workouts/log_workout.html', {
         'workouts_count': workouts_count,
@@ -49,8 +132,7 @@ def log_workout_view(request):
     })
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
 def start_workout_view(request):
     """
     Start a new empty workout session.
@@ -76,15 +158,35 @@ def start_workout_view(request):
 def active_workout_view(request, workout_id):
     """
     Display the active workout page where user can add exercises and track sets.
+    When called by mobile (Token auth) returns JSON.
     """
     workout = get_object_or_404(Workout, id=workout_id, user=request.user)
 
-    exercises = Exercise.objects.filter(workout=workout).prefetch_related('exercise_sets')
+    if _is_api_request(request):
+        return JsonResponse(_serialize_workout(workout))
 
+    exercises = Exercise.objects.filter(workout=workout).prefetch_related('exercise_sets')
     return render(request, 'workouts/active_workout.html', {
         'workout': workout,
         'exercises': exercises,
     })
+
+
+@api_view(['GET'])
+def api_active_workout_view(request):
+    """
+    Return the user's most recent active (unfinished) workout as JSON, or null.
+    An 'active' workout has duration <= 2 seconds (placeholder set by start_workout_view).
+    """
+    active = Workout.objects.filter(
+        user=request.user,
+        duration__lte=timedelta(seconds=2),
+    ).order_by('-start_time').first()
+
+    if not active:
+        return JsonResponse({'active': None})
+
+    return JsonResponse({'active': _serialize_workout(active)})
 
 
 @api_view(['GET'])
@@ -119,16 +221,14 @@ def exercise_catalog_view(request):
 
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
 def add_exercise_view(request, workout_id):
     """
     Add an exercise to the workout.
     """
     workout = get_object_or_404(Workout, id=workout_id, user=request.user)
 
-    data = json.loads(request.body)
-    catalog_id = data.get('catalog_id')
+    catalog_id = request.data.get('catalog_id')
 
     catalog_exercise = get_object_or_404(ExerciseCatalog, id=catalog_id)
 
@@ -161,7 +261,7 @@ def add_exercise_view(request, workout_id):
     return JsonResponse({
         'success': True,
         'exercise': {
-            'id': exercise.id,
+            'id': str(exercise.id),
             'name': exercise.name,
             'category': exercise.category,
             'order': exercise.order,
@@ -170,16 +270,14 @@ def add_exercise_view(request, workout_id):
     })
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
 def add_custom_exercise_view(request, workout_id):
     """
     Add a custom exercise to the workout (not from catalog).
     """
     workout = get_object_or_404(Workout, id=workout_id, user=request.user)
 
-    data = json.loads(request.body)
-    exercise_name = data.get('name', '').strip()
+    exercise_name = request.data.get('name', '').strip()
 
     if not exercise_name:
         return JsonResponse({
@@ -220,12 +318,12 @@ def add_custom_exercise_view(request, workout_id):
             'name': exercise.name,
             'category': exercise.category,
             'order': exercise.order,
+            'sets': list(exercise.exercise_sets.values('id', 'set_number', 'reps', 'weight', 'completed')),
         }
     })
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
 def add_set_view(request, exercise_id):
     """
     Add a new set to an exercise.
@@ -247,7 +345,7 @@ def add_set_view(request, exercise_id):
     return JsonResponse({
         'success': True,
         'set': {
-            'id': exercise_set.id,
+            'id': str(exercise_set.id),
             'set_number': exercise_set.set_number,
             'reps': exercise_set.reps,
             'weight': float(exercise_set.weight),
@@ -256,8 +354,7 @@ def add_set_view(request, exercise_id):
     })
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
 def update_set_view(request, set_id):
     """
     Update a set's reps, weight, or completed status.
@@ -268,7 +365,7 @@ def update_set_view(request, set_id):
         exercise__workout__user=request.user
     )
 
-    data = json.loads(request.body)
+    data = request.data
 
     if 'reps' in data:
         exercise_set.reps = max(0, int(data['reps']))
@@ -322,8 +419,7 @@ def update_set_view(request, set_id):
     return JsonResponse(response_data)
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
 def delete_set_view(request, set_id):
     """
     Delete a set from an exercise.
@@ -339,8 +435,7 @@ def delete_set_view(request, set_id):
     return JsonResponse({'success': True})
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
 def delete_exercise_view(request, exercise_id):
     """
     Delete an exercise from the workout.
@@ -351,8 +446,7 @@ def delete_exercise_view(request, exercise_id):
     return JsonResponse({'success': True})
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
 def delete_workout_view(request, workout_id):
     """
     Delete an incomplete workout (clear/cancel workout).
@@ -363,8 +457,7 @@ def delete_workout_view(request, workout_id):
     return JsonResponse({'success': True})
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
 def finish_workout_view(request, workout_id):
     """
     Finish the workout, calculate duration, and optionally post to feed.
@@ -389,7 +482,7 @@ def finish_workout_view(request, workout_id):
         photo = request.FILES.get('photo')
     else:
         # JSON data
-        data = json.loads(request.body) if request.body else {}
+        data = request.data
         photo = None
 
     # Update end time and calculate duration
@@ -518,20 +611,19 @@ def finish_workout_view(request, workout_id):
                         achieved_date=timezone.now().date(),
                     )
 
-        # Update streak
-        from workouts.services.streak_service import update_streak
-        from groups.services import update_group_streaks_for_user
-        update_streak(request.user, activity_type='workout')
-        update_group_streaks_for_user(request.user)
+    # Always update streak and workout count, regardless of post_to_feed
+    from workouts.services.streak_service import update_streak
+    from groups.services import update_group_streaks_for_user
+    update_streak(request.user, activity_type='workout')
+    update_group_streaks_for_user(request.user)
 
-        # Increment total workouts
-        request.user.total_workouts = F('total_workouts') + 1
-        request.user.save(update_fields=['total_workouts'])
+    request.user.total_workouts = F('total_workouts') + 1
+    request.user.save(update_fields=['total_workouts'])
 
     return JsonResponse({
         'success': True,
         'workout': {
-            'id': workout.id,
+            'id': str(workout.id),
             'name': workout.name,
             'duration': str(workout.duration),
             'duration_seconds': workout.duration.total_seconds(),
@@ -541,8 +633,7 @@ def finish_workout_view(request, workout_id):
     })
 
 
-@login_required
-@require_GET
+@api_view(['GET'])
 def get_templates_view(request):
     """
     Get all workout templates for the current user.
@@ -576,8 +667,7 @@ def get_templates_view(request):
     })
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
 def start_from_template_view(request, template_id):
     """
     Start a new workout from a template.
@@ -628,8 +718,7 @@ def start_from_template_view(request, template_id):
     })
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
 def delete_template_view(request, template_id):
     """
     Delete a workout template.
@@ -679,8 +768,7 @@ def view_workout_view(request, workout_id):
     })
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
 def add_workout_to_templates_view(request, workout_id):
     """
     Add another user's workout to your templates.
@@ -690,7 +778,7 @@ def add_workout_to_templates_view(request, workout_id):
 
     workout = get_object_or_404(Workout, id=workout_id)
 
-    data = json.loads(request.body) if request.body else {}
+    data = request.data
     template_name = data.get('name', '').strip() or f"{workout.name} (copied)"
 
     # Create the template
@@ -821,9 +909,40 @@ def rest_day_view(request):
 @login_required
 @require_GET
 def streak_details_view(request):
-    """Display the streak details page (HTML, web only)."""
-    from workouts.services.streak_service import get_streak_details
+    """Display the streak details page. Returns JSON for mobile (Token auth)."""
+    from workouts.services.streak_service import get_streak_details, get_streak_date
     details = get_streak_details(request.user)
+
+    if _is_api_request(request):
+        from datetime import timedelta as _td
+        today_streak = get_streak_date()
+        days_since_sunday = (today_streak.weekday() + 1) % 7
+        week_start = today_streak - _td(days=days_since_sunday)
+
+        week_days_adapted = []
+        for i, d in enumerate(details['week_days']):
+            day_date = week_start + _td(days=i)
+            if d.get('is_future'):
+                status = 'pending'
+            elif d.get('active'):
+                status = 'workout'
+            elif d.get('rest'):
+                status = 'rest'
+            else:
+                status = 'pending'
+            week_days_adapted.append({
+                'date': day_date.isoformat(),
+                'status': status,
+            })
+
+        return JsonResponse({
+            'current_streak': details['current_streak'],
+            'longest_streak': details['longest_streak'],
+            'weekly_goal': details['weekly_workout_goal'],
+            'workouts_this_week': details['weekly_workout_count'],
+            'rest_days_used': details['rest_info']['rest_days_used'],
+            'week_days': week_days_adapted,
+        })
 
     return render(request, 'workouts/streak_details.html', details)
 

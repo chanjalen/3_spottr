@@ -416,12 +416,13 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
                 user_vote_option = str(vote.option_id) if vote else None
                 total_votes = sum(opt.votes for opt in poll.options.all())
                 poll_options = []
-                for opt in poll.options.all():
+                for opt in poll.options.all().order_by('order'):
                     percentage = round((opt.votes / total_votes * 100) if total_votes > 0 else 0)
                     poll_options.append({
                         'id': str(opt.id),
                         'text': opt.text,
                         'votes': opt.votes,
+                        'order': opt.order,
                         'percentage': percentage,
                     })
                 post_data['poll'] = {
@@ -609,12 +610,13 @@ def post_detail_view(request, post_id):
                 user_vote_option = str(vote.option.id)
         total_votes = poll.get_total_votes()
         poll_options = []
-        for opt in poll.options.all():
+        for opt in poll.options.all().order_by('order'):
             percentage = round((opt.votes / total_votes * 100) if total_votes > 0 else 0)
             poll_options.append({
                 'id': str(opt.id),
                 'text': opt.text,
                 'votes': opt.votes,
+                'order': opt.order,
                 'percentage': percentage,
             })
         item['poll'] = {
@@ -685,31 +687,28 @@ def create_checkin_view(request):
     """
     try:
         gym_id = request.POST.get('gym')
-        activity = request.POST.get('activity')
+        activity = request.POST.get('activity', '').strip() or 'general'
         photo = request.FILES.get('photo')
 
-        if not gym_id or not activity:
-            return JsonResponse({
-                'success': False,
-                'error': 'Gym and activity are required'
-            }, status=400)
+        # Resolve gym — both fields are optional
+        gym = None
+        location_name = 'General'
+        if gym_id:
+            try:
+                gym = Gym.objects.get(id=gym_id)
+                location_name = gym.name
+            except Gym.DoesNotExist:
+                pass  # fall back to 'General'
 
-        # Get the gym
-        try:
-            gym = Gym.objects.get(id=gym_id)
-        except Gym.DoesNotExist:
-            return JsonResponse({
-                'success': False,
-                'error': 'Gym not found'
-            }, status=404)
+        # Description falls back to a label derived from activity
+        description = request.POST.get('description', '').strip() or f'{activity.replace("_", " ").title()} workout'
 
-        # Create the quick workout (check-in)
         checkin = QuickWorkout.objects.create(
             user=request.user,
             location=gym,
-            location_name=gym.name,
+            location_name=location_name,
             type=activity,
-            description=f'{activity.replace("_", " ").title()} workout',
+            description=description,
             visibility='friends',
         )
 
@@ -1666,24 +1665,63 @@ def vote_poll_view(request, poll_id):
         option.votes += 1
         option.save()
 
-    # Get updated results
+    # Get updated results — return full poll shape so frontend can reconstruct it
     total_votes = poll.get_total_votes()
-    results = []
-    for opt in poll.options.all():
+    options_data = []
+    for opt in poll.options.all().order_by('order'):
         percentage = round((opt.votes / total_votes * 100) if total_votes > 0 else 0)
-        results.append({
+        options_data.append({
             'id': str(opt.id),
             'text': opt.text,
             'votes': opt.votes,
+            'order': opt.order,
             'percentage': percentage,
         })
 
     return JsonResponse({
-        'success': True,
+        'id': str(poll.id),
+        'question': poll.question,
+        'options': options_data,
         'total_votes': total_votes,
-        'results': results,
-        'voted_option': str(option.id),
+        'user_voted': str(option.id),
+        'is_active': poll.is_active,
+        'ends_at': poll.ends_at.isoformat() if poll.ends_at else None,
     })
+
+
+@login_required
+@require_GET
+def poll_voters_view(request, poll_id):
+    """
+    Return per-option voter lists for a poll.
+    Only the post owner can access this.
+    """
+    poll = get_object_or_404(Poll, id=poll_id)
+
+    if poll.post.user != request.user:
+        return JsonResponse({'error': 'Permission denied'}, status=403)
+
+    options_data = []
+    for opt in poll.options.all().order_by('order'):
+        votes = PollVote.objects.filter(option=opt).select_related('user')
+        voters = []
+        for v in votes:
+            try:
+                avatar_url = v.user.avatar_url
+            except Exception:
+                avatar_url = None
+            voters.append({
+                'username': v.user.username,
+                'display_name': v.user.display_name,
+                'avatar_url': avatar_url,
+            })
+        options_data.append({
+            'id': str(opt.id),
+            'text': opt.text,
+            'voters': voters,
+        })
+
+    return JsonResponse({'options': options_data})
 
 
 @login_required
