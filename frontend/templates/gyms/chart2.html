@@ -1,27 +1,29 @@
-{% extends 'gyms/base.html' %}
-{% load static %}
-
-{% block title %}Chart: Gym Busy Level by Hour{% endblock %}
-
-{% block content %}
-<div class="page-header" style="display:flex;align-items:center;gap:12px;">
-    <a href="{% url 'gyms:reports' %}" class="back-arrow">&larr;</a>
-    <h1>📈 Average Busy Level by Hour</h1>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chart: Gym Busy Level by Hour</title>
+<style>
+  body { margin: 0; padding: 24px; background: #0f0f1a; color: #f0f0f5; font-family: sans-serif; }
+  h1 { font-size: 1.4rem; margin: 0 0 8px; }
+  .back { color: #7c3aed; text-decoration: none; font-size: 1.2rem; margin-right: 10px; }
+  .desc { color: #a1a1b0; margin-bottom: 20px; font-size: 0.9rem; }
+  code { background: #1e1e2e; padding: 2px 6px; border-radius: 4px; }
+  #chart2 { width: 100%; }
+</style>
+</head>
+<body>
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+  <a href="/gyms/reports/" class="back">&larr;</a>
+  <h1>&#128200; Average Busy Level by Hour</h1>
 </div>
-
-<div class="card" style="padding:24px;">
-    <p style="color:var(--text-muted);margin-bottom:20px;">
-        Line chart showing the average crowd level (1–5 scale) for each hour of the day,
-        aggregated across all gyms.
-        Data sourced from <code>/gyms/api/busy-summary/</code>.
-    </p>
-    <div id="chart2"></div>
-</div>
+<p class="desc">Line chart showing the average crowd level (1–5 scale) for each hour of the day, aggregated across all gyms. Data sourced from <code>/gyms/api/busy-summary/</code>.</p>
+<div id="chart2"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
 <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
 <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
-
 <script>
   const spec = {
     "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
@@ -33,17 +35,8 @@
       {
         "mark": { "type": "line", "color": "#7c3aed", "strokeWidth": 2.5 },
         "encoding": {
-          "x": {
-            "field": "hour",
-            "type": "quantitative",
-            "axis": { "title": "Hour of Day (0–23)", "tickMinStep": 1 }
-          },
-          "y": {
-            "field": "avg_level",
-            "type": "quantitative",
-            "scale": { "domain": [1, 5] },
-            "axis": { "title": "Avg Busy Level (1=Empty, 5=Packed)" }
-          }
+          "x": { "field": "hour", "type": "quantitative", "axis": { "title": "Hour of Day (0–23)", "tickMinStep": 1 } },
+          "y": { "field": "avg_level", "type": "quantitative", "scale": { "domain": [1, 5] }, "axis": { "title": "Avg Busy Level (1=Empty, 5=Packed)" } }
         }
       },
       {
@@ -67,4 +60,5 @@
   };
   vegaEmbed('#chart2', spec, { renderer: 'canvas', actions: false });
 </script>
-{% endblock %}
+</body>
+</html>

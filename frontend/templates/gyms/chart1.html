@@ -1,26 +1,29 @@
-{% extends 'gyms/base.html' %}
-{% load static %}
-
-{% block title %}Chart: Gym Memberships{% endblock %}
-
-{% block content %}
-<div class="page-header" style="display:flex;align-items:center;gap:12px;">
-    <a href="{% url 'gyms:reports' %}" class="back-arrow">&larr;</a>
-    <h1>📊 Gym Membership Counts</h1>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chart: Gym Memberships</title>
+<style>
+  body { margin: 0; padding: 24px; background: #0f0f1a; color: #f0f0f5; font-family: sans-serif; }
+  h1 { font-size: 1.4rem; margin: 0 0 8px; }
+  .back { color: #7c3aed; text-decoration: none; font-size: 1.2rem; margin-right: 10px; }
+  .desc { color: #a1a1b0; margin-bottom: 20px; font-size: 0.9rem; }
+  code { background: #1e1e2e; padding: 2px 6px; border-radius: 4px; }
+  #chart1 { width: 100%; }
+</style>
+</head>
+<body>
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;">
+  <a href="/gyms/reports/" class="back">&larr;</a>
+  <h1>&#128202; Gym Membership Counts</h1>
 </div>
-
-<div class="card" style="padding:24px;">
-    <p style="color:var(--text-muted);margin-bottom:20px;">
-        Bar chart showing the number of enrolled members per gym.
-        Data sourced from <code>/gyms/api/summary/</code>.
-    </p>
-    <div id="chart1"></div>
-</div>
+<p class="desc">Bar chart showing the number of enrolled members per gym. Data sourced from <code>/gyms/api/summary/</code>.</p>
+<div id="chart1"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
 <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
 <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
-
 <script>
   const spec = {
     "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
@@ -30,16 +33,8 @@
     "data": { "url": "/gyms/api/summary/" },
     "mark": { "type": "bar", "color": "#06b6d4", "cornerRadiusTopLeft": 4, "cornerRadiusTopRight": 4 },
     "encoding": {
-      "x": {
-        "field": "name",
-        "type": "nominal",
-        "axis": { "labelAngle": -30, "title": "Gym" }
-      },
-      "y": {
-        "field": "member_count",
-        "type": "quantitative",
-        "axis": { "title": "Members" }
-      },
+      "x": { "field": "name", "type": "nominal", "axis": { "labelAngle": -30, "title": "Gym" } },
+      "y": { "field": "member_count", "type": "quantitative", "axis": { "title": "Members" } },
       "tooltip": [
         { "field": "name", "type": "nominal", "title": "Gym" },
         { "field": "member_count", "type": "quantitative", "title": "Members" },
@@ -54,4 +49,5 @@
   };
   vegaEmbed('#chart1', spec, { renderer: 'canvas', actions: false });
 </script>
-{% endblock %}
+</body>
+</html>
