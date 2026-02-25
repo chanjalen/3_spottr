@@ -116,6 +116,19 @@ def api_me_view(request):
     return Response(_user_brief(request.user))
 
 
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def api_update_avatar_view(request):
+    """Update the authenticated user's avatar."""
+    avatar = request.FILES.get('avatar')
+    if not avatar:
+        return Response({'error': 'No avatar provided.'}, status=status.HTTP_400_BAD_REQUEST)
+    user = request.user
+    user.avatar = avatar
+    user.save(update_fields=['avatar'])
+    return Response(_user_brief(user))
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def api_profile_view(request, username):

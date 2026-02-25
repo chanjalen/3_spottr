@@ -75,11 +75,16 @@ class OrgListSerializer(serializers.ModelSerializer):
 
 
 class OrgDetailSerializer(OrgListSerializer):
-    """Full detail including creator info."""
+    """Full detail including creator info and invite code."""
     created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+    invite_code = serializers.SerializerMethodField()
 
     class Meta(OrgListSerializer.Meta):
-        fields = OrgListSerializer.Meta.fields + ['created_by_username']
+        fields = OrgListSerializer.Meta.fields + ['created_by_username', 'invite_code']
+
+    def get_invite_code(self, obj):
+        code = obj.invite_codes.filter(is_active=True).first()
+        return code.code if code else None
 
 
 # ---------------------------------------------------------------------------
@@ -226,13 +231,13 @@ class AnnouncementSerializer(serializers.ModelSerializer):
 
 class CreateOrgSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=100)
-    description = serializers.CharField(max_length=500, required=False, default='')
+    description = serializers.CharField(max_length=500, required=False, default='', allow_blank=True)
     privacy = serializers.ChoiceField(choices=['public', 'private'], default='public')
 
 
 class UpdateOrgSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=100, required=False)
-    description = serializers.CharField(max_length=500, required=False)
+    description = serializers.CharField(max_length=500, required=False, allow_blank=True)
     privacy = serializers.ChoiceField(choices=['public', 'private'], required=False)
 
 
@@ -269,7 +274,7 @@ class JoinViaCodeSerializer(serializers.Serializer):
 
 
 class JoinRequestSerializer(serializers.Serializer):
-    message = serializers.CharField(max_length=500, required=False, default='')
+    message = serializers.CharField(max_length=500, required=False, default='', allow_blank=True)
 
 
 class ReactSerializer(serializers.Serializer):

@@ -20,6 +20,7 @@ export interface OrgListItem {
 
 export interface OrgDetail extends OrgListItem {
   created_by_username: string;
+  invite_code: string | null;
 }
 
 export interface OrgMember {
@@ -189,7 +190,7 @@ export async function updateOrgAvatar(orgId: string, uri: string): Promise<OrgDe
   const ext = filename.split('.').pop()?.toLowerCase() ?? 'jpg';
   const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
   form.append('avatar', { uri, type: mime, name: filename } as any);
-  const { data } = await apiClient.patch(`/api/organizations/${orgId}/avatar/`, form, {
+  const { data } = await apiClient.post(`/api/organizations/${orgId}/avatar/`, form, {
     headers: { 'Content-Type': 'multipart/form-data' },
   });
   return data;
@@ -209,7 +210,7 @@ export async function joinOrg(orgId: string): Promise<void> {
 }
 
 export async function leaveOrg(orgId: string): Promise<void> {
-  await apiClient.post(`/api/organizations/${orgId}/leave/`);
+  await apiClient.delete(`/api/organizations/${orgId}/leave/`);
 }
 
 export async function promoteMember(orgId: string, userId: string): Promise<void> {

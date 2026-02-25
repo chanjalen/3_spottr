@@ -144,10 +144,16 @@ def get_org(org_id):
     return _get_org(org_id)
 
 
-def search_orgs(query=None, limit=50, offset=0):
-    qs = Organization.objects.filter(privacy=Organization.Privacy.PUBLIC)
+def search_orgs(user=None, query=None, limit=50, offset=0):
     if query:
-        qs = qs.filter(name__icontains=query)
+        # Search mode: all orgs (public + private)
+        qs = Organization.objects.filter(name__icontains=query)
+    else:
+        # Browse mode: public orgs the user isn't already in
+        qs = Organization.objects.filter(privacy=Organization.Privacy.PUBLIC)
+        if user and user.is_authenticated:
+            joined_ids = OrgMember.objects.filter(user=user).values_list('org_id', flat=True)
+            qs = qs.exclude(id__in=joined_ids)
     return qs[offset:offset + limit]
 
 
