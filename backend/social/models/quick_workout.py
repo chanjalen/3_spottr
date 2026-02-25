@@ -3,14 +3,12 @@ from django.db.models import Q
 from common.models import BaseModel
 
 
+
 class QuickWorkout(BaseModel):
     """
     A lightweight workout post — quick check-in without a full workout log.
+    Check-ins always appear in the Friends/Groups feed, never the Main feed.
     """
-
-    class Visibility(models.TextChoices):
-        MAIN = 'main', 'Main'
-        FRIENDS = 'friends', 'Friends'
 
     user = models.ForeignKey(
         'accounts.User',
@@ -24,21 +22,28 @@ class QuickWorkout(BaseModel):
         blank=True,
         related_name='quick_workouts',
     )
+    # Optionally link a full logged workout session to this check-in.
+    workout = models.ForeignKey(
+        'workouts.Workout',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='checkins',
+    )
     location_name = models.CharField(max_length=100, blank=True)
 
     description = models.TextField(blank=True)
-    visibility = models.CharField(
-        max_length=10,
-        choices=Visibility.choices,
-        default=Visibility.MAIN,
-    )
     type = models.CharField(max_length=50)
+
+    # Controls which sub-feeds see this check-in (friends, org, gym).
+    # Default is friends-only. Future dropdown filter will use this field.
+    # Example: ['friends'], ['friends', 'gym'], ['org']
+    audience = models.JSONField(default=list)
 
     class Meta:
         ordering = ['-created_at']
         indexes = [
             models.Index(fields=['user', '-created_at'], name='idx_quick_workout_user'),
-            models.Index(fields=['visibility', '-created_at'], name='idx_quick_workout_visibility'),
         ]
         constraints = [
             models.CheckConstraint(

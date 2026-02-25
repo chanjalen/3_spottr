@@ -84,9 +84,9 @@ export default function QuickCheckinScreen({ navigation }: Props) {
     try {
       await createCheckin({
         activity,
-        description: description.trim(),
-        gym_id: selectedGymId ?? undefined,
-        location_name: locationName.trim() || undefined,
+        description: description.trim() || undefined,
+        gymId: selectedGymId ?? undefined,
+        locationName: locationName.trim() || undefined,
         photo: photo ?? undefined,
       });
       navigation.goBack();

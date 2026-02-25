@@ -12,9 +12,10 @@ import { useAuth } from '../../store/AuthContext';
 interface FeedCardBodyProps {
   item: FeedItem;
   onPollVote: (optionId: number | string) => void;
+  onWorkoutPress?: () => void;
 }
 
-export default function FeedCardBody({ item, onPollVote }: FeedCardBodyProps) {
+export default function FeedCardBody({ item, onPollVote, onWorkoutPress }: FeedCardBodyProps) {
   const { user } = useAuth();
   const isOwner = !!user && user.username === item.user.username;
 
@@ -26,7 +27,9 @@ export default function FeedCardBody({ item, onPollVote }: FeedCardBodyProps) {
 
       {item.photo_url && <FeedCardImage uri={item.photo_url} />}
 
-      {item.workout && <WorkoutSummaryCard workout={item.workout} />}
+      {item.workout && (
+        <WorkoutSummaryCard workout={item.workout} onPress={onWorkoutPress} />
+      )}
 
       {item.personal_record && (
         <PersonalRecordCard record={item.personal_record} />

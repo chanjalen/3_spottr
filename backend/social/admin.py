@@ -14,9 +14,9 @@ class PostAdmin(admin.ModelAdmin):
 
 @admin.register(QuickWorkout)
 class QuickWorkoutAdmin(admin.ModelAdmin):
-    list_display = ['user', 'type', 'visibility', 'created_at']
+    list_display = ['user', 'type', 'created_at']
     search_fields = ['user__username']
-    list_filter = ['type', 'visibility']
+    list_filter = ['type']
 
 
 @admin.register(Comment)

@@ -105,10 +105,10 @@ export default function CreatePostScreen({ navigation }: Props) {
         text: text.trim() || undefined,
         photo: media && !media.isVideo ? { uri: media.uri, name: media.name, type: media.type } : undefined,
         video: media?.isVideo ? { uri: media.uri, name: media.name, type: media.type } : undefined,
-        workout_id: attachedWorkout?.id,
-        pr_exercise_name: showPR ? prExercise.trim() : undefined,
-        pr_value: showPR ? prValue.trim() : undefined,
-        pr_unit: showPR ? prUnit : undefined,
+        workoutId: attachedWorkout?.id,
+        pr: showPR && prExercise.trim() && prValue.trim()
+          ? { exerciseName: prExercise.trim(), value: prValue.trim(), unit: prUnit }
+          : undefined,
       });
       navigation.goBack();
     } catch (err: any) {
@@ -310,7 +310,7 @@ export default function CreatePostScreen({ navigation }: Props) {
                 <View style={{ flex: 1 }}>
                   <Text style={styles.workoutRowName} numberOfLines={1}>{item.name}</Text>
                   <Text style={styles.workoutRowMeta}>
-                    {item.exercise_count} exercise{item.exercise_count !== 1 ? 's' : ''} · {item.duration_minutes} min · {formatDate(item.started_at)}
+                    {item.exercise_count} exercise{item.exercise_count !== 1 ? 's' : ''} · {item.duration} · {formatDate(item.started_at)}
                   </Text>
                 </View>
                 <Feather name="plus-circle" size={20} color={colors.primary} />
@@ -336,7 +336,7 @@ function WorkoutCard({ workout, onRemove }: { workout: RecentWorkout; onRemove: 
         <View style={{ flex: 1 }}>
           <Text style={styles.workoutCardName} numberOfLines={1}>{workout.name}</Text>
           <Text style={styles.workoutCardMeta}>
-            {workout.exercise_count} exercise{workout.exercise_count !== 1 ? 's' : ''} · {workout.duration_minutes} min
+            {workout.exercise_count} exercise{workout.exercise_count !== 1 ? 's' : ''} · {workout.duration}
           </Text>
         </View>
       </View>

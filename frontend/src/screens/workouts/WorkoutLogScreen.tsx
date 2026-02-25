@@ -27,9 +27,11 @@ import { RootStackParamList } from '../../navigation/types';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'WorkoutLog'>;
+  route: { params?: { fromCheckin?: boolean } };
 };
 
-export default function WorkoutLogScreen({ navigation }: Props) {
+export default function WorkoutLogScreen({ navigation, route }: Props) {
+  const fromCheckin = route.params?.fromCheckin ?? false;
   const insets = useSafeAreaInsets();
   const [stats, setStats] = useState<WorkoutLogStats | null>(null);
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
@@ -60,7 +62,7 @@ export default function WorkoutLogScreen({ navigation }: Props) {
     setStartLoading(true);
     try {
       const workout = await startWorkout();
-      navigation.navigate('ActiveWorkout', { workoutId: workout.id });
+      navigation.navigate('ActiveWorkout', { workoutId: workout.id, fromCheckin });
     } catch {
       Alert.alert('Error', 'Could not start workout.');
     } finally {
@@ -71,7 +73,7 @@ export default function WorkoutLogScreen({ navigation }: Props) {
   const handleStartTemplate = async (template: WorkoutTemplate) => {
     try {
       const workout = await startFromTemplate(template.id);
-      navigation.navigate('ActiveWorkout', { workoutId: workout.id });
+      navigation.navigate('ActiveWorkout', { workoutId: workout.id, fromCheckin });
     } catch {
       Alert.alert('Error', 'Could not start workout from template.');
     }
