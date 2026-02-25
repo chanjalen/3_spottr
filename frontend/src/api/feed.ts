@@ -67,6 +67,22 @@ export async function fetchFeed(
   };
 }
 
+export async function fetchUserPostThumbnails(
+  username: string,
+  cursor?: string,
+): Promise<{ items: FeedItem[]; nextCursor: string }> {
+  const params: Record<string, string> = { limit: '9' };
+  if (cursor) params.cursor = cursor;
+  const response = await apiClient.get(ENDPOINTS.userPostThumbnails(username), { params });
+  const raw: any[] = Array.isArray(response.data)
+    ? response.data
+    : (response.data?.items ?? []);
+  return {
+    items: raw.map(adaptFeedItem),
+    nextCursor: response.data?.next_cursor ?? '',
+  };
+}
+
 export async function fetchUserPosts(
   username: string,
   cursor?: string,
