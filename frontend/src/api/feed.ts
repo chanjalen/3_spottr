@@ -1,6 +1,6 @@
 import { apiClient } from './client';
 import { ENDPOINTS } from './endpoints';
-import { FeedItem } from '../types/feed';
+import { FeedItem, WorkoutDetail } from '../types/feed';
 
 /** Normalize a raw backend feed item to the frontend FeedItem shape. */
 function adaptFeedItem(raw: any): FeedItem {
@@ -24,10 +24,11 @@ function adaptFeedItem(raw: any): FeedItem {
     user_liked: raw.user_liked ?? false,
     workout: raw.workout
       ? {
-          id: raw.workout.id ?? 0,
+          id: String(raw.workout.id ?? ''),
+          name: raw.workout.name ?? '',
           exercise_count: raw.workout.exercise_count ?? 0,
           total_sets: raw.workout.total_sets ?? 0,
-          duration_minutes: raw.workout.duration ?? raw.workout.duration_minutes ?? 0,
+          duration: raw.workout.duration ?? '',
           exercises: raw.workout.exercises ?? [],
         }
       : null,
@@ -133,6 +134,8 @@ export async function createPost(params: {
   video?: { uri: string; name: string; type: string };
   poll?: { question: string; options: string[]; duration: number };
   pr?: { exerciseName: string; value: string; unit: string };
+  // Optional: ID of an existing workout to attach (reference only, no duplication)
+  workoutId?: string;
 }): Promise<{ post_id: string }> {
   const formData = new FormData();
   if (params.text) formData.append('text', params.text);
@@ -141,6 +144,7 @@ export async function createPost(params: {
   formData.append('reply_restriction', params.replyRestriction ?? 'everyone');
   if (params.photo) formData.append('photo', params.photo as any);
   if (params.video) formData.append('video', params.video as any);
+  if (params.workoutId) formData.append('workout_id', params.workoutId);
   if (params.poll) {
     formData.append('poll_question', params.poll.question);
     params.poll.options.forEach(o => formData.append('poll_options[]', o));
@@ -176,17 +180,31 @@ export async function fetchLikers(
   return response.data?.likers ?? [];
 }
 
+export async function fetchWorkoutDetail(workoutId: string): Promise<WorkoutDetail> {
+  const response = await apiClient.get(`/api/workouts/${workoutId}/detail/`);
+  return response.data;
+}
+
 export async function createCheckin(params: {
+  // Exactly one of gymId or locationName is required
   gymId?: string;
-  activity?: string;
+  locationName?: string;
+  activity: string;
   description?: string;
-  photo: { uri: string; name: string; type: string };
+  // Camera capture always produces a photo or video
+  photo?: { uri: string; name: string; type: string };
+  video?: { uri: string; name: string; type: string };
+  // Optional: ID of a logged workout to attach to this check-in
+  workoutId?: string;
 }): Promise<{ checkin_id: string }> {
   const formData = new FormData();
-  if (params.gymId) formData.append('gym', params.gymId);
-  if (params.activity) formData.append('activity', params.activity);
+  if (params.gymId) formData.append('gym_id', params.gymId);
+  if (params.locationName) formData.append('location_name', params.locationName);
+  formData.append('activity', params.activity);
   if (params.description) formData.append('description', params.description);
-  formData.append('photo', params.photo as any);
+  if (params.photo) formData.append('photo', params.photo as any);
+  if (params.video) formData.append('video', params.video as any);
+  if (params.workoutId) formData.append('workout_id', params.workoutId);
 
   // Do NOT set Content-Type manually — React Native's XHR sets it automatically
   // with the correct multipart boundary when the body is FormData.

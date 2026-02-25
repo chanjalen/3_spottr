@@ -19,6 +19,7 @@ urlpatterns = [
     path("api/groups/", include("groups.api.urls")),
     path("api/messaging/", include("messaging.api.urls")),
     path("api/social/", include("social.api.urls")),
+    path("api/workouts/", include("workouts.api.urls")),
     path("api/notifications/", include("notifications.urls")),
     path("api/organizations/", include("organizations.api.urls")),
     path("api/media/", include("media.urls")),

@@ -99,10 +99,15 @@ def create_checkin(request):
     description = (request.data.get('description') or '').strip()
     gym_id = (request.data.get('gym_id') or '').strip()
     location_name = (request.data.get('location_name') or '').strip()
+    workout_id = (request.data.get('workout_id') or '').strip()
     photo = request.FILES.get('photo')
+    video = request.FILES.get('video')
 
     if not activity:
         return Response({'success': False, 'error': 'Activity type is required'}, status=400)
+
+    if not gym_id and not location_name:
+        return Response({'success': False, 'error': 'A gym or location name is required'}, status=400)
 
     gym = None
     if gym_id:
@@ -111,7 +116,12 @@ def create_checkin(request):
             gym = Gym.objects.get(id=gym_id)
             location_name = gym.name
         except Exception:
-            pass
+            return Response({'success': False, 'error': 'Gym not found'}, status=400)
+
+    linked_workout = None
+    if workout_id:
+        from workouts.models import Workout
+        linked_workout = Workout.objects.filter(id=workout_id, user=request.user).first()
 
     checkin = QuickWorkout.objects.create(
         user=request.user,
@@ -119,7 +129,8 @@ def create_checkin(request):
         location_name=location_name,
         type=activity,
         description=description or f'{activity.replace("_", " ").title()} workout',
-        visibility='main',
+        workout=linked_workout,
+        audience=['friends'],
     )
 
     if photo:
@@ -128,6 +139,23 @@ def create_checkin(request):
             from media.models import MediaLink
             path = f'checkins/{checkin.id}.jpg'
             asset = create_media_asset(request.user, photo, path, 'image')
+            MediaLink.objects.create(
+                asset=asset,
+                destination_type='quick_workout',
+                destination_id=str(checkin.id),
+                type='inline',
+            )
+        except Exception:
+            pass
+
+    if video:
+        try:
+            from media.utils import create_media_asset
+            from media.models import MediaLink
+            import os
+            ext = os.path.splitext(video.name)[1] or '.mp4'
+            path = f'checkins/{checkin.id}{ext}'
+            asset = create_media_asset(request.user, video, path, 'video')
             MediaLink.objects.create(
                 asset=asset,
                 destination_type='quick_workout',
