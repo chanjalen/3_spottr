@@ -1,6 +1,11 @@
+import csv
+import datetime
+import requests
+
 from django.contrib.auth.decorators import login_required
-from django.db.models import Count
-from django.http import JsonResponse
+from django.db.models import Avg, Count
+from django.http import HttpResponse, JsonResponse
+from django.shortcuts import render
 from django.views.generic import ListView, DetailView
 
 from .models import Gym, BusyLevel
@@ -103,3 +108,179 @@ def top_lifters_view(request, pk):
     lift = request.GET.get('lift', 'bench')
     lifters = services.get_top_lifters(str(pk), lift)
     return JsonResponse({'success': True, 'lifters': lifters})
+
+
+# ── Internal summary API (chart-ready) ───────────────────────────────────────
+
+def gym_summary_api(request):
+    """
+    GET /gyms/api/summary/
+    Returns gym enrollment counts and average ratings — ready for Vega-Lite bar chart.
+    No authentication required so classmates can access after deployment.
+    """
+    gyms = Gym.objects.annotate(member_count=Count('enrolled_users'))
+    data = [
+        {
+            'name': g.name,
+            'member_count': g.member_count,
+            'rating': float(g.rating) if g.rating else None,
+        }
+        for g in gyms
+    ]
+    return JsonResponse(data, safe=False)
+
+
+def busy_level_summary_api(request):
+    """
+    GET /gyms/api/busy-summary/
+    Returns average busy level per hour-of-day aggregated across all gyms.
+    Suitable for a Vega-Lite line chart.
+    No authentication required.
+    """
+    from django.db.models.functions import ExtractHour
+    rows = (
+        BusyLevel.objects
+        .annotate(hour=ExtractHour('timestamp'))
+        .values('hour')
+        .annotate(avg_level=Avg('survey_response'), total=Count('id'))
+        .order_by('hour')
+    )
+    data = [
+        {'hour': r['hour'], 'avg_level': round(r['avg_level'], 2), 'total_responses': r['total']}
+        for r in rows
+    ]
+    return JsonResponse(data, safe=False)
+
+
+# ── External API integration ──────────────────────────────────────────────────
+
+def exercise_search_view(request):
+    """
+    GET /gyms/exercise-search/?q=<exercise_name>
+    Fetches exercise information from the wger public API (no key required).
+    Combines external data with our internal PR count for that exercise name.
+    """
+    query = request.GET.get('q', '').strip()
+    if not query:
+        return JsonResponse({'error': 'Provide a search term via ?q='}, status=400)
+
+    try:
+        resp = requests.get(
+            'https://wger.de/api/v2/exercise/search/',
+            params={'term': query, 'language': 'english', 'format': 'json'},
+            timeout=5,
+        )
+        resp.raise_for_status()
+        external_data = resp.json()
+    except requests.RequestException as exc:
+        return JsonResponse({'error': f'External API error: {exc}'}, status=502)
+
+    suggestions = external_data.get('suggestions', [])
+
+    # Combine with internal PR count for matched exercise names
+    from workouts.models import PersonalRecord
+    results = []
+    for s in suggestions:
+        name = s.get('value', '')
+        pr_count = PersonalRecord.objects.filter(exercise_name__iexact=name).count()
+        results.append({
+            'exercise': name,
+            'category': s.get('data', {}).get('category', ''),
+            'spottr_pr_count': pr_count,
+        })
+
+    return JsonResponse({'query': query, 'results': results})
+
+
+# ── CSV export ────────────────────────────────────────────────────────────────
+
+def gym_csv_export(request):
+    """
+    GET /gyms/export/csv/
+    Downloads all gyms as a CSV file.
+    """
+    now = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="gyms_{now}.csv"'
+
+    writer = csv.writer(response)
+    writer.writerow(['id', 'name', 'address', 'rating', 'rating_count', 'website', 'created_at'])
+    for g in Gym.objects.all().order_by('name'):
+        writer.writerow([
+            str(g.id),
+            g.name,
+            g.address or '',
+            g.rating or '',
+            g.rating_count or '',
+            g.website or '',
+            g.created_at.strftime('%Y-%m-%d'),
+        ])
+    return response
+
+
+# ── JSON export ───────────────────────────────────────────────────────────────
+
+def gym_json_export(request):
+    """
+    GET /gyms/export/json/
+    Downloads all gyms as a formatted JSON file with metadata.
+    """
+    gyms = list(
+        Gym.objects.all().order_by('name').values(
+            'id', 'name', 'address', 'rating', 'rating_count', 'website', 'created_at'
+        )
+    )
+    for g in gyms:
+        g['id'] = str(g['id'])
+        g['created_at'] = g['created_at'].strftime('%Y-%m-%dT%H:%M:%S') if g['created_at'] else None
+        g['rating'] = float(g['rating']) if g['rating'] else None
+
+    payload = {
+        'generated_at': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+        'record_count': len(gyms),
+        'gyms': gyms,
+    }
+
+    now = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M')
+    response = JsonResponse(payload, json_dumps_params={'indent': 2})
+    response['Content-Disposition'] = f'attachment; filename="gyms_{now}.json"'
+    return response
+
+
+# ── Reports page ──────────────────────────────────────────────────────────────
+
+def reports_view(request):
+    """
+    GET /gyms/reports/
+    HTML page showing grouped summaries, totals, and export links.
+    """
+    gyms_by_member_count = (
+        Gym.objects.annotate(member_count=Count('enrolled_users'))
+        .order_by('-member_count')
+    )
+    busy_by_gym = (
+        BusyLevel.objects.values('gym__name')
+        .annotate(response_count=Count('id'), avg_level=Avg('survey_response'))
+        .order_by('-response_count')
+    )
+    total_gyms = Gym.objects.count()
+    total_busy_responses = BusyLevel.objects.count()
+
+    return render(request, 'gyms/reports.html', {
+        'gyms_by_member_count': gyms_by_member_count,
+        'busy_by_gym': busy_by_gym,
+        'total_gyms': total_gyms,
+        'total_busy_responses': total_busy_responses,
+    })
+
+
+# ── Vega-Lite chart pages ─────────────────────────────────────────────────────
+
+def chart1_view(request):
+    """Bar chart: gym membership counts."""
+    return render(request, 'gyms/chart1.html')
+
+
+def chart2_view(request):
+    """Line chart: average gym busy level by hour of day."""
+    return render(request, 'gyms/chart2.html')

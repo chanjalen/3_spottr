@@ -1,0 +1,57 @@
+{% extends 'gyms/base.html' %}
+{% load static %}
+
+{% block title %}Chart: Gym Memberships{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex;align-items:center;gap:12px;">
+    <a href="{% url 'gyms:reports' %}" class="back-arrow">&larr;</a>
+    <h1>📊 Gym Membership Counts</h1>
+</div>
+
+<div class="card" style="padding:24px;">
+    <p style="color:var(--text-muted);margin-bottom:20px;">
+        Bar chart showing the number of enrolled members per gym.
+        Data sourced from <code>/gyms/api/summary/</code>.
+    </p>
+    <div id="chart1"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+<script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
+<script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+
+<script>
+  const spec = {
+    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+    "title": "Gym Membership Counts",
+    "width": "container",
+    "height": 350,
+    "data": { "url": "/gyms/api/summary/" },
+    "mark": { "type": "bar", "color": "#06b6d4", "cornerRadiusTopLeft": 4, "cornerRadiusTopRight": 4 },
+    "encoding": {
+      "x": {
+        "field": "name",
+        "type": "nominal",
+        "axis": { "labelAngle": -30, "title": "Gym" }
+      },
+      "y": {
+        "field": "member_count",
+        "type": "quantitative",
+        "axis": { "title": "Members" }
+      },
+      "tooltip": [
+        { "field": "name", "type": "nominal", "title": "Gym" },
+        { "field": "member_count", "type": "quantitative", "title": "Members" },
+        { "field": "rating", "type": "quantitative", "title": "Rating", "format": ".1f" }
+      ]
+    },
+    "config": {
+      "background": "transparent",
+      "axis": { "labelColor": "#a1a1b0", "titleColor": "#a1a1b0", "gridColor": "#2a2a3a" },
+      "title": { "color": "#f0f0f5", "fontSize": 16 }
+    }
+  };
+  vegaEmbed('#chart1', spec, { renderer: 'canvas', actions: false });
+</script>
+{% endblock %}

@@ -1,0 +1,70 @@
+{% extends 'gyms/base.html' %}
+{% load static %}
+
+{% block title %}Chart: Gym Busy Level by Hour{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex;align-items:center;gap:12px;">
+    <a href="{% url 'gyms:reports' %}" class="back-arrow">&larr;</a>
+    <h1>📈 Average Busy Level by Hour</h1>
+</div>
+
+<div class="card" style="padding:24px;">
+    <p style="color:var(--text-muted);margin-bottom:20px;">
+        Line chart showing the average crowd level (1–5 scale) for each hour of the day,
+        aggregated across all gyms.
+        Data sourced from <code>/gyms/api/busy-summary/</code>.
+    </p>
+    <div id="chart2"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+<script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
+<script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+
+<script>
+  const spec = {
+    "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+    "title": "Average Gym Busy Level by Hour of Day",
+    "width": "container",
+    "height": 350,
+    "data": { "url": "/gyms/api/busy-summary/" },
+    "layer": [
+      {
+        "mark": { "type": "line", "color": "#7c3aed", "strokeWidth": 2.5 },
+        "encoding": {
+          "x": {
+            "field": "hour",
+            "type": "quantitative",
+            "axis": { "title": "Hour of Day (0–23)", "tickMinStep": 1 }
+          },
+          "y": {
+            "field": "avg_level",
+            "type": "quantitative",
+            "scale": { "domain": [1, 5] },
+            "axis": { "title": "Avg Busy Level (1=Empty, 5=Packed)" }
+          }
+        }
+      },
+      {
+        "mark": { "type": "point", "color": "#06b6d4", "size": 60, "filled": true },
+        "encoding": {
+          "x": { "field": "hour", "type": "quantitative" },
+          "y": { "field": "avg_level", "type": "quantitative" },
+          "tooltip": [
+            { "field": "hour", "type": "quantitative", "title": "Hour" },
+            { "field": "avg_level", "type": "quantitative", "title": "Avg Level", "format": ".2f" },
+            { "field": "total_responses", "type": "quantitative", "title": "Responses" }
+          ]
+        }
+      }
+    ],
+    "config": {
+      "background": "transparent",
+      "axis": { "labelColor": "#a1a1b0", "titleColor": "#a1a1b0", "gridColor": "#2a2a3a" },
+      "title": { "color": "#f0f0f5", "fontSize": 16 }
+    }
+  };
+  vegaEmbed('#chart2', spec, { renderer: 'canvas', actions: false });
+</script>
+{% endblock %}

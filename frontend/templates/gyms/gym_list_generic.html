@@ -3,9 +3,14 @@
 {% block title %}Nearby Gyms{% endblock %}
 
 {% block content %}
-<div class="page-header" style="display:flex;align-items:center;gap:12px;">
-    <a href="{% url 'home' %}" class="back-arrow">&larr;</a>
-    <h1>Nearby Gyms</h1>
+<div class="page-header" style="display:flex;align-items:center;gap:12px;justify-content:space-between;">
+    <div style="display:flex;align-items:center;gap:12px;">
+        <a href="{% url 'home' %}" class="back-arrow">&larr;</a>
+        <h1>Nearby Gyms</h1>
+    </div>
+    <a href="{% url 'gyms:reports' %}" style="text-decoration:none;padding:8px 16px;border-radius:8px;background:var(--bg-elevated);color:var(--text-secondary);border:1px solid var(--border-subtle);font-size:13px;font-weight:600;">
+        📊 Reports
+    </a>
 </div>
 
 <div class="search-bar">

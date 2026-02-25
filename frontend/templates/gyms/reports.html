@@ -1,0 +1,95 @@
+{% extends 'gyms/base.html' %}
+{% load static %}
+
+{% block title %}Gym Reports{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex;align-items:center;gap:12px;">
+    <a href="{% url 'gyms:gym_list' %}" class="back-arrow">&larr;</a>
+    <h1>Gym Reports</h1>
+</div>
+
+<!-- Totals -->
+<div class="aggregation-summary" style="margin-bottom:24px;">
+    <div class="agg-item">
+        <span class="agg-label">Total Gyms</span>
+        <span class="agg-value">{{ total_gyms }}</span>
+    </div>
+    <div class="agg-item">
+        <span class="agg-label">Total Busy Responses</span>
+        <span class="agg-value">{{ total_busy_responses }}</span>
+    </div>
+</div>
+
+<!-- Export Buttons -->
+<div style="display:flex;gap:12px;margin-bottom:32px;">
+    <a href="{% url 'gyms:gym_csv_export' %}" class="btn-primary" style="text-decoration:none;padding:10px 20px;border-radius:8px;background:var(--brand-cyan);color:#000;font-weight:600;">
+        ⬇ Download CSV
+    </a>
+    <a href="{% url 'gyms:gym_json_export' %}" class="btn-primary" style="text-decoration:none;padding:10px 20px;border-radius:8px;background:var(--brand-purple);color:#fff;font-weight:600;">
+        ⬇ Download JSON
+    </a>
+</div>
+
+<!-- Chart Links -->
+<div style="display:flex;gap:12px;margin-bottom:32px;">
+    <a href="{% url 'gyms:chart1' %}" style="text-decoration:none;padding:10px 20px;border-radius:8px;background:var(--bg-elevated);color:var(--text-primary);border:1px solid var(--border-subtle);font-weight:600;">
+        📊 Bar Chart: Gym Memberships
+    </a>
+    <a href="{% url 'gyms:chart2' %}" style="text-decoration:none;padding:10px 20px;border-radius:8px;background:var(--bg-elevated);color:var(--text-primary);border:1px solid var(--border-subtle);font-weight:600;">
+        📈 Line Chart: Busy Level by Hour
+    </a>
+</div>
+
+<!-- Summary 1: Gyms by Member Count -->
+<div class="card" style="margin-bottom:32px;">
+    <h2 style="margin-bottom:16px;">Gyms by Member Count</h2>
+    <table style="width:100%;border-collapse:collapse;">
+        <thead>
+            <tr style="border-bottom:1px solid var(--border-subtle);">
+                <th style="text-align:left;padding:10px 8px;color:var(--text-muted);font-size:12px;text-transform:uppercase;">Gym Name</th>
+                <th style="text-align:left;padding:10px 8px;color:var(--text-muted);font-size:12px;text-transform:uppercase;">Address</th>
+                <th style="text-align:right;padding:10px 8px;color:var(--text-muted);font-size:12px;text-transform:uppercase;">Members</th>
+                <th style="text-align:right;padding:10px 8px;color:var(--text-muted);font-size:12px;text-transform:uppercase;">Rating</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for gym in gyms_by_member_count %}
+            <tr style="border-bottom:1px solid var(--border-subtle);">
+                <td style="padding:12px 8px;font-weight:600;">{{ gym.name }}</td>
+                <td style="padding:12px 8px;color:var(--text-muted);font-size:13px;">{{ gym.address|default:"—" }}</td>
+                <td style="padding:12px 8px;text-align:right;font-weight:700;color:var(--brand-cyan);">{{ gym.member_count }}</td>
+                <td style="padding:12px 8px;text-align:right;color:var(--text-secondary);">{{ gym.rating|default:"—" }}</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="4" style="padding:24px;text-align:center;color:var(--text-muted);">No gyms found.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Summary 2: Busy Level Responses by Gym -->
+<div class="card" style="margin-bottom:32px;">
+    <h2 style="margin-bottom:16px;">Busy Level Responses by Gym</h2>
+    <table style="width:100%;border-collapse:collapse;">
+        <thead>
+            <tr style="border-bottom:1px solid var(--border-subtle);">
+                <th style="text-align:left;padding:10px 8px;color:var(--text-muted);font-size:12px;text-transform:uppercase;">Gym Name</th>
+                <th style="text-align:right;padding:10px 8px;color:var(--text-muted);font-size:12px;text-transform:uppercase;">Total Responses</th>
+                <th style="text-align:right;padding:10px 8px;color:var(--text-muted);font-size:12px;text-transform:uppercase;">Avg Busy Level</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in busy_by_gym %}
+            <tr style="border-bottom:1px solid var(--border-subtle);">
+                <td style="padding:12px 8px;font-weight:600;">{{ row.gym__name }}</td>
+                <td style="padding:12px 8px;text-align:right;font-weight:700;color:var(--brand-purple);">{{ row.response_count }}</td>
+                <td style="padding:12px 8px;text-align:right;color:var(--text-secondary);">{{ row.avg_level|floatformat:1 }} / 5</td>
+            </tr>
+            {% empty %}
+            <tr><td colspan="3" style="padding:24px;text-align:center;color:var(--text-muted);">No busy level data yet.</td></tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
