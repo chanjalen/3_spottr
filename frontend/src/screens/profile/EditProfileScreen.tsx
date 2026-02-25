@@ -9,14 +9,17 @@ import {
   Switch,
   Platform,
   Alert,
+  Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../../store/AuthContext';
 import Avatar from '../../components/common/Avatar';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
+import { updateUserAvatar } from '../../api/accounts';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'EditProfile'>;
@@ -33,6 +36,34 @@ export default function EditProfileScreen({ navigation }: Props) {
   // Profile fields
   const [displayName, setDisplayName] = useState(user?.display_name ?? '');
   const [bio, setBio] = useState('');
+  const [avatarUri, setAvatarUri] = useState<string | null>(null);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  const handlePickAvatar = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Please allow photo access to change your profile picture.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.85,
+    });
+    if (result.canceled) return;
+    const uri = result.assets[0].uri;
+    setAvatarUri(uri);
+    setUploadingAvatar(true);
+    try {
+      await updateUserAvatar(uri);
+    } catch {
+      Alert.alert('Error', 'Failed to upload profile picture. Please try again.');
+      setAvatarUri(null);
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
 
   // Preferences
   const [weightUnit, setWeightUnit] = useState<'lbs' | 'kg'>('lbs');
@@ -93,9 +124,20 @@ export default function EditProfileScreen({ navigation }: Props) {
           {activeTab === 'Profile' && (
             <View style={styles.section}>
               <View style={styles.avatarRow}>
-                <Avatar uri={user?.avatar_url ?? null} name={user?.display_name ?? ''} size={72} />
-                <Pressable style={styles.changeAvatarBtn}>
-                  <Text style={styles.changeAvatarText}>Change Photo</Text>
+                <Pressable onPress={handlePickAvatar} style={styles.avatarWrap}>
+                  {avatarUri ? (
+                    <Image source={{ uri: avatarUri }} style={styles.avatarPreview} />
+                  ) : (
+                    <Avatar uri={user?.avatar_url ?? null} name={user?.display_name ?? ''} size={72} />
+                  )}
+                  <View style={styles.avatarOverlay}>
+                    <Feather name={uploadingAvatar ? 'loader' : 'camera'} size={18} color="#fff" />
+                  </View>
+                </Pressable>
+                <Pressable style={styles.changeAvatarBtn} onPress={handlePickAvatar} disabled={uploadingAvatar}>
+                  <Text style={styles.changeAvatarText}>
+                    {uploadingAvatar ? 'Uploading…' : 'Change Photo'}
+                  </Text>
                 </Pressable>
               </View>
               <FieldInput label="Display Name" value={displayName} onChangeText={setDisplayName} />
@@ -308,6 +350,21 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xs,
   },
   avatarRow: { alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
+  avatarWrap: { position: 'relative' },
+  avatarPreview: { width: 72, height: 72, borderRadius: 36 },
+  avatarOverlay: {
+    position: 'absolute',
+    bottom: 0,
+    right: 0,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.background.base,
+  },
   changeAvatarBtn: {
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
