@@ -26,7 +26,7 @@ import { fetchDMConversations, fetchGroupConversations, sendZap } from '../../ap
 import { Conversation, GroupConversation, Message as MessageType } from '../../types/messaging';
 import { wsManager } from '../../services/websocket';
 import { searchGroups, createGroup, joinViaCode, joinGroup, requestJoinGroup, GroupListItem } from '../../api/groups';
-import { listMyOrgs, discoverOrgs, createOrg, joinOrgViaCode, OrgListItem } from '../../api/organizations';
+import { listMyOrgs, discoverOrgs, createOrg, joinOrgViaCode, joinOrg, requestJoinOrg, OrgListItem } from '../../api/organizations';
 import { fetchFriends, searchUsers } from '../../api/accounts';
 import { UserBrief } from '../../types/user';
 import { colors, spacing, typography } from '../../theme';
@@ -79,6 +79,10 @@ export default function SocialScreen({ navigation }: Props) {
   const [newOrgPrivacy, setNewOrgPrivacy] = useState<'public' | 'private'>('public');
   const [newOrgPrivacyOpen, setNewOrgPrivacyOpen] = useState(false);
   const [creatingOrg, setCreatingOrg] = useState(false);
+  // ── Org discover actions ──────────────────────────────────────────────────
+  const [orgActionId, setOrgActionId] = useState<string | null>(null);
+  const [requestedOrgIds, setRequestedOrgIds] = useState<Set<string>>(new Set());
+
   // ── Org join code modal ───────────────────────────────────────────────────
   const [orgJoinModalVisible, setOrgJoinModalVisible] = useState(false);
   const [orgInviteCode, setOrgInviteCode] = useState('');
@@ -415,6 +419,31 @@ export default function SocialScreen({ navigation }: Props) {
   };
 
   // ── Org card renderer ─────────────────────────────────────────────────────
+  const handleJoinOrg = async (item: OrgListItem) => {
+    setOrgActionId(item.id);
+    try {
+      await joinOrg(item.id);
+      setDiscoverOrgsList(prev => prev.filter(o => o.id !== item.id));
+      loadMyOrgs();
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.error ?? 'Failed to join organization.');
+    } finally {
+      setOrgActionId(null);
+    }
+  };
+
+  const handleRequestJoinOrg = async (item: OrgListItem) => {
+    setOrgActionId(item.id);
+    try {
+      await requestJoinOrg(item.id);
+      setRequestedOrgIds(prev => new Set(prev).add(item.id));
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.error ?? 'Failed to send join request.');
+    } finally {
+      setOrgActionId(null);
+    }
+  };
+
   const renderOrgCard = ({ item }: { item: OrgListItem }) => {
     const roleBg = item.user_role === 'creator'
       ? 'rgba(234,179,8,0.15)'
@@ -449,13 +478,19 @@ export default function SocialScreen({ navigation }: Props) {
           <View style={[styles.joinedBadge, { backgroundColor: roleBg }]}>
             <Text style={styles.joinedBadgeText}>{item.user_role}</Text>
           </View>
+        ) : requestedOrgIds.has(item.id) ? (
+          <View style={styles.pendingBadge}>
+            <Text style={styles.pendingBadgeText}>Requested</Text>
+          </View>
+        ) : orgActionId === item.id ? (
+          <ActivityIndicator size="small" color={colors.primary} style={{ marginLeft: 8 }} />
         ) : (
           <Pressable
             style={[styles.joinBtn, item.privacy === 'private' && styles.requestBtn]}
-            onPress={() => navigation.navigate('OrgProfile', { orgId: item.id })}
+            onPress={() => item.privacy === 'public' ? handleJoinOrg(item) : handleRequestJoinOrg(item)}
           >
             <Text style={[styles.joinBtnText, item.privacy === 'private' && styles.requestBtnText]}>
-              {item.privacy === 'public' ? 'View' : 'Request'}
+              {item.privacy === 'public' ? 'Join' : 'Request'}
             </Text>
           </Pressable>
         )}
@@ -826,6 +861,7 @@ export default function SocialScreen({ navigation }: Props) {
               data={orgsView === 'Mine' ? myOrgs : discoverOrgsList}
               keyExtractor={(item) => item.id}
               renderItem={renderOrgCard}
+              extraData={requestedOrgIds}
               style={{ flex: 1 }}
               contentContainerStyle={{ flexGrow: 1, paddingBottom: spacing.md }}
               ListEmptyComponent={

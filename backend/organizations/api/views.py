@@ -52,7 +52,7 @@ def org_discover(request):
     query = request.query_params.get('q', '').strip()
     limit = min(int(request.query_params.get('limit', 50)), 100)
     offset = int(request.query_params.get('offset', 0))
-    orgs = services.search_orgs(query=query or None, limit=limit, offset=offset)
+    orgs = services.search_orgs(user=request.user, query=query or None, limit=limit, offset=offset)
     serializer = OrgListSerializer(orgs, many=True, context={'request': request})
     return Response(serializer.data)
 
