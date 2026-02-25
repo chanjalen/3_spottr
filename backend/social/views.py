@@ -17,6 +17,10 @@ from django.core.cache import cache
 from django.core.files.storage import default_storage
 from django.db.models import F, Q, Max, Subquery, OuterRef, Exists, Count, Value, CharField, IntegerField
 
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response as DRFResponse
+
 from .models import QuickWorkout, Post, Comment, Reaction, Poll, PollOption, PollVote, Follow
 from media.models import MediaLink
 from media.utils import create_media_asset, get_media_url, build_media_url
@@ -230,30 +234,43 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
     """
     user = request.user if request.user.is_authenticated else None
 
-    # Build base querysets with annotations
+    # ── Feed split logic ─────────────────────────────────────────────────────
+    # Friends/Groups tab  → check-ins (QuickWorkout) only, from people you follow + yourself.
+    # Main tab            → posts (Post) only, filtered by visibility:
+    #                         'main'    = visible to everyone
+    #                         'friends' = visible only to followers of the author
+    # ─────────────────────────────────────────────────────────────────────────
     if tab == 'friends' and user:
-        my_following_ids = set(Follow.objects.filter(follower=user).values_list('following_id', flat=True))
-        my_follower_ids = set(Follow.objects.filter(following=user).values_list('follower_id', flat=True))
-        friend_ids = my_following_ids & my_follower_ids
-        visible_user_ids = friend_ids | {user.id}
-
-        qw_qs = QuickWorkout.objects.filter(user_id__in=visible_user_ids, visibility='friends')
-        post_qs = Post.objects.filter(user_id__in=visible_user_ids, visibility='friends')
+        following_ids = set(Follow.objects.filter(follower=user).values_list('following_id', flat=True))
+        visible_user_ids = following_ids | {user.id}
+        qw_qs = QuickWorkout.objects.filter(user_id__in=visible_user_ids)
+        post_qs = Post.objects.none()
     else:
-        qw_qs = QuickWorkout.objects.filter(visibility='main')
-        post_qs = Post.objects.filter(visibility='main')
+        # Main feed: everyone's public posts, plus friends-only posts from authors
+        # the current user follows.
+        qw_qs = QuickWorkout.objects.none()
+        if user:
+            following_ids = set(Follow.objects.filter(follower=user).values_list('following_id', flat=True))
+            post_qs = Post.objects.filter(
+                Q(visibility='main') |
+                Q(visibility='friends', user_id__in=following_ids | {user.id})
+            )
+        else:
+            post_qs = Post.objects.filter(visibility='main')
 
     # Filter by hashtag if tag is provided
     if tag:
         tag_filter = f'#{tag}'
-        qw_qs = qw_qs.filter(description__icontains=tag_filter)
-        post_qs = post_qs.filter(description__icontains=tag_filter)
+        if not qw_qs.query.is_empty():
+            qw_qs = qw_qs.filter(description__icontains=tag_filter)
+        if not post_qs.query.is_empty():
+            post_qs = post_qs.filter(description__icontains=tag_filter)
 
     # Annotate counts using subqueries to avoid JOIN row-multiplication.
     # Count('reactions', distinct=True) does LEFT JOIN + GROUP BY which explodes
     # rows (posts × reactions × comments). Subquery emits a correlated
     # SELECT COUNT(*) per row, using existing indexes with no GROUP BY overhead.
-    qw_qs = qw_qs.select_related('user', 'location').annotate(
+    qw_qs = qw_qs.select_related('user', 'location', 'workout').annotate(
         like_count=Subquery(
             Reaction.objects.filter(quick_workout=OuterRef('pk'))
             .values('quick_workout')
@@ -366,29 +383,30 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
         for pr in prs:
             prs_by_post[pr.post_id] = pr
 
-    # Bulk fetch workout details for workout posts
+    # Bulk fetch workout details for workout posts AND checkins with attached workouts
     from workouts.models import Exercise, ExerciseSet
-    workout_ids = [obj.workout_id for obj in post_objs.values() if obj.workout_id]
+    checkin_objs = {item[2]: item[3] for item in raw_items if item[0] == 'checkin'}
+    post_workout_ids = [obj.workout_id for obj in post_objs.values() if obj.workout_id]
+    checkin_workout_ids = [obj.workout_id for obj in checkin_objs.values() if obj.workout_id]
+    all_workout_ids = list(set(post_workout_ids + checkin_workout_ids))
     exercise_counts = {}
     set_counts = {}
-    exercise_names = {}
-    if workout_ids:
-        # Exercise counts per workout
+    exercise_summaries = {}  # workout_id -> [{'name': ..., 'sets': ...}, ...]
+    if all_workout_ids:
         from django.db.models import Count as DjCount
-        ex_counts = Exercise.objects.filter(workout_id__in=workout_ids).values('workout_id').annotate(cnt=DjCount('id'))
+        ex_counts = Exercise.objects.filter(workout_id__in=all_workout_ids).values('workout_id').annotate(cnt=DjCount('id'))
         for row in ex_counts:
             exercise_counts[row['workout_id']] = row['cnt']
-        # Set counts per workout
-        s_counts = ExerciseSet.objects.filter(exercise__workout_id__in=workout_ids).values('exercise__workout_id').annotate(cnt=DjCount('id'))
+        s_counts = ExerciseSet.objects.filter(exercise__workout_id__in=all_workout_ids).values('exercise__workout_id').annotate(cnt=DjCount('id'))
         for row in s_counts:
             set_counts[row['exercise__workout_id']] = row['cnt']
-        # Exercise names (first 3 per workout)
-        exercises = Exercise.objects.filter(workout_id__in=workout_ids).order_by('workout_id', 'order')
-        names_by_wk = defaultdict(list)
+        # First 3 exercises per workout with their set count
+        exercises = Exercise.objects.filter(workout_id__in=all_workout_ids).order_by('workout_id', 'order')
+        summaries_by_wk = defaultdict(list)
         for ex in exercises:
-            if len(names_by_wk[ex.workout_id]) < 3:
-                names_by_wk[ex.workout_id].append(ex.name)
-        exercise_names = dict(names_by_wk)
+            if len(summaries_by_wk[ex.workout_id]) < 3:
+                summaries_by_wk[ex.workout_id].append({'name': ex.name, 'sets': ex.sets})
+        exercise_summaries = dict(summaries_by_wk)
 
     # Build feed items
     feed_items = []
@@ -403,6 +421,7 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
                         photo_url = build_media_url(path)
                 except Exception:
                     pass
+            checkin_workout = obj.workout if obj.workout_id and obj.workout else None
             feed_items.append({
                 'type': 'checkin',
                 'id': str(item_id),
@@ -416,6 +435,14 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
                 'like_count': obj.like_count,
                 'comment_count': obj.comment_count,
                 'user_liked': bool(obj.user_liked) if user else False,
+                'workout': {
+                    'id': str(checkin_workout.id),
+                    'name': checkin_workout.name,
+                    'duration': _format_duration(checkin_workout.duration),
+                    'exercise_count': exercise_counts.get(checkin_workout.id, 0),
+                    'total_sets': set_counts.get(checkin_workout.id, 0),
+                    'exercises': exercise_summaries.get(checkin_workout.id, []),
+                } if checkin_workout else None,
             })
         else:
             post = obj
@@ -473,7 +500,7 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
                     'duration': _format_duration(workout.duration),
                     'exercise_count': exercise_counts.get(workout.id, 0),
                     'total_sets': set_counts.get(workout.id, 0),
-                    'exercises': exercise_names.get(workout.id, []),
+                    'exercises': exercise_summaries.get(workout.id, []),
                 }
 
             # Personal record
@@ -706,29 +733,48 @@ def get_checkin_photo(checkin_id):
     return None
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def create_checkin_view(request):
     """
-    Create a new quick check-in post.
+    Create a new quick check-in post. Supports token auth for mobile.
+    Accepts multipart/form-data (with optional photo file) or JSON.
+    Check-ins always go to the Friends/Groups feed.
     """
     try:
-        gym_id = request.POST.get('gym')
-        activity = request.POST.get('activity', '').strip() or 'general'
+        data = request.data
+        gym_id = data.get('gym') or data.get('gym_id')
+        activity = (data.get('activity') or '').strip() or 'general'
         photo = request.FILES.get('photo')
+        workout_id = data.get('workout_id')
 
-        # Resolve gym — both fields are optional
+        # Require either a gym FK or a typed location name
+        location_name_raw = (data.get('location_name') or '').strip()
         gym = None
-        location_name = 'General'
         if gym_id:
             try:
                 gym = Gym.objects.get(id=gym_id)
                 location_name = gym.name
             except Gym.DoesNotExist:
-                pass  # fall back to 'General'
+                return DRFResponse({'success': False, 'error': 'Gym not found.'}, status=400)
+        elif location_name_raw:
+            location_name = location_name_raw
+        else:
+            return DRFResponse(
+                {'success': False, 'error': 'A gym or location name is required.'},
+                status=400,
+            )
 
-        # Description falls back to a label derived from activity
-        description = request.POST.get('description', '').strip() or f'{activity.replace("_", " ").title()} workout'
+        description = (data.get('description') or '').strip() or f'{activity.replace("_", " ").title()} workout'
+
+        # Resolve optional linked logged workout
+        linked_workout = None
+        if workout_id:
+            from workouts.models import Workout
+            try:
+                linked_workout = Workout.objects.get(id=workout_id, user=request.user)
+            except Workout.DoesNotExist:
+                pass  # Non-fatal — post without attachment
 
         checkin = QuickWorkout.objects.create(
             user=request.user,
@@ -736,7 +782,8 @@ def create_checkin_view(request):
             location_name=location_name,
             type=activity,
             description=description,
-            visibility='friends',
+            workout=linked_workout,
+            audience=['friends'],
         )
 
         # Increment total workouts
@@ -763,17 +810,17 @@ def create_checkin_view(request):
                     type='inline',
                 )
             except DjangoValidationError as e:
-                return JsonResponse({'success': False, 'error': e.message}, status=400)
+                return DRFResponse({'success': False, 'error': e.message}, status=400)
 
-        return JsonResponse({
+        return DRFResponse({
             'success': True,
-            'checkin_id': checkin.id,
+            'checkin_id': str(checkin.id),
             'message': 'Check-in posted successfully!'
         })
 
     except Exception:
         logger.exception("Unexpected error in create_checkin_view")
-        return JsonResponse({
+        return DRFResponse({
             'success': False,
             'error': 'An unexpected error occurred. Please try again.'
         }, status=500)
@@ -1494,69 +1541,59 @@ def search_feed_view(request):
     return JsonResponse({'posts': items_json, 'users': []})
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def create_post_view(request):
     """
-    Create a new text/media post.
-    Supports text, photo, link URL, tags (via hashtags in text), polls, and PRs.
+    Create a new text/media post. Supports token auth for mobile.
+    Accepts multipart/form-data (with optional photo/video) or JSON.
+    Posts always go to the Main feed.
     """
-    # Handle both JSON and form data (for file uploads)
-    content_type = request.content_type or ''
+    # DRF request.data works for both multipart and JSON
+    data = request.data
+    text = (data.get('text') or '').strip()
+    link_url = (data.get('link_url') or '').strip() or None
+    visibility = data.get('visibility', 'main')
+    reply_restriction = data.get('reply_restriction', 'everyone')
+    photo = request.FILES.get('photo')
+    video = request.FILES.get('video')
+    workout_id = data.get('workout_id')
 
-    if 'multipart/form-data' in content_type:
-        text = request.POST.get('text', '').strip()
-        link_url = request.POST.get('link_url', '').strip() or None
-        visibility = request.POST.get('visibility', 'main')
-        reply_restriction = request.POST.get('reply_restriction', 'everyone')
-        photo = request.FILES.get('photo')
-        video = request.FILES.get('video')
+    # Poll data
+    poll_question = (data.get('poll_question') or '').strip()
+    poll_options = data.getlist('poll_options[]') if hasattr(data, 'getlist') else data.get('poll_options', [])
+    poll_duration = float(data.get('poll_duration', 24))
 
-        # Poll data
-        poll_question = request.POST.get('poll_question', '').strip()
-        poll_options = request.POST.getlist('poll_options[]')
-        poll_duration = float(request.POST.get('poll_duration', 24))
-
-        # PR data
-        pr_exercise_name = request.POST.get('pr_exercise_name', '').strip()
-        pr_value = request.POST.get('pr_value', '').strip()
-        pr_unit = request.POST.get('pr_unit', 'lbs')
-        pr_achieved_date = request.POST.get('pr_achieved_date', '')
-    else:
-        data = json.loads(request.body) if request.body else {}
-        text = data.get('text', '').strip()
-        link_url = data.get('link_url', '').strip() or None
-        visibility = data.get('visibility', 'main')
-        reply_restriction = data.get('reply_restriction', 'everyone')
-        photo = None
-        video = None
-
-        # Poll data
-        poll_question = data.get('poll_question', '').strip()
-        poll_options = data.get('poll_options', [])
-        poll_duration = float(data.get('poll_duration', 24))
-
-        # PR data
-        pr_exercise_name = data.get('pr_exercise_name', '').strip()
-        pr_value = data.get('pr_value', '').strip()
-        pr_unit = data.get('pr_unit', 'lbs')
-        pr_achieved_date = data.get('pr_achieved_date', '')
+    # PR data
+    pr_exercise_name = (data.get('pr_exercise_name') or '').strip()
+    pr_value = (data.get('pr_value') or '').strip()
+    pr_unit = data.get('pr_unit', 'lbs')
+    pr_achieved_date = data.get('pr_achieved_date', '')
 
     # Check if has PR
     has_pr = bool(pr_exercise_name and pr_value)
 
     # Validation
-    if not text and not photo and not video and not poll_question and not has_pr:
-        return JsonResponse({
+    if not text and not photo and not video and not poll_question and not has_pr and not workout_id:
+        return DRFResponse({
             'success': False,
-            'error': 'Post must have text, media, poll, or a personal record'
+            'error': 'Post must have text, media, poll, a personal record, or an attached workout'
         }, status=400)
 
     if len(text) > 500:
-        return JsonResponse({
+        return DRFResponse({
             'success': False,
             'error': 'Post text cannot exceed 500 characters'
         }, status=400)
+
+    # Resolve optional linked workout (attach by reference — never duplicates)
+    linked_workout = None
+    if workout_id:
+        from workouts.models import Workout
+        try:
+            linked_workout = Workout.objects.get(id=workout_id, user=request.user)
+        except Workout.DoesNotExist:
+            pass  # Non-fatal — post without attachment
 
     # Create the post
     post = Post.objects.create(
@@ -1565,6 +1602,7 @@ def create_post_view(request):
         link_url=link_url,
         visibility=visibility,
         reply_restriction=reply_restriction,
+        workout=linked_workout,
     )
 
     # Save photo if provided
@@ -1647,7 +1685,7 @@ def create_post_view(request):
                 achieved_date=achieved_date,
             )
 
-    return JsonResponse({
+    return DRFResponse({
         'success': True,
         'post_id': str(post.id),
         'message': 'Post created successfully!'

@@ -2,18 +2,44 @@ import { UserBrief } from './user';
 
 export type FeedItemType = 'post' | 'checkin';
 
-export interface Exercise {
+// Exercise summary shown on feed cards (name + set count only)
+export interface ExerciseSummary {
   name: string;
   sets: number;
 }
 
+// Workout card shown inline on feed cards
 export interface WorkoutSummary {
-  id: number;
+  id: string;
+  name: string;
   exercise_count: number;
   total_sets: number;
-  duration_minutes: number;
-  exercises: Exercise[];
-  workout_type?: string;
+  duration: string;  // formatted: "1h 30m" or "45m"
+  exercises: ExerciseSummary[];
+}
+
+// Full workout detail (fetched separately when user taps a workout card)
+export interface SetDetail {
+  set_number: number;
+  reps: number;
+  weight: number;
+  completed: boolean;
+}
+
+export interface ExerciseDetail {
+  id: string;
+  name: string;
+  category: string;
+  order: number;
+  unit: string;
+  sets: SetDetail[];
+}
+
+export interface WorkoutDetail {
+  id: string;
+  name: string;
+  duration: string;
+  exercises: ExerciseDetail[];
 }
 
 export interface PersonalRecord {

@@ -1,39 +1,49 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { WorkoutSummary } from '../../types/feed';
 import { colors, spacing, typography } from '../../theme';
 
 interface WorkoutSummaryCardProps {
   workout: WorkoutSummary;
+  onPress?: () => void;
 }
 
-export default function WorkoutSummaryCard({ workout }: WorkoutSummaryCardProps) {
+export default function WorkoutSummaryCard({ workout, onPress }: WorkoutSummaryCardProps) {
   const displayExercises = workout.exercises.slice(0, 3);
-  const remaining = workout.exercises.length - 3;
+  const remaining = workout.exercise_count - displayExercises.length;
 
   return (
-    <View style={styles.container}>
+    <Pressable
+      style={({ pressed }) => [styles.container, pressed && onPress && styles.pressed]}
+      onPress={onPress}
+      disabled={!onPress}
+    >
+      {/* Workout name row */}
+      <View style={styles.nameRow}>
+        <Feather name="activity" size={14} color={colors.primary} />
+        <Text style={styles.workoutName} numberOfLines={1}>{workout.name}</Text>
+        {onPress && <Feather name="chevron-right" size={16} color={colors.primary} />}
+      </View>
+
+      {/* Stats row */}
       <View style={styles.statsRow}>
         <View style={styles.stat}>
-          <Feather name="activity" size={14} color={colors.primary} />
           <Text style={styles.statValue}>{workout.exercise_count}</Text>
           <Text style={styles.statLabel}>exercises</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.stat}>
-          <Feather name="layers" size={14} color={colors.primary} />
           <Text style={styles.statValue}>{workout.total_sets}</Text>
           <Text style={styles.statLabel}>sets</Text>
         </View>
         <View style={styles.divider} />
         <View style={styles.stat}>
-          <Feather name="clock" size={14} color={colors.primary} />
-          <Text style={styles.statValue}>{workout.duration_minutes}</Text>
-          <Text style={styles.statLabel}>min</Text>
+          <Text style={styles.statValue}>{workout.duration}</Text>
         </View>
       </View>
 
+      {/* Exercise list */}
       {displayExercises.length > 0 && (
         <View style={styles.exerciseList}>
           {displayExercises.map((ex, i) => (
@@ -48,7 +58,7 @@ export default function WorkoutSummaryCard({ workout }: WorkoutSummaryCardProps)
           )}
         </View>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -60,6 +70,21 @@ const styles = StyleSheet.create({
     borderColor: colors.border.default,
     padding: spacing.base,
     marginBottom: spacing.md,
+  },
+  pressed: {
+    opacity: 0.75,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginBottom: spacing.md,
+  },
+  workoutName: {
+    flex: 1,
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.semibold,
+    color: colors.textPrimary,
   },
   statsRow: {
     flexDirection: 'row',

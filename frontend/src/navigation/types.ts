@@ -54,8 +54,8 @@ export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList>;
   Profile: ProfileParams;
   Notifications: undefined;
-  WorkoutLog: undefined;
-  ActiveWorkout: { workoutId: string };
+  WorkoutLog: { fromCheckin?: boolean } | undefined;
+  ActiveWorkout: { workoutId: string; fromCheckin?: boolean };
   StreakDetails: undefined;
   EditProfile: undefined;
   GroupProfile: { groupId: string };
@@ -66,4 +66,7 @@ export type RootStackParamList = {
   UserList: UserListParams;
   CreatePost: undefined;
   QuickCheckin: undefined;
+  CheckInSelection: undefined;
+  CameraCapture: undefined;
+  CheckInReview: { mediaUri: string; mediaType: 'photo' | 'video' };
 };

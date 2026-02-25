@@ -51,7 +51,7 @@ function isBigLift(exerciseName: string): boolean {
 
 export default function ActiveWorkoutScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { workoutId } = route.params;
+  const { workoutId, fromCheckin = false } = route.params;
 
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [loading, setLoading] = useState(true);
@@ -243,14 +243,20 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
       await finishWorkout(workoutId, {
         name: workoutName.trim() || 'Workout',
         notes,
-        post_to_feed: postToFeed,
+        // Never auto-post to feed when coming from a check-in — the check-in handles posting
+        post_to_feed: fromCheckin ? false : postToFeed,
         visibility: feedVisibility,
         save_template: saveAsTemplate,
         template_name: saveAsTemplate ? (templateName.trim() || workoutName) : '',
         pr_data: pendingPRs.map((p) => ({ exercise_name: p.exercise_name, value: p.value, unit: p.unit })),
       });
       setShowFinish(false);
-      navigation.goBack();
+      if (fromCheckin) {
+        // Pop both ActiveWorkout and WorkoutLog off the stack — returns to CheckInReview
+        navigation.pop(2);
+      } else {
+        navigation.goBack();
+      }
     } catch {
       Alert.alert('Error', 'Could not finish workout.');
     } finally {
@@ -479,35 +485,48 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
                 />
               </View>
 
-              {/* Post to feed toggle */}
-              <View style={styles.toggleRow}>
-                <View>
-                  <Text style={styles.toggleLabel}>Post to Feed</Text>
-                  <Text style={styles.toggleSub}>Share your workout</Text>
-                </View>
-                <Switch
-                  value={postToFeed}
-                  onValueChange={setPostToFeed}
-                  trackColor={{ true: colors.primary }}
-                />
-              </View>
-
-              {postToFeed && (
-                <View style={styles.visibilityRow}>
-                  <Text style={styles.fieldLabel}>Visibility</Text>
-                  <View style={styles.visibilityBtns}>
-                    {(['main', 'friends'] as const).map((v) => (
-                      <Pressable
-                        key={v}
-                        style={[styles.visibilityBtn, feedVisibility === v && styles.visibilityBtnActive]}
-                        onPress={() => setFeedVisibility(v)}
-                      >
-                        <Text style={[styles.visibilityBtnText, feedVisibility === v && styles.visibilityBtnTextActive]}>
-                          {v === 'main' ? 'Everyone' : 'Friends'}
-                        </Text>
-                      </Pressable>
-                    ))}
+              {/* Post to feed toggle — hidden when finishing from a check-in */}
+              {!fromCheckin && (
+                <>
+                  <View style={styles.toggleRow}>
+                    <View>
+                      <Text style={styles.toggleLabel}>Post to Feed</Text>
+                      <Text style={styles.toggleSub}>Share your workout</Text>
+                    </View>
+                    <Switch
+                      value={postToFeed}
+                      onValueChange={setPostToFeed}
+                      trackColor={{ true: colors.primary }}
+                    />
                   </View>
+
+                  {postToFeed && (
+                    <View style={styles.visibilityRow}>
+                      <Text style={styles.fieldLabel}>Visibility</Text>
+                      <View style={styles.visibilityBtns}>
+                        {(['main', 'friends'] as const).map((v) => (
+                          <Pressable
+                            key={v}
+                            style={[styles.visibilityBtn, feedVisibility === v && styles.visibilityBtnActive]}
+                            onPress={() => setFeedVisibility(v)}
+                          >
+                            <Text style={[styles.visibilityBtnText, feedVisibility === v && styles.visibilityBtnTextActive]}>
+                              {v === 'main' ? 'Everyone' : 'Friends'}
+                            </Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                    </View>
+                  )}
+                </>
+              )}
+
+              {fromCheckin && (
+                <View style={styles.checkinNotice}>
+                  <Feather name="link" size={14} color={colors.primary} />
+                  <Text style={styles.checkinNoticeText}>
+                    This workout will be attached to your check-in
+                  </Text>
                 </View>
               )}
 
@@ -1022,6 +1041,22 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xs,
     fontFamily: typography.family.regular,
     color: colors.textMuted,
+  },
+  checkinNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.primary + '12',
+    borderRadius: 10,
+    padding: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.primary + '30',
+  },
+  checkinNoticeText: {
+    fontSize: typography.size.sm,
+    color: colors.primary,
+    fontWeight: '600',
+    flex: 1,
   },
   visibilityRow: { gap: 6 },
   visibilityBtns: { flexDirection: 'row', gap: spacing.sm },
