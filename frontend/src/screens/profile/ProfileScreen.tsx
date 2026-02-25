@@ -1049,38 +1049,36 @@ function CalendarTab({
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
   const [restDayNums, setRestDayNums] = useState<Set<number>>(new Set());
+  const [workoutDayNums, setWorkoutDayNums] = useState<Set<number>>(new Set());
   const [dayModalVisible, setDayModalVisible] = useState(false);
   const [currentModalDay, setCurrentModalDay] = useState(1);
   const dayListRef = useRef<FlatList>(null);
 
   useEffect(() => {
     setRestDayNums(new Set());
+    setWorkoutDayNums(new Set());
     fetchCalendarPosts(year, month + 1, profileUsername)
       .then((res) => {
-        const nums = new Set<number>();
+        const restNums = new Set<number>();
+        const workoutNums = new Set<number>();
         for (const p of res.posts) {
+          const day = parseInt(p.date.split('-')[2], 10);
           if (p.type === 'rest') {
-            nums.add(parseInt(p.date.split('-')[2], 10));
+            restNums.add(day);
+          } else {
+            workoutNums.add(day);
           }
         }
-        setRestDayNums(nums);
+        setRestDayNums(restNums);
+        setWorkoutDayNums(workoutNums);
       })
       .catch(() => {});
   }, [year, month, profileUsername]);
 
-  const workoutDays = new Set<number>();
-  posts.forEach((p) => {
-    const d = new Date(p.created_at);
-    if (d.getFullYear() === year && d.getMonth() === month) {
-      workoutDays.add(d.getDate());
-    }
-  });
-
   // Sorted array of days that have workout posts — each becomes one swipeable page
   const sortedWorkoutDays = useMemo(
-    () => Array.from(workoutDays).sort((a, b) => a - b),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [posts, year, month],
+    () => Array.from(workoutDayNums).sort((a, b) => a - b),
+    [workoutDayNums],
   );
 
   const firstDay = new Date(year, month, 1).getDay();
@@ -1096,7 +1094,7 @@ function CalendarTab({
   };
 
   const handleDayPress = (day: number) => {
-    if (!workoutDays.has(day)) return;
+    if (!workoutDayNums.has(day)) return;
     setCurrentModalDay(day);
     setDayModalVisible(true);
   };
@@ -1131,7 +1129,7 @@ function CalendarTab({
           ))}
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const day = i + 1;
-            const hasWorkout = workoutDays.has(day);
+            const hasWorkout = workoutDayNums.has(day);
             const isRest = !hasWorkout && restDayNums.has(day);
             return (
               <Pressable
