@@ -14,6 +14,7 @@ import {
   Platform,
   Alert,
   TextInput,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -28,7 +29,7 @@ import CommentsSheet from '../../components/comments/CommentsSheet';
 import { useAuth } from '../../store/AuthContext';
 import { fetchProfile, toggleFollow, fetchUserPRs, savePR, deletePR } from '../../api/accounts';
 import { fetchExerciseCatalog, fetchCalendarPosts } from '../../api/workouts';
-import { fetchUserPosts } from '../../api/feed';
+import { fetchUserPostThumbnails, fetchUserPosts } from '../../api/feed';
 import { fetchMyGyms } from '../../api/gyms';
 import { listMyOrgs, OrgListItem } from '../../api/organizations';
 import { useToggleLike } from '../../hooks/useToggleLike';
@@ -48,6 +49,7 @@ type ProfileTab = 'Posts' | 'Calendar' | 'Records';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
+const POPUP_WIDTH = SCREEN_WIDTH - 48; // calModalCenter padding: 24 on each side
 const GRID_PADDING = spacing.xl * 2;
 const THUMB_GAP = 1;
 const THUMB_SIZE = (SCREEN_WIDTH - GRID_PADDING - THUMB_GAP * 2) / 3;
@@ -162,13 +164,37 @@ export default function ProfileScreen({ navigation, route }: Props) {
     postsLoadingRef.current = true;
     setPostsLoading(true);
     try {
-      const result = await fetchUserPosts(username, cursor);
-      setPosts((prev) => cursor ? [...prev, ...result.items] : result.items);
-      setPostsCursor(result.nextCursor);
-      setPostsHasMore(!!result.nextCursor);
+      // Phase 1: fast thumbnails — grid shows immediately (~5 DB queries)
+      let thumbResult: Awaited<ReturnType<typeof fetchUserPostThumbnails>> | null = null;
+      try {
+        thumbResult = await fetchUserPostThumbnails(username, cursor);
+      } catch {
+        // thumbnail endpoint unavailable — fall through to full load
+      }
+
+      if (thumbResult) {
+        setPosts((prev) => cursor ? [...prev, ...thumbResult!.items] : thumbResult!.items);
+        setPostsCursor(thumbResult.nextCursor);
+        setPostsHasMore(!!thumbResult.nextCursor);
+        postsLoadingRef.current = false;
+        setPostsLoading(false);
+        // Phase 2: full data in background — merges like/comment counts silently
+        fetchUserPosts(username, cursor)
+          .then((fullResult) => {
+            const fullMap = new Map(fullResult.items.map((i) => [i.id, i]));
+            setPosts((prev) => prev.map((p) => fullMap.get(p.id) ?? p));
+          })
+          .catch(() => {});
+      } else {
+        // Fallback: load full posts directly
+        const result = await fetchUserPosts(username, cursor);
+        setPosts((prev) => cursor ? [...prev, ...result.items] : result.items);
+        setPostsCursor(result.nextCursor);
+        setPostsHasMore(!!result.nextCursor);
+        postsLoadingRef.current = false;
+        setPostsLoading(false);
+      }
     } catch {
-      // endpoint may not be live yet
-    } finally {
       postsLoadingRef.current = false;
       setPostsLoading(false);
     }
@@ -384,12 +410,15 @@ export default function ProfileScreen({ navigation, route }: Props) {
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              postsLoaded.current = false;
-              prsLoaded.current = false;
+              const reloadPrs = prsLoaded.current;
+              postsLoaded.current = true;
+              prsLoaded.current = reloadPrs;
               setPosts([]);
               setPrs([]);
               setShowAllPRs(false);
               load();
+              loadPosts();
+              if (reloadPrs) loadPRs();
               if (isOwn) {
                 fetchMyGyms().then(setGyms).catch(() => {});
                 listMyOrgs().then(setOrgs).catch(() => {});
@@ -525,7 +554,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
         {isOwn && orgs.length > 0 && <OrgsSection orgs={orgs} navigation={navigation} />}
       </ScrollView>
 
-      {/* ── Post viewer modal (horizontal pager) ────────────────────────────── */}
+      {/* ── Post viewer modal (vertical feed) ───────────────────────────────── */}
       <Modal
         visible={viewerStartIndex !== null}
         animationType="slide"
@@ -544,31 +573,25 @@ export default function ProfileScreen({ navigation, route }: Props) {
           </View>
 
           <FlatList
-            data={posts}
+            data={viewerStartIndex !== null ? posts.slice(viewerStartIndex) : posts}
             keyExtractor={(item) => item.id}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            initialScrollIndex={viewerStartIndex ?? 0}
-            getItemLayout={(_, index) => ({
-              length: SCREEN_WIDTH,
-              offset: SCREEN_WIDTH * index,
-              index,
-            })}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.viewerScroll}
+            onEndReached={() => { if (postsHasMore && !postsLoadingRef.current) loadPosts(postsCursor); }}
+            onEndReachedThreshold={0.4}
+            ListFooterComponent={postsHasMore ? (
+              <View style={styles.feedFooter}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : null}
             renderItem={({ item }) => (
-              <ScrollView
-                style={{ width: SCREEN_WIDTH }}
-                contentContainerStyle={styles.viewerScroll}
-                showsVerticalScrollIndicator={false}
-              >
-                <FeedCard
-                  item={item}
-                  index={0}
-                  onLike={() => handleLike(item)}
-                  onComment={() => setCommentItem(item)}
-                  onPollVote={(optionId) => handlePollVote(item, optionId)}
-                />
-              </ScrollView>
+              <FeedCard
+                item={item}
+                index={0}
+                onLike={() => handleLike(item)}
+                onComment={() => setCommentItem(item)}
+                onPollVote={(optionId) => handlePollVote(item, optionId)}
+              />
             )}
           />
         </View>
@@ -598,6 +621,13 @@ export default function ProfileScreen({ navigation, route }: Props) {
             numColumns={3}
             contentContainerStyle={styles.allPostsGrid}
             columnWrapperStyle={styles.allPostsRow}
+            onEndReached={() => { if (postsHasMore && !postsLoadingRef.current) loadPosts(postsCursor); }}
+            onEndReachedThreshold={0.4}
+            ListFooterComponent={postsHasMore ? (
+              <View style={styles.feedFooter}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : null}
             renderItem={({ item }) => (
               <PostThumbnail
                 key={item.id}
@@ -1014,11 +1044,14 @@ function CalendarTab({
   onOpenPost: (item: FeedItem) => void;
   profileUsername: string;
 }) {
+  const insets = useSafeAreaInsets();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
-  const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [restDayNums, setRestDayNums] = useState<Set<number>>(new Set());
+  const [dayModalVisible, setDayModalVisible] = useState(false);
+  const [currentModalDay, setCurrentModalDay] = useState(1);
+  const dayListRef = useRef<FlatList>(null);
 
   useEffect(() => {
     setRestDayNums(new Set());
@@ -1043,31 +1076,29 @@ function CalendarTab({
     }
   });
 
-  const selectedPosts = selectedDay !== null
-    ? posts.filter((p) => {
-        const d = new Date(p.created_at);
-        return d.getFullYear() === year && d.getMonth() === month && d.getDate() === selectedDay;
-      })
-    : [];
+  // Sorted array of days that have workout posts — each becomes one swipeable page
+  const sortedWorkoutDays = useMemo(
+    () => Array.from(workoutDays).sort((a, b) => a - b),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [posts, year, month],
+  );
 
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
   const prevMonth = () => {
-    setSelectedDay(null);
     if (month === 0) { setMonth(11); setYear((y) => y - 1); }
     else setMonth((m) => m - 1);
   };
   const nextMonth = () => {
-    setSelectedDay(null);
     if (month === 11) { setMonth(0); setYear((y) => y + 1); }
     else setMonth((m) => m + 1);
   };
 
   const handleDayPress = (day: number) => {
-    if (workoutDays.has(day)) {
-      setSelectedDay((prev) => (prev === day ? null : day));
-    }
+    if (!workoutDays.has(day)) return;
+    setCurrentModalDay(day);
+    setDayModalVisible(true);
   };
 
   if (postsLoading) {
@@ -1102,7 +1133,6 @@ function CalendarTab({
             const day = i + 1;
             const hasWorkout = workoutDays.has(day);
             const isRest = !hasWorkout && restDayNums.has(day);
-            const isSelected = selectedDay === day;
             return (
               <Pressable
                 key={day}
@@ -1110,7 +1140,6 @@ function CalendarTab({
                   styles.calDay,
                   hasWorkout && styles.calDayWorkout,
                   isRest && styles.calDayRest,
-                  isSelected && styles.calDaySelected,
                 ]}
                 onPress={() => handleDayPress(day)}
                 disabled={!hasWorkout}
@@ -1119,7 +1148,6 @@ function CalendarTab({
                   styles.calDayText,
                   hasWorkout && styles.calDayTextWorkout,
                   isRest && styles.calDayTextRest,
-                  isSelected && styles.calDayTextSelected,
                 ]}>
                   {day}
                 </Text>
@@ -1130,46 +1158,138 @@ function CalendarTab({
         </View>
       </View>
 
-      {/* Selected day posts */}
-      {selectedDay !== null && selectedPosts.length > 0 && (
-        <View style={styles.calDayPostsWrap}>
-          <Text style={styles.calDayPostsTitle}>
-            {MONTHS[month]} {selectedDay} — {selectedPosts.length} post{selectedPosts.length > 1 ? 's' : ''}
-          </Text>
-          {selectedPosts.map((item) => (
-            <Pressable
-              key={item.id}
-              style={({ pressed }) => [styles.calPostRow, pressed && { opacity: 0.7 }]}
-              onPress={() => onOpenPost(item)}
-            >
-              <View style={styles.calPostThumb}>
-                {item.photo_url ? (
-                  <Image source={{ uri: item.photo_url }} style={styles.calPostThumbImage} contentFit="cover" />
-                ) : (
-                  <Text style={styles.calPostThumbIcon}>
-                    {item.workout ? '🏋️' : item.personal_record ? '🏆' : item.poll ? '📊' : '💬'}
-                  </Text>
-                )}
+      {/* Floating day popup */}
+      <Modal
+        visible={dayModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDayModalVisible(false)}
+      >
+        {/* Dark backdrop — tapping it closes the modal */}
+        <TouchableWithoutFeedback onPress={() => setDayModalVisible(false)}>
+          <View style={styles.calModalOverlay} />
+        </TouchableWithoutFeedback>
+        {/* Popup sits above the backdrop, pointer-events pass through the centering wrapper */}
+        <View style={styles.calModalCenter} pointerEvents="box-none">
+          <View style={styles.calModalPopup}>
+            {/* Header: prev arrow, date, next arrow, close */}
+            <View style={styles.calModalHeader}>
+              <Pressable
+                style={styles.calModalNavBtn}
+                onPress={() => {
+                  const idx = sortedWorkoutDays.indexOf(currentModalDay);
+                  if (idx > 0) {
+                    dayListRef.current?.scrollToIndex({ index: idx - 1, animated: true });
+                    setCurrentModalDay(sortedWorkoutDays[idx - 1]);
+                  }
+                }}
+                disabled={sortedWorkoutDays.indexOf(currentModalDay) === 0}
+              >
+                <Feather
+                  name="chevron-left"
+                  size={20}
+                  color={sortedWorkoutDays.indexOf(currentModalDay) === 0 ? colors.textMuted : colors.textPrimary}
+                />
+              </Pressable>
+              <View style={{ alignItems: 'center', flex: 1 }}>
+                <Text style={styles.calModalDate}>{MONTHS[month]} {currentModalDay}</Text>
+                <Text style={styles.calModalYear}>{year}</Text>
               </View>
-              <View style={styles.calPostInfo}>
-                <Text style={styles.calPostType}>
-                  {item.workout ? 'Workout' : item.personal_record ? 'Personal Record' : item.poll ? 'Poll' : 'Post'}
-                </Text>
-                <Text style={styles.calPostDesc} numberOfLines={2}>
-                  {item.workout
-                    ? `${item.workout.exercise_count} exercises`
-                    : item.personal_record
-                    ? `${item.personal_record.exercise_name} — ${item.personal_record.value} ${item.personal_record.unit}`
-                    : item.poll
-                    ? item.poll.question
-                    : item.description ?? ''}
-                </Text>
-              </View>
-              <Feather name="chevron-right" size={16} color={colors.textMuted} />
-            </Pressable>
-          ))}
+              <Pressable
+                style={styles.calModalNavBtn}
+                onPress={() => {
+                  const idx = sortedWorkoutDays.indexOf(currentModalDay);
+                  if (idx < sortedWorkoutDays.length - 1) {
+                    dayListRef.current?.scrollToIndex({ index: idx + 1, animated: true });
+                    setCurrentModalDay(sortedWorkoutDays[idx + 1]);
+                  }
+                }}
+                disabled={sortedWorkoutDays.indexOf(currentModalDay) === sortedWorkoutDays.length - 1}
+              >
+                <Feather
+                  name="chevron-right"
+                  size={20}
+                  color={sortedWorkoutDays.indexOf(currentModalDay) === sortedWorkoutDays.length - 1 ? colors.textMuted : colors.textPrimary}
+                />
+              </Pressable>
+              <Pressable style={styles.calModalNavBtn} onPress={() => setDayModalVisible(false)}>
+                <Feather name="x" size={18} color={colors.textMuted} />
+              </Pressable>
+            </View>
+
+            {/* Swipeable pages — one per workout day */}
+            <FlatList
+              ref={dayListRef}
+              style={styles.calModalScroll}
+              data={sortedWorkoutDays}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(day) => String(day)}
+              initialScrollIndex={
+                sortedWorkoutDays.indexOf(currentModalDay) >= 0
+                  ? sortedWorkoutDays.indexOf(currentModalDay)
+                  : 0
+              }
+              getItemLayout={(_, index) => ({
+                length: POPUP_WIDTH,
+                offset: POPUP_WIDTH * index,
+                index,
+              })}
+              onMomentumScrollEnd={(e) => {
+                const idx = Math.round(e.nativeEvent.contentOffset.x / POPUP_WIDTH);
+                if (idx >= 0 && idx < sortedWorkoutDays.length) {
+                  setCurrentModalDay(sortedWorkoutDays[idx]);
+                }
+              }}
+              renderItem={({ item: day }) => {
+                const dayPosts = posts.filter((p) => {
+                  const d = new Date(p.created_at);
+                  return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
+                });
+                return (
+                  <ScrollView
+                    style={{ width: POPUP_WIDTH }}
+                    contentContainerStyle={{ padding: spacing.md, paddingBottom: 20 }}
+                    showsVerticalScrollIndicator={false}
+                    nestedScrollEnabled
+                  >
+                    {dayPosts.map((item) => (
+                      <View key={item.id} style={styles.calDayCard}>
+                        {item.photo_url && (
+                          <Image source={{ uri: item.photo_url }} style={styles.calDayCardImage} contentFit="cover" />
+                        )}
+                        <View style={styles.calDayCardBody}>
+                          <Text style={styles.calPostType}>
+                            {item.workout ? 'Workout' : item.personal_record ? 'Personal Record' : item.poll ? 'Poll' : 'Post'}
+                          </Text>
+                          {!!item.description && (
+                            <Text style={styles.calDayCardDesc}>{item.description}</Text>
+                          )}
+                          {item.workout && (
+                            <Text style={styles.calDayCardMeta}>
+                              {item.workout.exercise_count} exercises · {item.workout.total_sets} sets
+                              {item.workout.duration_minutes ? ` · ${item.workout.duration_minutes}min` : ''}
+                            </Text>
+                          )}
+                          {item.personal_record && (
+                            <Text style={styles.calDayCardMeta}>
+                              {item.personal_record.exercise_name}: {item.personal_record.value} {item.personal_record.unit}
+                            </Text>
+                          )}
+                          {item.poll && (
+                            <Text style={styles.calDayCardMeta}>{item.poll.question}</Text>
+                          )}
+                        </View>
+                      </View>
+                    ))}
+                  </ScrollView>
+                );
+              }}
+            />
+          </View>
         </View>
-      )}
+      </Modal>
     </View>
   );
 }
@@ -1442,6 +1562,7 @@ const styles = StyleSheet.create({
 
   // ── All posts modal grid ──
   allPostsGrid: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: 60 },
+  feedFooter: { paddingVertical: spacing.xl, alignItems: 'center' as const },
   allPostsRow: { gap: THUMB_GAP, marginBottom: THUMB_GAP },
 
   // ── View All / See All toggle button ──
@@ -1502,15 +1623,47 @@ const styles = StyleSheet.create({
   calDay: { width: `${100 / 7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 6 },
   calDayWorkout: { backgroundColor: 'rgba(79,195,224,0.15)' },
   calDayRest: { backgroundColor: 'rgba(156,163,175,0.15)' },
-  calDaySelected: { backgroundColor: colors.primary },
   calDayText: { fontSize: 13, fontWeight: '500', color: colors.textSecondary },
   calDayTextWorkout: { color: colors.primary, fontWeight: '700' },
   calDayTextRest: { color: colors.textMuted, fontWeight: '500' },
-  calDayTextSelected: { color: '#000', fontWeight: '700' },
   calDayRestMark: { fontSize: 7, lineHeight: 8 },
 
-  calDayPostsWrap: { marginTop: spacing.md },
-  calDayPostsTitle: { fontSize: 14, fontWeight: '600', color: colors.textPrimary, marginBottom: spacing.sm },
+  calModalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  calModalCenter: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  calModalPopup: {
+    width: '100%', height: SCREEN_HEIGHT * 0.55,
+    backgroundColor: colors.background.base,
+    borderRadius: 20, overflow: 'hidden',
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 20 },
+      android: { elevation: 12 },
+    }),
+  },
+  calModalHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: spacing.sm, paddingVertical: spacing.md,
+    borderBottomWidth: 1, borderBottomColor: colors.border.subtle,
+  },
+  calModalNavBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  calModalDate: { fontSize: 17, fontWeight: '700', color: colors.textPrimary },
+  calModalYear: { fontSize: 13, color: colors.textMuted, marginTop: 1 },
+  calModalScroll: { flex: 1 },
+  calDayCard: {
+    backgroundColor: colors.background.elevated, borderRadius: 12,
+    borderWidth: 1, borderColor: colors.border.subtle, overflow: 'hidden',
+    marginBottom: 10,
+  },
+  calDayCardImage: { width: '100%', height: 160 },
+  calDayCardBody: { padding: spacing.md, gap: 4 },
+  calDayCardDesc: { fontSize: 14, color: colors.textPrimary, lineHeight: 19 },
+  calDayCardMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+
   calPostRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     backgroundColor: colors.background.elevated, borderRadius: 12,
