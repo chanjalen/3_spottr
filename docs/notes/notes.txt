@@ -1,0 +1,368 @@
+================================================================================
+SPOTTR - Weekly Progress Notes
+================================================================================
+
+NOTE: Our production app uses React Native for the mobile UI and Django as a
+REST API backend. The Django templates created for this assignment are for
+demonstration purposes to fulfill the assignment requirements.
+
+================================================================================
+WEEK [Current Week] - Assignment 2 Progress
+================================================================================
+
+COMPLETED TASKS:
+- Set up split settings pattern (base.py, dev.py, prod.py)
+- Created .env file for environment variables (SECRET_KEY, API keys)
+- Created .env.example as a safe template
+- Implemented 4 view types (2 FBV + 2 CBV)
+- Created base template with block inheritance
+- Styled templates to match Spottr app design
+- Set up docs directory structure
+
+CHALLENGES:
+- Django version compatibility with CheckConstraint (condition vs check parameter)
+- Resolved by upgrading Django to 6.0+
+
+NEXT STEPS:
+- Continue developing API endpoints
+- Implement user authentication
+- Add workout tracking features
+
+================================================================================
+SECTION 2: VIEWS DOCUMENTATION
+================================================================================
+
+VIEW 1: HttpResponse (Manual)
+-----------------------------
+Name: gym_list_manual
+URL: /gyms/manual/
+File: gyms/views.py
+
+Purpose: Demonstrates the manual approach to rendering templates using
+loader.get_template() and wrapping the result in HttpResponse.
+
+When useful: When you need fine-grained control over the response, such as
+setting custom headers, or when working with non-HTML content types.
+
+
+VIEW 2: render() Shortcut
+-------------------------
+Name: gym_list_render
+URL: /gyms/render/
+File: gyms/views.py
+
+Purpose: Demonstrates the shortcut approach using Django's render() function
+which combines template loading and HttpResponse in one step.
+
+When useful: For most standard views - it's cleaner, more readable, and
+handles the common case of rendering a template with context data.
+
+
+VIEW 3: Base Class-Based View
+-----------------------------
+Name: GymListView
+URL: /gyms/cbv/
+File: gyms/views.py
+
+Purpose: Demonstrates inheriting from django.views.View and manually
+implementing the get() method to handle requests.
+
+When useful: When you need more control than generic views provide, or when
+your view logic doesn't fit the patterns of generic views (e.g., complex
+multi-model queries, custom business logic).
+
+
+VIEW 4: Generic Class-Based Views
+---------------------------------
+Names: GymGenericListView, GymDetailView
+URLs: /gyms/generic/, /gyms/<int:pk>/
+File: gyms/views.py
+
+Purpose: Demonstrates using Django's built-in generic views (ListView,
+DetailView) which handle common patterns automatically.
+
+When useful: For standard CRUD operations - less code, follows Django
+conventions, and provides built-in functionality like pagination.
+
+
+================================================================================
+EXPERIENCE NOTES (Bonus)
+================================================================================
+
+HttpResponse vs render():
+- render() is preferred for 99% of cases - it's cleaner and does the same thing
+- HttpResponse is useful when you need to set custom headers or return non-HTML
+
+Base CBV vs Generic CBV:
+- Generic CBVs (ListView, DetailView) are great for standard CRUD operations
+- Base CBV is better when you have complex logic that doesn't fit the generic pattern
+- We found Generic CBVs saved a lot of boilerplate code for simple list/detail views
+
+
+================================================================================
+SECTION 3: TEMPLATES DOCUMENTATION
+================================================================================
+
+BASE TEMPLATE
+-------------
+File: gyms/templates/gyms/base.html
+
+Blocks defined:
+- {% block title %} - Page title
+- {% block content %} - Main page content
+- {% block extra_css %} - Additional CSS
+- {% block extra_js %} - Additional JavaScript
+
+Features:
+- Dark theme matching Spottr mobile app design
+- Navigation bar with links to all views
+- Bottom navigation with active state highlighting
+- Responsive design
+
+
+FEATURE TEMPLATES
+-----------------
+All templates extend base.html and override the title and content blocks:
+
+- gym_list_manual.html - View 1 template
+- gym_list_render.html - View 2 template
+- gym_list_cbv.html - View 3 template
+- gym_list_generic.html - View 4 template
+- gym_detail.html - Detail view template
+- home.html - Home page template
+
+Each template:
+- Uses {% extends 'gyms/base.html' %}
+- Overrides {% block title %} and {% block content %}
+- Uses {% for %} loop to iterate over gyms
+- Shows empty-state message when no gyms exist ("No gyms available...")
+- Uses {% if %} for conditional display of optional fields
+
+
+================================================================================
+SECTION 4: URL LINKING & NAVIGATION (Assignment 3 - Section 1)
+================================================================================
+
+get_absolute_url() IMPLEMENTATION
+---------------------------------
+File: gyms/models.py - Gym model
+
+We implemented get_absolute_url() on the Gym model:
+
+    def get_absolute_url(self):
+        return reverse('gyms:gym_detail', kwargs={'pk': self.pk})
+
+Why get_absolute_url() is useful:
+- It centralizes URL generation in the model itself, following Django's
+  "fat models" philosophy. Instead of building URLs manually in every
+  template or view, the model knows how to generate its own canonical URL.
+- Templates can use {{ gym.get_absolute_url }} instead of {% url 'gyms:gym_detail' gym.pk %}.
+  If the URL pattern ever changes, you only update one place (the model).
+- Django's admin and other built-in features (e.g., redirect after form save)
+  automatically use get_absolute_url() when available.
+- It's especially useful for detail pages driven by primary keys, because the
+  model already has access to its own pk - no need to pass it around.
+
+Usage in templates:
+    <a href="{{ gym.get_absolute_url }}">{{ gym.name }}</a>
+
+We use this in gym_list_generic.html where each gym card links to its detail page.
+
+
+================================================================================
+SECTION 5: ORM QUERIES & SEARCH (Assignment 3 - Section 2)
+================================================================================
+
+GET vs POST SEARCH RATIONALE
+-----------------------------
+
+We implemented two search forms on the gym list page:
+
+1. GET Search (client-side quick filter):
+   - Uses JavaScript to filter gym cards in real-time as the user types
+   - No server round-trip needed - instant feedback
+   - The URL doesn't change, so results aren't bookmarkable
+   - Best for: quick filtering where the user wants instant results on the
+     same page, like browsing a list they can already see
+
+2. POST Search (server-side filter):
+   - Submits a form with method="POST" to the same ListView
+   - The server filters the queryset using ORM: Gym.objects.filter(name__icontains=query)
+   - Includes {% csrf_token %} for security
+   - Results are rendered server-side, reducing data sent to the client
+   - Best for: when you need to hide data from the client (only matching
+     results are sent), when filtering involves complex ORM queries or
+     related model lookups, or when the search modifies server state
+
+When to use GET vs POST for search:
+- GET: When results should be shareable/bookmarkable (URL contains ?q=term),
+  when the search is read-only, and when the same link should load similar results.
+- POST: When you need to hide search parameters from the URL, when the search
+  involves sensitive data, or when server-side processing is required for
+  security (e.g., preventing users from seeing all data via URL manipulation).
+
+RELATIONSHIP-SPANNING QUERIES (__ lookups):
+- We use Django's __ syntax to query across model relationships:
+  BusyLevel.objects.values('gym__name').annotate(response_count=Count('id'))
+  This spans from BusyLevel -> Gym using the foreign key relationship.
+
+AGGREGATIONS:
+- Total count: Gym.objects.count() - returns total number of gyms
+- Grouped summary: BusyLevel.objects.values('gym__name').annotate(
+    response_count=Count('id')) - groups busy level responses by gym name
+
+
+================================================================================
+SECTION 6: STATIC FILES & UI STYLING (Assignment 3 - Section 3)
+================================================================================
+
+STATIC FILE ORGANIZATION
+-------------------------
+We chose a project-level static directory structure:
+
+    frontend/
+    └── static/
+        └── css/
+            └── spottr.css     <-- Core design tokens & base styles
+
+Configuration in settings/base.py:
+    STATIC_URL = "static/"
+    STATICFILES_DIRS = [BASE_DIR.parent / "frontend" / "static"]
+
+This puts static files alongside templates in the frontend/ directory,
+keeping all presentation-layer code together. Django's staticfiles app
+collects files from STATICFILES_DIRS and serves them at the STATIC_URL path.
+
+In templates, we load static files using:
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/spottr.css' %}">
+
+CACHE BUSTING EXPLANATION
+--------------------------
+Cache busting ensures browsers load the latest version of static files
+instead of serving stale cached copies. Common approaches:
+
+1. Query string versioning: style.css?v=2 - simple but some CDNs ignore
+   query strings
+2. Filename hashing: style.a1b2c3d4.css - most reliable, requires build step
+3. Django's ManifestStaticFilesStorage: Automatically appends content hashes
+   to filenames during collectstatic (e.g., spottr.css -> spottr.abc123.css).
+   Configure with: STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.ManifestStaticFilesStorage'
+
+For development, Django's DEBUG=True mode serves files directly without
+caching, so cache busting isn't needed during development.
+
+
+================================================================================
+SECTION 7: DATA VISUALIZATION (Assignment 3 - Section 4)
+================================================================================
+
+MATPLOTLIB CHART IMPLEMENTATION
+---------------------------------
+File: gyms/views.py - busy_level_chart_view()
+
+We use Matplotlib to generate a bar chart of average busy levels per gym:
+
+1. ORM Aggregation: BusyLevel.objects.values('gym__name').annotate(
+       avg_busy=Avg('survey_response'), total=Count('id'))
+   This computes the average busy level and total responses per gym.
+
+2. Chart Generation: Matplotlib creates a bar chart with color-coded bars
+   (green=low, yellow=moderate, orange=high, red=very high).
+
+3. BytesIO for Memory Efficiency: Instead of saving the chart to disk,
+   we use io.BytesIO() to write the PNG image to an in-memory buffer.
+   This avoids disk I/O overhead and file cleanup. The buffer is read
+   once and returned directly in the HttpResponse.
+
+   RAM implications: Each chart generation creates a temporary buffer in
+   memory. For our use case (small number of gyms), this is negligible.
+   For larger datasets, consider caching the generated image or using
+   a task queue to generate charts asynchronously.
+
+4. Image Endpoint: The chart is served at /gyms/chart/busy-levels.png
+   using HttpResponse(buf.getvalue(), content_type='image/png').
+   The template page at /gyms/chart/ embeds this image with an <img> tag.
+
+
+================================================================================
+SECTION 8: FORMS & CBV INPUT HANDLING (Assignment 3 - Section 5)
+================================================================================
+
+GET FORM:
+- The gym list page (/gyms/generic/) has a client-side GET filter
+- The exercise catalog API uses request.GET.get('search') for filtering
+- User search uses request.GET.get('q') for finding users
+
+POST FORM:
+- Signup form (accounts/signup.html): method="POST" with {% csrf_token %}
+- Login form (accounts/login.html): method="POST" with {% csrf_token %}
+- Edit profile form: method="POST" with enctype="multipart/form-data"
+- Gym list POST search: server-side filtering with {% csrf_token %}
+
+CBV HANDLING GET AND POST:
+- GymGenericListView (ListView) handles both:
+  - GET: Returns all gyms with enriched context (default ListView behavior)
+  - POST: Overrides post() method to filter gyms by search_query from
+    request.POST, then renders the same template with filtered results
+- This demonstrates adapting a generic ListView to process form input
+  on both HTTP methods.
+
+
+================================================================================
+SECTION 9: CREATING APIs (Assignment 3 - Section 6)
+================================================================================
+
+API PLANNING
+-------------
+We are building RESTful JSON APIs to serve Spottr's data to both our
+React Native mobile app and the Django template frontend.
+
+DATA WE SERVE:
+- Gym data: List of gyms with search/filter, enrollment status, busy levels
+- User data: Search users, follow/unfollow, block/unblock
+- Workout data: Exercise catalog, personal records, workout history
+- Social data: Feed posts, comments, likes, check-ins, polls
+- Group data: Group list with membership, messaging
+
+API ENDPOINTS IMPLEMENTED:
+- GET  /api/gyms/gyms/              - List gyms (supports ?q=, ?limit=, ?offset=)
+- GET  /api/gyms/gyms/<id>/         - Gym detail
+- POST /api/gyms/gyms/<id>/enroll/  - Enroll at gym
+- POST /api/gyms/unenroll/          - Unenroll from gym
+- GET  /api/gyms/gyms/<id>/busy/    - Get busy level
+- POST /api/gyms/gyms/<id>/busy/    - Submit busy level
+- GET  /api/groups/                 - List groups (supports ?q=)
+- POST /api/groups/                 - Create group
+- GET  /accounts/search-users/      - Search users (?q=)
+- POST /accounts/follow-toggle/     - Follow/unfollow user
+- GET  /workouts/api/catalog/       - Exercise catalog (?search=)
+- GET  /gyms/<pk>/api/top-lifters/  - Top lifters (?lift=bench|squat|deadlift)
+
+HttpResponse vs JsonResponse:
+- HttpResponse: Returns raw content with any content type. We use it for
+  the Matplotlib chart (content_type='image/png') and manual template
+  rendering. The MIME type defaults to 'text/html'.
+- JsonResponse: A subclass of HttpResponse that serializes data to JSON
+  and sets content_type='application/json' automatically. We use it for
+  all API endpoints that return structured data. It handles Python dict/list
+  serialization and proper JSON content-type headers.
+
+FBV vs CBV API:
+- FBV APIs: Most of our endpoints use function-based views with DRF's
+  @api_view decorator (e.g., gym_list, search_users_view, top_lifters_view)
+- CBV APIs: We also use DRF's @api_view which provides class-like behavior
+  with method routing (GET, POST handled in one view function)
+
+
+================================================================================
+TEAM NOTES & REMINDERS
+================================================================================
+
+- Remember to run migrations after pulling changes
+- Use 'python manage.py runserver' for development (uses dev.py settings)
+- Never commit .env file - use .env.example as reference
+- Follow branching strategy in docs/branching_strategy/
+- Install matplotlib: pip install matplotlib (required for chart generation)
+
+================================================================================

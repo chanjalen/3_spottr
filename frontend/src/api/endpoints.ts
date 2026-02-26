@@ -1,0 +1,40 @@
+const BASE = '/social';
+
+type ID = string | number;
+
+export const ENDPOINTS = {
+  feed: `${BASE}/feed/`,
+  searchFeed: `${BASE}/search/`,
+
+  likePost: (id: ID) => `${BASE}/post/${id}/like/`,
+  likeCheckin: (id: ID) => `${BASE}/checkin/${id}/like/`,
+  likeComment: (id: ID) => `${BASE}/comment/${id}/like/`,
+
+  postComments: (id: ID) => `${BASE}/post/${id}/comments/`,
+  addPostComment: (id: ID) => `${BASE}/post/${id}/comments/add/`,
+  checkinComments: (id: ID) => `${BASE}/checkin/${id}/comments/`,
+  addCheckinComment: (id: ID) => `${BASE}/checkin/${id}/comments/add/`,
+
+  deleteComment: (id: ID) => `${BASE}/comment/${id}/delete/`,
+  commentReplies: (id: ID) => `${BASE}/comment/${id}/replies/`,
+  addCommentReply: (id: ID) => `${BASE}/comment/${id}/replies/add/`,
+
+  deletePost: (id: ID) => `${BASE}/post/${id}/delete/`,
+  deleteCheckin: (id: ID) => `${BASE}/checkin/${id}/delete/`,
+
+  createPost: '/api/social/post/create/',
+  createCheckin: '/api/social/checkin/create/',
+
+  votePoll: (id: ID) => `${BASE}/poll/${id}/vote/`,
+  pollVoters: (id: ID) => `${BASE}/poll/${id}/voters/`,
+
+  userPostThumbnails: (username: string) => `/accounts/api/user/${username}/post-thumbnails/`,
+  userPosts: (username: string) => `/accounts/api/user/${username}/posts/`,
+  userCheckins: (username: string) => `/accounts/api/user/${username}/checkins/`,
+
+  postLikers: (id: ID) => `${BASE}/post/${id}/likers/`,
+  checkinLikers: (id: ID) => `${BASE}/checkin/${id}/likers/`,
+
+  shareRecipients: `${BASE}/share/recipients/`,
+  sendShare: `${BASE}/share/send/`,
+} as const;

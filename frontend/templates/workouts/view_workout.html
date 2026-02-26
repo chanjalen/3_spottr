@@ -1,0 +1,582 @@
+{% extends 'gyms/base.html' %}
+
+{% block title %}{{ workout.name }} - Spottr{% endblock %}
+
+{% block extra_css %}
+<style>
+    .view-workout-page {
+        min-height: 100vh;
+        background: var(--bg-base);
+    }
+
+    .view-workout-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 16px 20px;
+        border-bottom: 1px solid var(--border-subtle);
+        position: sticky;
+        top: 0;
+        background: var(--bg-base);
+        z-index: 10;
+    }
+
+    .view-workout-back {
+        font-size: 24px;
+        color: var(--text-secondary);
+        text-decoration: none;
+        padding: 8px;
+    }
+
+    .view-workout-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .view-workout-placeholder {
+        width: 40px;
+    }
+
+    .view-workout-content {
+        padding: 20px;
+        max-width: 500px;
+        margin: 0 auto;
+        padding-bottom: 100px;
+    }
+
+    /* Workout Info Card */
+    .workout-info-card {
+        background: linear-gradient(135deg, #0d3331, #0a2725);
+        border: 1px solid rgba(6, 182, 212, 0.2);
+        border-radius: var(--radius-2xl);
+        padding: 24px;
+        margin-bottom: 24px;
+    }
+
+    .workout-info-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 16px;
+    }
+
+    .workout-user-avatar {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: var(--bg-elevated);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        font-weight: 700;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        color: #fff;
+    }
+
+    .workout-user-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: 50%;
+    }
+
+    .workout-user-info h2 {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 4px;
+    }
+
+    .workout-user-info p {
+        font-size: 13px;
+        color: var(--text-muted);
+    }
+
+    .workout-info-stats {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 16px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(6, 182, 212, 0.2);
+    }
+
+    .workout-info-stat {
+        text-align: center;
+    }
+
+    .workout-info-stat-value {
+        font-size: 24px;
+        font-weight: 700;
+        color: var(--brand-cyan);
+    }
+
+    .workout-info-stat-label {
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+
+    /* Add to Templates Button */
+    .add-template-btn {
+        width: 100%;
+        padding: 16px;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        border: none;
+        border-radius: var(--radius-lg);
+        color: #fff;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        margin-bottom: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        transition: all var(--duration) var(--ease-out);
+    }
+
+    .add-template-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 8px 24px rgba(124, 58, 237, 0.3);
+    }
+
+    .add-template-btn:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        transform: none;
+    }
+
+    .add-template-btn.success {
+        background: #22c55e;
+    }
+
+    /* Section Title */
+    .section-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        margin-bottom: 16px;
+    }
+
+    /* Exercise Cards (Read-only) */
+    .exercise-list {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+    }
+
+    .exercise-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+        overflow: hidden;
+    }
+
+    .exercise-card-header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 16px;
+        border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .exercise-number {
+        width: 28px;
+        height: 28px;
+        background: #f97316;
+        border-radius: var(--radius-sm);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        font-weight: 600;
+        color: #fff;
+    }
+
+    .exercise-name {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .exercise-category {
+        font-size: 12px;
+        color: var(--text-muted);
+        text-transform: capitalize;
+    }
+
+    /* Sets Table (Read-only) */
+    .sets-container {
+        padding: 12px 16px;
+    }
+
+    .sets-header {
+        display: grid;
+        grid-template-columns: 50px 1fr 1fr 50px;
+        gap: 8px;
+        padding: 8px 0;
+        font-size: 12px;
+        color: var(--text-muted);
+        text-transform: uppercase;
+    }
+
+    .set-row {
+        display: grid;
+        grid-template-columns: 50px 1fr 1fr 50px;
+        gap: 8px;
+        padding: 8px 0;
+        align-items: center;
+    }
+
+    .set-number {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-secondary);
+    }
+
+    .set-value {
+        background: var(--bg-elevated);
+        padding: 10px 12px;
+        border-radius: var(--radius-md);
+        font-size: 15px;
+        font-weight: 500;
+        color: var(--text-primary);
+        text-align: center;
+    }
+
+    .set-completed {
+        width: 24px;
+        height: 24px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+    }
+
+    .set-completed.done {
+        background: var(--brand-cyan);
+        color: #000;
+    }
+
+    .set-completed.not-done {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        color: var(--text-muted);
+    }
+
+    /* Notes Section */
+    .workout-notes {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+        padding: 16px;
+        margin-top: 24px;
+    }
+
+    .workout-notes-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        margin-bottom: 8px;
+    }
+
+    .workout-notes-text {
+        font-size: 14px;
+        color: var(--text-primary);
+        line-height: 1.5;
+    }
+
+    /* Empty State */
+    .empty-exercises {
+        text-align: center;
+        padding: 48px 24px;
+        color: var(--text-muted);
+    }
+
+    .empty-exercises-icon {
+        font-size: 48px;
+        margin-bottom: 16px;
+        opacity: 0.5;
+    }
+
+    /* Template Name Modal */
+    .template-name-modal {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.8);
+        z-index: 500;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+    }
+
+    .template-name-modal.active {
+        display: flex;
+    }
+
+    .template-name-content {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+        padding: 24px;
+        width: 100%;
+        max-width: 400px;
+    }
+
+    .template-name-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 16px;
+    }
+
+    .template-name-input {
+        width: 100%;
+        padding: 14px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        color: var(--text-primary);
+        font-size: 15px;
+        margin-bottom: 16px;
+    }
+
+    .template-name-input:focus {
+        outline: none;
+        border-color: var(--brand-cyan);
+    }
+
+    .template-name-buttons {
+        display: flex;
+        gap: 12px;
+    }
+
+    .template-name-cancel {
+        flex: 1;
+        padding: 14px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        color: var(--text-secondary);
+        font-size: 15px;
+        font-weight: 500;
+        cursor: pointer;
+    }
+
+    .template-name-save {
+        flex: 1;
+        padding: 14px;
+        background: var(--brand-cyan);
+        border: none;
+        border-radius: var(--radius-lg);
+        color: #000;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="view-workout-header">
+    <a href="/" class="view-workout-back">&larr;</a>
+    <span class="view-workout-title">Workout Details</span>
+    <div class="view-workout-placeholder"></div>
+</div>
+
+<div class="view-workout-content">
+    <!-- Workout Info Card -->
+    <div class="workout-info-card">
+        <div class="workout-info-header">
+            <div class="workout-user-avatar">
+                {% if workout.user.avatar_url %}
+                <img src="{{ workout.user.avatar_url }}" alt="{{ workout.user.display_name }}">
+                {% else %}
+                {{ workout.user.display_name|make_list|first|upper }}
+                {% endif %}
+            </div>
+            <div class="workout-user-info">
+                <h2>{{ workout.name }}</h2>
+                <p>by {{ workout.user.display_name }} &bull; {{ workout.start_time|date:"M d, Y" }}</p>
+            </div>
+        </div>
+        <div class="workout-info-stats">
+            <div class="workout-info-stat">
+                <div class="workout-info-stat-value">{{ exercises|length }}</div>
+                <div class="workout-info-stat-label">Exercises</div>
+            </div>
+            <div class="workout-info-stat">
+                <div class="workout-info-stat-value">{{ total_sets }}</div>
+                <div class="workout-info-stat-label">Sets</div>
+            </div>
+            <div class="workout-info-stat">
+                <div class="workout-info-stat-value">{{ duration_str }}</div>
+                <div class="workout-info-stat-label">Duration</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add to Templates Button (only show if not owner) -->
+    {% if not is_owner %}
+    <button class="add-template-btn" id="addToTemplatesBtn" onclick="showTemplateNameModal()">
+        <span>+</span> Add to My Templates
+    </button>
+    {% endif %}
+
+    <!-- Exercises Section -->
+    <div class="section-title">Exercises</div>
+
+    <div class="exercise-list">
+        {% for exercise in exercises %}
+        <div class="exercise-card">
+            <div class="exercise-card-header">
+                <div class="exercise-number">{{ forloop.counter }}</div>
+                <div>
+                    <div class="exercise-name">{{ exercise.name }}</div>
+                    <div class="exercise-category">{{ exercise.category }}</div>
+                </div>
+            </div>
+            <div class="sets-container">
+                <div class="sets-header">
+                    <div>SET</div>
+                    <div>REPS</div>
+                    <div>WEIGHT</div>
+                    <div></div>
+                </div>
+                {% for set in exercise.exercise_sets.all %}
+                <div class="set-row">
+                    <div class="set-number">{{ set.set_number }}</div>
+                    <div class="set-value">{{ set.reps }}</div>
+                    <div class="set-value">{{ set.weight|floatformat:0 }} lbs</div>
+                    <div class="set-completed {% if set.completed %}done{% else %}not-done{% endif %}">
+                        {% if set.completed %}&#10003;{% else %}-{% endif %}
+                    </div>
+                </div>
+                {% empty %}
+                <div style="text-align: center; padding: 16px; color: var(--text-muted);">No sets recorded</div>
+                {% endfor %}
+            </div>
+        </div>
+        {% empty %}
+        <div class="empty-exercises">
+            <div class="empty-exercises-icon">🏋️</div>
+            <p>No exercises in this workout</p>
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Notes -->
+    {% if workout.notes %}
+    <div class="workout-notes">
+        <div class="workout-notes-title">Notes</div>
+        <div class="workout-notes-text">{{ workout.notes }}</div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Template Name Modal -->
+<div class="template-name-modal" id="templateNameModal">
+    <div class="template-name-content">
+        <div class="template-name-title">Save as Template</div>
+        <input type="text" class="template-name-input" id="newTemplateName" placeholder="Enter template name..." value="{{ workout.name }}">
+        <div class="template-name-buttons">
+            <button class="template-name-cancel" onclick="hideTemplateNameModal()">Cancel</button>
+            <button class="template-name-save" onclick="addToTemplates()">Save</button>
+        </div>
+    </div>
+</div>
+
+<script>
+const workoutId = '{{ workout.id }}';
+
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+
+const csrftoken = getCookie('csrftoken');
+
+function showTemplateNameModal() {
+    document.getElementById('templateNameModal').classList.add('active');
+    document.getElementById('newTemplateName').focus();
+}
+
+function hideTemplateNameModal() {
+    document.getElementById('templateNameModal').classList.remove('active');
+}
+
+function addToTemplates() {
+    const templateName = document.getElementById('newTemplateName').value.trim();
+    const btn = document.getElementById('addToTemplatesBtn');
+
+    if (!templateName) {
+        alert('Please enter a template name');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Adding...';
+
+    fetch(`/workouts/${workoutId}/add-to-templates/`, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrftoken,
+            'Content-Type': 'application/json',
+        },
+        credentials: 'same-origin',
+        body: JSON.stringify({ name: templateName })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            hideTemplateNameModal();
+            btn.classList.add('success');
+            btn.innerHTML = '&#10003; Added to Templates';
+            btn.disabled = true;
+        } else {
+            alert('Error adding template: ' + (data.error || 'Unknown error'));
+            btn.disabled = false;
+            btn.innerHTML = '<span>+</span> Add to My Templates';
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Failed to add template. Please try again.');
+        btn.disabled = false;
+        btn.innerHTML = '<span>+</span> Add to My Templates';
+    });
+}
+
+// Close modal when clicking outside
+document.getElementById('templateNameModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        hideTemplateNameModal();
+    }
+});
+
+// Allow pressing Enter to save
+document.getElementById('newTemplateName').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        addToTemplates();
+    }
+});
+</script>
+{% endblock %}

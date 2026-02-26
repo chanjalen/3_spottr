@@ -1,0 +1,274 @@
+{% extends 'gyms/base.html' %}
+
+{% block title %}Sign Up - Spottr{% endblock %}
+
+{% block extra_css %}
+<style>
+    .auth-container {
+        max-width: 400px;
+        margin: 40px auto;
+    }
+
+    .auth-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-2xl);
+        padding: 40px 32px;
+        box-shadow: var(--shadow-lg), var(--shadow-glow);
+        position: relative;
+        overflow: hidden;
+    }
+
+    .auth-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 3px;
+        background: linear-gradient(90deg, var(--brand-purple), var(--brand-blue), var(--brand-cyan));
+    }
+
+    .auth-logo {
+        text-align: center;
+        margin-bottom: 32px;
+    }
+
+    .auth-logo-icon {
+        width: 56px;
+        height: 56px;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        border-radius: var(--radius-lg);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 24px;
+        color: #fff;
+        box-shadow: 0 4px 20px rgba(124, 58, 237, 0.3);
+        margin-bottom: 16px;
+    }
+
+    .auth-logo h1 {
+        font-size: 24px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 4px;
+    }
+
+    .auth-logo p {
+        font-size: 14px;
+        color: var(--text-muted);
+    }
+
+    .form-group {
+        margin-bottom: 18px;
+    }
+
+    .form-row {
+        display: flex;
+        gap: 12px;
+    }
+
+    .form-row .form-group {
+        flex: 1;
+    }
+
+    .form-group label {
+        display: block;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        margin-bottom: 8px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .form-input {
+        width: 100%;
+        padding: 14px 18px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-family: 'Inter', sans-serif;
+        font-size: 15px;
+        transition: all var(--duration) var(--ease-out);
+        outline: none;
+    }
+
+    .form-input::placeholder {
+        color: var(--text-muted);
+    }
+
+    .form-input:focus {
+        border-color: var(--brand-purple);
+        box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+    }
+
+    .form-errors {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        border-radius: var(--radius-md);
+        padding: 12px 16px;
+        margin-bottom: 20px;
+        font-size: 13px;
+        color: #fca5a5;
+    }
+
+    .form-errors ul {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .form-errors li {
+        padding: 2px 0;
+    }
+
+    .field-error {
+        font-size: 12px;
+        color: #fca5a5;
+        margin-top: 6px;
+    }
+
+    .auth-btn {
+        width: 100%;
+        padding: 14px;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        border: none;
+        border-radius: var(--radius-md);
+        color: #fff;
+        font-family: 'Inter', sans-serif;
+        font-size: 15px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all var(--duration) var(--ease-out);
+        box-shadow: 0 2px 12px rgba(124, 58, 237, 0.3);
+        margin-top: 8px;
+    }
+
+    .auth-btn:hover {
+        box-shadow: 0 4px 24px rgba(124, 58, 237, 0.4);
+        transform: translateY(-1px);
+    }
+
+    .auth-btn:active {
+        transform: translateY(0);
+    }
+
+    .auth-footer {
+        text-align: center;
+        margin-top: 24px;
+        font-size: 14px;
+        color: var(--text-muted);
+    }
+
+    .auth-footer a {
+        color: var(--text-brand);
+        text-decoration: none;
+        font-weight: 500;
+        transition: color var(--duration) var(--ease-out);
+    }
+
+    .auth-footer a:hover {
+        color: var(--brand-purple);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-card">
+        <div class="auth-logo">
+            <div class="auth-logo-icon">S</div>
+            <h1>Join Spottr</h1>
+            <p>Create your fitness profile</p>
+        </div>
+
+        {% if form.non_field_errors %}
+        <div class="form-errors">
+            <ul>
+                {% for error in form.non_field_errors %}
+                <li>{{ error }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+
+        <form method="post">
+            {% csrf_token %}
+
+            <div class="form-group">
+                <label for="id_username">Username</label>
+                <input type="text" name="username" id="id_username" class="form-input"
+                       placeholder="Username" value="{{ form.username.value|default:'' }}" required>
+                {% if form.username.errors %}
+                <div class="field-error">{{ form.username.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_email">Email</label>
+                <input type="email" name="email" id="id_email" class="form-input"
+                       placeholder="Email" value="{{ form.email.value|default:'' }}" required>
+                {% if form.email.errors %}
+                <div class="field-error">{{ form.email.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="id_display_name">Display Name</label>
+                    <input type="text" name="display_name" id="id_display_name" class="form-input"
+                           placeholder="Display name" value="{{ form.display_name.value|default:'' }}" required>
+                    {% if form.display_name.errors %}
+                    <div class="field-error">{{ form.display_name.errors.0 }}</div>
+                    {% endif %}
+                </div>
+                <div class="form-group">
+                    <label for="id_phone_number">Phone</label>
+                    <input type="text" name="phone_number" id="id_phone_number" class="form-input"
+                           placeholder="Phone number" value="{{ form.phone_number.value|default:'' }}" required>
+                    {% if form.phone_number.errors %}
+                    <div class="field-error">{{ form.phone_number.errors.0 }}</div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="id_birthday">Birthday</label>
+                <input type="date" name="birthday" id="id_birthday" class="form-input"
+                       value="{{ form.birthday.value|default:'' }}" required>
+                {% if form.birthday.errors %}
+                <div class="field-error">{{ form.birthday.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_password">Password</label>
+                <input type="password" name="password" id="id_password" class="form-input"
+                       placeholder="Password" required>
+                {% if form.password.errors %}
+                <div class="field-error">{{ form.password.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="form-group">
+                <label for="id_password_confirm">Confirm Password</label>
+                <input type="password" name="password_confirm" id="id_password_confirm" class="form-input"
+                       placeholder="Confirm password" required>
+                {% if form.password_confirm.errors %}
+                <div class="field-error">{{ form.password_confirm.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <button type="submit" class="auth-btn">Create Account</button>
+        </form>
+
+        <div class="auth-footer">
+            Already have an account? <a href="{% url 'accounts:login' %}">Log in</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,147 @@
+import React, { useEffect } from 'react';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withTiming,
+  Easing,
+} from 'react-native-reanimated';
+import { Feather } from '@expo/vector-icons';
+import { colors, spacing, typography } from '../../theme';
+
+interface PollOptionProps {
+  text: string;
+  votes: number;
+  totalVotes: number;
+  isSelected: boolean;
+  hasVoted: boolean;
+  isActive: boolean;
+  onVote: () => void;
+}
+
+export default function PollOption({
+  text,
+  votes,
+  totalVotes,
+  isSelected,
+  hasVoted,
+  isActive,
+  onVote,
+}: PollOptionProps) {
+  const percentage = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
+  const barWidth = useSharedValue(0);
+  // Show results if the user voted OR if the poll has ended
+  const showResults = hasVoted || !isActive;
+
+  useEffect(() => {
+    if (showResults) {
+      barWidth.value = withTiming(percentage, {
+        duration: 600,
+        easing: Easing.out(Easing.cubic),
+      });
+    }
+  }, [showResults, percentage]);
+
+  const barStyle = useAnimatedStyle(() => ({
+    width: `${barWidth.value}%`,
+  }));
+
+  return (
+    <Pressable
+      style={[
+        styles.container,
+        isSelected && styles.selected,
+        !isActive && !hasVoted && styles.disabled,
+      ]}
+      onPress={isActive ? onVote : undefined}
+      disabled={!isActive}
+      accessibilityRole="button"
+      accessibilityLabel={`${text}, ${percentage}%`}
+      accessibilityState={{ selected: isSelected }}
+    >
+      {showResults && (
+        <Animated.View
+          style={[
+            styles.bar,
+            isSelected && styles.barSelected,
+            barStyle,
+          ]}
+        />
+      )}
+      <View style={styles.content}>
+        <View style={styles.textRow}>
+          {isSelected && (
+            <Feather name="check-circle" size={14} color={colors.primary} />
+          )}
+          <Text style={[styles.text, isSelected && styles.textSelected]}>
+            {text}
+          </Text>
+        </View>
+        {showResults && (
+          <Text style={[styles.percent, isSelected && styles.percentSelected]}>
+            {percentage}%
+          </Text>
+        )}
+      </View>
+    </Pressable>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    marginBottom: spacing.sm,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  selected: {
+    borderColor: colors.primary,
+    borderWidth: 1.5,
+  },
+  disabled: {
+    opacity: 0.6,
+  },
+  bar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(79,195,224,0.12)',
+    borderRadius: 11,
+  },
+  barSelected: {
+    backgroundColor: 'rgba(79,195,224,0.2)',
+  },
+  content: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+  },
+  textRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  text: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.medium,
+    color: colors.textPrimary,
+  },
+  textSelected: {
+    color: colors.primary,
+    fontFamily: typography.family.semibold,
+  },
+  percent: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.medium,
+    color: colors.textSecondary,
+  },
+  percentSelected: {
+    color: colors.primary,
+    fontFamily: typography.family.semibold,
+  },
+});

@@ -1,0 +1,3937 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{% block title %}Spottr{% endblock %}</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{% static 'css/spottr.css' %}">
+    <style>
+        /* ============================================
+           SPOTTR DESIGN SYSTEM
+           ============================================
+           Color Tokens:
+             --brand-purple:    #7c3aed
+             --brand-blue:      #3b82f6
+             --brand-cyan:      #06b6d4
+             --gradient-brand:  135deg, #7c3aed, #3b82f6, #06b6d4
+             --gradient-accent:  135deg, #7c3aed, #3b82f6
+
+           Surface Tokens:
+             --bg-base:     #08080f
+             --bg-surface:  #111118
+             --bg-card:     #16161f
+             --bg-elevated: #1e1e28
+             --bg-hover:    #252530
+
+           Spacing Scale (4px base):
+             4, 8, 12, 16, 20, 24, 32, 40, 48, 64
+
+           Border Radius:
+             --radius-sm:   8px
+             --radius-md:   12px
+             --radius-lg:   16px
+             --radius-xl:   20px
+             --radius-2xl:  24px
+             --radius-pill: 9999px
+
+           Transition:
+             --ease-out: cubic-bezier(0.16, 1, 0.3, 1)
+             --duration: 200ms
+
+           Shadow System:
+             --shadow-sm:   0 1px 2px rgba(0,0,0,0.3)
+             --shadow-md:   0 4px 12px rgba(0,0,0,0.4)
+             --shadow-lg:   0 8px 30px rgba(0,0,0,0.5)
+             --shadow-glow: 0 0 20px rgba(124,58,237,0.15)
+           ============================================ */
+
+        :root {
+            --brand-purple: #7c3aed;
+            --brand-blue: #3b82f6;
+            --brand-cyan: #06b6d4;
+            --brand-purple-muted: rgba(124, 58, 237, 0.15);
+            --brand-blue-muted: rgba(59, 130, 246, 0.12);
+
+            --bg-base: #08080f;
+            --bg-surface: #111118;
+            --bg-card: #16161f;
+            --bg-elevated: #1e1e28;
+            --bg-hover: #252530;
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-default: rgba(255, 255, 255, 0.08);
+            --border-hover: rgba(124, 58, 237, 0.3);
+
+            --text-primary: #f0f0f5;
+            --text-secondary: #9898a8;
+            --text-muted: #5a5a6e;
+            --text-brand: #a78bfa;
+
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 16px;
+            --radius-xl: 20px;
+            --radius-2xl: 24px;
+            --radius-pill: 9999px;
+
+            --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+            --duration: 200ms;
+
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 8px 30px rgba(0, 0, 0, 0.5);
+            --shadow-glow: 0 0 30px rgba(124, 58, 237, 0.12);
+            --shadow-glow-hover: 0 0 40px rgba(124, 58, 237, 0.2);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background-color: var(--bg-base);
+            color: var(--text-primary);
+            min-height: 100vh;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* ============ HEADER ============ */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 24px;
+            background: rgba(17, 17, 24, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .logo-container {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .logo {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+            border-radius: var(--radius-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 18px;
+            color: #fff;
+            box-shadow: 0 2px 12px rgba(124, 58, 237, 0.3);
+        }
+
+        .logo-text {
+            font-size: 22px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue), var(--brand-cyan));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -0.5px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .streak-badge {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            padding: 8px 16px;
+            border-radius: var(--radius-pill);
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            transition: all var(--duration) var(--ease-out);
+        }
+
+        .streak-badge:hover {
+            border-color: var(--border-hover);
+            box-shadow: var(--shadow-glow);
+        }
+
+        /* Header user avatar */
+        .header-user {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            padding: 4px 12px 4px 4px;
+            border-radius: var(--radius-pill);
+            border: 1px solid var(--border-subtle);
+            transition: all var(--duration) var(--ease-out);
+        }
+
+        .header-user:hover {
+            border-color: var(--border-hover);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .header-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            overflow: hidden;
+            background: var(--bg-elevated);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .header-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .header-avatar-letter {
+            font-size: 14px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .header-username {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        /* ============ NOTIFICATION BELL ============ */
+        .notif-bell-btn {
+            position: relative;
+            width: 40px;
+            height: 40px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            border-radius: 50%;
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--duration) var(--ease-out);
+            flex-shrink: 0;
+        }
+
+        .notif-bell-btn:hover {
+            border-color: var(--border-hover);
+            color: var(--text-primary);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .notif-bell-btn.has-unread {
+            color: var(--text-primary);
+        }
+
+        .notif-badge {
+            position: absolute;
+            top: -2px;
+            right: -2px;
+            min-width: 18px;
+            height: 18px;
+            background: #ef4444;
+            border-radius: var(--radius-pill);
+            color: #fff;
+            font-size: 11px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 5px;
+            border: 2px solid var(--bg-surface);
+        }
+
+        /* ============ NOTIFICATION PANEL ============ */
+        .notif-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 199;
+        }
+
+        .notif-overlay.active {
+            display: block;
+        }
+
+        .notif-panel {
+            display: none;
+            position: fixed;
+            top: 70px;
+            right: 16px;
+            width: 400px;
+            max-width: calc(100vw - 32px);
+            max-height: calc(100vh - 90px);
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-xl);
+            box-shadow: var(--shadow-lg);
+            z-index: 200;
+            flex-direction: column;
+            overflow: hidden;
+            animation: notifSlideIn 0.2s var(--ease-out);
+        }
+
+        .notif-panel.active {
+            display: flex;
+        }
+
+        @keyframes notifSlideIn {
+            from { opacity: 0; transform: translateY(-8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .notif-panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 20px 14px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .notif-panel-title {
+            font-size: 17px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0;
+        }
+
+        .notif-mark-all {
+            background: none;
+            border: none;
+            color: var(--text-brand);
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            padding: 4px 8px;
+            border-radius: var(--radius-sm);
+            transition: background var(--duration) var(--ease-out);
+        }
+
+        .notif-mark-all:hover {
+            background: var(--brand-purple-muted);
+        }
+
+        .notif-panel-body {
+            overflow-y: auto;
+            flex: 1;
+            min-height: 80px;
+            max-height: calc(100vh - 160px);
+        }
+
+        .notif-loading, .notif-empty {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 48px 20px;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        /* ============ NOTIFICATION ROWS ============ */
+        .notif-row {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 20px;
+            cursor: pointer;
+            transition: background var(--duration) var(--ease-out);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .notif-row:last-child {
+            border-bottom: none;
+        }
+
+        .notif-row:hover {
+            background: var(--bg-hover);
+        }
+
+        .notif-row.unread {
+            background: rgba(124, 58, 237, 0.06);
+        }
+
+        .notif-row.unread:hover {
+            background: rgba(124, 58, 237, 0.1);
+        }
+
+        /* Avatar stack for grouped likes */
+        .notif-avatars {
+            position: relative;
+            width: 44px;
+            height: 44px;
+            flex-shrink: 0;
+        }
+
+        .notif-avatars .notif-avatar {
+            position: absolute;
+            border: 2px solid var(--bg-card);
+        }
+
+        .notif-avatars .notif-avatar:nth-child(1) { top: 0; left: 0; z-index: 3; }
+        .notif-avatars .notif-avatar:nth-child(2) { top: 6px; left: 12px; z-index: 2; }
+        .notif-avatars .notif-avatar:nth-child(3) { top: 12px; left: 24px; z-index: 1; }
+
+        .notif-avatars.single .notif-avatar {
+            position: relative;
+            top: auto;
+            left: auto;
+            border: none;
+        }
+
+        .notif-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            overflow: hidden;
+            background: var(--bg-elevated);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+
+        .notif-avatars .notif-avatar {
+            width: 30px;
+            height: 30px;
+        }
+
+        .notif-avatars.single .notif-avatar {
+            width: 44px;
+            height: 44px;
+        }
+
+        .notif-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .notif-avatar-letter {
+            font-size: 13px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .notif-avatars.single .notif-avatar-letter {
+            font-size: 16px;
+        }
+
+        .notif-avatar-link {
+            display: block;
+            flex-shrink: 0;
+            text-decoration: none;
+        }
+
+        .notif-actor-link {
+            font-weight: 600;
+            color: var(--text-primary);
+            text-decoration: none;
+        }
+
+        .notif-actor-link:hover {
+            text-decoration: underline;
+        }
+
+        .notif-content {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .notif-message {
+            font-size: 13px;
+            color: var(--text-primary);
+            line-height: 1.4;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
+        .notif-time {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .notif-row.unread .notif-time::after {
+            content: '';
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            background: var(--brand-purple);
+            border-radius: 50%;
+            margin-left: 6px;
+            vertical-align: middle;
+        }
+
+        .notif-thumb {
+            width: 44px;
+            height: 44px;
+            border-radius: var(--radius-sm);
+            overflow: hidden;
+            flex-shrink: 0;
+            background: var(--bg-elevated);
+        }
+
+        .notif-thumb img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .notif-actions {
+            display: flex;
+            gap: 6px;
+            flex-shrink: 0;
+            margin-left: 8px;
+            align-items: center;
+        }
+
+        .notif-action-btn {
+            padding: 5px 12px;
+            border-radius: var(--radius-pill);
+            border: none;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--duration) var(--ease-out);
+            white-space: nowrap;
+        }
+
+        .notif-action-accept {
+            background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+            color: #fff;
+        }
+
+        .notif-action-accept:hover {
+            opacity: 0.85;
+        }
+
+        .notif-action-dismiss {
+            background: var(--bg-elevated);
+            color: var(--text-muted);
+        }
+
+        .notif-action-dismiss:hover {
+            background: var(--bg-hover);
+            color: var(--text-secondary);
+        }
+
+        .notif-action-done {
+            background: var(--bg-elevated);
+            color: var(--text-muted);
+            cursor: default;
+        }
+
+        .notif-desc-box {
+            margin-top: 8px;
+            padding: 8px 10px;
+            background: var(--bg-elevated);
+            border-radius: var(--radius-sm);
+            border-left: 2px solid var(--brand-purple);
+            font-size: 12px;
+            color: var(--text-secondary);
+            line-height: 1.5;
+        }
+
+        .notif-desc-text {
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 2;
+            overflow: hidden;
+        }
+
+        .notif-desc-box.expanded .notif-desc-text {
+            -webkit-line-clamp: unset;
+            overflow: visible;
+        }
+
+        .notif-show-more {
+            background: none;
+            border: none;
+            color: var(--text-brand);
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            padding: 4px 0 0;
+            display: block;
+            font-family: inherit;
+        }
+
+        .notif-show-more:hover {
+            opacity: 0.75;
+        }
+
+        .header-login-btn {
+            padding: 8px 18px;
+            background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+            border-radius: var(--radius-pill);
+            color: #fff;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 600;
+            transition: all var(--duration) var(--ease-out);
+            box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
+        }
+
+        .header-login-btn:hover {
+            box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4);
+            transform: translateY(-1px);
+        }
+
+        /* ============ TOP NAVIGATION ============ */
+        nav:not(.bottom-nav) {
+            background: rgba(17, 17, 24, 0.6);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            padding: 12px 24px;
+            display: flex;
+            gap: 6px;
+            overflow-x: auto;
+            border-bottom: 1px solid var(--border-subtle);
+            scrollbar-width: none;
+        }
+
+        nav:not(.bottom-nav)::-webkit-scrollbar {
+            display: none;
+        }
+
+        nav:not(.bottom-nav) a {
+            color: var(--text-muted);
+            text-decoration: none;
+            padding: 8px 18px;
+            border-radius: var(--radius-pill);
+            font-size: 13px;
+            font-weight: 500;
+            white-space: nowrap;
+            transition: all var(--duration) var(--ease-out);
+            border: 1px solid transparent;
+            position: relative;
+        }
+
+        nav:not(.bottom-nav) a:hover {
+            color: var(--text-secondary);
+            background: var(--bg-elevated);
+            border-color: var(--border-subtle);
+        }
+
+        nav:not(.bottom-nav) a.active {
+            background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+            color: #fff;
+            font-weight: 600;
+            border-color: transparent;
+            box-shadow: 0 2px 16px rgba(124, 58, 237, 0.3);
+        }
+
+        /* ============ MAIN CONTENT ============ */
+        .main-content {
+            padding: 24px 20px;
+            max-width: 640px;
+            margin: 0 auto;
+        }
+
+        /* ============ PAGE HEADER ============ */
+        .page-header {
+            margin-bottom: 24px;
+        }
+
+        .page-header h1 {
+            font-size: 28px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            color: var(--text-primary);
+        }
+
+        /* ============ VIEW INFO BADGE ============ */
+        .view-info {
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-left: 3px solid var(--brand-purple);
+            padding: 14px 18px;
+            border-radius: var(--radius-md);
+            margin-bottom: 24px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .view-info strong {
+            color: var(--text-brand);
+            display: block;
+            margin-bottom: 4px;
+            font-weight: 600;
+        }
+
+        .view-info code {
+            background: var(--bg-elevated);
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 12px;
+            color: var(--text-primary);
+            border: 1px solid var(--border-subtle);
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+        }
+
+        /* ============ SEARCH BAR ============ */
+        .search-bar {
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-pill);
+            padding: 14px 20px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            transition: all var(--duration) var(--ease-out);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .search-bar:focus-within {
+            border-color: var(--brand-purple);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15), var(--shadow-md);
+        }
+
+        .search-bar input {
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 15px;
+            width: 100%;
+            outline: none;
+        }
+
+        .search-bar input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .search-icon {
+            color: var(--text-muted);
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+
+        /* ============ GYM CARDS ============ */
+        .gym-list {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .gym-list > a {
+            text-decoration: none;
+        }
+
+        .gym-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-xl);
+            padding: 22px;
+            transition: all var(--duration) var(--ease-out);
+            position: relative;
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .gym-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, var(--brand-purple), var(--brand-blue), var(--brand-cyan));
+            opacity: 0;
+            transition: opacity var(--duration) var(--ease-out);
+        }
+
+        .gym-card:hover {
+            border-color: var(--border-hover);
+            transform: translateY(-2px) scale(1.01);
+            box-shadow: var(--shadow-lg), var(--shadow-glow-hover);
+        }
+
+        .gym-card:hover::before {
+            opacity: 1;
+        }
+
+        .gym-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+
+        .gym-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+            letter-spacing: -0.2px;
+        }
+
+        .gym-address {
+            font-size: 14px;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .gym-distance {
+            font-size: 13px;
+            color: var(--text-brand);
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        /* ============ STATUS BADGES ============ */
+        .status-badge {
+            padding: 6px 16px;
+            border-radius: var(--radius-pill);
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.2px;
+            transition: all var(--duration) var(--ease-out);
+        }
+
+        .status-enrolled {
+            background: var(--brand-purple-muted);
+            color: var(--text-brand);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+        }
+
+        .status-enroll {
+            background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+            color: #fff;
+            border: none;
+            box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
+        }
+
+        .status-enroll:hover {
+            box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4);
+        }
+
+        /* ============ STAT BOXES ============ */
+        .gym-stats {
+            display: flex;
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .stat-box {
+            flex: 1;
+            background: var(--bg-elevated);
+            border-radius: var(--radius-md);
+            padding: 14px 16px;
+            border: 1px solid var(--border-subtle);
+            transition: all var(--duration) var(--ease-out);
+        }
+
+        .stat-box:hover {
+            border-color: var(--border-hover);
+        }
+
+        .stat-box.activity {
+            background: linear-gradient(135deg, #2d1810, #1a1020);
+            border-color: rgba(251, 191, 36, 0.12);
+        }
+
+        .stat-label {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-box.activity .stat-label {
+            color: #d4a574;
+        }
+
+        .stat-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--text-primary);
+            letter-spacing: -0.3px;
+        }
+
+        .stat-sublabel {
+            font-size: 12px;
+            color: var(--text-brand);
+            margin-top: 2px;
+            font-weight: 500;
+        }
+
+        .stat-box.activity .stat-sublabel {
+            color: #fbbf24;
+        }
+
+        .stat-value-text {
+            font-size: 16px;
+            font-weight: 700;
+            letter-spacing: -0.2px;
+            line-height: 1.3;
+        }
+
+        /* ============ EMPTY STATE ============ */
+        .empty-state {
+            text-align: center;
+            padding: 64px 24px;
+            color: var(--text-muted);
+        }
+
+        .empty-state-icon {
+            font-size: 56px;
+            margin-bottom: 20px;
+            filter: grayscale(0.3);
+        }
+
+        .empty-state p {
+            font-size: 15px;
+            max-width: 300px;
+            margin: 0 auto;
+            line-height: 1.6;
+            color: var(--text-secondary);
+        }
+
+        /* ============ DETAIL PAGE ============ */
+        .detail-section {
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-xl);
+            padding: 24px;
+            margin-bottom: 16px;
+            box-shadow: var(--shadow-sm);
+        }
+
+        .detail-section h2 {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-brand);
+            margin-bottom: 16px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+
+        .detail-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 14px 0;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .detail-row:last-child {
+            border-bottom: none;
+            padding-bottom: 0;
+        }
+
+        .detail-row:first-child {
+            padding-top: 0;
+        }
+
+        .detail-label {
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 400;
+        }
+
+        .detail-value {
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .detail-value a {
+            color: var(--text-brand);
+            text-decoration: none;
+            transition: color var(--duration) var(--ease-out);
+        }
+
+        .detail-value a:hover {
+            color: var(--brand-purple);
+        }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-brand);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            margin-top: 24px;
+            padding: 10px 20px;
+            border-radius: var(--radius-pill);
+            background: var(--brand-purple-muted);
+            border: 1px solid rgba(124, 58, 237, 0.2);
+            transition: all var(--duration) var(--ease-out);
+        }
+
+        .back-link:hover {
+            background: rgba(124, 58, 237, 0.2);
+            border-color: var(--brand-purple);
+            box-shadow: var(--shadow-glow);
+            transform: translateX(-4px);
+        }
+
+        /* ============ BOTTOM NAVIGATION ============ */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(17, 17, 24, 0.85);
+            backdrop-filter: blur(24px);
+            -webkit-backdrop-filter: blur(24px);
+            border-top: 1px solid var(--border-subtle);
+            padding: 10px 20px 24px;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            z-index: 100;
+        }
+
+        .bottom-nav a {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 11px;
+            font-weight: 500;
+            transition: all var(--duration) var(--ease-out);
+            padding: 4px 8px;
+            border-radius: var(--radius-md);
+        }
+
+        .bottom-nav a:hover {
+            color: var(--text-secondary);
+        }
+
+        .bottom-nav a.active {
+            color: var(--text-primary);
+        }
+
+        .bottom-nav a.active .nav-icon {
+            transform: scale(1.1);
+        }
+
+        .bottom-nav .nav-icon {
+            font-size: 22px;
+            transition: transform var(--duration) var(--ease-out);
+        }
+
+        .fab-button {
+            width: 52px;
+            height: 52px;
+            background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
+            color: #fff;
+            font-weight: 300;
+            box-shadow: 0 4px 24px rgba(124, 58, 237, 0.4);
+            transition: all var(--duration) var(--ease-out);
+            margin-top: -16px;
+        }
+
+        .fab-button:hover {
+            transform: scale(1.08) translateY(-2px);
+            box-shadow: 0 6px 32px rgba(124, 58, 237, 0.5);
+        }
+
+        .fab-button:active {
+            transform: scale(0.95);
+        }
+
+        /* ============ CREATE POST POPUP ============ */
+        .popup-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            z-index: 200;
+            opacity: 0;
+            visibility: hidden;
+            transition: all var(--duration) var(--ease-out);
+        }
+
+        .popup-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .create-popup {
+            position: fixed;
+            bottom: 100px;
+            left: 50%;
+            transform: translateX(-50%) translateY(20px);
+            background: #ffffff;
+            border-radius: var(--radius-2xl);
+            padding: 8px;
+            min-width: 200px;
+            z-index: 201;
+            opacity: 0;
+            visibility: hidden;
+            transition: all var(--duration) var(--ease-out);
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .create-popup.active {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        .popup-option {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            padding: 14px 18px;
+            border-radius: var(--radius-lg);
+            text-decoration: none;
+            transition: all var(--duration) var(--ease-out);
+            cursor: pointer;
+        }
+
+        .popup-option:hover {
+            background: rgba(0, 0, 0, 0.05);
+        }
+
+        .popup-option-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: #fff;
+            flex-shrink: 0;
+        }
+
+        .popup-option-icon.blue {
+            background: linear-gradient(135deg, #3b82f6, #06b6d4);
+        }
+
+        .popup-option-icon.purple {
+            background: linear-gradient(135deg, #7c3aed, #a855f7);
+        }
+
+        .popup-option-icon.orange {
+            background: linear-gradient(135deg, #f97316, #fb923c);
+        }
+
+        .popup-option-icon.green {
+            background: linear-gradient(135deg, #22c55e, #4ade80);
+        }
+
+        .popup-option-text {
+            font-size: 15px;
+            font-weight: 600;
+            color: #1a1a1a;
+        }
+
+        .fab-button.active {
+            transform: rotate(45deg);
+        }
+
+        /* ============ QUICK CHECK-IN MODAL ============ */
+        .checkin-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--bg-surface);
+            z-index: 300;
+            opacity: 0;
+            visibility: hidden;
+            transition: all var(--duration) var(--ease-out);
+            overflow-y: auto;
+        }
+
+        .checkin-modal.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .checkin-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky;
+            top: 0;
+            background: var(--bg-surface);
+            z-index: 10;
+        }
+
+        .checkin-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .checkin-close {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 20px;
+            color: var(--text-secondary);
+            transition: all var(--duration) var(--ease-out);
+        }
+
+        .checkin-close:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .checkin-content {
+            padding: 20px;
+            max-width: 500px;
+            margin: 0 auto;
+        }
+
+        .camera-container {
+            aspect-ratio: 4/5;
+            background: var(--bg-card);
+            border: 2px dashed var(--border-default);
+            border-radius: var(--radius-xl);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all var(--duration) var(--ease-out);
+            overflow: hidden;
+            position: relative;
+            margin-bottom: 24px;
+        }
+
+        .camera-container:hover {
+            border-color: var(--border-hover);
+            background: var(--bg-elevated);
+        }
+
+        .camera-container.has-photo {
+            border-style: solid;
+            border-color: var(--brand-purple);
+        }
+
+        .camera-icon {
+            font-size: 48px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .camera-text {
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        .camera-container img,
+        .camera-container video {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .camera-placeholder {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .camera-container.has-photo .camera-placeholder {
+            display: none;
+        }
+
+        .retake-btn {
+            position: absolute;
+            bottom: 12px;
+            right: 12px;
+            padding: 8px 16px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            border: none;
+            border-radius: var(--radius-pill);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            display: none;
+        }
+
+        .camera-container.has-photo .retake-btn {
+            display: block;
+        }
+
+        .checkin-form-group {
+            margin-bottom: 20px;
+        }
+
+        .checkin-label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 10px;
+        }
+
+        .checkin-label-icon {
+            font-size: 16px;
+        }
+
+        .checkin-select {
+            width: 100%;
+            padding: 14px 18px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            color: var(--text-primary);
+            font-family: 'Inter', sans-serif;
+            font-size: 15px;
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%239898a8' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 16px center;
+            transition: all var(--duration) var(--ease-out);
+        }
+
+        .checkin-select:focus {
+            outline: none;
+            border-color: var(--brand-purple);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+        }
+
+        .checkin-select option {
+            background: var(--bg-card);
+            color: var(--text-primary);
+        }
+
+        .checkin-btn {
+            width: 100%;
+            padding: 16px 24px;
+            background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+            border: none;
+            border-radius: var(--radius-lg);
+            color: #fff;
+            font-family: 'Inter', sans-serif;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--duration) var(--ease-out);
+            box-shadow: 0 4px 16px rgba(124, 58, 237, 0.3);
+            margin-top: 8px;
+        }
+
+        .checkin-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(124, 58, 237, 0.4);
+        }
+
+        .checkin-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* Hidden file input */
+        #cameraInput {
+            display: none;
+        }
+
+        /* ============ CREATE POST MODAL ============ */
+        .post-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.6);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            z-index: 299;
+            opacity: 0;
+            visibility: hidden;
+            transition: all var(--duration) var(--ease-out);
+        }
+
+        .post-modal-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .post-modal {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0.95);
+            width: calc(100% - 32px);
+            max-width: 580px;
+            max-height: calc(100vh - 100px);
+            background: var(--bg-surface);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-2xl);
+            z-index: 300;
+            opacity: 0;
+            visibility: hidden;
+            transition: all var(--duration) var(--ease-out);
+            overflow-y: auto;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .post-modal.active {
+            opacity: 1;
+            visibility: visible;
+            transform: translate(-50%, -50%) scale(1);
+        }
+
+        .post-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-subtle);
+            position: sticky;
+            top: 0;
+            background: var(--bg-surface);
+            border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+            z-index: 10;
+        }
+
+        .post-modal-close {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: none;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 24px;
+            color: var(--text-secondary);
+            transition: all var(--duration) var(--ease-out);
+        }
+
+        .post-modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .post-modal-drafts {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--brand-cyan);
+            cursor: pointer;
+        }
+
+        .post-modal-content {
+            padding: 20px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .post-compose-area {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .post-compose-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: var(--bg-elevated);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 18px;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+            color: #fff;
+        }
+
+        .post-compose-avatar img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+        }
+
+        .post-compose-input {
+            flex: 1;
+        }
+
+        .post-compose-textarea {
+            width: 100%;
+            background: none;
+            border: none;
+            color: var(--text-primary);
+            font-size: 18px;
+            font-family: inherit;
+            resize: none;
+            min-height: 120px;
+            outline: none;
+            line-height: 1.5;
+        }
+
+        .post-compose-textarea::placeholder {
+            color: var(--text-muted);
+        }
+
+        /* Reply Restriction */
+        .post-reply-restriction {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 12px 0;
+            border-bottom: 1px solid var(--border-subtle);
+            cursor: pointer;
+            transition: color var(--duration);
+        }
+
+        .post-reply-restriction:hover {
+            color: var(--brand-cyan);
+        }
+
+        .post-reply-icon {
+            font-size: 16px;
+            color: var(--brand-cyan);
+        }
+
+        .post-reply-text {
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--brand-cyan);
+        }
+
+        /* Media Preview */
+        .post-media-preview {
+            display: none;
+            margin-top: 16px;
+            position: relative;
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+        }
+
+        .post-media-preview.has-media {
+            display: block;
+        }
+
+        .post-media-preview img,
+        .post-media-preview video {
+            width: 100%;
+            max-height: 300px;
+            object-fit: cover;
+            border-radius: var(--radius-xl);
+        }
+
+        .post-media-remove {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.7);
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Link Preview */
+        .post-link-preview {
+            display: none;
+            margin-top: 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            padding: 12px 16px;
+        }
+
+        .post-link-preview.has-link {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .post-link-url {
+            font-size: 14px;
+            color: var(--brand-cyan);
+            word-break: break-all;
+            flex: 1;
+        }
+
+        .post-link-remove {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 18px;
+            padding: 4px;
+        }
+
+        /* Poll Section */
+        .post-poll-section {
+            display: none;
+            margin-top: 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-xl);
+            padding: 16px;
+        }
+
+        .post-poll-section.active {
+            display: block;
+        }
+
+        .post-poll-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .post-poll-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .post-poll-name-input {
+            flex: 1;
+            background: var(--bg-elevated, #1a1a1a);
+            border: 1px solid var(--border-subtle, #333);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+            outline: none;
+            margin-right: 8px;
+        }
+        .post-poll-name-input:focus {
+            border-color: var(--brand-cyan, #06b6d4);
+        }
+        .post-poll-name-input::placeholder {
+            color: var(--text-muted, #888);
+            font-weight: 400;
+        }
+
+        .post-poll-remove {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 18px;
+        }
+
+        .post-poll-options {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .post-poll-option-input {
+            width: 100%;
+            padding: 12px 16px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            color: var(--text-primary);
+            font-size: 14px;
+            font-family: inherit;
+        }
+
+        .post-poll-option-input:focus {
+            outline: none;
+            border-color: var(--brand-cyan);
+        }
+
+        .post-poll-option-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .post-poll-add-option {
+            padding: 12px 16px;
+            background: none;
+            border: 1px dashed var(--border-default);
+            border-radius: var(--radius-lg);
+            color: var(--text-muted);
+            font-size: 14px;
+            cursor: pointer;
+            transition: all var(--duration);
+        }
+
+        .post-poll-add-option:hover {
+            border-color: var(--brand-cyan);
+            color: var(--brand-cyan);
+        }
+
+        .post-poll-duration {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .post-poll-duration-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .post-poll-duration-select {
+            padding: 8px 12px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-md);
+            color: var(--text-primary);
+            font-size: 13px;
+        }
+
+        /* Bottom Toolbar */
+        .post-toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 0;
+            margin-top: 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .post-toolbar-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .post-toolbar-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: none;
+            border: none;
+            color: var(--brand-cyan);
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--duration);
+        }
+
+        .post-toolbar-btn:hover {
+            background: var(--bg-elevated);
+        }
+
+        .post-toolbar-btn.active {
+            background: rgba(6, 182, 212, 0.2);
+        }
+
+        .post-submit-btn {
+            padding: 12px 24px;
+            background: var(--bg-elevated);
+            border: none;
+            border-radius: var(--radius-pill);
+            color: var(--text-muted);
+            font-size: 15px;
+            font-weight: 600;
+            cursor: not-allowed;
+            transition: all var(--duration);
+        }
+
+        .post-submit-btn.enabled {
+            background: var(--brand-cyan);
+            color: #000;
+            cursor: pointer;
+        }
+
+        .post-submit-btn.enabled:hover {
+            background: #0891b2;
+        }
+
+        /* Hidden file input */
+        #postMediaInput {
+            display: none;
+        }
+
+        /* Link input modal */
+        .link-input-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 400;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .link-input-overlay.active {
+            display: flex;
+        }
+
+        .link-input-modal {
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-xl);
+            padding: 24px;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .link-input-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 16px;
+        }
+
+        .link-input-field {
+            width: 100%;
+            padding: 14px;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            color: var(--text-primary);
+            font-size: 14px;
+            margin-bottom: 16px;
+        }
+
+        .link-input-field:focus {
+            outline: none;
+            border-color: var(--brand-cyan);
+        }
+
+        .link-input-buttons {
+            display: flex;
+            gap: 12px;
+        }
+
+        .link-input-cancel,
+        .link-input-add {
+            flex: 1;
+            padding: 12px;
+            border-radius: var(--radius-lg);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        .link-input-cancel {
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-default);
+            color: var(--text-secondary);
+        }
+
+        .link-input-add {
+            background: var(--brand-cyan);
+            border: none;
+            color: #000;
+        }
+
+        /* ============ PR MODAL ============ */
+        .pr-modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            z-index: 400;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .pr-modal-overlay.active {
+            display: flex;
+        }
+
+        .pr-modal {
+            background: var(--bg-surface);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-2xl);
+            width: 100%;
+            max-width: 440px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+
+        .pr-modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 18px 20px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .pr-modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .pr-modal-close {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: none;
+            border: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 24px;
+            color: var(--text-secondary);
+            transition: all var(--duration);
+        }
+
+        .pr-modal-close:hover {
+            color: var(--text-primary);
+            background: var(--bg-elevated);
+        }
+
+        .pr-modal-content {
+            padding: 20px;
+        }
+
+        .pr-form-group {
+            margin-bottom: 16px;
+        }
+
+        .pr-form-row {
+            display: flex;
+            gap: 12px;
+        }
+
+        .pr-form-row .pr-form-group {
+            flex: 1;
+        }
+
+        .pr-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+        }
+
+        .pr-input,
+        .pr-select {
+            width: 100%;
+            padding: 14px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            color: var(--text-primary);
+            font-size: 15px;
+            font-family: inherit;
+            transition: all var(--duration);
+        }
+
+        .pr-input:focus,
+        .pr-select:focus {
+            outline: none;
+            border-color: var(--brand-purple);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+        }
+
+        .pr-input::placeholder {
+            color: var(--text-muted);
+        }
+
+        .pr-select {
+            cursor: pointer;
+            appearance: none;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='%239898a8' viewBox='0 0 16 16'%3E%3Cpath d='M4 6l4 4 4-4'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 16px center;
+        }
+
+        .pr-exercise-search {
+            width: 100%;
+            padding: 14px 16px 14px 42px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            color: var(--text-primary);
+            font-size: 15px;
+            font-family: inherit;
+            outline: none;
+            transition: all var(--duration);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' fill='%235a5a6e' viewBox='0 0 24 24'%3E%3Cpath d='M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z' stroke='%235a5a6e' stroke-width='2' fill='none'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: 14px center;
+            box-sizing: border-box;
+        }
+
+        .pr-exercise-search:focus {
+            border-color: var(--brand-purple);
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+        }
+
+        .pr-exercise-search::placeholder {
+            color: var(--text-muted);
+        }
+
+        .pr-exercise-results {
+            max-height: 200px;
+            overflow-y: auto;
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-lg);
+            background: var(--bg-card);
+            margin-top: 4px;
+            display: none;
+        }
+
+        .pr-exercise-results.open {
+            display: block;
+        }
+
+        .pr-exercise-category {
+            font-size: 11px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 10px 16px 4px;
+        }
+
+        .pr-exercise-option {
+            padding: 10px 16px;
+            font-size: 15px;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+
+        .pr-exercise-option:hover {
+            background: var(--bg-elevated);
+            color: var(--brand-purple);
+        }
+
+        .pr-exercise-selected {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 14px 16px;
+            background: var(--bg-card);
+            border: 1px solid var(--brand-purple);
+            border-radius: var(--radius-lg);
+            font-size: 15px;
+            color: var(--text-primary);
+        }
+
+        .pr-exercise-selected span {
+            flex: 1;
+        }
+
+        .pr-exercise-selected-clear {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 20px;
+            cursor: pointer;
+            padding: 0 4px;
+            line-height: 1;
+        }
+
+        .pr-exercise-selected-clear:hover {
+            color: var(--text-primary);
+        }
+
+        .pr-video-upload {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 32px;
+            background: var(--bg-card);
+            border: 2px dashed var(--border-default);
+            border-radius: var(--radius-xl);
+            cursor: pointer;
+            transition: all var(--duration);
+        }
+
+        .pr-video-upload:hover {
+            border-color: var(--brand-purple);
+            background: var(--bg-elevated);
+        }
+
+        .pr-video-icon {
+            font-size: 32px;
+            margin-bottom: 8px;
+        }
+
+        .pr-video-text {
+            font-size: 14px;
+            color: var(--text-muted);
+        }
+
+        .pr-video-preview {
+            display: none;
+            position: relative;
+            border-radius: var(--radius-xl);
+            overflow: hidden;
+        }
+
+        .pr-video-preview.has-video {
+            display: block;
+        }
+
+        .pr-video-preview video {
+            width: 100%;
+            max-height: 200px;
+            border-radius: var(--radius-xl);
+        }
+
+        .pr-video-remove {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.7);
+            border: none;
+            color: #fff;
+            cursor: pointer;
+            font-size: 18px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .pr-checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .pr-checkbox-group input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--brand-purple);
+            cursor: pointer;
+        }
+
+        .pr-checkbox-group label {
+            font-size: 14px;
+            color: var(--text-secondary);
+            cursor: pointer;
+        }
+
+        .pr-submit-btn {
+            width: 100%;
+            padding: 16px 24px;
+            background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+            border: none;
+            border-radius: var(--radius-lg);
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--duration);
+            box-shadow: 0 4px 16px rgba(124, 58, 237, 0.3);
+        }
+
+        .pr-submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(124, 58, 237, 0.4);
+        }
+
+        .pr-submit-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        /* ============ POST PR PREVIEW ============ */
+        .post-pr-preview {
+            display: none;
+            position: relative;
+            margin-top: 16px;
+        }
+
+        .post-pr-preview.has-pr {
+            display: block;
+        }
+
+        .post-pr-card {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: linear-gradient(135deg, #0d2818, #1a3a2a);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: var(--radius-lg);
+            padding: 16px 20px;
+        }
+
+        .post-pr-card-left {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .post-pr-label {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.6);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .post-pr-exercise {
+            font-size: 18px;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .post-pr-card-right {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 4px;
+        }
+
+        .post-pr-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #22c55e;
+        }
+
+        .post-pr-badge {
+            font-size: 12px;
+            font-weight: 600;
+            color: #22c55e;
+        }
+
+        .post-pr-remove {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: var(--bg-elevated);
+            border: 1px solid var(--border-default);
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all var(--duration);
+        }
+
+        .post-pr-remove:hover {
+            background: #ef4444;
+            border-color: #ef4444;
+            color: #fff;
+        }
+
+        /* ============ SPACER ============ */
+        .bottom-spacer {
+            height: 100px;
+        }
+
+        /* ============ ACTIVE WORKOUT BAR ============ */
+        .active-workout-bar {
+            position: fixed;
+            bottom: 80px;
+            left: 16px;
+            right: 16px;
+            background: linear-gradient(135deg, #1a2e1a, #0f1f0f);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            border-radius: var(--radius-xl);
+            padding: 12px 16px;
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            z-index: 99;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+            animation: slideUp 0.3s var(--ease-out);
+        }
+
+        .active-workout-bar.visible {
+            display: flex;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .active-workout-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .active-workout-pulse {
+            width: 10px;
+            height: 10px;
+            background: #22c55e;
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% {
+                opacity: 0.6;
+                transform: scale(1.2);
+            }
+        }
+
+        .active-workout-text {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .active-workout-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #22c55e;
+        }
+
+        .active-workout-timer {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .active-workout-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .active-workout-return {
+            padding: 10px 20px;
+            background: #22c55e;
+            border: none;
+            border-radius: var(--radius-pill);
+            color: #000;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--duration) var(--ease-out);
+        }
+
+        .active-workout-clear {
+            padding: 10px 16px;
+            background: transparent;
+            border: 1px solid rgba(239, 68, 68, 0.5);
+            border-radius: var(--radius-pill);
+            color: #ef4444;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all var(--duration) var(--ease-out);
+        }
+
+        .active-workout-clear:hover {
+            background: rgba(239, 68, 68, 0.1);
+            border-color: #ef4444;
+        }
+
+        .active-workout-return:hover {
+            background: #16a34a;
+            transform: scale(1.05);
+        }
+
+        /* ============ UTILITY / ANIMATIONS ============ */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .gym-card,
+        .detail-section {
+            animation: fadeIn 0.4s var(--ease-out) both;
+        }
+
+        .gym-list .gym-card:nth-child(1),
+        .gym-list > a:nth-child(1) .gym-card { animation-delay: 0s; }
+        .gym-list .gym-card:nth-child(2),
+        .gym-list > a:nth-child(2) .gym-card { animation-delay: 0.05s; }
+        .gym-list .gym-card:nth-child(3),
+        .gym-list > a:nth-child(3) .gym-card { animation-delay: 0.1s; }
+        .gym-list .gym-card:nth-child(4),
+        .gym-list > a:nth-child(4) .gym-card { animation-delay: 0.15s; }
+        .gym-list .gym-card:nth-child(5),
+        .gym-list > a:nth-child(5) .gym-card { animation-delay: 0.2s; }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--bg-elevated);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--bg-hover);
+        }
+
+        /* Selection highlight */
+        ::selection {
+            background: rgba(124, 58, 237, 0.3);
+            color: #fff;
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <header class="header">
+        <a href="{% url 'home' %}" class="logo-container" style="text-decoration:none;">
+            <div class="logo">S</div>
+            <span class="logo-text">Spottr</span>
+        </a>
+        <div class="header-right">
+            {% if user.is_authenticated %}
+            <a href="{% url 'workouts:streak_details' %}" class="streak-badge" style="text-decoration:none;color:inherit;">
+                <span>🔥</span>
+                <span>{{ user.current_streak }}</span>
+            </a>
+            <button class="notif-bell-btn" id="notifBellBtn" aria-label="Notifications">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                    <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                </svg>
+                <span class="notif-badge" id="notifBadge" style="display:none;"></span>
+            </button>
+            <a href="{% url 'accounts:profile' %}" class="header-user">
+                <div class="header-avatar">
+                    {% if user.avatar_url %}
+                    <img src="{{ user.avatar_url }}" alt="{{ user.username }}">
+                    {% else %}
+                    <span class="header-avatar-letter">{{ user.display_name|make_list|first|upper }}</span>
+                    {% endif %}
+                </div>
+                <span class="header-username">{{ user.username }}</span>
+            </a>
+            {% else %}
+            <a href="{% url 'accounts:login' %}" class="header-login-btn">Log In</a>
+            {% endif %}
+        </div>
+    </header>
+
+    <!-- Notification Panel -->
+    <div class="notif-overlay" id="notifOverlay"></div>
+    <div class="notif-panel" id="notifPanel">
+        <div class="notif-panel-header">
+            <h3 class="notif-panel-title">Notifications</h3>
+            <button class="notif-mark-all" id="notifMarkAll">Mark all as read</button>
+        </div>
+        <div class="notif-panel-body" id="notifPanelBody">
+            <div class="notif-loading">Loading...</div>
+        </div>
+    </div>
+
+
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <div class="bottom-spacer"></div>
+
+    <!-- Create Post Popup -->
+    <div class="popup-overlay" id="popupOverlay"></div>
+    <div class="create-popup" id="createPopup">
+        <a href="#" class="popup-option" id="quickCheckinBtn">
+            <div class="popup-option-icon blue">📍</div>
+            <span class="popup-option-text">Quick Check-in</span>
+        </a>
+        <a href="#" class="popup-option" id="createPostBtn">
+            <div class="popup-option-icon purple">📝</div>
+            <span class="popup-option-text">Post</span>
+        </a>
+        <a href="{% url 'workouts:log_workout' %}" class="popup-option">
+            <div class="popup-option-icon orange">🏋️</div>
+            <span class="popup-option-text">Log Workout</span>
+        </a>
+        <a href="#" class="popup-option" id="restDayBtn">
+            <div class="popup-option-icon green">😴</div>
+            <span class="popup-option-text">Rest Day</span>
+        </a>
+    </div>
+
+    <!-- Quick Check-in Modal -->
+    <div class="checkin-modal" id="checkinModal">
+        <div class="checkin-header">
+            <span class="checkin-title">Quick Check-in</span>
+            <button class="checkin-close" id="checkinClose">&times;</button>
+        </div>
+        <div class="checkin-content">
+            <form id="checkinForm">
+                {% csrf_token %}
+                <!-- Camera Area -->
+                <div class="camera-container" id="cameraContainer">
+                    <div class="camera-placeholder">
+                        <span class="camera-icon">📷</span>
+                        <span class="camera-text">Tap to take photo</span>
+                    </div>
+                    <img id="capturedPhoto" src="" alt="Captured photo">
+                    <button type="button" class="retake-btn" id="retakeBtn">Retake</button>
+                </div>
+                <input type="file" id="cameraInput" accept="image/*" capture="environment">
+
+                <!-- Gym Selection -->
+                <div class="checkin-form-group">
+                    <label class="checkin-label">
+                        <span class="checkin-label-icon">📍</span>
+                        Where are you working out?
+                    </label>
+                    <select class="checkin-select" id="gymSelect" name="gym" required>
+                        <option value="">Select gym...</option>
+                        {% for gym in all_gyms %}
+                        <option value="{{ gym.id }}">{{ gym.name }}</option>
+                        {% empty %}
+                        <option value="" disabled>No gyms available</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Activity Selection -->
+                <div class="checkin-form-group">
+                    <label class="checkin-label">
+                        <span class="checkin-label-icon">🏋️</span>
+                        What workout are you hitting?
+                    </label>
+                    <select class="checkin-select" id="activitySelect" name="activity" required>
+                        <option value="">Select activities...</option>
+                        <option value="chest">Chest</option>
+                        <option value="back">Back</option>
+                        <option value="shoulders">Shoulders</option>
+                        <option value="arms">Arms</option>
+                        <option value="legs">Legs</option>
+                        <option value="core">Core</option>
+                        <option value="cardio">Cardio</option>
+                        <option value="full_body">Full Body</option>
+                        <option value="push">Push</option>
+                        <option value="pull">Pull</option>
+                        <option value="upper_body">Upper Body</option>
+                        <option value="lower_body">Lower Body</option>
+                    </select>
+                </div>
+
+                <!-- Check-in Button -->
+                <button type="submit" class="checkin-btn" id="checkinSubmit">Check in</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Create Post Modal -->
+    <div class="post-modal-overlay" id="postModalOverlay"></div>
+    <div class="post-modal" id="postModal">
+        <div class="post-modal-header">
+            <button class="post-modal-close" id="postModalClose">&times;</button>
+            <span class="post-modal-drafts">Drafts</span>
+        </div>
+        <div class="post-modal-content">
+            <div class="post-compose-area">
+                <div class="post-compose-avatar">
+                    {% if user.is_authenticated and user.avatar_url %}
+                    <img src="{{ user.avatar_url }}" alt="{{ user.display_name }}">
+                    {% elif user.is_authenticated %}
+                    {{ user.display_name|make_list|first|upper }}
+                    {% else %}
+                    U
+                    {% endif %}
+                </div>
+                <div class="post-compose-input">
+                    <textarea class="post-compose-textarea" id="postTextarea" placeholder="What's happening?" maxlength="500"></textarea>
+                </div>
+            </div>
+
+            <!-- Visibility Setting -->
+            <div class="post-reply-restriction" id="replyRestrictionBtn">
+                <span class="post-reply-icon">&#127758;</span>
+                <span class="post-reply-text" id="replyRestrictionText">Everyone can see</span>
+            </div>
+
+            <!-- Media Preview -->
+            <div class="post-media-preview" id="postMediaPreview">
+                <img id="postMediaImg" src="" alt="Media preview">
+                <video id="postMediaVideo" src="" controls playsinline style="display:none;width:100%;max-height:300px;border-radius:12px;"></video>
+                <button class="post-media-remove" id="postMediaRemove">&times;</button>
+            </div>
+
+            <!-- Link Preview -->
+            <div class="post-link-preview" id="postLinkPreview">
+                <span class="post-link-url" id="postLinkUrl"></span>
+                <button class="post-link-remove" id="postLinkRemove">&times;</button>
+            </div>
+
+            <!-- Poll Section -->
+            <div class="post-poll-section" id="postPollSection">
+                <div class="post-poll-header">
+                    <input type="text" class="post-poll-name-input" id="pollNameInput" placeholder="Name poll" maxlength="200">
+                    <button class="post-poll-remove" id="postPollRemove">&times;</button>
+                </div>
+                <div class="post-poll-options" id="postPollOptions">
+                    <input type="text" class="post-poll-option-input" placeholder="Option 1" maxlength="100">
+                    <input type="text" class="post-poll-option-input" placeholder="Option 2" maxlength="100">
+                </div>
+                <button class="post-poll-add-option" id="addPollOption">+ Add option</button>
+                <div class="post-poll-duration">
+                    <span class="post-poll-duration-label">Poll duration:</span>
+                    <select class="post-poll-duration-select" id="pollDuration">
+                        <option value="0.5">30 minutes</option>
+                        <option value="1">1 hour</option>
+                        <option value="6">6 hours</option>
+                        <option value="12">12 hours</option>
+                        <option value="24" selected>1 day</option>
+                        <option value="72">3 days</option>
+                        <option value="168">7 days</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- PR Preview Section -->
+            <div class="post-pr-preview" id="postPrPreview">
+                <div class="post-pr-card">
+                    <div class="post-pr-card-left">
+                        <span class="post-pr-label">Personal Record</span>
+                        <span class="post-pr-exercise" id="postPrExercise">Squat</span>
+                    </div>
+                    <div class="post-pr-card-right">
+                        <span class="post-pr-value" id="postPrValue">500 lbs</span>
+                        <span class="post-pr-badge">&#8599; New PR</span>
+                    </div>
+                </div>
+                <button class="post-pr-remove" id="postPrRemove">&times;</button>
+            </div>
+
+            <!-- Bottom Toolbar -->
+            <div class="post-toolbar">
+                <div class="post-toolbar-actions">
+                    <button class="post-toolbar-btn" id="addMediaBtn" title="Add photo/video">&#128247;</button>
+                    <button class="post-toolbar-btn" id="addPollBtn" title="Create poll">&#128202;</button>
+                    <button class="post-toolbar-btn" id="addLinkBtn" title="Add link">&#128279;</button>
+                    <button class="post-toolbar-btn" id="addTagBtn" title="Add hashtag">#</button>
+                    <button class="post-toolbar-btn" id="addPrBtn" title="Log Personal Record">&#128170;</button>
+                    <button class="post-toolbar-btn" id="addEmojiBtn" title="Add emoji">&#128578;</button>
+                </div>
+                <button class="post-submit-btn" id="postSubmitBtn">Post</button>
+            </div>
+        </div>
+        <input type="file" id="postMediaInput" accept="image/*,video/*">
+    </div>
+
+    <!-- Link Input Modal -->
+    <div class="link-input-overlay" id="linkInputOverlay">
+        <div class="link-input-modal">
+            <div class="link-input-title">Add Link</div>
+            <input type="url" class="link-input-field" id="linkInputField" placeholder="https://...">
+            <div class="link-input-buttons">
+                <button class="link-input-cancel" id="linkInputCancel">Cancel</button>
+                <button class="link-input-add" id="linkInputAdd">Add Link</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PR Modal -->
+    <div class="pr-modal-overlay" id="prModalOverlay">
+        <div class="pr-modal">
+            <div class="pr-modal-header">
+                <span class="pr-modal-title">&#128170; Log Personal Record</span>
+                <button class="pr-modal-close" id="prModalClose">&times;</button>
+            </div>
+            <div class="pr-modal-content">
+                <div class="pr-form-group">
+                    <label class="pr-label">Exercise</label>
+                    <input type="hidden" id="prExerciseSelectedName" value="">
+                    <div class="pr-exercise-selected" id="prExerciseSelectedChip" style="display:none;">
+                        <span id="prExerciseSelectedLabel"></span>
+                        <button type="button" class="pr-exercise-selected-clear" onclick="clearPostPrExercise()">&times;</button>
+                    </div>
+                    <div id="prExerciseSearchWrap">
+                        <input type="text" class="pr-exercise-search" id="prExerciseSearch" placeholder="Search exercises..." oninput="onPostPrSearchInput()">
+                        <div class="pr-exercise-results" id="prExerciseResults"></div>
+                    </div>
+                </div>
+                <div class="pr-form-row">
+                    <div class="pr-form-group">
+                        <label class="pr-label" id="prValueLabel">Weight</label>
+                        <input type="text" class="pr-input" id="prValue" placeholder="e.g. 315">
+                    </div>
+                    <div class="pr-form-group">
+                        <label class="pr-label">Unit</label>
+                        <select class="pr-select" id="prUnit">
+                            <option value="lbs">lbs</option>
+                            <option value="kg">kg</option>
+                            <option value="min:sec">min:sec</option>
+                            <option value="reps">reps</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="pr-form-group">
+                    <label class="pr-label">Date Achieved</label>
+                    <input type="date" class="pr-input" id="prDate">
+                </div>
+                <button class="pr-submit-btn" id="prSubmitBtn">Attach to Post</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Workout Bar -->
+    <div class="active-workout-bar" id="activeWorkoutBar">
+        <div class="active-workout-info">
+            <div class="active-workout-pulse"></div>
+            <div class="active-workout-text">
+                <span class="active-workout-title">Workout in progress</span>
+                <span class="active-workout-timer" id="activeWorkoutTimer">0:00</span>
+            </div>
+        </div>
+        <div class="active-workout-buttons">
+            <button class="active-workout-return" id="returnToWorkout">Return</button>
+            <button class="active-workout-clear" id="clearWorkoutBar">Clear</button>
+        </div>
+    </div>
+
+    <nav class="bottom-nav">
+        <a href="/" {% if request.resolver_match.url_name == 'home' %}class="active"{% endif %}>
+            <span class="nav-icon">🏠</span>
+            <span>Feed</span>
+        </a>
+        <a href="{% url 'gyms:gym_list' %}" {% if request.resolver_match.app_name == 'gyms' %}class="active"{% endif %}>
+            <span class="nav-icon">📍</span>
+            <span>Gyms</span>
+        </a>
+        <a href="#" class="fab-button" id="fabButton">+</a>
+        <a href="{% url 'social:social' %}" {% if request.resolver_match.app_name == 'social' and request.resolver_match.url_name == 'social' %}class="active"{% endif %}>
+            <span class="nav-icon">👥</span>
+            <span>Social</span>
+        </a>
+        <a href="{% url 'social:leaderboard' %}" {% if request.resolver_match.url_name == 'leaderboard' %}class="active"{% endif %}>
+            <span class="nav-icon">🏆</span>
+            <span>Ranks</span>
+        </a>
+    </nav>
+
+    {% block extra_js %}{% endblock %}
+
+    <script>
+        // Search functionality
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.querySelector('.search-bar input');
+            if (searchInput) {
+                searchInput.addEventListener('input', function() {
+                    const searchTerm = this.value.toLowerCase();
+                    const gymCards = document.querySelectorAll('.gym-card');
+                    const gymLinks = document.querySelectorAll('.gym-list > a, .gym-list > .gym-card');
+
+                    gymLinks.forEach(function(item) {
+                        const card = item.classList.contains('gym-card') ? item : item.querySelector('.gym-card');
+                        if (card) {
+                            const gymName = card.querySelector('.gym-name')?.textContent.toLowerCase() || '';
+                            const gymAddress = card.querySelector('.gym-address')?.textContent.toLowerCase() || '';
+
+                            if (gymName.includes(searchTerm) || gymAddress.includes(searchTerm)) {
+                                item.style.display = '';
+                            } else {
+                                item.style.display = 'none';
+                            }
+                        }
+                    });
+
+                    // Show "no results" message if all cards are hidden
+                    const visibleCards = document.querySelectorAll('.gym-list > a:not([style*="display: none"]), .gym-list > .gym-card:not([style*="display: none"])');
+                    let noResultsMsg = document.querySelector('.no-results-message');
+
+                    if (visibleCards.length === 0 && searchTerm !== '') {
+                        // Use textContent for the user-supplied search term to prevent XSS
+                        const safeMsg = document.createElement('p');
+                        safeMsg.textContent = 'No gyms found matching "' + searchTerm + '"';
+                        if (!noResultsMsg) {
+                            noResultsMsg = document.createElement('div');
+                            noResultsMsg.className = 'no-results-message empty-state';
+                            noResultsMsg.innerHTML = '<div class="empty-state-icon">🔍</div>';
+                            noResultsMsg.appendChild(safeMsg);
+                            document.querySelector('.gym-list')?.appendChild(noResultsMsg);
+                        } else {
+                            const existingP = noResultsMsg.querySelector('p');
+                            if (existingP) existingP.textContent = 'No gyms found matching "' + searchTerm + '"';
+                            noResultsMsg.style.display = '';
+                        }
+                    } else if (noResultsMsg) {
+                        noResultsMsg.style.display = 'none';
+                    }
+                });
+            }
+
+            // FAB Button Popup Toggle
+            const fabButton = document.getElementById('fabButton');
+            const createPopup = document.getElementById('createPopup');
+            const popupOverlay = document.getElementById('popupOverlay');
+
+            function closeCreatePopup() {
+                fabButton.classList.remove('active');
+                createPopup.classList.remove('active');
+                popupOverlay.classList.remove('active');
+            }
+
+            if (fabButton && createPopup && popupOverlay) {
+                fabButton.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    fabButton.classList.toggle('active');
+                    createPopup.classList.toggle('active');
+                    popupOverlay.classList.toggle('active');
+                });
+
+                popupOverlay.addEventListener('click', closeCreatePopup);
+            }
+
+            // Quick Check-in Modal
+            const quickCheckinBtn = document.getElementById('quickCheckinBtn');
+            const checkinModal = document.getElementById('checkinModal');
+            const checkinClose = document.getElementById('checkinClose');
+            const cameraContainer = document.getElementById('cameraContainer');
+            const cameraInput = document.getElementById('cameraInput');
+            const capturedPhoto = document.getElementById('capturedPhoto');
+            const retakeBtn = document.getElementById('retakeBtn');
+            const checkinForm = document.getElementById('checkinForm');
+
+            if (quickCheckinBtn && checkinModal) {
+                // Open Quick Check-in modal
+                quickCheckinBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    closeCreatePopup();
+                    checkinModal.classList.add('active');
+                    // Directly open camera
+                    setTimeout(() => {
+                        cameraInput.click();
+                    }, 300);
+                });
+
+                // Close modal
+                checkinClose.addEventListener('click', function() {
+                    checkinModal.classList.remove('active');
+                    resetCheckinForm();
+                });
+
+                // Camera container click
+                cameraContainer.addEventListener('click', function() {
+                    if (!cameraContainer.classList.contains('has-photo')) {
+                        cameraInput.click();
+                    }
+                });
+
+                // Handle camera input change
+                cameraInput.addEventListener('change', function(e) {
+                    const file = e.target.files[0];
+                    if (file) {
+                        const reader = new FileReader();
+                        reader.onload = function(event) {
+                            capturedPhoto.src = event.target.result;
+                            cameraContainer.classList.add('has-photo');
+                        };
+                        reader.readAsDataURL(file);
+                    }
+                });
+
+                // Retake photo
+                retakeBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    cameraContainer.classList.remove('has-photo');
+                    capturedPhoto.src = '';
+                    cameraInput.value = '';
+                    cameraInput.click();
+                });
+
+                // Form submission
+                checkinForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+
+                    const gymSelect = document.getElementById('gymSelect');
+                    const activitySelect = document.getElementById('activitySelect');
+                    const hasPhoto = cameraContainer.classList.contains('has-photo');
+                    const submitBtn = document.getElementById('checkinSubmit');
+
+                    if (!hasPhoto) {
+                        alert('Please take a photo first!');
+                        return;
+                    }
+
+                    if (!gymSelect.value) {
+                        alert('Please select a gym!');
+                        return;
+                    }
+
+                    if (!activitySelect.value) {
+                        alert('Please select an activity!');
+                        return;
+                    }
+
+                    // Disable button while submitting
+                    submitBtn.disabled = true;
+                    submitBtn.textContent = 'Posting...';
+
+                    // Get form data
+                    const formData = new FormData();
+                    formData.append('gym', gymSelect.value);
+                    formData.append('activity', activitySelect.value);
+                    if (cameraInput.files[0]) {
+                        formData.append('photo', cameraInput.files[0]);
+                    }
+
+                    // Get CSRF token
+                    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+                                      document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
+
+                    // Send to backend API
+                    fetch('/social/checkin/create/', {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-CSRFToken': csrfToken
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            checkinModal.classList.remove('active');
+                            resetCheckinForm();
+                            // Redirect to feed to see the new post
+                            window.location.href = '/';
+                        } else {
+                            alert(data.error || 'Failed to post check-in');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Failed to post check-in. Please try again.');
+                    })
+                    .finally(() => {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = 'Check in';
+                    });
+                });
+
+                function resetCheckinForm() {
+                    cameraContainer.classList.remove('has-photo');
+                    capturedPhoto.src = '';
+                    cameraInput.value = '';
+                    document.getElementById('gymSelect').value = '';
+                    document.getElementById('activitySelect').value = '';
+                }
+            }
+
+            // ============ ACTIVE WORKOUT BAR ============
+            const activeWorkoutBar = document.getElementById('activeWorkoutBar');
+            const activeWorkoutTimer = document.getElementById('activeWorkoutTimer');
+            const returnToWorkoutBtn = document.getElementById('returnToWorkout');
+
+            function checkActiveWorkout() {
+                const activeWorkout = localStorage.getItem('activeWorkout');
+                if (!activeWorkout) return;
+
+                const workout = JSON.parse(activeWorkout);
+                const currentPath = window.location.pathname;
+
+                // Don't show bar if we're on the active workout page
+                if (currentPath.includes('/workouts/' + workout.id)) {
+                    activeWorkoutBar.classList.remove('visible');
+                    return;
+                }
+
+                // Show the bar
+                activeWorkoutBar.classList.add('visible');
+
+                // Update timer
+                updateActiveWorkoutTimer(workout.startTime);
+            }
+
+            function updateActiveWorkoutTimer(startTimeStr) {
+                const startTime = new Date(startTimeStr);
+                const now = new Date();
+                const diff = Math.floor((now - startTime) / 1000);
+                const minutes = Math.floor(diff / 60);
+                const seconds = diff % 60;
+                activeWorkoutTimer.textContent = minutes + ':' + (seconds < 10 ? '0' : '') + seconds;
+            }
+
+            // Check for active workout on page load
+            checkActiveWorkout();
+
+            // Update timer every second if bar is visible
+            setInterval(function() {
+                const activeWorkout = localStorage.getItem('activeWorkout');
+                if (activeWorkout && activeWorkoutBar.classList.contains('visible')) {
+                    const workout = JSON.parse(activeWorkout);
+                    updateActiveWorkoutTimer(workout.startTime);
+                }
+            }, 1000);
+
+            // Return to workout button
+            if (returnToWorkoutBtn) {
+                returnToWorkoutBtn.addEventListener('click', function() {
+                    const activeWorkout = localStorage.getItem('activeWorkout');
+                    if (activeWorkout) {
+                        const workout = JSON.parse(activeWorkout);
+                        window.location.href = '/workouts/' + workout.id + '/';
+                    }
+                });
+            }
+
+            // Clear workout button
+            const clearWorkoutBarBtn = document.getElementById('clearWorkoutBar');
+            if (clearWorkoutBarBtn) {
+                clearWorkoutBarBtn.addEventListener('click', function() {
+                    if (confirm('Are you sure you want to clear this workout? All progress will be lost.')) {
+                        const activeWorkout = localStorage.getItem('activeWorkout');
+                        if (activeWorkout) {
+                            const workout = JSON.parse(activeWorkout);
+                            const csrfToken = document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
+
+                            // Delete the workout from backend
+                            fetch('/workouts/' + workout.id + '/delete/', {
+                                method: 'POST',
+                                headers: {
+                                    'X-CSRFToken': csrfToken,
+                                },
+                                credentials: 'same-origin'
+                            })
+                            .finally(() => {
+                                // Clear localStorage and hide bar
+                                localStorage.removeItem('activeWorkout');
+                                activeWorkoutBar.classList.remove('visible');
+                            });
+                        }
+                    }
+                });
+            }
+
+            // ============ NOTIFICATIONS ============
+            (function() {
+                const bellBtn = document.getElementById('notifBellBtn');
+                const panel = document.getElementById('notifPanel');
+                const overlay = document.getElementById('notifOverlay');
+                const badge = document.getElementById('notifBadge');
+                const body = document.getElementById('notifPanelBody');
+                const markAllBtn = document.getElementById('notifMarkAll');
+                if (!bellBtn) return;
+
+                const csrfToken = document.cookie.split('; ').find(r => r.startsWith('csrftoken='))?.split('=')[1] || '';
+                let isOpen = false;
+
+                function openPanel() {
+                    isOpen = true;
+                    panel.classList.add('active');
+                    overlay.classList.add('active');
+                    loadNotifications();
+                }
+
+                function closePanel() {
+                    isOpen = false;
+                    panel.classList.remove('active');
+                    overlay.classList.remove('active');
+                }
+
+                bellBtn.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    if (isOpen) closePanel();
+                    else openPanel();
+                });
+
+                overlay.addEventListener('click', closePanel);
+
+                document.addEventListener('keydown', function(e) {
+                    if (e.key === 'Escape' && isOpen) closePanel();
+                });
+
+                function renderAvatar(actor) {
+                    if (actor.avatar_url) {
+                        return `<img src="${actor.avatar_url}" alt="${actor.username}">`;
+                    }
+                    const letter = (actor.display_name || actor.username || '?')[0].toUpperCase();
+                    return `<span class="notif-avatar-letter">${letter}</span>`;
+                }
+
+                function renderAvatarStack(actors, isSingle) {
+                    const cls = isSingle ? 'notif-avatars single' : 'notif-avatars';
+                    const primaryUsername = actors.length > 0 ? actors[0].username : '';
+                    const inner = `<div class="${cls}">${actors.map(a =>
+                        `<div class="notif-avatar">${renderAvatar(a)}</div>`
+                    ).join('')}</div>`;
+                    return primaryUsername
+                        ? `<a href="/accounts/profile/${primaryUsername}/" onclick="event.stopPropagation()" class="notif-avatar-link">${inner}</a>`
+                        : inner;
+                }
+
+                function renderDescriptionBox(description) {
+                    if (!description) return '';
+                    const desc = description.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    const isLong = description.length > 80;
+                    const showMoreBtn = isLong
+                        ? `<button class="notif-show-more" onclick="event.stopPropagation();var b=this.closest('.notif-desc-box');b.classList.toggle('expanded');this.textContent=b.classList.contains('expanded')?'show less':'show more'">show more</button>`
+                        : '';
+                    return `<div class="notif-desc-box${isLong ? '' : ' expanded'}"><span class="notif-desc-text">${desc}</span>${showMoreBtn}</div>`;
+                }
+
+                function renderActions(n) {
+                    const type = n.type;
+                    const targetType = n.target_type || '';
+                    const actors = n.actors || [];
+                    const actionStatus = n.action_status || 'pending';
+                    if (type === 'follow' && actors.length > 0) {
+                        const uid = actors[0].id;
+                        return `<div class="notif-actions"><button class="notif-action-btn notif-action-accept" onclick="event.stopPropagation();notifFollowBack('${uid}',this)">Follow Back</button></div>`;
+                    }
+                    if (type === 'workout_invite') {
+                        if (actionStatus === 'accepted') {
+                            return `<div class="notif-actions"><button class="notif-action-btn notif-action-done" disabled>Accepted</button></div>`;
+                        }
+                        return `<div class="notif-actions"><button class="notif-action-btn notif-action-accept" onclick="event.stopPropagation();notifAcceptWorkoutInvite('${n.target_id}',this)">Accept</button><button class="notif-action-btn notif-action-dismiss" onclick="event.stopPropagation();notifDeclineWorkoutInvite('${n.target_id}',this)">Decline</button></div>`;
+                    }
+                    if (type === 'join_request' && targetType === 'group') {
+                        if (actionStatus === 'accepted') {
+                            return `<div class="notif-actions"><button class="notif-action-btn notif-action-done" disabled>Accepted</button></div>`;
+                        }
+                        return `<div class="notif-actions"><button class="notif-action-btn notif-action-accept" onclick="event.stopPropagation();notifAcceptGroupJoin('${n.target_id}','${n.context_id}',this)">Accept</button><button class="notif-action-btn notif-action-dismiss" onclick="event.stopPropagation();notifDenyGroupJoin('${n.target_id}','${n.context_id}',this)">Decline</button></div>`;
+                    }
+                    if (type === 'join_request' && targetType === 'workout_invite') {
+                        if (actionStatus === 'accepted') {
+                            return `<div class="notif-actions"><button class="notif-action-btn notif-action-done" disabled>Accepted</button></div>`;
+                        }
+                        return `<div class="notif-actions"><button class="notif-action-btn notif-action-accept" onclick="event.stopPropagation();notifAcceptWorkoutJoin('${n.context_id}',this)">Accept</button><button class="notif-action-btn notif-action-dismiss" onclick="event.stopPropagation();notifDenyWorkoutJoin('${n.context_id}',this)">Decline</button></div>`;
+                    }
+                    return '';
+                }
+
+                function renderRow(n) {
+                    const unreadCls = n.is_read ? '' : ' unread';
+                    const actors = n.actors || [];
+                    const isSingle = actors.length <= 1;
+                    const avatarHtml = actors.length > 0
+                        ? renderAvatarStack(actors, isSingle)
+                        : `<div class="notif-avatars single"><div class="notif-avatar"><span class="notif-avatar-letter">?</span></div></div>`;
+
+                    const thumbHtml = n.thumbnail
+                        ? `<div class="notif-thumb"><img src="${n.thumbnail}" alt=""></div>`
+                        : '';
+
+                    const ids = n.ids ? n.ids.join(',') : n.id;
+                    const actorId = (actors.length > 0 && actors[0].id) ? actors[0].id : '';
+                    const actorUsername = (actors.length > 0 && actors[0].username) ? actors[0].username : '';
+                    const contextId = n.context_id || '';
+
+                    // Escape HTML in message, then linkify the actor name at the start
+                    const rawMsg = (n.message || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    let msgHtml = rawMsg;
+                    if (actorUsername && actors.length > 0 && actors[0].display_name) {
+                        const escapedName = actors[0].display_name.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        if (rawMsg.startsWith(escapedName)) {
+                            const rest = rawMsg.slice(escapedName.length);
+                            msgHtml = `<a href="/accounts/profile/${actorUsername}/" onclick="event.stopPropagation()" class="notif-actor-link">${escapedName}</a>${rest}`;
+                        }
+                    }
+                    const descHtml = renderDescriptionBox(n.description || '');
+
+                    return `<div class="notif-row${unreadCls}" data-ids="${ids}" data-type="${n.type}" data-target-type="${n.target_type || ''}" data-target-id="${n.target_id || ''}" data-context-id="${contextId}" data-actor-id="${actorId}" data-actor-username="${actorUsername}">
+                        ${avatarHtml}
+                        <div class="notif-content">
+                            <div class="notif-message">${msgHtml}</div>
+                            <div class="notif-time">${n.time_ago || ''}</div>
+                            ${descHtml}
+                        </div>
+                        ${renderActions(n)}
+                        ${thumbHtml}
+                    </div>`;
+                }
+
+                async function loadNotifications() {
+                    body.innerHTML = '<div class="notif-loading">Loading...</div>';
+                    try {
+                        const res = await fetch('/api/notifications/', { credentials: 'same-origin' });
+                        if (!res.ok) {
+                            body.innerHTML = '<div class="notif-empty">Could not load notifications</div>';
+                            return;
+                        }
+                        const data = await res.json();
+                        const notifs = data.notifications || [];
+                        if (notifs.length === 0) {
+                            body.innerHTML = '<div class="notif-empty">No notifications yet</div>';
+                            return;
+                        }
+                        body.innerHTML = notifs.map(renderRow).join('');
+
+                        // Click handler for each row
+                        body.querySelectorAll('.notif-row').forEach(row => {
+                            row.addEventListener('click', function() {
+                                const ids = this.dataset.ids.split(',');
+                                markRead(ids);
+                                this.classList.remove('unread');
+
+                                // Navigate based on type
+                                const type = this.dataset.type;
+                                const targetType = this.dataset.targetType;
+                                const targetId = this.dataset.targetId;
+                                const actorUsername = this.dataset.actorUsername;
+                                if (type === 'follow' && actorUsername) {
+                                    window.location.href = '/accounts/profile/' + actorUsername + '/';
+                                } else if (targetType === 'post' && targetId) {
+                                    window.location.href = '/social/post/' + targetId + '/view/';
+                                } else {
+                                    closePanel();
+                                }
+                            });
+                        });
+                    } catch {
+                        body.innerHTML = '<div class="notif-empty">Network error</div>';
+                    }
+                }
+
+                async function markRead(ids) {
+                    try {
+                        await fetch('/api/notifications/mark-read/', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                            credentials: 'same-origin',
+                            body: JSON.stringify({ ids }),
+                        });
+                        fetchUnreadCount();
+                    } catch {}
+                }
+
+                markAllBtn.addEventListener('click', async function() {
+                    try {
+                        await fetch('/api/notifications/mark-all-read/', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+                            credentials: 'same-origin',
+                        });
+                        // Update UI
+                        body.querySelectorAll('.notif-row.unread').forEach(r => r.classList.remove('unread'));
+                        badge.style.display = 'none';
+                        bellBtn.classList.remove('has-unread');
+                    } catch {}
+                });
+
+                async function fetchUnreadCount() {
+                    try {
+                        const res = await fetch('/api/notifications/unread-count/', { credentials: 'same-origin' });
+                        if (!res.ok) return;
+                        const data = await res.json();
+                        const count = data.count || 0;
+                        if (count > 0) {
+                            badge.textContent = count > 99 ? '99+' : count;
+                            badge.style.display = 'flex';
+                            bellBtn.classList.add('has-unread');
+                        } else {
+                            badge.style.display = 'none';
+                            bellBtn.classList.remove('has-unread');
+                        }
+                    } catch {}
+                }
+
+                async function notifFollowBack(userId, btn) {
+                    btn.disabled = true;
+                    const fd = new FormData();
+                    fd.append('user_id', userId);
+                    try {
+                        const res = await fetch('/accounts/api/follow-toggle/', { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, credentials: 'same-origin', body: fd });
+                        const data = await res.json();
+                        if (data.action === 'followed') { btn.textContent = 'Following'; btn.className = 'notif-action-btn notif-action-done'; }
+                        else { btn.disabled = false; }
+                    } catch { btn.disabled = false; }
+                }
+
+                async function notifAcceptWorkoutInvite(inviteId, btn) {
+                    btn.disabled = true;
+                    try {
+                        await fetch(`/api/gyms/invites/${inviteId}/join/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, credentials: 'same-origin' });
+                        btn.textContent = 'Accepted'; btn.className = 'notif-action-btn notif-action-done';
+                        const declineBtn = btn.parentElement.querySelector('.notif-action-dismiss');
+                        if (declineBtn) declineBtn.style.display = 'none';
+                        const row = btn.closest('.notif-row');
+                        if (row) { row.classList.remove('unread'); markRead(row.dataset.ids.split(',')); fetchUnreadCount(); }
+                    } catch { btn.disabled = false; }
+                }
+
+                async function notifDeclineWorkoutInvite(inviteId, btn) {
+                    btn.disabled = true;
+                    try {
+                        await fetch(`/api/gyms/invites/${inviteId}/decline/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, credentials: 'same-origin' });
+                        const row = btn.closest('.notif-row');
+                        if (row) { row.style.transition = 'opacity 0.3s'; row.style.opacity = '0'; setTimeout(() => row.remove(), 300); fetchUnreadCount(); }
+                    } catch { btn.disabled = false; }
+                }
+
+                async function notifAcceptGroupJoin(groupId, requestId, btn) {
+                    btn.disabled = true;
+                    try {
+                        await fetch(`/api/groups/${groupId}/join-requests/${requestId}/accept/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, credentials: 'same-origin' });
+                        btn.textContent = 'Accepted'; btn.className = 'notif-action-btn notif-action-done';
+                        const deny = btn.parentElement.querySelector('.notif-action-dismiss');
+                        if (deny) deny.style.display = 'none';
+                        const row = btn.closest('.notif-row');
+                        if (row) { row.classList.remove('unread'); markRead(row.dataset.ids.split(',')); fetchUnreadCount(); }
+                    } catch { btn.disabled = false; }
+                }
+
+                async function notifDenyGroupJoin(groupId, requestId, btn) {
+                    btn.disabled = true;
+                    try {
+                        await fetch(`/api/groups/${groupId}/join-requests/${requestId}/deny/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, credentials: 'same-origin' });
+                        const row = btn.closest('.notif-row');
+                        if (row) { row.style.transition = 'opacity 0.3s'; row.style.opacity = '0'; setTimeout(() => row.remove(), 300); markRead(row.dataset.ids.split(',')); fetchUnreadCount(); }
+                    } catch { btn.disabled = false; }
+                }
+
+                async function notifAcceptWorkoutJoin(requestId, btn) {
+                    btn.disabled = true;
+                    try {
+                        await fetch(`/api/gyms/invites/requests/${requestId}/accept/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, credentials: 'same-origin' });
+                        btn.textContent = 'Accepted'; btn.className = 'notif-action-btn notif-action-done';
+                        const deny = btn.parentElement.querySelector('.notif-action-dismiss');
+                        if (deny) deny.style.display = 'none';
+                        const row = btn.closest('.notif-row');
+                        if (row) { row.classList.remove('unread'); markRead(row.dataset.ids.split(',')); fetchUnreadCount(); }
+                    } catch { btn.disabled = false; }
+                }
+
+                async function notifDenyWorkoutJoin(requestId, btn) {
+                    btn.disabled = true;
+                    try {
+                        await fetch(`/api/gyms/invites/requests/${requestId}/deny/`, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, credentials: 'same-origin' });
+                        const row = btn.closest('.notif-row');
+                        if (row) { row.style.transition = 'opacity 0.3s'; row.style.opacity = '0'; setTimeout(() => row.remove(), 300); markRead(row.dataset.ids.split(',')); fetchUnreadCount(); }
+                    } catch { btn.disabled = false; }
+                }
+
+                // Expose action handlers globally for onclick attributes
+                window.notifFollowBack = notifFollowBack;
+                window.notifAcceptWorkoutInvite = notifAcceptWorkoutInvite;
+                window.notifDeclineWorkoutInvite = notifDeclineWorkoutInvite;
+                window.notifAcceptGroupJoin = notifAcceptGroupJoin;
+                window.notifDenyGroupJoin = notifDenyGroupJoin;
+                window.notifAcceptWorkoutJoin = notifAcceptWorkoutJoin;
+                window.notifDenyWorkoutJoin = notifDenyWorkoutJoin;
+
+                // Poll for unread count
+                fetchUnreadCount();
+                setInterval(fetchUnreadCount, 30000);
+            })();
+
+            // ============ CREATE POST MODAL ============
+            const createPostBtn = document.getElementById('createPostBtn');
+            const postModal = document.getElementById('postModal');
+            const postModalOverlay = document.getElementById('postModalOverlay');
+            const postModalClose = document.getElementById('postModalClose');
+            const postTextarea = document.getElementById('postTextarea');
+            const postSubmitBtn = document.getElementById('postSubmitBtn');
+            const postMediaInput = document.getElementById('postMediaInput');
+            const postMediaPreview = document.getElementById('postMediaPreview');
+            const postMediaImg = document.getElementById('postMediaImg');
+            const postMediaVideo = document.getElementById('postMediaVideo');
+            const postMediaRemove = document.getElementById('postMediaRemove');
+            const postLinkPreview = document.getElementById('postLinkPreview');
+            const postLinkUrl = document.getElementById('postLinkUrl');
+            const postLinkRemove = document.getElementById('postLinkRemove');
+            const postPollSection = document.getElementById('postPollSection');
+            const postPollOptions = document.getElementById('postPollOptions');
+            const postPollRemove = document.getElementById('postPollRemove');
+            const addPollOption = document.getElementById('addPollOption');
+            const linkInputOverlay = document.getElementById('linkInputOverlay');
+            const linkInputField = document.getElementById('linkInputField');
+            const linkInputCancel = document.getElementById('linkInputCancel');
+            const linkInputAdd = document.getElementById('linkInputAdd');
+
+            let postMediaFile = null;
+            let postLinkValue = '';
+            let postVisibility = 'main';
+            let attachedPrData = null;
+
+            // Rest Day button handler
+            const restDayBtn = document.getElementById('restDayBtn');
+            if (restDayBtn) {
+                restDayBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    closeCreatePopup();
+                    if (!confirm('Are you sure you want to log a rest day?')) return;
+                    fetch('/workouts/rest-day/', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
+                        },
+                    })
+                    .then(r => r.json())
+                    .then(data => {
+                        alert(data.message || data.error || 'Done');
+                    })
+                    .catch(() => alert('Something went wrong. Please try again.'));
+                });
+            }
+
+            if (createPostBtn && postModal) {
+                // Open post modal
+                createPostBtn.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    closeCreatePopup();
+                    postModal.classList.add('active');
+                    postModalOverlay.classList.add('active');
+                    postTextarea.focus();
+                });
+
+                // Close post modal
+                postModalClose.addEventListener('click', function() {
+                    closePostModal();
+                });
+
+                // Close on overlay click
+                postModalOverlay.addEventListener('click', function() {
+                    closePostModal();
+                });
+
+                function closePostModal() {
+                    postModal.classList.remove('active');
+                    postModalOverlay.classList.remove('active');
+                    resetPostForm();
+                }
+
+                function resetPostForm() {
+                    postTextarea.value = '';
+                    postMediaFile = null;
+                    postLinkValue = '';
+                    attachedPrData = null;
+                    postMediaPreview.classList.remove('has-media');
+                    postMediaImg.src = '';
+                    postMediaImg.style.display = '';
+                    postMediaVideo.src = '';
+                    postMediaVideo.style.display = 'none';
+                    postLinkPreview.classList.remove('has-link');
+                    postLinkUrl.textContent = '';
+                    postPollSection.classList.remove('active');
+                    document.getElementById('pollNameInput').value = '';
+                    postPollOptions.innerHTML = `
+                        <input type="text" class="post-poll-option-input" placeholder="Option 1" maxlength="100">
+                        <input type="text" class="post-poll-option-input" placeholder="Option 2" maxlength="100">
+                    `;
+                    // Reset visibility
+                    postVisibility = 'main';
+                    replyRestrictionText.textContent = 'Everyone can see';
+                    replyRestrictionBtn.querySelector('.post-reply-icon').textContent = '\u{1F30E}';
+                    // Reset PR preview
+                    const prPreview = document.getElementById('postPrPreview');
+                    if (prPreview) prPreview.classList.remove('has-pr');
+                    const prBtn = document.getElementById('addPrBtn');
+                    if (prBtn) prBtn.classList.remove('active');
+                    updatePostButton();
+                }
+
+                // Update post button state
+                function updatePostButton() {
+                    const hasText = postTextarea.value.trim().length > 0;
+                    const hasMedia = postMediaFile !== null;
+                    const hasPoll = postPollSection.classList.contains('active');
+                    const hasPr = attachedPrData !== null;
+
+                    if (hasText || hasMedia || hasPoll || hasPr) {
+                        postSubmitBtn.classList.add('enabled');
+                    } else {
+                        postSubmitBtn.classList.remove('enabled');
+                    }
+                }
+
+                postTextarea.addEventListener('input', updatePostButton);
+
+                // Add media button
+                document.getElementById('addMediaBtn').addEventListener('click', function() {
+                    postMediaInput.click();
+                });
+
+                postMediaInput.addEventListener('change', function(e) {
+                    const file = e.target.files[0];
+                    if (file) {
+                        postMediaFile = file;
+                        const isVideo = file.type.startsWith('video/');
+                        if (isVideo) {
+                            postMediaImg.style.display = 'none';
+                            postMediaVideo.style.display = 'block';
+                            postMediaVideo.src = URL.createObjectURL(file);
+                        } else {
+                            postMediaVideo.style.display = 'none';
+                            postMediaImg.style.display = '';
+                            const reader = new FileReader();
+                            reader.onload = function(event) {
+                                postMediaImg.src = event.target.result;
+                            };
+                            reader.readAsDataURL(file);
+                        }
+                        postMediaPreview.classList.add('has-media');
+                        updatePostButton();
+                    }
+                });
+
+                postMediaRemove.addEventListener('click', function() {
+                    postMediaFile = null;
+                    postMediaInput.value = '';
+                    postMediaPreview.classList.remove('has-media');
+                    postMediaImg.src = '';
+                    postMediaImg.style.display = '';
+                    postMediaVideo.src = '';
+                    postMediaVideo.style.display = 'none';
+                    updatePostButton();
+                });
+
+                // Add link button
+                document.getElementById('addLinkBtn').addEventListener('click', function() {
+                    linkInputOverlay.classList.add('active');
+                    linkInputField.focus();
+                });
+
+                linkInputCancel.addEventListener('click', function() {
+                    linkInputOverlay.classList.remove('active');
+                    linkInputField.value = '';
+                });
+
+                linkInputAdd.addEventListener('click', function() {
+                    const url = linkInputField.value.trim();
+                    if (url) {
+                        postLinkValue = url;
+                        postLinkUrl.textContent = url;
+                        postLinkPreview.classList.add('has-link');
+                    }
+                    linkInputOverlay.classList.remove('active');
+                    linkInputField.value = '';
+                    updatePostButton();
+                });
+
+                linkInputField.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        linkInputAdd.click();
+                    }
+                });
+
+                postLinkRemove.addEventListener('click', function() {
+                    postLinkValue = '';
+                    postLinkUrl.textContent = '';
+                    postLinkPreview.classList.remove('has-link');
+                });
+
+                // Add poll button
+                document.getElementById('addPollBtn').addEventListener('click', function() {
+                    postPollSection.classList.toggle('active');
+                    this.classList.toggle('active');
+                    updatePostButton();
+                });
+
+                postPollRemove.addEventListener('click', function() {
+                    postPollSection.classList.remove('active');
+                    document.getElementById('addPollBtn').classList.remove('active');
+                    updatePostButton();
+                });
+
+                addPollOption.addEventListener('click', function() {
+                    const inputs = postPollOptions.querySelectorAll('input');
+                    if (inputs.length < 4) {
+                        const newInput = document.createElement('input');
+                        newInput.type = 'text';
+                        newInput.className = 'post-poll-option-input';
+                        newInput.placeholder = `Option ${inputs.length + 1}`;
+                        newInput.maxLength = 100;
+                        postPollOptions.appendChild(newInput);
+                    }
+                    if (postPollOptions.querySelectorAll('input').length >= 4) {
+                        addPollOption.style.display = 'none';
+                    }
+                });
+
+                // Visibility toggle
+                const replyRestrictionBtn = document.getElementById('replyRestrictionBtn');
+                const replyRestrictionText = document.getElementById('replyRestrictionText');
+                const visibilityOptions = ['main', 'friends'];
+                const visibilityLabels = {
+                    'main': 'Everyone can see',
+                    'friends': 'Only friends can see'
+                };
+                const visibilityIcons = {
+                    'main': '\u{1F30E}',
+                    'friends': '\u{1F465}'
+                };
+
+                replyRestrictionBtn.addEventListener('click', function() {
+                    const currentIndex = visibilityOptions.indexOf(postVisibility);
+                    const nextIndex = (currentIndex + 1) % visibilityOptions.length;
+                    postVisibility = visibilityOptions[nextIndex];
+                    replyRestrictionText.textContent = visibilityLabels[postVisibility];
+                    replyRestrictionBtn.querySelector('.post-reply-icon').textContent = visibilityIcons[postVisibility];
+                });
+
+                // Submit post
+                postSubmitBtn.addEventListener('click', function() {
+                    if (!postSubmitBtn.classList.contains('enabled')) return;
+
+                    const text = postTextarea.value.trim();
+                    const hasPoll = postPollSection.classList.contains('active');
+
+                    // Get poll data
+                    let pollQuestion = '';
+                    let pollOptions = [];
+                    if (hasPoll) {
+                        pollQuestion = document.getElementById('pollNameInput').value.trim() || text;
+                        const inputs = postPollOptions.querySelectorAll('input');
+                        inputs.forEach(input => {
+                            if (input.value.trim()) {
+                                pollOptions.push(input.value.trim());
+                            }
+                        });
+
+                        if (pollOptions.length < 2) {
+                            alert('Poll needs at least 2 options');
+                            return;
+                        }
+                    }
+
+                    postSubmitBtn.textContent = 'Posting...';
+                    postSubmitBtn.classList.remove('enabled');
+
+                    const formData = new FormData();
+                    formData.append('text', text);
+                    formData.append('visibility', postVisibility);
+
+                    if (postLinkValue) {
+                        formData.append('link_url', postLinkValue);
+                    }
+
+                    if (postMediaFile) {
+                        if (postMediaFile.type.startsWith('video/')) {
+                            formData.append('video', postMediaFile);
+                        } else {
+                            formData.append('photo', postMediaFile);
+                        }
+                    }
+
+                    if (hasPoll && pollQuestion) {
+                        formData.append('poll_question', pollQuestion);
+                        pollOptions.forEach(opt => {
+                            formData.append('poll_options[]', opt);
+                        });
+                        formData.append('poll_duration', document.getElementById('pollDuration').value);
+                    }
+
+                    // Add PR data if attached
+                    if (attachedPrData) {
+                        formData.append('pr_exercise_name', attachedPrData.exercise_name);
+                        formData.append('pr_value', attachedPrData.value);
+                        formData.append('pr_unit', attachedPrData.unit);
+                        formData.append('pr_achieved_date', attachedPrData.achieved_date);
+                    }
+
+                    const csrfToken = document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
+
+                    fetch('/social/post/create/', {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-CSRFToken': csrfToken
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            closePostModal();
+                            window.location.href = '/';
+                        } else {
+                            alert(data.error || 'Failed to create post');
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Failed to create post. Please try again.');
+                    })
+                    .finally(() => {
+                        postSubmitBtn.textContent = 'Post';
+                        updatePostButton();
+                    });
+                });
+
+                // Emoji picker (simple implementation - just insert common emojis)
+                document.getElementById('addEmojiBtn').addEventListener('click', function() {
+                    const emojis = ['💪', '🔥', '🏋️', '🎯', '✨', '👏', '🙌', '💯'];
+                    const randomEmoji = emojis[Math.floor(Math.random() * emojis.length)];
+                    postTextarea.value += randomEmoji;
+                    postTextarea.focus();
+                    updatePostButton();
+                });
+
+                // Tag button - insert hashtag
+                document.getElementById('addTagBtn').addEventListener('click', function() {
+                    postTextarea.value += '#';
+                    postTextarea.focus();
+                    updatePostButton();
+                });
+
+                // ============ PR MODAL ============
+                const prModalOverlay = document.getElementById('prModalOverlay');
+                const prModalClose = document.getElementById('prModalClose');
+                const prSubmitBtn = document.getElementById('prSubmitBtn');
+                const addPrBtn = document.getElementById('addPrBtn');
+                const postPrPreview = document.getElementById('postPrPreview');
+                const postPrRemove = document.getElementById('postPrRemove');
+                const prValueLabel = document.getElementById('prValueLabel');
+
+                // Catalog for PR exercise search
+                let postPrCatalog = null;
+
+                function loadPostPrCatalog() {
+                    if (postPrCatalog) return Promise.resolve();
+                    return fetch('/workouts/api/catalog/')
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.success) {
+                                postPrCatalog = data.catalog;
+                            }
+                        });
+                }
+
+                function renderPostPrResults(catalog) {
+                    const container = document.getElementById('prExerciseResults');
+                    let html = '';
+                    let hasResults = false;
+                    for (const category in catalog) {
+                        const exercises = catalog[category];
+                        if (exercises.length === 0) continue;
+                        hasResults = true;
+                        html += '<div class="pr-exercise-category">' + category + '</div>';
+                        for (const ex of exercises) {
+                            html += '<div class="pr-exercise-option" onclick="selectPostPrExercise(\'' +
+                                ex.name.replace(/'/g, "\\'") + '\', ' + (ex.is_cardio ? 'true' : 'false') + ')">' +
+                                ex.name + '</div>';
+                        }
+                    }
+                    container.innerHTML = hasResults ? html : '<div class="pr-exercise-option" style="color:var(--text-muted)">No exercises found</div>';
+                }
+
+                window.onPostPrSearchInput = function() {
+                    const query = document.getElementById('prExerciseSearch').value.toLowerCase();
+                    const results = document.getElementById('prExerciseResults');
+                    if (!query) {
+                        results.classList.remove('open');
+                        return;
+                    }
+                    if (!postPrCatalog) return;
+                    const filtered = {};
+                    for (const category in postPrCatalog) {
+                        const matches = postPrCatalog[category].filter(e =>
+                            e.name.toLowerCase().indexOf(query) !== -1
+                        );
+                        if (matches.length > 0) {
+                            filtered[category] = matches;
+                        }
+                    }
+                    renderPostPrResults(filtered);
+                    results.classList.add('open');
+                };
+
+                window.selectPostPrExercise = function(name, isCardio) {
+                    document.getElementById('prExerciseSelectedName').value = name;
+                    document.getElementById('prExerciseSelectedLabel').textContent = name;
+                    document.getElementById('prExerciseSelectedChip').style.display = 'flex';
+                    document.getElementById('prExerciseSearchWrap').style.display = 'none';
+                    document.getElementById('prExerciseResults').classList.remove('open');
+
+                    const unitEl = document.getElementById('prUnit');
+                    if (isCardio) {
+                        prValueLabel.textContent = 'Time';
+                        unitEl.value = 'min:sec';
+                    } else {
+                        prValueLabel.textContent = 'Weight';
+                        if (unitEl.value === 'min:sec') unitEl.value = 'lbs';
+                    }
+                };
+
+                window.clearPostPrExercise = function() {
+                    document.getElementById('prExerciseSelectedName').value = '';
+                    document.getElementById('prExerciseSelectedChip').style.display = 'none';
+                    document.getElementById('prExerciseSearchWrap').style.display = 'block';
+                    document.getElementById('prExerciseSearch').value = '';
+                    document.getElementById('prExerciseResults').classList.remove('open');
+                };
+
+                // Set default date to today
+                const prDateInput = document.getElementById('prDate');
+                if (prDateInput) {
+                    prDateInput.valueAsDate = new Date();
+                }
+
+                // Open PR modal
+                if (addPrBtn) {
+                    addPrBtn.addEventListener('click', function() {
+                        loadPostPrCatalog();
+                        prModalOverlay.classList.add('active');
+                    });
+                }
+
+                // Close PR modal
+                if (prModalClose) {
+                    prModalClose.addEventListener('click', function() {
+                        closePrModal();
+                    });
+                }
+
+                // Close on overlay click
+                if (prModalOverlay) {
+                    prModalOverlay.addEventListener('click', function(e) {
+                        if (e.target === prModalOverlay) {
+                            closePrModal();
+                        }
+                    });
+                }
+
+                function closePrModal() {
+                    prModalOverlay.classList.remove('active');
+                }
+
+                function resetPrForm() {
+                    clearPostPrExercise();
+                    document.getElementById('prValue').value = '';
+                    document.getElementById('prUnit').value = 'lbs';
+                    document.getElementById('prValueLabel').textContent = 'Weight';
+                    document.getElementById('prDate').valueAsDate = new Date();
+                }
+
+                // Attach PR to post
+                if (prSubmitBtn) {
+                    prSubmitBtn.addEventListener('click', function() {
+                        const exerciseName = document.getElementById('prExerciseSelectedName').value.trim();
+                        const prValue = document.getElementById('prValue').value.trim();
+                        const prUnit = document.getElementById('prUnit').value;
+                        const prDate = document.getElementById('prDate').value;
+
+                        if (!exerciseName) {
+                            alert('Please select an exercise');
+                            return;
+                        }
+
+                        if (!prValue) {
+                            alert('Please enter a value');
+                            return;
+                        }
+
+                        if (!prDate) {
+                            alert('Please select a date');
+                            return;
+                        }
+
+                        // Store PR data
+                        attachedPrData = {
+                            exercise_name: exerciseName,
+                            value: prValue,
+                            unit: prUnit,
+                            achieved_date: prDate
+                        };
+
+                        // Update preview
+                        document.getElementById('postPrExercise').textContent = exerciseName;
+                        document.getElementById('postPrValue').textContent = `${prValue} ${prUnit}`;
+                        postPrPreview.classList.add('has-pr');
+
+                        // Close modal and update post button
+                        closePrModal();
+                        resetPrForm();
+                        updatePostButton();
+
+                        // Mark PR button as active
+                        addPrBtn.classList.add('active');
+                    });
+                }
+
+                // Remove PR from post
+                if (postPrRemove) {
+                    postPrRemove.addEventListener('click', function() {
+                        attachedPrData = null;
+                        postPrPreview.classList.remove('has-pr');
+                        addPrBtn.classList.remove('active');
+                        updatePostButton();
+                    });
+                }
+            }
+        });
+    </script>
+</body>
+</html>

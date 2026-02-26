@@ -1,0 +1,448 @@
+// Spottr (Cleaned & Corrected ERD)
+title Spottr (Production-Ready)
+notation crows-foot
+
+// =======================
+// CORE USER DOMAIN
+// =======================
+
+users [icon: user, color: cyan] {
+  id string pk
+  email string unique
+  phoneNumber string unique
+  password string
+  username string unique
+  displayName string
+  birthday date
+  bio text
+  workoutFrequency int
+  memberSince timestamp
+  currentStreak int
+  longestStreak int
+  totalWorkouts int
+  status string              // online | offline | working_out | deactivated
+  enrolledGymId string fk
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+// =======================
+// WORKOUTS (EXECUTIONS)
+// =======================
+
+workouts [icon: dumbbell, color: orange] {
+  id string pk
+  userId string fk
+  gymId string fk
+  templateId string fk nullable
+  name string
+  type string
+  duration int
+  startTime timestamp
+  endTime timestamp
+  notes text
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+exercises [icon: zap, color: purple] {
+  id string pk
+  workoutId string fk
+  name string
+  category string
+  sets int
+  reps int
+  weight decimal
+  unit string
+  duration int
+  distance decimal
+  orderIndex int
+  notes text
+  createdAt timestamp
+}
+
+// =======================
+// WORKOUT TEMPLATES (BLUEPRINTS)
+// =======================
+
+workout_templates [icon: layout, color: violet] {
+  id string pk
+  userId string fk
+  name string
+  description text
+  visibility string          // private | friends | public
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+template_exercises [icon: list, color: violet] {
+  id string pk
+  templateId string fk
+  name string
+  category string
+  sets int
+  reps int
+  weight decimal
+  unit string
+  orderIndex int
+}
+
+// =======================
+// SOCIAL CONTENT
+// =======================
+
+posts [icon: image, color: green] {
+  id string pk
+  userId string fk
+  workoutId string fk nullable
+  description string
+  locationId string
+  visibility string // main or friends feed
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+quick_workout [icon: image, color: green] {
+  id string pk
+  userId string fk
+  description string
+  locationId string
+  visibility string
+  createdAt timestamp
+  updatedAt timestamp
+  type string
+}
+
+comments [icon: message-circle, color: blue] {
+  id string pk
+  postId string fk nullable // constraint: should either pull postId or quickWorkoutId
+  quickWorkoutId string fk nullable // constraint: should either pull postId or quickWorkoutId
+  userId string fk
+  description string
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+reactions [icon: heart, color: red] {
+  id string pk
+  postId string fk nullable // constraint: should either pull postId or quickWorkoutId
+  quickWorkoutId string fk nullable // constraint: should either pull postId or quickWorkoutId
+  userId string fk
+  commentsId string fk nullable
+  type string
+  createdAt timestamp
+}
+
+// =======================
+// MEDIA SYSTEM (UNCHANGED – CORRECT)
+// =======================
+
+media_assets [icon: image, color: indigo] {
+  id string pk
+  userId string fk
+  kind string              // image | video
+  storageKey string
+  thumbnailKey string
+  mimeType string
+  byteSize int
+  width int
+  height int
+  durationMs int nullable
+  status string            // uploaded | processing | ready | failed
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+media_links [icon: link, color: indigo] {
+  id string pk
+  mediaAssetsId string fk
+  destinationType string        // post | user | group | personal_record | message (individual and groupchats) | quick_workouts
+  destinationId string          // postId, groupId, userId, groupId, personalRecordId, messageId (individual and groupchats), quick_workoutsId
+  type string              // avatar | cover | inline
+  position int
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+// =======================
+// GYMS & ACTIVITY
+// =======================
+
+gyms [icon: map-pin, color: yellow] {
+  id string pk
+  name string
+  address string
+  latitude decimal
+  longitude decimal
+  website string nullable
+  phoneNumber string
+  hours json
+  amenities json
+  createdAt timestamp
+  updatedAt timestamp
+}
+
+
+busy_level [icon: trending-up, color: indigo] {
+  id string pk
+  gymId string fk
+  timestamp timestamp
+  surveyResponse int
+}
+
+// =======================
+// SOCIAL CONNECTIONS
+// =======================
+
+
+follows [icon: users, color: teal] {
+  id string pk
+  followersId string fk //user.id (self joins)
+  followingId string fk //user.id (self joins)
+  createdAt timestamp
+}
+
+block [icon: users, color: teal] {
+  id string pk
+  blockerId string fk // user.id (self join)
+  blockedId string fk // user.id (self join)
+  createdAt  timestamp
+}
+// =======================
+// GROUPS & MESSAGING
+// =======================
+
+groups [icon: users, color: violet] {
+  id string pk
+  name string
+  description text
+  groupStreak int
+  privacy string
+  createdAt timestamp
+  userId string fk
+  updatedAt timestamp
+}
+
+group_members [icon: user-plus, color: fuchsia] {
+  id string pk
+  groupId string fk
+  userId string fk
+  role string              // admin | member | creator
+  joinedAt timestamp
+  updatedAt timestamp
+}
+
+messages [icon: message-square, color: blue] {
+  id string pk
+  senderId string fk // user.id
+  recipientId string fk nullable // user.id
+  groupId string fk nullable // constraint: should either be group messages (groupId) or individual messages (recipient Id)
+  postId string fk nullable
+  content string
+  isRead boolean
+  createdAt timestamp
+}
+
+// =======================
+// ACHIEVEMENTS & STREAKS
+// =======================
+
+personal_records [icon: trophy, color: amber] {
+  id string pk
+  userId string fk
+  postId string fk nullable
+  exerciseId string fk nullable
+  exerciseName string
+  value string
+  unit string
+  achievedDate date
+  createdAt timestamp
+}
+
+streaks [icon: flame, color: orange] {
+  id string pk
+  userId string fk
+  lastWorkoutDate date
+  updatedAt timestamp
+}
+
+// =======================
+// EVENTS & INVITES
+// =======================
+
+workout_invites [icon: calendar, color: lime] {
+  id string pk
+  userId string fk // sender
+  gymId string fk
+  groupId string fk nullable
+  description string
+  workoutType string
+  scheduledTime timestamp
+  spotsAvailable int
+  createdAt timestamp
+  expiresAt timestamp
+  type string   // gym invite, group/individual invite
+}
+
+join_request [icon: user-check, color: emerald] {
+  id string pk
+  workoutInvitesId string fk
+  userId string fk
+  description string
+  status string  // pending, accept, deny
+  joinedAt timestamp
+}
+
+// =======================
+// NOTIFICATIONS & LEADERBOARD
+// =======================
+
+notifications [icon: bell, color: yellow] {
+  id string pk
+  recipientId string fk        // user who receives it
+  triggeredId string fk nullable   // user who triggered it (nullable for system)
+  type string                  // LIKE_POST | COMMENT | FOLLOW | PR | etc.
+  targetType string            // post | comment | workout | personal_record | group | ...
+  targetId string              // id of that target
+  contextType string nullable  // optional: post for "comment" notifications, group, etc.
+  contextId string nullable
+  createdAt timestamp
+  readAt timestamp nullable
+}
+
+leaderboard_entries [icon: award, color: yellow] {
+  id string pk
+  userId string fk
+  streakId string fk
+  gymId string fk
+  rank int
+  updatedAt timestamp
+}
+
+// =======================
+// RELATIONSHIPS
+// =======================
+
+// =======================
+// CORE USER DOMAIN
+// =======================
+
+users.enrolledGymId > gyms.id
+
+
+// =======================
+// WORKOUTS (EXECUTIONS)
+// =======================
+
+workouts.userId > users.id
+workouts.gymId > gyms.id
+workouts.templateId > workout_templates.id
+
+exercises.workoutId > workouts.id
+
+
+// =======================
+// WORKOUT TEMPLATES (BLUEPRINTS)
+// =======================
+
+workout_templates.userId > users.id
+template_exercises.templateId > workout_templates.id
+
+
+// =======================
+// SOCIAL CONTENT
+// =======================
+
+posts.userId > users.id
+posts.workoutId > workouts.id
+posts.locationId > gyms.id
+
+quick_workout.userId > users.id
+quick_workout.locationId > gyms.id
+
+comments.userId > users.id
+comments.postId > posts.id
+comments.quickWorkoutId > quick_workout.id
+
+reactions.userId > users.id
+reactions.postId > posts.id
+reactions.quickWorkoutId > quick_workout.id
+reactions.commentsId > comments.id
+
+
+// =======================
+// MEDIA SYSTEM
+// =======================
+
+media_assets.userId > users.id
+media_links.mediaAssetsId > media_assets.id
+// destinationType + destinationId handled polymorphically at app layer
+
+
+// =======================
+// GYMS & ACTIVITY
+// =======================
+
+
+
+busy_level.gymId > gyms.id
+
+
+// =======================
+// SOCIAL CONNECTIONS
+// =======================
+
+follows.followersId > users.id
+follows.followingId > users.id
+
+block.blockerId > users.id
+block.blockedId > users.id
+
+
+// =======================
+// GROUPS & MESSAGING
+// =======================
+
+groups.userId > users.id
+
+group_members.groupId > groups.id
+group_members.userId > users.id
+
+messages.senderId > users.id
+messages.recipientId > users.id
+messages.groupId > groups.id
+messages.postId > posts.id
+
+
+// =======================
+// ACHIEVEMENTS & STREAKS
+// =======================
+
+personal_records.userId > users.id
+personal_records.postId > posts.id
+personal_records.exerciseId > exercises.id
+
+streaks.userId > users.id
+
+
+// =======================
+// EVENTS & INVITES
+// =======================
+
+workout_invites.userId > users.id
+workout_invites.gymId > gyms.id
+
+join_request.workoutInvitesId > workout_invites.id
+join_request.userId > users.id
+
+
+// =======================
+// NOTIFICATIONS & LEADERBOARD
+// =======================
+
+notifications.recipientId > users.id
+notifications.triggeredId > users.id
+
+leaderboard_entries.userId > users.id
+leaderboard_entries.streakId > streaks.id
+leaderboard_entries.gymId > gyms.id

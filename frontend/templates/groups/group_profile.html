@@ -1,0 +1,1340 @@
+{% extends "gyms/base.html" %}
+{% block title %}{{ group.name }} – Spottr{% endblock %}
+
+{% block extra_css %}
+<style>
+    .group-page {
+        max-width: 540px;
+        margin: 0 auto;
+        padding: 24px 16px 100px;
+    }
+
+    /* ── Header card ── */
+    .group-header-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-2xl);
+        overflow: hidden;
+        margin-bottom: 16px;
+        box-shadow: var(--shadow-md);
+    }
+
+    .group-banner {
+        height: 100px;
+        background: linear-gradient(135deg, #1a0533, #7c3aed 40%, #3b82f6 70%, #06b6d4);
+    }
+
+    .group-identity {
+        padding: 0 20px 20px;
+        position: relative;
+    }
+
+    .group-avatar-wrap {
+        margin-top: -40px;
+        margin-bottom: 14px;
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+    }
+
+    .group-avatar {
+        width: 80px;
+        height: 80px;
+        border-radius: 50%;
+        border: 4px solid var(--bg-card);
+        object-fit: cover;
+        background: var(--bg-elevated);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 28px;
+        font-weight: 700;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        color: #fff;
+        overflow: hidden;
+    }
+
+    .group-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .group-name {
+        font-size: 22px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 4px;
+    }
+
+    .group-description {
+        font-size: 14px;
+        color: var(--text-secondary);
+        line-height: 1.5;
+        margin-bottom: 14px;
+    }
+
+    .group-meta {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex-wrap: wrap;
+    }
+
+    .group-meta-chip {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 13px;
+        color: var(--text-muted);
+        background: var(--bg-elevated);
+        border-radius: var(--radius-pill);
+        padding: 4px 10px;
+    }
+
+    .group-meta-chip svg {
+        flex-shrink: 0;
+    }
+
+    .edit-group-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 14px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-secondary);
+        font-size: 13px;
+        font-weight: 500;
+        font-family: 'Inter', sans-serif;
+        cursor: pointer;
+        transition: all var(--duration) var(--ease-out);
+        flex-shrink: 0;
+        align-self: flex-end;
+        margin-bottom: 2px;
+    }
+
+    .edit-group-btn:hover {
+        border-color: var(--border-hover);
+        color: var(--text-primary);
+        box-shadow: var(--shadow-glow);
+    }
+
+    /* ── Streak card (clickable) ── */
+    .streak-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+        padding: 18px 20px;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        cursor: pointer;
+        transition: border-color var(--duration) var(--ease-out),
+                    box-shadow var(--duration) var(--ease-out);
+        -webkit-tap-highlight-color: transparent;
+        user-select: none;
+    }
+
+    .streak-card:hover {
+        border-color: var(--border-hover);
+        box-shadow: var(--shadow-glow);
+    }
+
+    .streak-card:active {
+        opacity: 0.85;
+    }
+
+    .streak-left {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+    }
+
+    .streak-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .streak-value-row {
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+    }
+
+    .streak-count {
+        font-size: 36px;
+        font-weight: 800;
+        color: var(--brand-blue);
+        line-height: 1;
+    }
+
+    .streak-count.inactive {
+        color: var(--text-muted);
+    }
+
+    .streak-unit {
+        font-size: 16px;
+        font-weight: 500;
+        color: var(--text-secondary);
+    }
+
+    .streak-flame {
+        font-size: 22px;
+    }
+
+    .streak-best {
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+
+    .streak-right {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .streak-chevron {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        background: var(--bg-elevated);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-muted);
+    }
+
+    .streak-tap-hint {
+        font-size: 11px;
+        color: var(--text-muted);
+        text-align: center;
+        max-width: 72px;
+        line-height: 1.4;
+    }
+
+    /* ── Members section ── */
+    .section-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+        padding: 18px 20px;
+        margin-bottom: 16px;
+    }
+
+    .section-heading {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 14px;
+    }
+
+    .member-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 0;
+    }
+
+    .member-row + .member-row {
+        border-top: 1px solid var(--border-subtle);
+    }
+
+    .member-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 15px;
+        font-weight: 700;
+        color: #fff;
+        flex-shrink: 0;
+        overflow: hidden;
+    }
+
+    .member-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .member-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .member-name {
+        font-size: 15px;
+        font-weight: 500;
+        color: var(--text-primary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .member-username {
+        font-size: 13px;
+        color: var(--text-muted);
+    }
+
+    .member-role-badge {
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-brand);
+        background: var(--brand-purple-muted);
+        border-radius: var(--radius-pill);
+        padding: 3px 8px;
+        text-transform: capitalize;
+        flex-shrink: 0;
+    }
+
+    /* ── Streak Modal ── */
+    .streak-modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(4px);
+        z-index: 200;
+        align-items: flex-end;
+        justify-content: center;
+    }
+
+    .streak-modal-overlay.open {
+        display: flex;
+    }
+
+    .streak-modal {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+        width: 100%;
+        max-width: 640px;
+        max-height: 75vh;
+        display: flex;
+        flex-direction: column;
+        animation: slideUp 0.28s var(--ease-out) both;
+    }
+
+    @keyframes slideUp {
+        from { transform: translateY(100%); opacity: 0; }
+        to   { transform: translateY(0);    opacity: 1; }
+    }
+
+    .streak-modal-handle {
+        width: 36px;
+        height: 4px;
+        background: var(--text-muted);
+        border-radius: 2px;
+        margin: 12px auto 0;
+        flex-shrink: 0;
+    }
+
+    .streak-modal-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 16px 20px 14px;
+        border-bottom: 1px solid var(--border-subtle);
+        flex-shrink: 0;
+    }
+
+    .streak-modal-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .streak-modal-badge {
+        font-size: 11px;
+        font-weight: 700;
+        color: #fff;
+        background: #ef4444;
+        border-radius: 10px;
+        padding: 2px 7px;
+        min-width: 20px;
+        text-align: center;
+    }
+
+    .streak-modal-badge.green {
+        background: #22c55e;
+    }
+
+    .streak-modal-body {
+        overflow-y: auto;
+        padding: 16px 20px 32px;
+        flex: 1;
+    }
+
+    /* Spinner */
+    .modal-spinner {
+        display: flex;
+        justify-content: center;
+        padding: 40px 0;
+    }
+
+    .spinner {
+        width: 28px;
+        height: 28px;
+        border: 3px solid var(--border-default);
+        border-top-color: var(--brand-blue);
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+
+    /* Empty state */
+    .modal-empty {
+        text-align: center;
+        padding: 40px 20px;
+    }
+
+    .modal-empty-icon {
+        font-size: 40px;
+        margin-bottom: 12px;
+    }
+
+    .modal-empty-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 6px;
+    }
+
+    .modal-empty-subtitle {
+        font-size: 14px;
+        color: var(--text-muted);
+        line-height: 1.5;
+    }
+
+    /* Inactive member rows */
+    .inactive-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 0;
+    }
+
+    .inactive-row + .inactive-row {
+        border-top: 1px solid var(--border-subtle);
+    }
+
+    .inactive-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 15px;
+        font-weight: 700;
+        color: #fff;
+        flex-shrink: 0;
+        overflow: hidden;
+    }
+
+    .inactive-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .inactive-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .inactive-name {
+        font-size: 15px;
+        font-weight: 500;
+        color: var(--text-primary);
+    }
+
+    .inactive-username {
+        font-size: 13px;
+        color: var(--text-muted);
+    }
+
+    .inactive-streak {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-muted);
+        flex-shrink: 0;
+    }
+
+    /* ── Edit Group Modal ── */
+    .edit-modal-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.65);
+        backdrop-filter: blur(4px);
+        z-index: 300;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+    }
+
+    .edit-modal-backdrop.open {
+        display: flex;
+    }
+
+    .edit-modal {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-2xl);
+        width: 100%;
+        max-width: 460px;
+        max-height: 90vh;
+        display: flex;
+        flex-direction: column;
+        box-shadow: var(--shadow-lg);
+        animation: editModalIn 0.22s var(--ease-out) both;
+        overflow: hidden;
+    }
+
+    @keyframes editModalIn {
+        from { opacity: 0; transform: scale(0.96) translateY(8px); }
+        to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .edit-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 18px 20px 14px;
+        border-bottom: 1px solid var(--border-subtle);
+        flex-shrink: 0;
+    }
+
+    .edit-modal-title {
+        font-size: 17px;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .edit-modal-close {
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        border: none;
+        background: transparent;
+        color: var(--text-secondary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: color var(--duration) var(--ease-out);
+    }
+
+    .edit-modal-close:hover { color: var(--text-primary); }
+
+    /* Tabs */
+    .edit-modal-tabs {
+        display: flex;
+        border-bottom: 1px solid var(--border-subtle);
+        flex-shrink: 0;
+    }
+
+    .edit-tab {
+        flex: 1;
+        padding: 12px 16px;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-muted);
+        background: none;
+        border: none;
+        border-bottom: 2px solid transparent;
+        cursor: pointer;
+        transition: all var(--duration) var(--ease-out);
+        font-family: 'Inter', sans-serif;
+        margin-bottom: -1px;
+    }
+
+    .edit-tab.active { color: var(--brand-cyan); border-bottom-color: var(--brand-cyan); }
+    .edit-tab.danger-tab { color: var(--text-muted); }
+    .edit-tab.danger-tab.active { color: #ef4444; border-bottom-color: #ef4444; }
+
+    .edit-modal-body {
+        overflow-y: auto;
+        flex: 1;
+    }
+
+    .edit-panel { display: none; padding: 20px; }
+    .edit-panel.active { display: block; }
+
+    /* Form fields */
+    .edit-form-group { margin-bottom: 16px; }
+
+    .edit-form-group label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 7px;
+    }
+
+    .edit-input {
+        width: 100%;
+        padding: 11px 14px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-family: 'Inter', sans-serif;
+        font-size: 14px;
+        outline: none;
+        transition: border-color var(--duration) var(--ease-out),
+                    box-shadow var(--duration) var(--ease-out);
+        box-sizing: border-box;
+    }
+
+    .edit-input::placeholder { color: var(--text-muted); }
+
+    .edit-input:focus {
+        border-color: var(--brand-cyan);
+        box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.12);
+    }
+
+    .edit-input.error { border-color: #ef4444; }
+
+    textarea.edit-input { resize: vertical; min-height: 80px; }
+
+    select.edit-input {
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1.5L6 6.5L11 1.5' stroke='%239ca3af' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 14px center;
+        padding-right: 36px;
+        cursor: pointer;
+    }
+
+    .field-error { font-size: 12px; color: #fca5a5; margin-top: 5px; }
+
+    .edit-char-counter { text-align: right; font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+    .edit-char-counter.warning { color: #f59e0b; }
+    .edit-char-counter.limit { color: #ef4444; }
+
+    /* Avatar row */
+    .edit-avatar-row {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        margin-bottom: 18px;
+    }
+
+    .edit-avatar-preview {
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 22px;
+        font-weight: 700;
+        color: #fff;
+        overflow: hidden;
+        flex-shrink: 0;
+        border: 2px solid var(--border-default);
+    }
+
+    .edit-avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
+
+    .edit-avatar-change-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 16px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-family: 'Inter', sans-serif;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all var(--duration) var(--ease-out);
+    }
+
+    .edit-avatar-change-btn:hover { border-color: var(--border-hover); box-shadow: var(--shadow-glow); }
+
+    /* Alert */
+    .edit-alert {
+        padding: 10px 14px;
+        border-radius: var(--radius-md);
+        font-size: 13px;
+        margin-bottom: 14px;
+    }
+
+    .edit-alert.error {
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        color: #fca5a5;
+    }
+
+    /* Save button */
+    .edit-save-btn {
+        width: 100%;
+        padding: 12px;
+        background: var(--brand-cyan);
+        color: #000;
+        border: none;
+        border-radius: var(--radius-md);
+        font-family: 'Inter', sans-serif;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        margin-top: 4px;
+        transition: all var(--duration) var(--ease-out);
+        box-shadow: 0 2px 12px rgba(6, 182, 212, 0.25);
+    }
+
+    .edit-save-btn:hover { box-shadow: 0 4px 20px rgba(6, 182, 212, 0.35); transform: translateY(-1px); }
+    .edit-save-btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+
+    /* Danger zone */
+    .danger-info-box {
+        padding: 14px 16px;
+        background: var(--bg-elevated);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        border-radius: var(--radius-md);
+        margin-bottom: 16px;
+    }
+
+    .danger-info-box-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 4px;
+    }
+
+    .danger-info-box-sub {
+        font-size: 12px;
+        color: var(--text-muted);
+        line-height: 1.4;
+    }
+
+    .edit-delete-btn {
+        width: 100%;
+        padding: 12px;
+        background: rgba(239, 68, 68, 0.1);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        border-radius: var(--radius-md);
+        color: #ef4444;
+        font-family: 'Inter', sans-serif;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all var(--duration) var(--ease-out);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+    }
+
+    .edit-delete-btn:hover { background: rgba(239, 68, 68, 0.15); border-color: rgba(239, 68, 68, 0.3); }
+    .edit-delete-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    /* Inline confirm */
+    .delete-confirm-box {
+        display: none;
+        margin-top: 14px;
+        padding: 16px;
+        background: rgba(239, 68, 68, 0.06);
+        border: 1px solid rgba(239, 68, 68, 0.2);
+        border-radius: var(--radius-md);
+    }
+
+    .delete-confirm-box.show { display: block; }
+
+    .delete-confirm-text {
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin-bottom: 14px;
+        line-height: 1.5;
+    }
+
+    .delete-confirm-text strong { color: var(--text-primary); }
+
+    .delete-confirm-actions { display: flex; gap: 8px; }
+
+    .delete-cancel-btn {
+        flex: 1;
+        padding: 10px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-family: 'Inter', sans-serif;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all var(--duration) var(--ease-out);
+    }
+
+    .delete-cancel-btn:hover { border-color: var(--border-hover); }
+    .delete-cancel-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .delete-confirm-btn {
+        flex: 1;
+        padding: 10px;
+        background: #ef4444;
+        border: none;
+        border-radius: var(--radius-md);
+        color: #fff;
+        font-family: 'Inter', sans-serif;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background var(--duration) var(--ease-out);
+    }
+
+    .delete-confirm-btn:hover { background: #dc2626; }
+    .delete-confirm-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="group-page">
+
+    <!-- Header card -->
+    <div class="group-header-card">
+        <div class="group-banner"></div>
+        <div class="group-identity">
+            <div class="group-avatar-wrap">
+                <div class="group-avatar">
+                    {% if group.avatar_url %}
+                    <img src="{{ group.avatar_url }}" alt="{{ group.name }}">
+                    {% else %}
+                    {{ group.name|make_list|first|upper }}
+                    {% endif %}
+                </div>
+                {% if user_role == 'creator' or user_role == 'admin' %}
+                <button class="edit-group-btn" id="openEditModal">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                    Edit Group
+                </button>
+                {% endif %}
+            </div>
+            <div class="group-name">{{ group.name }}</div>
+            {% if group.description %}
+            <div class="group-description">{{ group.description }}</div>
+            {% endif %}
+            <div class="group-meta">
+                <span class="group-meta-chip">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    {{ member_count }} member{{ member_count|pluralize }}
+                </span>
+                <span class="group-meta-chip">
+                    {% if group.privacy == 'public' %}
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    Public
+                    {% else %}
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    Private
+                    {% endif %}
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Streak card (clickable) -->
+    <div class="streak-card" id="streakCard" role="button" aria-label="View streak details">
+        <div class="streak-left">
+            <div class="streak-label">Group Streak</div>
+            <div class="streak-value-row">
+                <span class="streak-count {% if not group.group_streak %}inactive{% endif %}">
+                    {{ group.group_streak }}
+                </span>
+                <span class="streak-unit">days</span>
+                {% if group.group_streak %}<span class="streak-flame">🔥</span>{% endif %}
+            </div>
+            <div class="streak-best">Best: {{ group.longest_group_streak }}d</div>
+        </div>
+        <div class="streak-right">
+            <div class="streak-chevron">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </div>
+            <div class="streak-tap-hint">
+                {% if group.group_streak %}See who's behind{% else %}See inactive members{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Members -->
+    <div class="section-card">
+        <div class="section-heading">Members</div>
+        {% for m in members %}
+        <div class="member-row">
+            <div class="member-avatar">
+                {% if m.user.avatar_url %}
+                <img src="{{ m.user.avatar_url }}" alt="{{ m.user.username }}">
+                {% else %}
+                {{ m.user.display_name|default:m.user.username|make_list|first|upper }}
+                {% endif %}
+            </div>
+            <div class="member-info">
+                <div class="member-name">{{ m.user.display_name|default:m.user.username }}</div>
+                <div class="member-username">@{{ m.user.username }}</div>
+            </div>
+            {% if m.role != 'member' %}
+            <span class="member-role-badge">{{ m.role }}</span>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+</div>
+
+<!-- Streak modal -->
+<div class="streak-modal-overlay" id="streakOverlay">
+    <div class="streak-modal" id="streakModal">
+        <div class="streak-modal-handle"></div>
+        <div class="streak-modal-header">
+            <span class="streak-modal-title" id="modalTitle">Loading…</span>
+            <span class="streak-modal-badge" id="modalBadge" style="display:none;"></span>
+        </div>
+        <div class="streak-modal-body" id="modalBody">
+            <div class="modal-spinner"><div class="spinner"></div></div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Group Modal -->
+{% if user_role == 'admin' or user_role == 'creator' %}
+<div class="edit-modal-backdrop" id="editModalBackdrop">
+    <div class="edit-modal">
+
+        <div class="edit-modal-header">
+            <span class="edit-modal-title">Group Settings</span>
+            <button class="edit-modal-close" id="editModalClose" aria-label="Close">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+
+        {% if user_role == 'creator' %}
+        <div class="edit-modal-tabs">
+            <button class="edit-tab active" data-tab="info">Group Info</button>
+            <button class="edit-tab danger-tab" data-tab="danger">Danger Zone</button>
+        </div>
+        {% endif %}
+
+        <div class="edit-modal-body">
+
+            <!-- Info panel -->
+            <div class="edit-panel active" id="editPanelInfo">
+                <div id="editAlert" class="edit-alert" style="display:none;"></div>
+
+                <!-- Avatar -->
+                <div class="edit-avatar-row">
+                    <div class="edit-avatar-preview" id="editAvatarPreview">
+                        {% if group.avatar_url %}
+                        <img src="{{ group.avatar_url }}" alt="{{ group.name }}">
+                        {% else %}
+                        {{ group.name|make_list|first|upper }}
+                        {% endif %}
+                    </div>
+                    <div>
+                        <button type="button" class="edit-avatar-change-btn" onclick="document.getElementById('editAvatarInput').click()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                                <circle cx="12" cy="13" r="4"/>
+                            </svg>
+                            Change Photo
+                        </button>
+                        <input type="file" id="editAvatarInput" accept="image/*" style="display:none;">
+                    </div>
+                </div>
+
+                <!-- Name -->
+                <div class="edit-form-group">
+                    <label for="editName">Group Name</label>
+                    <input type="text" id="editName" class="edit-input" value="{{ group.name }}" maxlength="100" placeholder="Group name">
+                    <div id="editNameError" class="field-error" style="display:none;"></div>
+                </div>
+
+                <!-- Description -->
+                <div class="edit-form-group">
+                    <label for="editDescription">Description</label>
+                    <textarea id="editDescription" class="edit-input" maxlength="500" placeholder="What's this group about?">{{ group.description }}</textarea>
+                    <div class="edit-char-counter" id="editDescCounter">{{ group.description|length }}/500</div>
+                </div>
+
+                <!-- Privacy -->
+                <div class="edit-form-group">
+                    <label for="editPrivacy">Privacy</label>
+                    <select id="editPrivacy" class="edit-input">
+                        <option value="public" {% if group.privacy == 'public' %}selected{% endif %}>Public</option>
+                        <option value="private" {% if group.privacy == 'private' %}selected{% endif %}>Private</option>
+                    </select>
+                </div>
+
+                <button type="button" class="edit-save-btn" id="editSaveBtn">Save Changes</button>
+            </div>
+
+            <!-- Danger zone panel (creator only) -->
+            {% if user_role == 'creator' %}
+            <div class="edit-panel" id="editPanelDanger">
+                <div class="danger-info-box">
+                    <div class="danger-info-box-title">Delete Group</div>
+                    <div class="danger-info-box-sub">
+                        Permanently removes the group and all {{ member_count }} member{{ member_count|pluralize }}. This cannot be undone.
+                    </div>
+                </div>
+
+                <button type="button" class="edit-delete-btn" id="editDeleteBtn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="3 6 5 6 21 6"/>
+                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                        <path d="M10 11v6"/><path d="M14 11v6"/>
+                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                    </svg>
+                    Delete "{{ group.name }}"
+                </button>
+
+                <div class="delete-confirm-box" id="deleteConfirmBox">
+                    <div class="delete-confirm-text">
+                        Are you sure you want to delete <strong>{{ group.name }}</strong>?
+                        This will remove all {{ member_count }} member{{ member_count|pluralize }} and cannot be undone.
+                    </div>
+                    <div class="delete-confirm-actions">
+                        <button type="button" class="delete-cancel-btn" id="deleteCancelBtn">Cancel</button>
+                        <button type="button" class="delete-confirm-btn" id="deleteConfirmBtn">Yes, Delete It</button>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+(function () {
+    const groupId   = "{{ group.id }}";
+    const groupStreak = {{ group.group_streak }};
+
+    // ── Streak modal ─────────────────────────────────────────────────────────
+    const overlay    = document.getElementById('streakOverlay');
+    const modalTitle = document.getElementById('modalTitle');
+    const modalBadge = document.getElementById('modalBadge');
+    const modalBody  = document.getElementById('modalBody');
+
+    let cachedMembers = null;
+
+    function escapeHtml(str) {
+        var d = document.createElement('div');
+        d.textContent = String(str == null ? '' : str);
+        return d.innerHTML;
+    }
+
+    function getInitials(name) {
+        return (name || '?')[0].toUpperCase();
+    }
+
+    function avatarHtml(member) {
+        if (member.avatar_url) {
+            return `<img src="${escapeHtml(member.avatar_url)}" alt="${escapeHtml(member.username)}">`;
+        }
+        return escapeHtml(getInitials(member.display_name || member.username));
+    }
+
+    function renderMembers(members) {
+        let flagged;
+        if (groupStreak > 0) {
+            flagged = members.filter(m => !m.has_activity_today);
+            modalTitle.textContent = 'Not Checked In Today';
+        } else {
+            flagged = members.filter(m => m.current_streak === 0);
+            modalTitle.textContent = 'No Active Streak';
+        }
+
+        modalBadge.textContent = flagged.length;
+        modalBadge.className = 'streak-modal-badge' + (flagged.length === 0 ? ' green' : '');
+        modalBadge.style.display = '';
+
+        if (flagged.length === 0) {
+            const emptyTitle = groupStreak > 0
+                ? "Everyone's checked in for the day! 🎉"
+                : "All members are on a streak!";
+            const emptySub = groupStreak > 0
+                ? "All members have logged activity today."
+                : "Every member has an active personal streak.";
+            modalBody.innerHTML = `
+                <div class="modal-empty">
+                    <div class="modal-empty-icon">✅</div>
+                    <div class="modal-empty-title">${emptyTitle}</div>
+                    <div class="modal-empty-subtitle">${emptySub}</div>
+                </div>`;
+            return;
+        }
+
+        modalBody.innerHTML = flagged.map(m => `
+            <div class="inactive-row">
+                <div class="inactive-avatar">${avatarHtml(m)}</div>
+                <div class="inactive-info">
+                    <div class="inactive-name">${escapeHtml(m.display_name || m.username)}</div>
+                    <div class="inactive-username">@${escapeHtml(m.username)}</div>
+                </div>
+                <div class="inactive-streak">⚡ ${escapeHtml(m.current_streak)}d</div>
+            </div>`).join('');
+    }
+
+    async function loadStreakData() {
+        if (cachedMembers) { renderMembers(cachedMembers); return; }
+        modalBody.innerHTML = '<div class="modal-spinner"><div class="spinner"></div></div>';
+        modalTitle.textContent = groupStreak > 0 ? 'Not Checked In Today' : 'No Active Streak';
+        modalBadge.style.display = 'none';
+
+        try {
+            const resp = await fetch(`/api/groups/${groupId}/streak/`, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            if (!resp.ok) throw new Error('Failed to load');
+            const data = await resp.json();
+            cachedMembers = data.members;
+            renderMembers(cachedMembers);
+        } catch {
+            modalBody.innerHTML = `
+                <div class="modal-empty">
+                    <div class="modal-empty-icon">⚠️</div>
+                    <div class="modal-empty-title">Couldn't load data</div>
+                    <div class="modal-empty-subtitle">Please try again.</div>
+                </div>`;
+        }
+    }
+
+    document.getElementById('streakCard').addEventListener('click', () => {
+        overlay.classList.add('open');
+        document.body.style.overflow = 'hidden';
+        loadStreakData();
+    });
+
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) closeStreakModal();
+    });
+
+    function closeStreakModal() {
+        overlay.classList.remove('open');
+        document.body.style.overflow = '';
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            if (overlay.classList.contains('open')) closeStreakModal();
+            if (editBackdrop && editBackdrop.classList.contains('open')) closeEditModal();
+        }
+    });
+
+    // ── Edit Group Modal ──────────────────────────────────────────────────────
+    const editBackdrop = document.getElementById('editModalBackdrop');
+    if (!editBackdrop) return; // not admin/creator
+
+    const csrfToken = "{{ csrf_token }}";
+    let pendingAvatarFile = null;
+
+    function openEditModal() {
+        editBackdrop.classList.add('open');
+        document.body.style.overflow = 'hidden';
+        clearAlert();
+    }
+
+    function closeEditModal() {
+        editBackdrop.classList.remove('open');
+        document.body.style.overflow = '';
+    }
+
+    document.getElementById('openEditModal').addEventListener('click', openEditModal);
+    document.getElementById('editModalClose').addEventListener('click', closeEditModal);
+    editBackdrop.addEventListener('click', (e) => {
+        if (e.target === editBackdrop) closeEditModal();
+    });
+
+    // Tab switching
+    document.querySelectorAll('.edit-tab').forEach(function (tab) {
+        tab.addEventListener('click', function () {
+            document.querySelectorAll('.edit-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.edit-panel').forEach(p => p.classList.remove('active'));
+            this.classList.add('active');
+            const panelId = 'editPanel' + this.getAttribute('data-tab').charAt(0).toUpperCase() + this.getAttribute('data-tab').slice(1);
+            document.getElementById(panelId).classList.add('active');
+        });
+    });
+
+    // Avatar preview
+    const avatarInput = document.getElementById('editAvatarInput');
+    const avatarPreview = document.getElementById('editAvatarPreview');
+    avatarInput.addEventListener('change', function () {
+        const file = this.files[0];
+        if (!file) return;
+        pendingAvatarFile = file;
+        const reader = new FileReader();
+        reader.onload = (e) => { avatarPreview.innerHTML = `<img src="${e.target.result}" alt="Preview">`; };
+        reader.readAsDataURL(file);
+    });
+
+    // Description counter
+    const descInput = document.getElementById('editDescription');
+    const descCounter = document.getElementById('editDescCounter');
+    descInput.addEventListener('input', function () {
+        const len = this.value.length;
+        descCounter.textContent = len + '/500';
+        descCounter.className = 'edit-char-counter' + (len >= 500 ? ' limit' : len >= 450 ? ' warning' : '');
+    });
+
+    // Alerts
+    function showAlert(msg) {
+        const alert = document.getElementById('editAlert');
+        alert.textContent = msg;
+        alert.className = 'edit-alert error';
+        alert.style.display = '';
+    }
+    function clearAlert() {
+        document.getElementById('editAlert').style.display = 'none';
+    }
+
+    // Save
+    document.getElementById('editSaveBtn').addEventListener('click', async function () {
+        const nameInput = document.getElementById('editName');
+        const nameError = document.getElementById('editNameError');
+        const name = nameInput.value.trim();
+
+        if (!name) {
+            nameError.textContent = 'Group name is required.';
+            nameError.style.display = '';
+            nameInput.classList.add('error');
+            return;
+        }
+        nameError.style.display = 'none';
+        nameInput.classList.remove('error');
+
+        const btn = this;
+        btn.disabled = true;
+        btn.textContent = 'Saving…';
+        clearAlert();
+
+        try {
+            if (pendingAvatarFile) {
+                const fd = new FormData();
+                fd.append('avatar', pendingAvatarFile);
+                const avatarResp = await fetch(`/api/groups/${groupId}/avatar/`, {
+                    method: 'PATCH',
+                    headers: { 'X-CSRFToken': csrfToken },
+                    credentials: 'same-origin',
+                    body: fd,
+                });
+                if (!avatarResp.ok) {
+                    const err = await avatarResp.json().catch(() => ({}));
+                    throw new Error(err.error || 'Failed to upload avatar.');
+                }
+            }
+
+            const updateResp = await fetch(`/api/groups/${groupId}/update/`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken,
+                },
+                credentials: 'same-origin',
+                body: JSON.stringify({
+                    name: name,
+                    description: descInput.value,
+                    privacy: document.getElementById('editPrivacy').value,
+                }),
+            });
+
+            if (!updateResp.ok) {
+                const err = await updateResp.json().catch(() => ({}));
+                throw new Error(err.error || 'Failed to save changes.');
+            }
+
+            window.location.reload();
+
+        } catch (err) {
+            showAlert(err.message || 'Something went wrong. Please try again.');
+            btn.disabled = false;
+            btn.textContent = 'Save Changes';
+        }
+    });
+
+    // Delete (creator only)
+    const deleteBtn = document.getElementById('editDeleteBtn');
+    if (deleteBtn) {
+        const confirmBox    = document.getElementById('deleteConfirmBox');
+        const cancelBtn     = document.getElementById('deleteCancelBtn');
+        const confirmDelBtn = document.getElementById('deleteConfirmBtn');
+
+        deleteBtn.addEventListener('click', () => {
+            confirmBox.classList.add('show');
+            deleteBtn.style.display = 'none';
+        });
+
+        cancelBtn.addEventListener('click', () => {
+            confirmBox.classList.remove('show');
+            deleteBtn.style.display = '';
+        });
+
+        confirmDelBtn.addEventListener('click', async function () {
+            this.disabled = true;
+            this.textContent = 'Deleting…';
+            cancelBtn.disabled = true;
+
+            try {
+                const resp = await fetch(`/api/groups/${groupId}/delete/`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': csrfToken },
+                    credentials: 'same-origin',
+                });
+
+                if (!resp.ok) {
+                    const err = await resp.json().catch(() => ({}));
+                    throw new Error(err.error || 'Failed to delete group.');
+                }
+
+                window.location.href = '/social/';
+
+            } catch (err) {
+                this.disabled = false;
+                this.textContent = 'Yes, Delete It';
+                cancelBtn.disabled = false;
+                showAlert(err.message || 'Failed to delete group. Please try again.');
+                // Switch back to info panel to show the alert
+                document.querySelectorAll('.edit-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.edit-panel').forEach(p => p.classList.remove('active'));
+                document.querySelector('[data-tab="info"]').classList.add('active');
+                document.getElementById('editPanelInfo').classList.add('active');
+                confirmBox.classList.remove('show');
+                deleteBtn.style.display = '';
+            }
+        });
+    }
+})();
+</script>
+{% endblock %}

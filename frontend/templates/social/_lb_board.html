@@ -1,0 +1,97 @@
+{% comment %}
+Shared podium + ranked-list + Your Rank card.
+Variables:
+  ranked   — list of {rank, user} dicts, sorted by rank
+  my_rank  — integer rank of the current user (or None)
+{% endcomment %}
+
+<!-- Podium: top 3 -->
+{% if ranked %}
+<div class="lb-podium">
+    {% for entry in ranked %}
+    {% if entry.rank == 1 %}
+    <a href="{% url 'accounts:user_profile' entry.user.username %}" class="lb-podium-slot rank-1">
+        <div class="lb-podium-icon">👑</div>
+        <div class="lb-podium-avatar">
+            {% if entry.user.avatar_url %}
+            <img src="{{ entry.user.avatar_url }}" alt="{{ entry.user.username }}">
+            {% else %}
+            <div class="lb-podium-avatar-letter">{{ entry.user.display_name|make_list|first|upper }}</div>
+            {% endif %}
+        </div>
+        <div class="lb-podium-name">{{ entry.user.display_name }}</div>
+        <div class="lb-podium-workouts">{{ entry.user.total_workouts }} workouts &bull; {{ entry.user.current_streak }}🔥</div>
+    </a>
+    {% elif entry.rank == 2 %}
+    <a href="{% url 'accounts:user_profile' entry.user.username %}" class="lb-podium-slot rank-2">
+        <div class="lb-podium-icon">🥈</div>
+        <div class="lb-podium-avatar">
+            {% if entry.user.avatar_url %}
+            <img src="{{ entry.user.avatar_url }}" alt="{{ entry.user.username }}">
+            {% else %}
+            <div class="lb-podium-avatar-letter">{{ entry.user.display_name|make_list|first|upper }}</div>
+            {% endif %}
+        </div>
+        <div class="lb-podium-name">{{ entry.user.display_name }}</div>
+        <div class="lb-podium-workouts">{{ entry.user.total_workouts }} workouts &bull; {{ entry.user.current_streak }}🔥</div>
+    </a>
+    {% elif entry.rank == 3 %}
+    <a href="{% url 'accounts:user_profile' entry.user.username %}" class="lb-podium-slot rank-3">
+        <div class="lb-podium-icon">🥉</div>
+        <div class="lb-podium-avatar">
+            {% if entry.user.avatar_url %}
+            <img src="{{ entry.user.avatar_url }}" alt="{{ entry.user.username }}">
+            {% else %}
+            <div class="lb-podium-avatar-letter">{{ entry.user.display_name|make_list|first|upper }}</div>
+            {% endif %}
+        </div>
+        <div class="lb-podium-name">{{ entry.user.display_name }}</div>
+        <div class="lb-podium-workouts">{{ entry.user.total_workouts }} workouts &bull; {{ entry.user.current_streak }}🔥</div>
+    </a>
+    {% endif %}
+    {% endfor %}
+</div>
+{% endif %}
+
+<!-- Ranked list: 4th place onward -->
+<div class="lb-list">
+    {% for entry in ranked %}
+    {% if entry.rank >= 4 %}
+    <a href="{% url 'accounts:user_profile' entry.user.username %}"
+       class="lb-row {% if entry.user.id == request.user.id %}is-me{% endif %}">
+        <div class="lb-rank-num">#{{ entry.rank }}</div>
+        <div class="lb-row-avatar">
+            {% if entry.user.avatar_url %}
+            <img src="{{ entry.user.avatar_url }}" alt="{{ entry.user.username }}">
+            {% else %}
+            <div class="lb-row-avatar-letter">{{ entry.user.display_name|make_list|first|upper }}</div>
+            {% endif %}
+        </div>
+        <div class="lb-row-info">
+            <div class="lb-row-name">
+                {{ entry.user.display_name }}{% if entry.user.id == request.user.id %} (You){% endif %}
+            </div>
+            <div class="lb-row-meta">{{ entry.user.total_workouts }} workouts &bull; {{ entry.user.current_streak }}🔥</div>
+        </div>
+    </a>
+    {% endif %}
+    {% endfor %}
+</div>
+
+<!-- Your Rank card -->
+{% if my_rank %}
+<div class="lb-my-rank-card">
+    <div class="lb-my-rank-label">Your Rank</div>
+    <div class="lb-my-rank-number">#{{ my_rank }}</div>
+    <div class="lb-my-rank-stats">
+        <div>
+            <div class="lb-my-rank-stat-val">{{ request.user.total_workouts }}</div>
+            <div class="lb-my-rank-stat-label">Total Workouts</div>
+        </div>
+        <div>
+            <div class="lb-my-rank-stat-val">{{ request.user.current_streak }}</div>
+            <div class="lb-my-rank-stat-label">Day Streak</div>
+        </div>
+    </div>
+</div>
+{% endif %}

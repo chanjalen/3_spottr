@@ -1,0 +1,1185 @@
+{% extends 'gyms/base.html' %}
+
+{% block title %}{{ gym.name }}{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="detail-header">
+    <div>
+        <h1 class="detail-gym-name">{{ gym.name }}</h1>
+        <div class="detail-gym-address">{{ gym.address|default:"No address" }}</div>
+    </div>
+    <div class="detail-header-actions">
+        {% if is_enrolled %}
+        <button class="enroll-action-btn enrolled" id="enrollBtn">Enrolled</button>
+        {% else %}
+        <button class="enroll-action-btn" id="enrollBtn">Enroll</button>
+        {% endif %}
+        <a href="{% url 'gyms:gym_list' %}" class="view-map-btn">View Map</a>
+    </div>
+</div>
+
+<!-- Live Activity -->
+<div class="live-activity-card">
+    <div class="live-activity-header">
+        <div class="live-activity-label">Live Activity</div>
+        <div class="live-activity-right">
+            <div class="busy-level-text {% if busy_level and busy_level <= 2 %}color-low{% elif busy_level == 3 %}color-moderate{% elif busy_level == 4 %}color-high{% elif busy_level and busy_level >= 5 %}color-very-high{% endif %}">
+                {{ busy_label }}
+            </div>
+            <div class="busy-level-sublabel">Busy Level</div>
+        </div>
+        <button class="survey-btn" id="surveyBtn" title="Report busy level">&#9998;</button>
+    </div>
+    <div class="busy-level-display {% if busy_level and busy_level <= 2 %}color-low{% elif busy_level == 3 %}color-moderate{% elif busy_level == 4 %}color-high{% elif busy_level and busy_level >= 5 %}color-very-high{% endif %}">
+        {{ busy_label }}
+    </div>
+    <div class="busy-bar">
+        <div class="busy-bar-track">
+            {% if busy_level %}
+            <div class="busy-bar-fill {% if busy_level <= 2 %}fill-low{% elif busy_level == 3 %}fill-moderate{% elif busy_level == 4 %}fill-high{% else %}fill-very-high{% endif %}" style="width:{% widthratio busy_level 5 100 %}%;"></div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Busy Level Survey Modal -->
+<div class="survey-modal" id="surveyModal">
+    <div class="survey-modal-content">
+        <div class="survey-modal-title">How busy is it?</div>
+        <div class="survey-options">
+            <button class="survey-option" data-value="1">
+                <span class="survey-option-dot" style="background:#22c55e;"></span>
+                Not crowded
+            </button>
+            <button class="survey-option" data-value="2">
+                <span class="survey-option-dot" style="background:#84cc16;"></span>
+                Not too crowded
+            </button>
+            <button class="survey-option" data-value="3">
+                <span class="survey-option-dot" style="background:#eab308;"></span>
+                Moderately crowded
+            </button>
+            <button class="survey-option" data-value="4">
+                <span class="survey-option-dot" style="background:#f97316;"></span>
+                Crowded
+            </button>
+            <button class="survey-option" data-value="5">
+                <span class="survey-option-dot" style="background:#ef4444;"></span>
+                Very crowded
+            </button>
+        </div>
+        <button class="survey-cancel" id="surveyCancel">Cancel</button>
+    </div>
+</div>
+
+<!-- Workout Buddies -->
+<div class="section-block">
+    <div class="section-header">
+        <h2 class="section-title">Workout Buddies</h2>
+        <button class="post-invite-btn" id="postInviteBtn">Post Invite</button>
+    </div>
+
+    <div class="invite-list" id="inviteList">
+        {% for invite in invites %}
+        <div class="invite-card">
+            <div class="invite-avatar">
+                {% if invite.user.avatar_url %}
+                <img src="{{ invite.user.avatar_url }}" alt="{{ invite.user.username }}" class="invite-avatar-img">
+                {% else %}
+                <span class="invite-avatar-letter">{{ invite.user.username|make_list|first|upper }}</span>
+                {% endif %}
+            </div>
+            <div class="invite-info">
+                <div class="invite-title"><a href="{% url 'accounts:user_profile' username=invite.user.username %}" class="user-link">{{ invite.user.username }}</a> is looking for {{ invite.spots_available }} {% if invite.spots_available == 1 %}person{% else %}people{% endif %}</div>
+                <div class="invite-meta">{{ invite.workout_type }} &middot; {{ invite.scheduled_time|date:"M j" }} at {{ invite.scheduled_time|time:"g:i A" }}</div>
+            </div>
+            {% if invite.user == request.user %}
+            <button class="cancel-invite-btn" data-invite-id="{{ invite.id }}">Cancel Invite</button>
+            {% else %}
+            <button class="join-btn" data-invite-id="{{ invite.id }}">Join</button>
+            {% endif %}
+        </div>
+        {% empty %}
+        <div class="invite-empty">No active invites right now. Be the first to post one!</div>
+        {% endfor %}
+    </div>
+</div>
+
+<!-- Post Invite Modal -->
+<div class="invite-modal" id="inviteModal">
+    <div class="invite-modal-content">
+        <div class="invite-modal-title">Post Workout Invite</div>
+        <form id="inviteForm">
+            <div class="form-group">
+                <label>Workout Type</label>
+                <input type="text" id="inviteWorkoutType" placeholder="e.g. Leg Day, Basketball" required>
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <input type="text" id="inviteDescription" placeholder="What are you looking for?" required>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Spots</label>
+                    <input type="number" id="inviteSpots" value="1" min="1" max="20" required>
+                </div>
+                <div class="form-group">
+                    <label>Time</label>
+                    <input type="datetime-local" id="inviteTime" required>
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="modal-cancel" id="inviteCancel">Cancel</button>
+                <button type="submit" class="modal-submit">Post</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Join Request Modal -->
+<div class="join-modal" id="joinModal">
+    <div class="join-modal-content">
+        <div class="join-modal-title">Request to Join</div>
+        <div class="join-invite-preview" id="joinInvitePreview"></div>
+        <form id="joinForm">
+            <div class="form-group">
+                <label>Message</label>
+                <textarea id="joinMessage" placeholder="Introduce yourself or say what you're working on..." rows="3" required></textarea>
+            </div>
+            <div class="form-actions">
+                <button type="button" class="modal-cancel" id="joinCancel">Cancel</button>
+                <button type="submit" class="modal-submit" id="joinSubmitBtn">Send Request</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Top Lifters -->
+<div class="section-block">
+    <div class="section-header">
+        <h2 class="section-title">Top Lifters at {{ gym.name }}</h2>
+        <select class="lifters-select" id="liftersSelect">
+            <option value="total" selected>Total</option>
+            <option value="bench">Bench Press</option>
+            <option value="squat">Squat</option>
+            <option value="deadlift">Deadlift</option>
+        </select>
+    </div>
+    <div class="lifters-list" id="liftersList">
+        <div class="invite-empty">Loading...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* ============ DETAIL HEADER ============ */
+    .detail-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 24px;
+    }
+
+    .detail-gym-name {
+        font-size: 26px;
+        font-weight: 700;
+        color: var(--text-primary);
+        letter-spacing: -0.5px;
+        margin-bottom: 4px;
+    }
+
+    .detail-gym-address {
+        font-size: 14px;
+        color: var(--text-secondary);
+        margin-bottom: 4px;
+    }
+
+    .detail-gym-distance {
+        font-size: 13px;
+        color: var(--text-brand);
+    }
+
+    .detail-header-actions {
+        display: flex;
+        gap: 10px;
+        align-items: center;
+        flex-shrink: 0;
+    }
+
+    .view-map-btn {
+        padding: 10px 20px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-pill);
+        color: var(--text-primary);
+        text-decoration: none;
+        font-size: 13px;
+        font-weight: 600;
+        transition: all var(--duration) var(--ease-out);
+        flex-shrink: 0;
+    }
+
+    .view-map-btn:hover {
+        border-color: var(--border-hover);
+        box-shadow: var(--shadow-glow);
+    }
+
+    .enroll-action-btn {
+        padding: 10px 20px;
+        background: linear-gradient(135deg, #0891b2, #06b6d4);
+        border: none;
+        border-radius: var(--radius-pill);
+        color: #fff;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all var(--duration) var(--ease-out);
+        box-shadow: 0 2px 8px rgba(6,182,212,0.3);
+        flex-shrink: 0;
+    }
+
+    .enroll-action-btn:hover {
+        box-shadow: 0 4px 16px rgba(6,182,212,0.4);
+        transform: translateY(-1px);
+    }
+
+    .enroll-action-btn.enrolled {
+        background: rgba(6,182,212,0.15);
+        color: #22d3ee;
+        border: 1px solid rgba(6,182,212,0.3);
+        box-shadow: none;
+    }
+
+    .enroll-action-btn.enrolled:hover {
+        background: rgba(239,68,68,0.15);
+        color: #f87171;
+        border-color: rgba(239,68,68,0.3);
+    }
+
+    /* ============ LIVE ACTIVITY ============ */
+    .live-activity-card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-xl);
+        padding: 22px;
+        margin-bottom: 28px;
+        box-shadow: var(--shadow-sm);
+    }
+
+    .live-activity-header {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        margin-bottom: 8px;
+    }
+
+    .live-activity-label {
+        font-size: 13px;
+        color: var(--text-muted);
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .live-activity-right {
+        text-align: right;
+    }
+
+    .busy-level-text {
+        font-size: 16px;
+        font-weight: 700;
+    }
+
+    .busy-level-sublabel {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+
+    .color-low { color: #22c55e; }
+    .color-moderate { color: #eab308; }
+    .color-high { color: #f97316; }
+    .color-very-high { color: #ef4444; }
+
+    .survey-btn {
+        width: 36px;
+        height: 36px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-sm);
+        color: var(--text-secondary);
+        font-size: 16px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all var(--duration) var(--ease-out);
+        margin-left: 12px;
+        flex-shrink: 0;
+    }
+
+    .survey-btn:hover {
+        border-color: var(--border-hover);
+        color: var(--text-primary);
+        box-shadow: var(--shadow-glow);
+    }
+
+    .busy-level-display {
+        font-size: 28px;
+        font-weight: 700;
+        margin-bottom: 16px;
+        letter-spacing: -0.5px;
+    }
+
+    /* ============ BUSY BAR ============ */
+    .busy-bar {
+        margin-top: 4px;
+    }
+
+    .busy-bar-track {
+        height: 10px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-pill);
+        overflow: hidden;
+    }
+
+    .busy-bar-fill {
+        height: 100%;
+        border-radius: var(--radius-pill);
+        transition: width 0.4s var(--ease-out);
+    }
+
+    .busy-bar-fill.fill-low { background: #22c55e; }
+    .busy-bar-fill.fill-moderate { background: #eab308; }
+    .busy-bar-fill.fill-high { background: #f97316; }
+    .busy-bar-fill.fill-very-high { background: #ef4444; }
+
+    /* ============ SURVEY MODAL ============ */
+    .survey-modal, .invite-modal, .join-modal {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0,0,0,0.6);
+        backdrop-filter: blur(4px);
+        z-index: 200;
+        align-items: flex-end;
+        justify-content: center;
+    }
+
+    .survey-modal.active, .invite-modal.active, .join-modal.active {
+        display: flex;
+    }
+
+    .survey-modal-content, .invite-modal-content, .join-modal-content {
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-2xl) var(--radius-2xl) 0 0;
+        padding: 28px 24px 36px;
+        width: 100%;
+        max-width: 640px;
+        animation: slideUp 0.3s var(--ease-out);
+    }
+
+    @keyframes slideUp {
+        from { transform: translateY(100%); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+    }
+
+    .survey-modal-title, .invite-modal-title, .join-modal-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 20px;
+        text-align: center;
+    }
+
+    .survey-options {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-bottom: 16px;
+    }
+
+    .survey-option {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 18px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all var(--duration) var(--ease-out);
+        font-family: inherit;
+    }
+
+    .survey-option:hover {
+        border-color: var(--border-hover);
+        background: var(--bg-hover);
+    }
+
+    .survey-option-dot {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    .survey-cancel, .modal-cancel {
+        width: 100%;
+        padding: 12px;
+        background: none;
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-secondary);
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all var(--duration) var(--ease-out);
+    }
+
+    .survey-cancel:hover, .modal-cancel:hover {
+        border-color: var(--border-hover);
+        color: var(--text-primary);
+    }
+
+    /* ============ SECTIONS ============ */
+    .section-block {
+        margin-bottom: 28px;
+    }
+
+    .section-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+    }
+
+    .section-title {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text-primary);
+        letter-spacing: -0.2px;
+    }
+
+    .post-invite-btn {
+        padding: 8px 18px;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        border: none;
+        border-radius: var(--radius-pill);
+        color: #fff;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all var(--duration) var(--ease-out);
+        box-shadow: 0 2px 8px rgba(124,58,237,0.3);
+    }
+
+    .post-invite-btn:hover {
+        box-shadow: 0 4px 16px rgba(124,58,237,0.4);
+        transform: translateY(-1px);
+    }
+
+    /* ============ INVITE CARDS ============ */
+    .invite-list {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+
+    .invite-card {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        padding: 16px 18px;
+        transition: all var(--duration) var(--ease-out);
+    }
+
+    .invite-card:hover {
+        border-color: var(--border-hover);
+    }
+
+    .invite-avatar {
+        width: 42px;
+        height: 42px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #f97316, #ef4444);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .invite-avatar:nth-child(1) { background: linear-gradient(135deg, #f97316, #ef4444); }
+    .invite-card:nth-child(2) .invite-avatar { background: linear-gradient(135deg, #eab308, #f59e0b); }
+    .invite-card:nth-child(3) .invite-avatar { background: linear-gradient(135deg, #f97316, #fb923c); }
+
+    .invite-avatar-letter {
+        font-size: 16px;
+        font-weight: 700;
+        color: #fff;
+    }
+
+    .invite-avatar-img {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    .leaderboard-avatar-img {
+        width: 100%;
+        height: 100%;
+        border-radius: 50%;
+        object-fit: cover;
+    }
+
+    .invite-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .invite-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 3px;
+    }
+
+    .invite-meta {
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+
+    .join-btn {
+        padding: 8px 18px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-pill);
+        color: var(--text-primary);
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all var(--duration) var(--ease-out);
+        flex-shrink: 0;
+    }
+
+    .join-btn:hover {
+        border-color: var(--border-hover);
+        box-shadow: var(--shadow-glow);
+    }
+
+    .invite-empty {
+        text-align: center;
+        padding: 32px 16px;
+        color: var(--text-muted);
+        font-size: 14px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+    }
+
+    /* ============ LEADERBOARD ============ */
+    .leaderboard-list {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .leaderboard-row {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        background: var(--bg-card);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        padding: 14px 18px;
+        transition: all var(--duration) var(--ease-out);
+    }
+
+    .leaderboard-row:hover {
+        border-color: var(--border-hover);
+    }
+
+    .leaderboard-rank {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text-muted);
+        width: 28px;
+        text-align: center;
+        flex-shrink: 0;
+    }
+
+    .leaderboard-row:nth-child(1) .leaderboard-rank { color: #fbbf24; }
+    .leaderboard-row:nth-child(2) .leaderboard-rank { color: #94a3b8; }
+    .leaderboard-row:nth-child(3) .leaderboard-rank { color: #cd7f32; }
+
+    .leaderboard-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .leaderboard-row:nth-child(1) .leaderboard-avatar {
+        background: linear-gradient(135deg, #f97316, #ef4444);
+        border-color: transparent;
+    }
+
+    .leaderboard-row:nth-child(2) .leaderboard-avatar {
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        border-color: transparent;
+    }
+
+    .leaderboard-row:nth-child(3) .leaderboard-avatar {
+        background: linear-gradient(135deg, #f97316, #fb923c);
+        border-color: transparent;
+    }
+
+    .leaderboard-avatar-letter {
+        font-size: 15px;
+        font-weight: 700;
+        color: #fff;
+    }
+
+    .leaderboard-info {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .leaderboard-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .leaderboard-streak {
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+
+    .leaderboard-stat {
+        font-size: 16px;
+        font-weight: 700;
+        color: #22d3ee;
+        flex-shrink: 0;
+    }
+
+    .leaderboard-row:nth-child(1) .leaderboard-stat { color: #fbbf24; }
+
+    /* ============ INVITE FORM ============ */
+    .form-group {
+        margin-bottom: 16px;
+    }
+
+    .form-group label {
+        display: block;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        margin-bottom: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .form-group input {
+        width: 100%;
+        padding: 12px 16px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-size: 14px;
+        font-family: inherit;
+        outline: none;
+        transition: border-color var(--duration) var(--ease-out);
+    }
+
+    .form-group input:focus {
+        border-color: var(--brand-purple);
+    }
+
+    .form-group input::placeholder {
+        color: var(--text-muted);
+    }
+
+    .form-row {
+        display: flex;
+        gap: 12px;
+    }
+
+    .form-row .form-group { flex: 1; }
+
+    .form-actions {
+        display: flex;
+        gap: 12px;
+        margin-top: 8px;
+    }
+
+    .form-actions .modal-cancel { flex: 1; }
+
+    .modal-submit {
+        flex: 2;
+        padding: 12px;
+        background: linear-gradient(135deg, var(--brand-purple), var(--brand-blue));
+        border: none;
+        border-radius: var(--radius-md);
+        color: #fff;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all var(--duration) var(--ease-out);
+        box-shadow: 0 2px 8px rgba(124,58,237,0.3);
+    }
+
+    .modal-submit:hover {
+        box-shadow: 0 4px 16px rgba(124,58,237,0.4);
+    }
+
+    .modal-submit:disabled {
+        opacity: 0.6;
+        cursor: not-allowed;
+    }
+
+    /* ============ JOIN REQUEST MODAL ============ */
+    .join-invite-preview {
+        font-size: 13px;
+        color: var(--text-secondary);
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        padding: 12px 16px;
+        margin-bottom: 16px;
+        line-height: 1.5;
+    }
+
+    .form-group textarea {
+        width: 100%;
+        padding: 12px 16px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-size: 14px;
+        font-family: inherit;
+        outline: none;
+        resize: vertical;
+        min-height: 80px;
+        transition: border-color var(--duration) var(--ease-out);
+    }
+
+    .form-group textarea:focus {
+        border-color: var(--brand-purple);
+    }
+
+    .form-group textarea::placeholder {
+        color: var(--text-muted);
+    }
+
+    .join-btn.requested {
+        background: rgba(124,58,237,0.15);
+        color: #a78bfa;
+        border-color: rgba(124,58,237,0.3);
+        cursor: default;
+    }
+
+    .cancel-invite-btn {
+        padding: 8px 18px;
+        background: rgba(239,68,68,0.12);
+        border: 1px solid rgba(239,68,68,0.3);
+        border-radius: var(--radius-pill);
+        color: #f87171;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: inherit;
+        transition: all var(--duration) var(--ease-out);
+        flex-shrink: 0;
+    }
+
+    .cancel-invite-btn:hover {
+        background: rgba(239,68,68,0.22);
+        border-color: rgba(239,68,68,0.5);
+    }
+
+    /* ============ USER LINKS ============ */
+    .user-link { color: var(--text-brand, #22d3ee); text-decoration: none; }
+    .user-link:hover { text-decoration: underline; }
+
+    /* ============ TOP LIFTERS SELECT ============ */
+    .lifters-select {
+        padding: 8px 14px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-md);
+        color: var(--text-primary);
+        font-size: 13px;
+        font-weight: 600;
+        font-family: inherit;
+        cursor: pointer;
+        outline: none;
+        transition: border-color var(--duration) var(--ease-out);
+        -webkit-appearance: none;
+        appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 10px center;
+        padding-right: 30px;
+    }
+
+    .lifters-select:hover,
+    .lifters-select:focus {
+        border-color: var(--border-hover);
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    const gymId = '{{ gym.id }}';
+    const csrfToken = '{{ csrf_token }}';
+    const isEnrolled = {{ is_enrolled|yesno:"true,false" }};
+
+    // ---- Enroll / Unenroll ----
+    const enrollBtn = document.getElementById('enrollBtn');
+    if (enrollBtn) {
+        enrollBtn.addEventListener('click', async () => {
+            enrollBtn.disabled = true;
+            if (isEnrolled) {
+                if (!confirm('Unenroll from this gym?')) {
+                    enrollBtn.disabled = false;
+                    return;
+                }
+                enrollBtn.textContent = 'Unenrolling...';
+                try {
+                    const res = await fetch(`/api/gyms/gyms/${gymId}/unenroll/`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken,
+                        },
+                    });
+                    if (res.ok || res.status === 204) {
+                        location.reload();
+                    } else {
+                        const data = await res.json();
+                        alert(data.error || 'Could not unenroll.');
+                        enrollBtn.disabled = false;
+                        enrollBtn.textContent = 'Enrolled';
+                    }
+                } catch {
+                    alert('Network error. Please try again.');
+                    enrollBtn.disabled = false;
+                    enrollBtn.textContent = 'Enrolled';
+                }
+            } else {
+                enrollBtn.textContent = 'Enrolling...';
+                try {
+                    const res = await fetch(`/api/gyms/gyms/${gymId}/enroll/`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken,
+                        },
+                    });
+                    if (res.ok) {
+                        location.reload();
+                    } else {
+                        const data = await res.json();
+                        alert(data.error || 'Could not enroll.');
+                        enrollBtn.disabled = false;
+                        enrollBtn.textContent = 'Enroll';
+                    }
+                } catch {
+                    alert('Network error. Please try again.');
+                    enrollBtn.disabled = false;
+                    enrollBtn.textContent = 'Enroll';
+                }
+            }
+        });
+    }
+
+    // ---- Busy Level Survey ----
+    const surveyBtn = document.getElementById('surveyBtn');
+    const surveyModal = document.getElementById('surveyModal');
+    const surveyCancel = document.getElementById('surveyCancel');
+    const surveyOptions = document.querySelectorAll('.survey-option');
+
+    if (surveyBtn) {
+        surveyBtn.addEventListener('click', () => surveyModal.classList.add('active'));
+    }
+    if (surveyCancel) {
+        surveyCancel.addEventListener('click', () => surveyModal.classList.remove('active'));
+    }
+    surveyModal.addEventListener('click', (e) => {
+        if (e.target === surveyModal) surveyModal.classList.remove('active');
+    });
+
+    surveyOptions.forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const value = parseInt(btn.dataset.value);
+            try {
+                const res = await fetch(`/api/gyms/gyms/${gymId}/busy-level/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                    },
+                    body: JSON.stringify({ survey_response: value }),
+                });
+                if (res.ok) {
+                    surveyModal.classList.remove('active');
+                    location.reload();
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Could not submit. Try again later.');
+                    surveyModal.classList.remove('active');
+                }
+            } catch {
+                alert('Network error. Please try again.');
+                surveyModal.classList.remove('active');
+            }
+        });
+    });
+
+    // ---- Post Invite ----
+    const postInviteBtn = document.getElementById('postInviteBtn');
+    const inviteModal = document.getElementById('inviteModal');
+    const inviteCancel = document.getElementById('inviteCancel');
+    const inviteForm = document.getElementById('inviteForm');
+
+    if (postInviteBtn) {
+        postInviteBtn.addEventListener('click', () => inviteModal.classList.add('active'));
+    }
+    if (inviteCancel) {
+        inviteCancel.addEventListener('click', () => inviteModal.classList.remove('active'));
+    }
+    inviteModal.addEventListener('click', (e) => {
+        if (e.target === inviteModal) inviteModal.classList.remove('active');
+    });
+
+    if (inviteForm) {
+        inviteForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const scheduledTime = document.getElementById('inviteTime').value;
+            // Set expires_at to 1 hour after scheduled time
+            const expiresAt = new Date(new Date(scheduledTime).getTime() + 3600000).toISOString();
+
+            const payload = {
+                gym_id: gymId,
+                workout_type: document.getElementById('inviteWorkoutType').value,
+                description: document.getElementById('inviteDescription').value,
+                spots_available: parseInt(document.getElementById('inviteSpots').value),
+                scheduled_time: scheduledTime,
+                type: 'gym',
+                expires_at: expiresAt,
+            };
+
+            try {
+                const res = await fetch('/api/gyms/invites/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                    },
+                    body: JSON.stringify(payload),
+                });
+                if (res.ok) {
+                    inviteModal.classList.remove('active');
+                    location.reload();
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Could not post invite.');
+                    inviteModal.classList.remove('active');
+                }
+            } catch {
+                alert('Network error. Please try again.');
+                inviteModal.classList.remove('active');
+            }
+        });
+    }
+
+    // ---- Join Request Modal ----
+    const joinModal = document.getElementById('joinModal');
+    const joinCancel = document.getElementById('joinCancel');
+    const joinForm = document.getElementById('joinForm');
+    const joinMessage = document.getElementById('joinMessage');
+    const joinSubmitBtn = document.getElementById('joinSubmitBtn');
+    const joinInvitePreview = document.getElementById('joinInvitePreview');
+    let activeJoinInviteId = null;
+    let activeJoinBtn = null;
+
+    if (joinCancel) {
+        joinCancel.addEventListener('click', () => {
+            joinModal.classList.remove('active');
+            activeJoinInviteId = null;
+            activeJoinBtn = null;
+        });
+    }
+    joinModal.addEventListener('click', (e) => {
+        if (e.target === joinModal) {
+            joinModal.classList.remove('active');
+            activeJoinInviteId = null;
+            activeJoinBtn = null;
+        }
+    });
+
+    document.querySelectorAll('.join-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const inviteId = btn.dataset.inviteId;
+            const card = btn.closest('.invite-card');
+            const title = card.querySelector('.invite-title').textContent;
+            const meta = card.querySelector('.invite-meta').textContent;
+
+            activeJoinInviteId = inviteId;
+            activeJoinBtn = btn;
+            joinInvitePreview.textContent = title + ' — ' + meta;
+            joinMessage.value = '';
+            joinSubmitBtn.disabled = false;
+            joinSubmitBtn.textContent = 'Send Request';
+            joinModal.classList.add('active');
+            joinMessage.focus();
+        });
+    });
+
+    if (joinForm) {
+        joinForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (!activeJoinInviteId) return;
+
+            joinSubmitBtn.disabled = true;
+            joinSubmitBtn.textContent = 'Sending...';
+
+            try {
+                const res = await fetch(`/api/gyms/invites/${activeJoinInviteId}/join/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrfToken,
+                    },
+                    body: JSON.stringify({ description: joinMessage.value }),
+                });
+                if (res.ok) {
+                    joinModal.classList.remove('active');
+                    if (activeJoinBtn) {
+                        activeJoinBtn.textContent = 'Requested';
+                        activeJoinBtn.disabled = true;
+                        activeJoinBtn.classList.add('requested');
+                    }
+                } else {
+                    const data = await res.json();
+                    alert(data.error || 'Could not send request.');
+                    joinSubmitBtn.disabled = false;
+                    joinSubmitBtn.textContent = 'Send Request';
+                }
+            } catch {
+                alert('Network error. Please try again.');
+                joinSubmitBtn.disabled = false;
+                joinSubmitBtn.textContent = 'Send Request';
+            }
+
+            activeJoinInviteId = null;
+            activeJoinBtn = null;
+        });
+    }
+
+    // ---- Cancel Invite ----
+    document.querySelectorAll('.cancel-invite-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (!confirm('Cancel this workout invite?')) return;
+            const inviteId = btn.dataset.inviteId;
+            btn.disabled = true;
+            btn.textContent = 'Cancelling...';
+            try {
+                const res = await fetch(`/api/gyms/invites/${inviteId}/`, {
+                    method: 'DELETE',
+                    headers: { 'X-CSRFToken': csrfToken },
+                });
+                if (res.ok || res.status === 204) {
+                    btn.closest('.invite-card').remove();
+                    const inviteList = document.getElementById('inviteList');
+                    if (inviteList && inviteList.querySelectorAll('.invite-card').length === 0) {
+                        inviteList.innerHTML = '<div class="invite-empty">No active invites right now. Be the first to post one!</div>';
+                    }
+                } else {
+                    const data = await res.json().catch(() => ({}));
+                    alert(data.error || 'Could not cancel invite.');
+                    btn.disabled = false;
+                    btn.textContent = 'Cancel Invite';
+                }
+            } catch {
+                alert('Network error. Please try again.');
+                btn.disabled = false;
+                btn.textContent = 'Cancel Invite';
+            }
+        });
+    });
+
+    // ---- Top Lifters ----
+    const liftersSelect = document.getElementById('liftersSelect');
+    const liftersList = document.getElementById('liftersList');
+
+    async function loadTopLifters(lift) {
+        liftersList.innerHTML = '<div class="invite-empty">Loading...</div>';
+        try {
+            const res = await fetch(`/gyms/${gymId}/api/top-lifters/?lift=${encodeURIComponent(lift)}`, {
+                headers: { 'X-CSRFToken': csrfToken },
+            });
+            if (!res.ok) {
+                liftersList.innerHTML = '<div class="invite-empty">Could not load lifters.</div>';
+                return;
+            }
+            const data = await res.json();
+            const lifters = data.lifters || [];
+            if (lifters.length === 0) {
+                liftersList.innerHTML = '<div class="invite-empty">No records yet</div>';
+                return;
+            }
+            liftersList.innerHTML = lifters.map(l => `
+                <div class="leaderboard-row">
+                    <span class="leaderboard-rank">#${l.rank}</span>
+                    <div class="leaderboard-avatar">
+                        ${l.avatar_url
+                            ? `<img src="${l.avatar_url}" alt="${l.username}" class="leaderboard-avatar-img">`
+                            : `<span class="leaderboard-avatar-letter">${(l.username[0] || '?').toUpperCase()}</span>`
+                        }
+                    </div>
+                    <div class="leaderboard-info">
+                        <div class="leaderboard-name"><a href="/accounts/profile/${encodeURIComponent(l.username)}/" class="user-link">${l.display_name}</a></div>
+                        <div class="leaderboard-streak">@${l.username}</div>
+                    </div>
+                    <div class="leaderboard-stat">${l.value} ${l.unit}</div>
+                </div>
+            `).join('');
+        } catch {
+            liftersList.innerHTML = '<div class="invite-empty">Network error.</div>';
+        }
+    }
+
+    if (liftersSelect) {
+        liftersSelect.addEventListener('change', () => loadTopLifters(liftersSelect.value));
+    }
+    loadTopLifters('total');
+})();
+</script>
+{% endblock %}

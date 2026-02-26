@@ -1,0 +1,81 @@
+{% extends 'gyms/base.html' %}
+
+{% block title %}Profile Unavailable - Spottr{% endblock %}
+
+{% block extra_css %}
+<style>
+    .unavailable-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 50vh;
+        text-align: center;
+        padding: 40px 20px;
+    }
+
+    .unavailable-icon {
+        width: 80px;
+        height: 80px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 24px;
+    }
+
+    .unavailable-icon svg {
+        width: 36px;
+        height: 36px;
+        color: var(--text-muted);
+    }
+
+    .unavailable-title {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 8px;
+    }
+
+    .unavailable-text {
+        font-size: 14px;
+        color: var(--text-muted);
+        max-width: 320px;
+        line-height: 1.5;
+        margin-bottom: 24px;
+    }
+
+    .unavailable-back {
+        padding: 10px 24px;
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-default);
+        border-radius: var(--radius-lg);
+        color: var(--text-secondary);
+        font-size: 14px;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+
+    .unavailable-back:hover {
+        border-color: var(--border-hover);
+        color: var(--text-primary);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="unavailable-container">
+    <div class="unavailable-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+        </svg>
+    </div>
+    <div class="unavailable-title">Profile Unavailable</div>
+    <div class="unavailable-text">This profile isn't available right now.</div>
+    <a href="/" class="unavailable-back">Go Back to Feed</a>
+</div>
+{% endblock %}

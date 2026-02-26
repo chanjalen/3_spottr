@@ -1,0 +1,1113 @@
+{% extends "gyms/base.html" %}
+{% block title %}Streak Details{% endblock %}
+
+{% block extra_css %}
+<style>
+    .streak-page {
+        max-width: 480px;
+        margin: 0 auto;
+        padding: 20px 16px 100px;
+    }
+
+    .streak-hero {
+        text-align: center;
+        padding: 32px 0 24px;
+    }
+
+    .streak-hero-emoji {
+        font-size: 56px;
+        display: block;
+        margin-bottom: 8px;
+    }
+
+    .streak-hero-count {
+        font-size: 48px;
+        font-weight: 800;
+        color: var(--text-primary);
+        line-height: 1;
+    }
+
+    .streak-hero-label {
+        font-size: 16px;
+        color: var(--text-secondary);
+        margin-top: 4px;
+    }
+
+    .streak-hero-status {
+        display: inline-block;
+        margin-top: 12px;
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .streak-hero-status.active {
+        background: rgba(34, 197, 94, 0.15);
+        color: #22c55e;
+    }
+
+    .streak-hero-status.pending {
+        background: rgba(251, 191, 36, 0.15);
+        color: #fbbf24;
+    }
+
+    .streak-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: 16px;
+        padding: 20px;
+        margin-bottom: 16px;
+    }
+
+    .streak-card-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 16px;
+    }
+
+    .streak-card-title-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+    }
+
+    .streak-card-title-row .streak-card-title {
+        margin-bottom: 0;
+    }
+
+    .goal-edit-btn {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--text-secondary);
+        font-size: 13px;
+        font-weight: 600;
+        padding: 3px 8px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        transition: color 0.15s, background 0.15s;
+    }
+
+    .goal-edit-btn:hover {
+        color: var(--brand-primary);
+        background: rgba(124, 58, 237, 0.1);
+    }
+
+    .streak-stat-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 0;
+    }
+
+    .streak-stat-row + .streak-stat-row {
+        border-top: 1px solid var(--border-subtle);
+    }
+
+    .streak-stat-label {
+        font-size: 15px;
+        color: var(--text-secondary);
+    }
+
+    .streak-stat-value {
+        font-size: 18px;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    /* Week day bubbles */
+    .week-days {
+        display: flex;
+        justify-content: space-between;
+        padding: 4px 0 12px;
+    }
+
+    .week-day-bubble {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0;
+    }
+
+    .week-day-circle {
+        width: 38px;
+        height: 38px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 700;
+        background: var(--bg-base);
+        border: 2px solid var(--border-subtle);
+        color: var(--text-muted);
+        transition: background 0.2s, border-color 0.2s, color 0.2s;
+    }
+
+    .week-day-circle.active {
+        background: linear-gradient(135deg, var(--brand-purple), #a855f7);
+        border-color: transparent;
+        color: #fff;
+    }
+
+    .week-day-circle.today:not(.active) {
+        border-color: var(--brand-purple);
+        color: var(--text-primary);
+    }
+
+    .week-day-circle.rest {
+        background: rgba(34, 197, 94, 0.15);
+        border-color: #22c55e;
+        color: #22c55e;
+    }
+
+    .week-day-circle.future {
+        opacity: 0.35;
+    }
+
+    .streak-rule {
+        display: flex;
+        gap: 12px;
+        padding: 10px 0;
+    }
+
+    .streak-rule + .streak-rule {
+        border-top: 1px solid var(--border-subtle);
+    }
+
+    .streak-rule-icon {
+        font-size: 20px;
+        flex-shrink: 0;
+        width: 28px;
+        text-align: center;
+    }
+
+    .streak-rule-text {
+        font-size: 14px;
+        color: var(--text-secondary);
+        line-height: 1.5;
+    }
+
+    /* Goal modal */
+    .goal-modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 1000;
+        align-items: flex-end;
+        justify-content: center;
+    }
+
+    .goal-modal-overlay.open {
+        display: flex;
+    }
+
+    .goal-modal {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: 20px 20px 0 0;
+        padding: 16px 20px 40px;
+        width: 100%;
+        max-width: 480px;
+    }
+
+    .goal-modal-handle {
+        width: 36px;
+        height: 4px;
+        background: var(--border-subtle);
+        border-radius: 2px;
+        margin: 0 auto 20px;
+    }
+
+    .goal-modal-title {
+        font-size: 17px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin-bottom: 4px;
+    }
+
+    .goal-modal-sub {
+        font-size: 13px;
+        color: var(--text-secondary);
+        margin-bottom: 20px;
+    }
+
+    .goal-options {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 8px;
+        margin-bottom: 20px;
+    }
+
+    .goal-option {
+        aspect-ratio: 1;
+        border: 2px solid var(--border-subtle);
+        border-radius: 12px;
+        background: none;
+        color: var(--text-primary);
+        font-size: 16px;
+        font-weight: 600;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: border-color 0.15s, background 0.15s, color 0.15s;
+    }
+
+    .goal-option:hover {
+        border-color: var(--brand-primary);
+        background: rgba(124, 58, 237, 0.08);
+    }
+
+    .goal-option.selected {
+        border-color: var(--brand-primary);
+        background: rgba(124, 58, 237, 0.15);
+        color: var(--brand-primary);
+    }
+
+    .goal-modal-save {
+        width: 100%;
+        padding: 14px;
+        background: var(--brand-primary);
+        color: #fff;
+        border: none;
+        border-radius: 12px;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: opacity 0.15s;
+    }
+
+    .goal-modal-save:hover {
+        opacity: 0.9;
+    }
+
+    /* Info button */
+    .streak-page-top {
+        display: flex;
+        justify-content: flex-end;
+        padding-top: 4px;
+        margin-bottom: -8px;
+    }
+
+    .info-btn {
+        background: rgba(124, 58, 237, 0.12);
+        border: 1px solid rgba(124, 58, 237, 0.3);
+        cursor: pointer;
+        color: #a78bfa;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 12px 6px 10px;
+        border-radius: var(--radius-pill);
+        font-size: 13px;
+        font-weight: 600;
+        font-family: inherit;
+        transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+
+    .info-btn:hover {
+        background: rgba(124, 58, 237, 0.22);
+        border-color: rgba(124, 58, 237, 0.5);
+        color: #c4b5fd;
+    }
+
+    /* Info modal */
+    .info-modal-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.6);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+    }
+
+    .info-modal-overlay.open {
+        display: flex;
+    }
+
+    .info-modal {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: 20px;
+        padding: 24px 20px 28px;
+        width: 100%;
+        max-width: 400px;
+    }
+
+    .info-modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 20px;
+    }
+
+    .info-modal-title {
+        font-size: 17px;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .info-modal-close {
+        background: none;
+        border: none;
+        cursor: pointer;
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        transition: color 0.15s, background 0.15s;
+    }
+
+    .info-modal-close:hover {
+        color: var(--text-secondary);
+        background: var(--bg-hover);
+    }
+
+    /* ============ WORKOUT CALENDAR ============ */
+    .calendar-nav {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 16px;
+    }
+
+    .calendar-nav-btn {
+        width: 32px;
+        height: 32px;
+        background: var(--bg-base);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-sm);
+        color: var(--text-secondary);
+        font-size: 14px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: border-color 0.15s, color 0.15s;
+    }
+
+    .calendar-nav-btn:hover {
+        border-color: rgba(124, 58, 237, 0.4);
+        color: var(--text-primary);
+    }
+
+    .calendar-month-label {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-primary);
+    }
+
+    .calendar-weekdays {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        margin-bottom: 6px;
+    }
+
+    .calendar-weekday {
+        text-align: center;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text-muted);
+        padding: 6px 0;
+    }
+
+    .calendar-days {
+        display: grid;
+        grid-template-columns: repeat(7, 1fr);
+        gap: 3px;
+    }
+
+    .calendar-day {
+        aspect-ratio: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        border-radius: 8px;
+        transition: all 0.15s;
+    }
+
+    .calendar-day.empty {
+        color: transparent;
+    }
+
+    .calendar-day.today {
+        border: 1px solid rgba(124, 58, 237, 0.5);
+    }
+
+    .calendar-day.workout {
+        background: rgba(124, 58, 237, 0.18);
+        color: #a78bfa;
+        font-weight: 700;
+        cursor: pointer;
+    }
+
+    .calendar-day.workout:hover {
+        background: rgba(124, 58, 237, 0.32);
+        color: #c4b5fd;
+    }
+
+    .calendar-day.rest-day {
+        background: rgba(34, 197, 94, 0.12);
+        color: #22c55e;
+        font-weight: 600;
+    }
+
+    .cal-loading {
+        text-align: center;
+        padding: 16px 0 8px;
+        color: var(--text-muted);
+        font-size: 13px;
+    }
+
+    /* Day posts panel */
+    .calendar-day-posts {
+        margin-top: 16px;
+    }
+
+    .calendar-day-posts-header {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .calendar-day-posts-close {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-sm);
+        color: var(--text-muted);
+        font-size: 12px;
+        padding: 4px 10px;
+        cursor: pointer;
+        font-family: inherit;
+        transition: border-color 0.15s, color 0.15s;
+    }
+
+    .calendar-day-posts-close:hover {
+        border-color: rgba(124, 58, 237, 0.4);
+        color: var(--text-primary);
+    }
+
+    .calendar-post-card {
+        background: var(--bg-elevated);
+        border: 1px solid var(--border-subtle);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        margin-bottom: 10px;
+    }
+
+    .calendar-post-card-image {
+        width: 100%;
+        aspect-ratio: 16/9;
+        object-fit: cover;
+        display: block;
+    }
+
+    .calendar-post-card-emoji {
+        width: 100%;
+        padding: 20px 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 40px;
+        background: var(--bg-card);
+    }
+
+    .calendar-post-workout-summary {
+        padding: 14px;
+        background: linear-gradient(135deg, rgba(124, 58, 237, 0.12), rgba(6, 182, 212, 0.12));
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 4px;
+        text-align: center;
+    }
+
+    .cal-workout-icon { font-size: 24px; }
+
+    .cal-workout-name {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .cal-workout-stats {
+        display: flex;
+        gap: 10px;
+        font-size: 12px;
+        color: var(--text-secondary);
+    }
+
+    .cal-workout-stats strong { color: var(--brand-cyan); }
+
+    .calendar-post-text-summary {
+        padding: 14px;
+        background: linear-gradient(135deg, rgba(124, 58, 237, 0.08), rgba(59, 130, 246, 0.08));
+        text-align: center;
+        font-size: 13px;
+        color: var(--text-secondary);
+        line-height: 1.4;
+    }
+
+    .calendar-post-card-body {
+        padding: 10px 14px;
+    }
+
+    .calendar-post-card-desc {
+        font-size: 13px;
+        color: var(--text-secondary);
+        line-height: 1.4;
+        margin-bottom: 6px;
+    }
+
+    .calendar-post-card-desc strong {
+        color: var(--text-primary);
+        margin-right: 4px;
+    }
+
+    .calendar-post-card-meta {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+
+    .calendar-post-reactions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 6px;
+    }
+
+    .calendar-post-reactions button {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        font-size: 15px;
+        cursor: pointer;
+        padding: 0;
+        display: flex;
+        align-items: center;
+        gap: 3px;
+    }
+
+    .calendar-post-reactions button .cnt {
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .calendar-post-reactions button.liked { color: #ef4444; }
+
+    .calendar-post-like-count {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 6px;
+    }
+
+    .calendar-post-comments {
+        border-top: 1px solid var(--border-subtle);
+        padding-top: 8px;
+        margin-top: 8px;
+    }
+
+    .calendar-post-view-comments {
+        font-size: 11px;
+        color: var(--text-muted);
+        cursor: pointer;
+        margin-bottom: 4px;
+    }
+
+    .calendar-post-view-comments:hover { color: var(--text-secondary); }
+
+    .calendar-post-comments-list .post-comment {
+        font-size: 12px;
+        margin-bottom: 4px;
+    }
+
+    .calendar-post-comment-input-wrap {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 8px;
+        border-top: 1px solid var(--border-subtle);
+        padding-top: 8px;
+    }
+
+    .calendar-post-comment-input-wrap input {
+        flex: 1;
+        background: transparent;
+        border: none;
+        color: var(--text-primary);
+        font-size: 12px;
+        outline: none;
+        padding: 2px 0;
+    }
+
+    .calendar-post-comment-input-wrap input::placeholder { color: var(--text-muted); }
+
+    .calendar-post-comment-input-wrap button {
+        background: none;
+        border: none;
+        color: var(--brand-cyan);
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        padding: 2px 6px;
+        opacity: 0.5;
+        font-family: inherit;
+    }
+
+    .calendar-post-comment-input-wrap button:hover { opacity: 1; }
+
+    .calendar-no-posts {
+        text-align: center;
+        padding: 16px;
+        color: var(--text-muted);
+        font-size: 13px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="streak-page">
+    <!-- Info button -->
+    <div class="streak-page-top">
+        <button class="info-btn" id="infoBtn">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <line x1="12" y1="16" x2="12" y2="12"/>
+                <line x1="12" y1="8" x2="12.01" y2="8"/>
+            </svg>
+            How streaks work
+        </button>
+    </div>
+
+    <!-- Hero -->
+    <div class="streak-hero">
+        <span class="streak-hero-emoji">🔥</span>
+        <div class="streak-hero-count">{{ current_streak }}</div>
+        <div class="streak-hero-label">Day Streak</div>
+        {% if has_activity_today %}
+        <span class="streak-hero-status active">Active today</span>
+        {% elif has_rest_today %}
+        <span class="streak-hero-status active">Resting today</span>
+        {% else %}
+        <span class="streak-hero-status pending">Not yet today</span>
+        {% endif %}
+    </div>
+
+    <!-- Stats -->
+    <div class="streak-card">
+        <div class="streak-card-title">Stats</div>
+        <div class="streak-stat-row">
+            <span class="streak-stat-label">Current Streak</span>
+            <span class="streak-stat-value">{{ current_streak }} day{{ current_streak|pluralize }}</span>
+        </div>
+        <div class="streak-stat-row">
+            <span class="streak-stat-label">Longest Streak</span>
+            <span class="streak-stat-value">{{ longest_streak }} day{{ longest_streak|pluralize }}</span>
+        </div>
+    </div>
+
+    <!-- Weekly Progress -->
+    <div class="streak-card">
+        <div class="streak-card-title-row">
+            <div class="streak-card-title">This Week</div>
+            <button class="goal-edit-btn" id="goalEditBtn">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                Edit goal
+            </button>
+        </div>
+        <div class="streak-stat-row" style="padding-bottom: 12px;">
+            <span class="streak-stat-label">Workouts</span>
+            <span class="streak-stat-value">{{ weekly_workout_count }} / {{ weekly_workout_goal }}</span>
+        </div>
+
+        <!-- 7-day activity bubbles -->
+        <div class="week-days">
+            {% for day in week_days %}
+            <div class="week-day-bubble">
+                <div class="week-day-circle{% if day.active %} active{% elif day.rest %} rest{% endif %}{% if day.is_today and not day.active and not day.rest %} today{% endif %}{% if day.is_future %} future{% endif %}">
+                    {{ day.label }}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="streak-stat-row">
+            <span class="streak-stat-label">Rest Days Used</span>
+            <span class="streak-stat-value">{{ rest_info.rest_days_used }} / <span id="restDaysAllowed">{{ rest_info.rest_days_allowed }}</span></span>
+        </div>
+        <div class="streak-stat-row">
+            <span class="streak-stat-label">Rest Days Remaining</span>
+            <span class="streak-stat-value" id="restDaysRemaining">{{ rest_info.rest_days_remaining }}</span>
+        </div>
+    </div>
+
+    <!-- Workout Calendar -->
+    <div class="streak-card">
+        <div class="streak-card-title-row">
+            <div class="streak-card-title">Workout Calendar</div>
+        </div>
+        <div class="calendar-nav">
+            <button class="calendar-nav-btn" id="calPrev">&#8592;</button>
+            <div class="calendar-month-label" id="calMonthLabel"></div>
+            <button class="calendar-nav-btn" id="calNext">&#8594;</button>
+        </div>
+        <div class="calendar-weekdays">
+            <div class="calendar-weekday">S</div>
+            <div class="calendar-weekday">M</div>
+            <div class="calendar-weekday">T</div>
+            <div class="calendar-weekday">W</div>
+            <div class="calendar-weekday">T</div>
+            <div class="calendar-weekday">F</div>
+            <div class="calendar-weekday">S</div>
+        </div>
+        <div class="calendar-days" id="calDays"><div class="cal-loading">Loading…</div></div>
+        <div id="calDayPosts"></div>
+    </div>
+
+</div>
+
+<!-- How Streaks Work modal -->
+<div class="info-modal-overlay" id="infoModalOverlay">
+    <div class="info-modal">
+        <div class="info-modal-header">
+            <span class="info-modal-title">How Streaks Work</span>
+            <button class="info-modal-close" id="infoModalClose" aria-label="Close">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+            </button>
+        </div>
+        <div class="streak-rule">
+            <span class="streak-rule-icon">🏋️</span>
+            <span class="streak-rule-text">Complete a workout or quick check-in each day to keep your streak alive.</span>
+        </div>
+        <div class="streak-rule">
+            <span class="streak-rule-icon">😴</span>
+            <span class="streak-rule-text">Use rest days to protect your streak when you need a break. You get <span id="restDaysAllowedInline">{{ rest_info.rest_days_allowed }}</span> per week based on your workout goal.</span>
+        </div>
+        <div class="streak-rule">
+            <span class="streak-rule-icon">💔</span>
+            <span class="streak-rule-text">Missing a day without a rest day resets your streak to zero.</span>
+        </div>
+        <div class="streak-rule">
+            <span class="streak-rule-icon">🌙</span>
+            <span class="streak-rule-text">Days reset at 3:00 AM, so late-night workouts still count for the previous day.</span>
+        </div>
+    </div>
+</div>
+
+<!-- Goal modal -->
+<div class="goal-modal-overlay" id="goalModalOverlay">
+    <div class="goal-modal">
+        <div class="goal-modal-handle"></div>
+        <div class="goal-modal-title">Weekly workout goal</div>
+        <div class="goal-modal-sub">How many days a week do you plan to work out?</div>
+        <div class="goal-options">
+            {% for i in "1234567" %}
+            <button class="goal-option {% if forloop.counter == weekly_workout_goal %}selected{% endif %}"
+                    data-value="{{ forloop.counter }}">{{ forloop.counter }}</button>
+            {% endfor %}
+        </div>
+        <button class="goal-modal-save" id="goalModalSave">Save</button>
+    </div>
+</div>
+
+{% block extra_js %}
+<script>
+(function () {
+    const overlay = document.getElementById('goalModalOverlay');
+    const editBtn = document.getElementById('goalEditBtn');
+    const saveBtn = document.getElementById('goalModalSave');
+    const options = document.querySelectorAll('.goal-option');
+
+    let selected = {{ weekly_workout_goal }};
+    const restUsed = {{ rest_info.rest_days_used }};
+
+    editBtn.addEventListener('click', () => overlay.classList.add('open'));
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.classList.remove('open');
+    });
+
+    options.forEach(btn => {
+        btn.addEventListener('click', () => {
+            options.forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+            selected = parseInt(btn.dataset.value, 10);
+        });
+    });
+
+    saveBtn.addEventListener('click', async () => {
+        saveBtn.disabled = true;
+        saveBtn.textContent = 'Saving…';
+        try {
+            const res = await fetch('{% url "workouts:update_workout_goal" %}', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCookie('csrftoken'),
+                },
+                body: JSON.stringify({ weekly_workout_goal: selected }),
+            });
+            const data = await res.json();
+            if (data.success) {
+                const goal = data.weekly_workout_goal;
+                // Update rest day counts (7 - goal)
+                const allowed = Math.max(0, 7 - goal);
+                const remaining = Math.max(0, allowed - restUsed);
+                document.getElementById('restDaysAllowed').textContent = allowed;
+                document.getElementById('restDaysAllowedInline').textContent = allowed;
+                document.getElementById('restDaysRemaining').textContent = remaining;
+                overlay.classList.remove('open');
+            }
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.textContent = 'Save';
+        }
+    });
+
+    function getCookie(name) {
+        const match = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+        return match ? decodeURIComponent(match[1]) : '';
+    }
+
+    // Info modal
+    const infoOverlay = document.getElementById('infoModalOverlay');
+    const infoBtn = document.getElementById('infoBtn');
+    const infoClose = document.getElementById('infoModalClose');
+
+    infoBtn.addEventListener('click', () => infoOverlay.classList.add('open'));
+    infoClose.addEventListener('click', () => infoOverlay.classList.remove('open'));
+    infoOverlay.addEventListener('click', (e) => {
+        if (e.target === infoOverlay) infoOverlay.classList.remove('open');
+    });
+
+    // ============ WORKOUT CALENDAR ============
+    var calMonth = new Date().getMonth();
+    var calYear = new Date().getFullYear();
+    var monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+    // postDateMap: "YYYY-M-D" -> [post objects]
+    var calPostMap = {};
+    var calLoadedMonths = {};
+
+    function calKey(year, month) { return year + '-' + month; }
+
+    function loadCalendarMonth(year, month, cb) {
+        var mk = calKey(year, month);
+        if (calLoadedMonths[mk]) { cb(calLoadedMonths[mk]); return; }
+        fetch('{% url "workouts:calendar_posts" %}?year=' + year + '&month=' + month, {
+            headers: { 'X-CSRFToken': getCookie('csrftoken') }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                var map = {};
+                data.posts.forEach(function(p) {
+                    var key = p.date; // e.g. "2026-2-8"
+                    if (!map[key]) map[key] = [];
+                    map[key].push(p);
+                });
+                calLoadedMonths[mk] = map;
+                Object.assign(calPostMap, map);
+                cb(map);
+            }
+        })
+        .catch(() => cb({}));
+    }
+
+    function renderCalendar() {
+        var label = document.getElementById('calMonthLabel');
+        var container = document.getElementById('calDays');
+        label.textContent = monthNames[calMonth] + ' ' + calYear;
+        container.innerHTML = '<div class="cal-loading">Loading…</div>';
+        document.getElementById('calDayPosts').innerHTML = '';
+
+        loadCalendarMonth(calYear, calMonth + 1, function(map) {
+            var firstDay = new Date(calYear, calMonth, 1).getDay();
+            var daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+            var today = new Date();
+            var html = '';
+            for (var i = 0; i < firstDay; i++) {
+                html += '<div class="calendar-day empty"></div>';
+            }
+            for (var d = 1; d <= daysInMonth; d++) {
+                var key = calYear + '-' + (calMonth + 1) + '-' + d;
+                var dayPosts = map[key] || [];
+                var classes = 'calendar-day';
+                if (dayPosts.length) classes += ' workout';
+                if (d === today.getDate() && calMonth === today.getMonth() && calYear === today.getFullYear()) classes += ' today';
+                if (dayPosts.length) {
+                    html += '<div class="' + classes + '" onclick="showCalDayPosts(' + calYear + ',' + (calMonth + 1) + ',' + d + ')">' + d + '</div>';
+                } else {
+                    html += '<div class="' + classes + '">' + d + '</div>';
+                }
+            }
+            container.innerHTML = html;
+        });
+    }
+
+    window.showCalDayPosts = function(year, month, day) {
+        var key = year + '-' + month + '-' + day;
+        var dayPosts = calPostMap[key] || [];
+        var container = document.getElementById('calDayPosts');
+        if (!dayPosts.length) {
+            container.innerHTML = '<div class="calendar-no-posts">No workouts on this day.</div>';
+            return;
+        }
+        var monthName = monthNames[month - 1];
+        var html = '<div class="calendar-day-posts">';
+        html += '<div class="calendar-day-posts-header"><span>' + monthName + ' ' + day + ', ' + year + ' — ' + dayPosts.length + ' post' + (dayPosts.length > 1 ? 's' : '') + '</span>';
+        html += '<button class="calendar-day-posts-close" onclick="document.getElementById(\'calDayPosts\').innerHTML=\'\'">Close</button></div>';
+
+        dayPosts.forEach(function(p) {
+            var likedCls = p.user_liked ? ' liked' : '';
+            html += '<div class="calendar-post-card" data-post-id="' + p.id + '" data-post-type="' + p.type + '">';
+            if (p.video_url) {
+                html += '<video class="calendar-post-card-image" src="' + p.video_url + '" controls playsinline></video>';
+            } else if (p.photo_url) {
+                html += '<img class="calendar-post-card-image" src="' + p.photo_url + '" alt="Post">';
+            } else if (p.workout_name) {
+                html += '<div class="calendar-post-workout-summary">';
+                html += '<div class="cal-workout-icon">🏋️</div>';
+                html += '<div class="cal-workout-name">' + escapeHtml(p.workout_name) + '</div>';
+                html += '<div class="cal-workout-stats">';
+                if (p.workout_exercises) html += '<span><strong>' + p.workout_exercises + '</strong> exercises</span>';
+                if (p.workout_sets) html += '<span><strong>' + p.workout_sets + '</strong> sets</span>';
+                html += '</div></div>';
+            } else if (p.description && p.type !== 'checkin') {
+                html += '<div class="calendar-post-text-summary">' + escapeHtml(p.description) + '</div>';
+            } else {
+                html += '<div class="calendar-post-card-emoji">💪</div>';
+            }
+
+            html += '<div class="calendar-post-card-body">';
+            html += '<div class="calendar-post-reactions">';
+            html += '<button class="' + likedCls + '" onclick="calToggleLike(this,\'' + p.id + '\',\'' + p.type + '\')">' + (p.user_liked ? '❤️' : '🤍') + '</button>';
+            html += '<button onclick="this.closest(\'.calendar-post-card\').querySelector(\'input\').focus()">💬</button>';
+            html += '</div>';
+            html += '<div class="calendar-post-like-count" id="calLikes-' + p.id + '">' + p.like_count + (p.like_count === 1 ? ' like' : ' likes') + '</div>';
+            if (p.description) {
+                html += '<div class="calendar-post-card-desc">' + escapeHtml(p.description) + '</div>';
+            }
+            if (p.location_name) {
+                html += '<div class="calendar-post-card-meta">' + escapeHtml(p.location_name) + '</div>';
+            }
+            html += '<div class="calendar-post-comments">';
+            if (p.comment_count > 0) {
+                html += '<div class="calendar-post-view-comments" onclick="calLoadComments(this,\'' + p.id + '\',\'' + p.type + '\')">View all ' + p.comment_count + ' comment' + (p.comment_count !== 1 ? 's' : '') + '</div>';
+            }
+            html += '<div class="calendar-post-comments-list post-comments-list"></div>';
+            html += '</div>';
+            html += '<div class="calendar-post-comment-input-wrap">';
+            html += '<input type="text" placeholder="Add a comment…" maxlength="500" onkeydown="if(event.key===\'Enter\')calSubmitComment(this,\'' + p.id + '\',\'' + p.type + '\')">';
+            html += '<button onclick="calSubmitComment(this.previousElementSibling,\'' + p.id + '\',\'' + p.type + '\')">Post</button>';
+            html += '</div>';
+            html += '</div></div>';
+        });
+
+        html += '</div>';
+        container.innerHTML = html;
+        container.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+
+    window.calToggleLike = function(btn, postId, postType) {
+        var url = postType === 'checkin'
+            ? '/social/checkin/' + postId + '/like/'
+            : '/social/post/' + postId + '/like/';
+        fetch(url, { method: 'POST', headers: { 'X-CSRFToken': getCookie('csrftoken') } })
+        .then(r => r.json())
+        .then(function(data) {
+            if (data.success) {
+                btn.innerHTML = data.liked ? '❤️' : '🤍';
+                if (data.liked) btn.classList.add('liked'); else btn.classList.remove('liked');
+                var el = document.getElementById('calLikes-' + postId);
+                if (el) el.textContent = data.like_count + (data.like_count === 1 ? ' like' : ' likes');
+            }
+        });
+    };
+
+    window.calLoadComments = function(trigger, postId, postType) {
+        var url = postType === 'checkin'
+            ? '/social/checkin/' + postId + '/comments/'
+            : '/social/post/' + postId + '/comments/';
+        fetch(url, { headers: { 'X-CSRFToken': getCookie('csrftoken') } })
+        .then(r => r.json())
+        .then(function(data) {
+            if (data.success) {
+                trigger.style.display = 'none';
+                var listEl = trigger.nextElementSibling;
+                listEl.innerHTML = data.comments.length
+                    ? data.comments.map(c => '<div class="post-comment"><strong>' + escapeHtml(c.user.username) + '</strong> ' + escapeHtml(c.text) + '</div>').join('')
+                    : '<div style="font-size:11px;color:var(--text-muted)">No comments yet</div>';
+            }
+        });
+    };
+
+    window.calSubmitComment = function(input, postId, postType) {
+        var text = input.value.trim();
+        if (!text) return;
+        var url = postType === 'checkin'
+            ? '/social/checkin/' + postId + '/comments/add/'
+            : '/social/post/' + postId + '/comments/add/';
+        fetch(url, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': getCookie('csrftoken'), 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: text }),
+        })
+        .then(r => r.json())
+        .then(function(data) {
+            if (data.success) {
+                input.value = '';
+                var listEl = input.closest('.calendar-post-card').querySelector('.post-comments-list');
+                var c = data.comment;
+                listEl.innerHTML += '<div class="post-comment"><strong>' + escapeHtml(c.user.username) + '</strong> ' + escapeHtml(c.text) + '</div>';
+                var viewAll = input.closest('.calendar-post-card').querySelector('.calendar-post-view-comments');
+                if (viewAll) viewAll.style.display = 'none';
+            }
+        });
+    };
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    document.getElementById('calPrev').addEventListener('click', function() {
+        calMonth--;
+        if (calMonth < 0) { calMonth = 11; calYear--; }
+        renderCalendar();
+    });
+
+    document.getElementById('calNext').addEventListener('click', function() {
+        calMonth++;
+        if (calMonth > 11) { calMonth = 0; calYear++; }
+        renderCalendar();
+    });
+
+    renderCalendar();
+})();
+</script>
+{% endblock %}
+{% endblock %}

@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Spottr",
+    "slug": "spottr",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "backgroundColor": "#4FC3E0"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.spottr.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#4FC3E0"
+      },
+      "package": "com.spottr.app"
+    },
+    "plugins": [
+      "expo-font",
+      "expo-secure-store",
+      "@react-native-community/datetimepicker",
+      "expo-video"
+    ]
+  }
+}

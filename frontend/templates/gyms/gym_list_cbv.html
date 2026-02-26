@@ -1,0 +1,52 @@
+{% extends 'gyms/base.html' %}
+
+{% block title %}Nearby Gyms - Base CBV{% endblock %}
+
+{% block content %}
+<div class="page-hea11der">
+    <h1>Nearby Gyms</h1>
+</div>
+
+<div class="view-info">
+    <strong>View 3: Base Class-Based View</strong>
+    Inherits from <code>django.views.View</code> and implements <code>get()</code> manually
+</div>
+
+<div class="search-bar">
+    <span class="search-icon">🔍</span>
+    <input type="text" placeholder="Search gyms...">
+</div>
+
+{% if gyms %}
+<div class="gym-list">
+    {% for gym in gyms %}
+    <div class="gym-card">
+        <div class="gym-card-header">
+            <div>
+                <div class="gym-name">{{ gym.name }}</div>
+                <div class="gym-address">{{ gym.address }}</div>
+            </div>
+            <span class="status-badge status-enrolled">Enrolled</span>
+        </div>
+        <div class="gym-stats">
+            <div class="stat-box activity">
+                <div class="stat-label">👥 Activity</div>
+                <div class="stat-value">--/--</div>
+                <div class="stat-sublabel">Unknown</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">📈 Top PR</div>
+                <div class="stat-value">-- lbs</div>
+                <div class="stat-sublabel">No data</div>
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="empty-state">
+    <div class="empty-state-icon">🏋️</div>
+    <p>No gyms available. Add some gyms to see them listed here.</p>
+</div>
+{% endif %}
+{% endblock %}
