@@ -99,19 +99,27 @@ DATABASES = {
     }
 }
 
+# Password hashing — Argon2 is the primary hasher; PBKDF2 stays as fallback so
+# existing passwords continue to work and are transparently upgraded on next login.
+PASSWORD_HASHERS = [
+    'django.contrib.auth.hashers.Argon2PasswordHasher',
+    'django.contrib.auth.hashers.PBKDF2PasswordHasher',
+]
+
 # Password validation
 AUTH_PASSWORD_VALIDATORS = [
     {
-        "NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator",
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {'min_length': 10},
     },
     {
-        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
     },
     {
-        "NAME": "django.contrib.auth.password_validation.CommonPasswordValidator",
+        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
     {
-        "NAME": "django.contrib.auth.password_validation.NumericPasswordValidator",
+        'NAME': 'accounts.validators.PasswordComplexityValidator',
     },
 ]
 
@@ -181,6 +189,8 @@ REST_FRAMEWORK = {
         'message': '30/minute',
         # Applied to send_zap — zaps are a special action, tighter limit
         'zap': '5/minute',
+        # Applied to resend-verification — prevent abuse of email sending
+        'resend_verification': '3/hour',
     },
 }
 

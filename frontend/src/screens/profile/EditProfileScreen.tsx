@@ -19,7 +19,7 @@ import { useAuth } from '../../store/AuthContext';
 import Avatar from '../../components/common/Avatar';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
-import { updateUserAvatar } from '../../api/accounts';
+import { updateUserAvatar, apiDeleteAccount } from '../../api/accounts';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'EditProfile'>;
@@ -92,6 +92,41 @@ export default function EditProfileScreen({ navigation }: Props) {
     ]);
   };
 
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      'Delete Account',
+      'This will permanently delete your account and all your posts, check-ins, and workouts. This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete Account',
+          style: 'destructive',
+          onPress: () => {
+            Alert.alert(
+              'Are you sure?',
+              'Type "DELETE" to confirm — all your data will be erased forever.',
+              [
+                { text: 'Cancel', style: 'cancel' },
+                {
+                  text: 'Yes, delete everything',
+                  style: 'destructive',
+                  onPress: async () => {
+                    try {
+                      await apiDeleteAccount();
+                    } catch {
+                      // Account may already be gone; sign out regardless
+                    }
+                    signOut();
+                  },
+                },
+              ],
+            );
+          },
+        },
+      ],
+    );
+  };
+
   return (
     <View style={{ flex: 1, backgroundColor: colors.background.base }}>
       {/* Header */}
@@ -160,12 +195,16 @@ export default function EditProfileScreen({ navigation }: Props) {
 
           {activeTab === 'Account' && (
             <View style={styles.section}>
-              <FieldInput label="Email" value="" placeholder="your@email.com" keyboard="email-address" />
-              <FieldInput label="Phone Number" value="" placeholder="+1 555 000 0000" keyboard="phone-pad" />
-              <FieldInput label="Birthday" value="" placeholder="YYYY-MM-DD" />
+              <FieldInput label="Email" value={user?.email ?? ''} placeholder="your@email.com" keyboard="email-address" editable={false} />
+              <FieldInput label="Phone Number" value={user?.phone_number ?? ''} placeholder="Not set" keyboard="phone-pad" editable={false} />
+              <FieldInput label="Birthday" value={user?.birthday ?? ''} placeholder="Not set" editable={false} />
               <Pressable style={styles.dangerBtn} onPress={handleSignOut}>
                 <Feather name="log-out" size={16} color={colors.error} />
                 <Text style={styles.dangerBtnText}>Log Out</Text>
+              </Pressable>
+              <Pressable style={styles.dangerBtn} onPress={handleDeleteAccount}>
+                <Feather name="trash-2" size={16} color={colors.error} />
+                <Text style={styles.dangerBtnText}>Delete Account</Text>
               </Pressable>
             </View>
           )}

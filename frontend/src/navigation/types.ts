@@ -1,4 +1,5 @@
 import { NavigatorScreenParams } from '@react-navigation/native';
+import { UserBrief } from '../types/user';
 
 // Shared sub-screens that appear inside every tab stack so the tab bar stays visible
 type ProfileParams = { username: string };
@@ -8,6 +9,17 @@ type UserListParams = { username: string; type: 'followers' | 'following' | 'fri
 export type AuthStackParamList = {
   Login: undefined;
   Signup: undefined;
+  EmailVerification: { email: string; token: string; autoResend?: boolean };
+};
+
+// ─── Onboarding Stack ─────────────────────────────────────────────────────────
+
+export type OnboardingStackParamList = {
+  OnboardingStep1: undefined;
+  OnboardingStep2: undefined;
+  OnboardingStep3: undefined;
+  OnboardingStep4: undefined;
+  OnboardingComplete: { finalUser: UserBrief };
 };
 
 // ─── Feed Stack ───────────────────────────────────────────────────────────────
