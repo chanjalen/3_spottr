@@ -66,6 +66,9 @@ export type RootStackParamList = {
   UserList: UserListParams;
   CreatePost: undefined;
   QuickCheckin: undefined;
+  AllDMs: undefined;
+  AllGroupChats: undefined;
+  AllOrgs: undefined;
   CheckInSelection: undefined;
   CameraCapture: undefined;
   CheckInReview: { mediaUri: string; mediaType: 'photo' | 'video' };

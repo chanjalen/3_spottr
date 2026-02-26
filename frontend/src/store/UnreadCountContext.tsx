@@ -8,15 +8,17 @@ interface UnreadCounts {
   total: number;
   dm: number;
   group: number;
+  org: number;
   refresh: () => void;
-  optimisticDecrement: (amount: number, type: 'dm' | 'group') => void;
-  optimisticIncrement: (amount: number, type: 'dm' | 'group') => void;
+  optimisticDecrement: (amount: number, type: 'dm' | 'group' | 'org') => void;
+  optimisticIncrement: (amount: number, type: 'dm' | 'group' | 'org') => void;
 }
 
 const UnreadCountContext = createContext<UnreadCounts>({
   total: 0,
   dm: 0,
   group: 0,
+  org: 0,
   refresh: () => {},
   optimisticDecrement: () => {},
   optimisticIncrement: () => {},
@@ -25,9 +27,10 @@ const UnreadCountContext = createContext<UnreadCounts>({
 const POLL_INTERVAL_MS = 30_000;
 
 export function UnreadCountProvider({ children }: { children: React.ReactNode }) {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [dm, setDm] = useState(0);
   const [group, setGroup] = useState(0);
+  const [org, setOrg] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetch = useCallback(async () => {
@@ -36,6 +39,7 @@ export function UnreadCountProvider({ children }: { children: React.ReactNode })
       const data = await fetchUnreadCount();
       setDm(data.dm);
       setGroup(data.group);
+      setOrg(data.org);
     } catch {
       // silently ignore — badge simply won't update
     }
@@ -45,6 +49,7 @@ export function UnreadCountProvider({ children }: { children: React.ReactNode })
     if (!token) {
       setDm(0);
       setGroup(0);
+      setOrg(0);
       return;
     }
     fetch();
@@ -61,23 +66,37 @@ export function UnreadCountProvider({ children }: { children: React.ReactNode })
     const handler = (counts: UnreadCount) => {
       setDm(counts.dm);
       setGroup(counts.group);
+      setOrg(counts.org);
     };
     wsManager.on('unread_update', handler);
     return () => wsManager.off('unread_update', handler);
   }, [token]);
 
-  const optimisticDecrement = useCallback((amount: number, type: 'dm' | 'group') => {
+  // Increment org badge when a new announcement arrives over WS (skip own posts).
+  useEffect(() => {
+    if (!token) return;
+    const handler = (ann: { author_id: string }) => {
+      if (String(ann.author_id) === String(user?.id)) return;
+      setOrg(prev => prev + 1);
+    };
+    wsManager.on('new_announcement', handler);
+    return () => wsManager.off('new_announcement', handler);
+  }, [token, user?.id]);
+
+  const optimisticDecrement = useCallback((amount: number, type: 'dm' | 'group' | 'org') => {
     if (type === 'dm') setDm(prev => Math.max(0, prev - amount));
-    else setGroup(prev => Math.max(0, prev - amount));
+    else if (type === 'group') setGroup(prev => Math.max(0, prev - amount));
+    else setOrg(prev => Math.max(0, prev - amount));
   }, []);
 
-  const optimisticIncrement = useCallback((amount: number, type: 'dm' | 'group') => {
+  const optimisticIncrement = useCallback((amount: number, type: 'dm' | 'group' | 'org') => {
     if (type === 'dm') setDm(prev => prev + amount);
-    else setGroup(prev => prev + amount);
+    else if (type === 'group') setGroup(prev => prev + amount);
+    else setOrg(prev => prev + amount);
   }, []);
 
   return (
-    <UnreadCountContext.Provider value={{ total: dm + group, dm, group, refresh: fetch, optimisticDecrement, optimisticIncrement }}>
+    <UnreadCountContext.Provider value={{ total: dm + group + org, dm, group, org, refresh: fetch, optimisticDecrement, optimisticIncrement }}>
       {children}
     </UnreadCountContext.Provider>
   );

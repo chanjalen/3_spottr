@@ -82,11 +82,11 @@ def create_group(user, name, description='', privacy=Group.Privacy.PUBLIC, avata
 
 def update_group(user, group_id, **fields):
     """
-    Update group details. Only admins/creator can update.
+    Update group details. Any member can update.
     Returns the updated group.
     """
     group = _get_group(group_id)
-    _require_admin(group, user)
+    _get_membership(group, user)  # just verify they're a member
 
     allowed = {'name', 'description', 'privacy', 'avatar'}
     update_fields = []
@@ -112,7 +112,7 @@ def update_group_avatar(user, group_id, avatar_file):
     from media.models import MediaLink
 
     group = _get_group(group_id)
-    _require_admin(group, user)
+    _get_membership(group, user)  # just verify they're a member
 
     # Remove previous avatar MediaLink and underlying asset
     old_links = MediaLink.objects.filter(
@@ -229,20 +229,20 @@ def remove_member(admin_user, group_id, user_id):
 
 def leave_group(user, group_id):
     """
-    User voluntarily leaves the group. Creator cannot leave.
+    User voluntarily leaves the group. Anyone including the creator can leave.
+    If the group has 0 members after, it is automatically deleted.
     """
     group = _get_group(group_id)
     membership = _get_membership(group, user)
-
-    if membership.role == GroupMember.Role.CREATOR:
-        raise CannotRemoveCreatorError(
-            "The group creator cannot leave. Delete the group or transfer ownership first."
-        )
 
     membership.delete()
 
     from messaging.models import InboxEntry
     InboxEntry.objects.filter(user=user, conversation_type='group', group=group).delete()
+
+    # Auto-delete empty groups
+    if not GroupMember.objects.filter(group=group).exists():
+        group.delete()
 
 
 def promote_member(admin_user, group_id, user_id):

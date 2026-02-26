@@ -67,16 +67,19 @@ export async function searchGroups(query?: string): Promise<GroupListItem[]> {
 export async function createGroup(payload: {
   name: string;
   description?: string;
-  privacy?: 'public' | 'private';
   avatarUri?: string;
+  member_ids?: string[];
 }): Promise<GroupDetail> {
-  const { avatarUri, ...fields } = payload;
+  const { avatarUri, member_ids, ...fields } = payload;
 
   if (avatarUri) {
     const form = new FormData();
     form.append('name', fields.name);
     if (fields.description) form.append('description', fields.description);
-    if (fields.privacy) form.append('privacy', fields.privacy);
+    form.append('privacy', 'private');
+    if (member_ids?.length) {
+      member_ids.forEach(id => form.append('member_ids', id));
+    }
     const filename = avatarUri.split('/').pop() ?? 'avatar.jpg';
     const ext = filename.split('.').pop()?.toLowerCase() ?? 'jpg';
     const mime = ext === 'png' ? 'image/png' : 'image/jpeg';
@@ -87,7 +90,11 @@ export async function createGroup(payload: {
     return data;
   }
 
-  const { data } = await apiClient.post('/api/groups/create/', fields);
+  const { data } = await apiClient.post('/api/groups/create/', {
+    ...fields,
+    privacy: 'private',
+    member_ids: member_ids ?? [],
+  });
   return data;
 }
 

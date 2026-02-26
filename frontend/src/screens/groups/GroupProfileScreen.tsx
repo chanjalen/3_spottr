@@ -28,14 +28,9 @@ import {
   fetchGroupDetail,
   fetchGroupStreakDetail,
   leaveGroup,
-  promoteMember,
-  demoteMember,
-  kickMember,
   generateInviteCode,
   updateGroup,
-  deleteGroup,
   GroupDetail,
-  GroupMember,
   GroupStreakDetail,
 } from '../../api/groups';
 import { useAuth } from '../../store/AuthContext';
@@ -46,8 +41,6 @@ type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'GroupProfile'>;
   route: RouteProp<RootStackParamList, 'GroupProfile'>;
 };
-
-type EditTab = 'info' | 'danger';
 
 export default function GroupProfileScreen({ navigation, route }: Props) {
   const groupId = route.params.groupId;
@@ -61,19 +54,14 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
   const [streakSheetVisible, setStreakSheetVisible] = useState(false);
   const [streakLoading, setStreakLoading] = useState(false);
   const [isLeaving, setIsLeaving] = useState(false);
-  const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [inviteCode, setInviteCode] = useState<string | null>(null);
   const [generatingCode, setGeneratingCode] = useState(false);
 
   // Edit modal state
   const [editVisible, setEditVisible] = useState(false);
-  const [editTab, setEditTab] = useState<EditTab>('info');
   const [editName, setEditName] = useState('');
-  const [editDescription, setEditDescription] = useState('');
-  const [editPrivacy, setEditPrivacy] = useState<'public' | 'private'>('public');
   const [editAvatarUri, setEditAvatarUri] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
 
   const loadGroup = useCallback(async () => {
     try {
@@ -164,83 +152,13 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
     }
   };
 
-  const handlePromote = (member: GroupMember) => {
-    const name = member.display_name || member.username;
-    Alert.alert('Promote to Admin', `Make ${name} an admin?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Promote',
-        onPress: async () => {
-          const key = `promote-${member.user}`;
-          setActionLoading(key);
-          try {
-            await promoteMember(groupId, member.user);
-            await loadGroup();
-          } catch {
-            Alert.alert('Error', 'Could not promote member.');
-          } finally {
-            setActionLoading(null);
-          }
-        },
-      },
-    ]);
-  };
-
-  const handleDemote = (member: GroupMember) => {
-    const name = member.display_name || member.username;
-    Alert.alert('Demote to Member', `Remove admin role from ${name}?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Demote',
-        style: 'destructive',
-        onPress: async () => {
-          const key = `demote-${member.user}`;
-          setActionLoading(key);
-          try {
-            await demoteMember(groupId, member.user);
-            await loadGroup();
-          } catch {
-            Alert.alert('Error', 'Could not demote member.');
-          } finally {
-            setActionLoading(null);
-          }
-        },
-      },
-    ]);
-  };
-
-  const handleKick = (member: GroupMember) => {
-    const name = member.display_name || member.username;
-    Alert.alert('Remove Member', `Remove ${name} from the group?`, [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Remove',
-        style: 'destructive',
-        onPress: async () => {
-          const key = `kick-${member.user}`;
-          setActionLoading(key);
-          try {
-            await kickMember(groupId, member.user);
-            await loadGroup();
-          } catch {
-            Alert.alert('Error', 'Could not remove member.');
-          } finally {
-            setActionLoading(null);
-          }
-        },
-      },
-    ]);
-  };
 
   // ── Edit modal handlers ────────────────────────────────────────────────────
 
   const openEditModal = () => {
     if (!group) return;
     setEditName(group.name);
-    setEditDescription(group.description ?? '');
-    setEditPrivacy(group.privacy);
     setEditAvatarUri(null);
-    setEditTab('info');
     setEditVisible(true);
   };
 
@@ -268,8 +186,6 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
     try {
       const updated = await updateGroup(groupId, {
         name: editName.trim(),
-        description: editDescription.trim(),
-        privacy: editPrivacy,
         ...(editAvatarUri ? { avatarUri: editAvatarUri } : {}),
       });
       setGroup(updated);
@@ -282,32 +198,6 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
     }
   };
 
-  const handleDeleteGroup = () => {
-    Alert.alert(
-      'Delete Group',
-      `Permanently delete "${group?.name}"? This cannot be undone.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            setIsDeleting(true);
-            try {
-              await deleteGroup(groupId);
-              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-              setEditVisible(false);
-              navigation.goBack();
-            } catch {
-              Alert.alert('Error', 'Could not delete the group. Please try again.');
-            } finally {
-              setIsDeleting(false);
-            }
-          },
-        },
-      ],
-    );
-  };
 
   if (isLoading || !group) {
     return (
@@ -317,24 +207,8 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
     );
   }
 
-  const myRole = group.user_role;
-  const myId = String(me?.id);
   const isMember = group.is_member;
   const hasActiveStreak = group.group_streak > 0;
-  const canManage = myRole === 'creator' || myRole === 'admin';
-  const isCreator = myRole === 'creator';
-
-  const getActions = (m: GroupMember) => {
-    const isMe = String(m.user) === myId;
-    if (isMe || m.role === 'creator') return { promote: false, demote: false, kick: false };
-    if (myRole === 'creator') {
-      return { promote: m.role === 'member', demote: m.role === 'admin', kick: true };
-    }
-    if (myRole === 'admin') {
-      return { promote: m.role === 'member', demote: false, kick: m.role === 'member' };
-    }
-    return { promote: false, demote: false, kick: false };
-  };
 
   // Avatar to show in edit modal (newly picked or existing)
   const editAvatarSource = editAvatarUri
@@ -351,7 +225,7 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
           <Feather name="arrow-left" size={22} color={colors.text.primary} />
         </Pressable>
         <Text style={styles.headerTitle} numberOfLines={1}>{group.name}</Text>
-        {canManage ? (
+        {isMember ? (
           <Pressable style={styles.headerBtn} onPress={openEditModal}>
             <Feather name="settings" size={20} color={colors.text.primary} />
           </Pressable>
@@ -402,7 +276,7 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                   <Text style={styles.copyBtnText}>Copy</Text>
                 </Pressable>
               </View>
-            ) : canManage ? (
+            ) : isMember ? (
               <Pressable style={styles.generateCodeBtn} onPress={handleGenerateCode} disabled={generatingCode}>
                 {generatingCode ? (
                   <ActivityIndicator size="small" color={colors.brand.primary} />
@@ -459,7 +333,7 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
               )}
               <Feather name="chevron-right" size={15} color={hasActiveStreak ? colors.brand.primary : colors.text.muted} />
             </TouchableOpacity>
-            {(myRole === 'member' || myRole === 'admin') && (
+            {isMember && (
               <TouchableOpacity
                 style={styles.leaveButton}
                 onPress={handleLeaveGroup}
@@ -479,78 +353,19 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
         {/* ── Members ── */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>MEMBERS</Text>
-          {group.members.map((member) => {
-            const actions = getActions(member);
-            const loadingKey = actionLoading;
-
-            return (
-              <View key={member.id} style={styles.memberRow}>
-                <Avatar
-                  uri={member.avatar_url}
-                  name={member.display_name || member.username}
-                  size={40}
-                />
-                <View style={styles.memberInfo}>
-                  <Text style={styles.memberName}>{member.display_name || member.username}</Text>
-                  <Text style={styles.memberUsername}>@{member.username}</Text>
-                </View>
-
-                <View style={styles.memberActions}>
-                  {member.role === 'creator' ? (
-                    <View style={styles.creatorBadge}>
-                      <Text style={styles.creatorBadgeText}>CREATOR</Text>
-                    </View>
-                  ) : member.role === 'admin' ? (
-                    <View style={styles.adminBadge}>
-                      <Text style={styles.adminBadgeText}>ADMIN</Text>
-                    </View>
-                  ) : (
-                    <Text style={styles.memberRoleText}>MEMBER</Text>
-                  )}
-
-                  {actions.promote && (
-                    <Pressable
-                      style={[styles.actionBtn, styles.promoteBtn]}
-                      onPress={() => handlePromote(member)}
-                      disabled={loadingKey !== null}
-                    >
-                      {loadingKey === `promote-${member.user}` ? (
-                        <ActivityIndicator size="small" color={colors.success} />
-                      ) : (
-                        <Text style={[styles.actionBtnText, styles.promoteBtnText]}>Promote</Text>
-                      )}
-                    </Pressable>
-                  )}
-                  {actions.demote && (
-                    <Pressable
-                      style={[styles.actionBtn, styles.demoteBtn]}
-                      onPress={() => handleDemote(member)}
-                      disabled={loadingKey !== null}
-                    >
-                      {loadingKey === `demote-${member.user}` ? (
-                        <ActivityIndicator size="small" color={colors.warning} />
-                      ) : (
-                        <Text style={[styles.actionBtnText, styles.demoteBtnText]}>Demote</Text>
-                      )}
-                    </Pressable>
-                  )}
-                  {actions.kick && (
-                    <Pressable
-                      style={[styles.actionBtn, styles.kickBtn]}
-                      onPress={() => handleKick(member)}
-                      disabled={loadingKey !== null}
-                    >
-                      {loadingKey === `kick-${member.user}` ? (
-                        <ActivityIndicator size="small" color={colors.error} />
-                      ) : (
-                        <Text style={[styles.actionBtnText, styles.kickBtnText]}>Remove</Text>
-                      )}
-                    </Pressable>
-                  )}
-                </View>
+          {group.members.map((member) => (
+            <View key={member.id} style={styles.memberRow}>
+              <Avatar
+                uri={member.avatar_url}
+                name={member.display_name || member.username}
+                size={40}
+              />
+              <View style={styles.memberInfo}>
+                <Text style={styles.memberName}>{member.display_name || member.username}</Text>
+                <Text style={styles.memberUsername}>@{member.username}</Text>
               </View>
-            );
-          })}
+            </View>
+          ))}
         </View>
       </ScrollView>
 
@@ -570,14 +385,12 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
         animationType="fade"
         onRequestClose={() => setEditVisible(false)}
       >
-        {/* Tap-outside dismiss */}
         <Pressable style={styles.modalOverlay} onPress={() => setEditVisible(false)}>
           <KeyboardAvoidingView
             behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
             style={styles.modalKAV}
           >
             <Pressable style={styles.modalCard} onPress={(e) => e.stopPropagation()}>
-              {/* Modal header */}
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Group Settings</Text>
                 <Pressable style={styles.modalCloseBtn} onPress={() => setEditVisible(false)}>
@@ -585,127 +398,49 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                 </Pressable>
               </View>
 
-              {/* Tabs */}
-              <View style={styles.modalTabs}>
-                <Pressable
-                  style={styles.modalTabItem}
-                  onPress={() => setEditTab('info')}
-                >
-                  <Text style={[styles.modalTabText, editTab === 'info' && styles.modalTabTextActive]}>
-                    Group Info
-                  </Text>
-                  {editTab === 'info' && <View style={styles.modalTabUnderline} />}
-                </Pressable>
-                {isCreator && (
-                  <Pressable
-                    style={styles.modalTabItem}
-                    onPress={() => setEditTab('danger')}
-                  >
-                    <Text style={[styles.modalTabText, editTab === 'danger' && styles.modalTabTextDanger]}>
-                      Danger Zone
-                    </Text>
-                    {editTab === 'danger' && <View style={[styles.modalTabUnderline, styles.modalTabUnderlineDanger]} />}
+              <View style={styles.modalInfoContent}>
+                {/* Avatar */}
+                <View style={styles.avatarRow}>
+                  {editAvatarSource ? (
+                    <Image
+                      source={editAvatarSource}
+                      style={styles.editAvatar}
+                      contentFit="cover"
+                    />
+                  ) : (
+                    <View style={styles.editAvatarFallback}>
+                      <Text style={styles.editAvatarInitial}>
+                        {(editName || group.name)[0]?.toUpperCase() ?? '?'}
+                      </Text>
+                    </View>
+                  )}
+                  <Pressable style={styles.changePhotoBtn} onPress={handlePickEditAvatar}>
+                    <Text style={styles.changePhotoText}>Change Photo</Text>
                   </Pressable>
-                )}
-              </View>
+                </View>
 
-              <View>
-                {editTab === 'info' ? (
-                  <View style={styles.modalInfoContent}>
-                    {/* Avatar row */}
-                    <View style={styles.avatarRow}>
-                      {editAvatarSource ? (
-                        <Image
-                          source={editAvatarSource}
-                          style={styles.editAvatar}
-                          contentFit="cover"
-                        />
-                      ) : (
-                        <View style={styles.editAvatarFallback}>
-                          <Text style={styles.editAvatarInitial}>
-                            {(editName || group.name)[0]?.toUpperCase() ?? '?'}
-                          </Text>
-                        </View>
-                      )}
-                      <Pressable style={styles.changePhotoBtn} onPress={handlePickEditAvatar}>
-                        <Text style={styles.changePhotoText}>Change Photo</Text>
-                      </Pressable>
-                    </View>
+                {/* Group Name */}
+                <Text style={styles.fieldLabel}>Group Name</Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  value={editName}
+                  onChangeText={setEditName}
+                  placeholder="Group name"
+                  placeholderTextColor={colors.text.muted}
+                  maxLength={100}
+                />
 
-                    {/* Group Name */}
-                    <Text style={styles.fieldLabel}>Group Name</Text>
-                    <TextInput
-                      style={styles.fieldInput}
-                      value={editName}
-                      onChangeText={setEditName}
-                      placeholder="Group name"
-                      placeholderTextColor={colors.text.muted}
-                      maxLength={100}
-                    />
-
-                    {/* Description */}
-                    <Text style={styles.fieldLabel}>Description</Text>
-                    <TextInput
-                      style={[styles.fieldInput, styles.fieldInputMultiline]}
-                      value={editDescription}
-                      onChangeText={setEditDescription}
-                      placeholder="Describe your group…"
-                      placeholderTextColor={colors.text.muted}
-                      multiline
-                      numberOfLines={2}
-                      maxLength={500}
-                    />
-
-                    {/* Privacy */}
-                    <Text style={styles.fieldLabel}>Privacy</Text>
-                    <Pressable
-                      style={styles.privacyRow}
-                      onPress={() => setEditPrivacy(editPrivacy === 'public' ? 'private' : 'public')}
-                    >
-                      <Text style={styles.privacyText}>
-                        {editPrivacy === 'public' ? 'Public' : 'Private'}
-                      </Text>
-                      <Feather name="chevron-down" size={16} color={colors.text.muted} />
-                    </Pressable>
-
-                    {/* Save */}
-                    <Pressable
-                      style={[styles.saveBtn, isSaving && styles.saveBtnDisabled]}
-                      onPress={handleSaveChanges}
-                      disabled={isSaving}
-                    >
-                      {isSaving ? (
-                        <ActivityIndicator size="small" color="#fff" />
-                      ) : (
-                        <Text style={styles.saveBtnText}>Save Changes</Text>
-                      )}
-                    </Pressable>
-                  </View>
-                ) : (
-                  <View style={styles.modalDangerContent}>
-                    <View style={styles.dangerCard}>
-                      <Feather name="alert-triangle" size={22} color="#ef4444" style={{ marginBottom: spacing.sm }} />
-                      <Text style={styles.dangerTitle}>Delete Group</Text>
-                      <Text style={styles.dangerDescription}>
-                        Permanently delete this group and all its data. This action cannot be undone and all members will be removed.
-                      </Text>
-                      <Pressable
-                        style={[styles.deleteBtn, isDeleting && styles.deleteBtnDisabled]}
-                        onPress={handleDeleteGroup}
-                        disabled={isDeleting}
-                      >
-                        {isDeleting ? (
-                          <ActivityIndicator size="small" color="#fff" />
-                        ) : (
-                          <>
-                            <Feather name="trash-2" size={15} color="#fff" />
-                            <Text style={styles.deleteBtnText}>Delete Group</Text>
-                          </>
-                        )}
-                      </Pressable>
-                    </View>
-                  </View>
-                )}
+                <Pressable
+                  style={[styles.saveBtn, isSaving && styles.saveBtnDisabled]}
+                  onPress={handleSaveChanges}
+                  disabled={isSaving}
+                >
+                  {isSaving ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.saveBtnText}>Save Changes</Text>
+                  )}
+                </Pressable>
               </View>
             </Pressable>
           </KeyboardAvoidingView>

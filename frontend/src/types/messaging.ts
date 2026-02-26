@@ -5,12 +5,27 @@
  * `sender` is the FK integer id on the Message model.
  * `sender_username` and `sender_avatar_url` are denormalized via SerializerMethodField.
  */
+export interface MessageReaction {
+  emoji: string;
+  count: number;
+  user_reacted: boolean;
+}
+
+export interface MessageMedia {
+  url: string;
+  kind: 'image' | 'video';
+  thumbnail_url: string | null;
+  width: number | null;
+  height: number | null;
+}
+
 export interface Message {
   id: string;
   sender: string;
   sender_username: string | null;
   sender_avatar_url: string | null;
   content: string;
+  media?: MessageMedia[] | null;
   created_at: string;
   is_read: boolean;
   is_system?: boolean;
@@ -18,6 +33,7 @@ export interface Message {
   shared_post?: SharedPost | null;
   join_request_id?: string | null;
   join_request_status?: string | null;
+  reactions?: MessageReaction[];
   // Present on WebSocket-delivered messages for client-side routing.
   dm_recipient_id?: string | null;
   group_id?: string | null;
@@ -80,6 +96,7 @@ export interface GroupConversation {
 export interface UnreadCount {
   dm: number;
   group: number;
+  org: number;
   total: number;
 }
 

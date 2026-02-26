@@ -122,8 +122,13 @@ class GroupJoinRequestSerializer(serializers.ModelSerializer):
 class CreateGroupSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=100)
     description = serializers.CharField(max_length=500, required=False, default='')
-    privacy = serializers.ChoiceField(choices=Group.Privacy.choices, default=Group.Privacy.PUBLIC)
+    privacy = serializers.ChoiceField(choices=Group.Privacy.choices, default=Group.Privacy.PRIVATE)
     avatar = serializers.ImageField(required=False, default=None)
+    member_ids = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        default=list,
+    )
 
 
 class UpdateGroupSerializer(serializers.Serializer):

@@ -7,6 +7,14 @@ import { apiClient } from './client';
 export type OrgRole = 'creator' | 'admin' | 'member';
 export type OrgPrivacy = 'public' | 'private';
 
+export interface LatestAnnouncement {
+  author_display_name: string;
+  content: string;
+  has_media: boolean;
+  has_poll: boolean;
+  created_at: string;
+}
+
 export interface OrgListItem {
   id: string;
   name: string;
@@ -15,12 +23,15 @@ export interface OrgListItem {
   avatar_url: string | null;
   member_count: number;
   user_role: OrgRole | null;
+  unread_count: number;
+  latest_announcement: LatestAnnouncement | null;
   created_at: string;
 }
 
 export interface OrgDetail extends OrgListItem {
   created_by_username: string;
   invite_code: string | null;
+  pending_request: boolean;
 }
 
 export interface OrgMember {
@@ -93,6 +104,7 @@ export interface Announcement {
   poll: AnnouncementPoll | null;
   reactions: AnnouncementReaction[];
   created_at: string;
+  is_read: boolean;
 }
 
 export interface AnnouncementPage {
@@ -132,8 +144,10 @@ export async function uploadMedia(uri: string, kind: 'image' | 'video'): Promise
     : (ext === 'png' ? 'image/png' : 'image/jpeg');
   form.append('file', { uri, type: mime, name: filename } as any);
   form.append('kind', kind);
+  // Do NOT set Content-Type manually — React Native's XHR sets it automatically
+  // with the correct multipart boundary when the body is FormData.
   const { data } = await apiClient.post('/api/media/upload/', form, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+    headers: { 'Content-Type': undefined },
   });
   return data;
 }
@@ -314,4 +328,8 @@ export async function voteOnPoll(
     { option_id: optionId },
   );
   return data;
+}
+
+export async function markAnnouncementsRead(orgId: string): Promise<void> {
+  await apiClient.post(`/api/organizations/${orgId}/announcements/read/`);
 }

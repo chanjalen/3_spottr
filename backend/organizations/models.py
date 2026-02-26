@@ -104,6 +104,7 @@ class OrgMember(BaseModel):
         default=Role.MEMBER,
     )
     joined_at = models.DateTimeField(auto_now_add=True)
+    last_announcements_read_at = models.DateTimeField(null=True, blank=True)
 
     objects = OrgMemberManager()
 
