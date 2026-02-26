@@ -188,32 +188,20 @@ def api_user_post_thumbnails_view(request, username):
     except (ValueError, TypeError):
         limit, offset = 9, 0
 
-    from social.models import Post, QuickWorkout
+    from social.models import Post
     from social.views import _bulk_media_urls, build_media_url
     from workouts.models import PersonalRecord
-    from django.core.files.storage import default_storage
 
-    # 2 queries — one for posts, one for checkins
     posts = list(
         Post.objects.filter(user=target)
         .select_related('workout')
         .order_by('-created_at')
         .only('id', 'created_at', 'description', 'photo', 'workout')
     )
-    checkins = list(
-        QuickWorkout.objects.filter(user=target)
-        .order_by('-created_at')
-        .only('id', 'created_at', 'description', 'type')
-    )
 
     post_ids = [p.id for p in posts]
-    checkin_ids = [c.id for c in checkins]
-
-    # 2 bulk queries for photos (instead of 1 per post)
     post_photos = _bulk_media_urls('post', post_ids)
-    checkin_photos = _bulk_media_urls('quick_workout', checkin_ids)
 
-    # 1 query for PRs linked to these posts
     pr_map = {}
     for pr in PersonalRecord.objects.filter(post_id__in=post_ids).values(
         'post_id', 'exercise_name', 'value', 'unit'
@@ -244,25 +232,6 @@ def api_user_post_thumbnails_view(request, username):
             } if pr else None,
         })
 
-    for c in checkins:
-        photo_url = checkin_photos.get(str(c.id))
-        if not photo_url:
-            path = f'checkins/{c.id}.jpg'
-            try:
-                if default_storage.exists(path):
-                    photo_url = build_media_url(path)
-            except Exception:
-                pass
-        items.append({
-            'id': c.id,
-            'type': 'checkin',
-            'created_at': c.created_at.isoformat(),
-            'description': c.description,
-            'photo_url': photo_url,
-            'workout_type': c.type.replace('_', ' ').title() if c.type else '',
-        })
-
-    items.sort(key=lambda x: x['created_at'], reverse=True)
     total = len(items)
     page = items[offset:offset + limit]
     next_cursor = str(offset + limit) if (offset + limit) < total else ''
