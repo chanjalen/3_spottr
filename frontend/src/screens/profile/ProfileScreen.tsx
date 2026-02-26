@@ -451,9 +451,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
               { borderColor: profile.has_checkin_today ? colors.primary : '#555' },
             ]}
             onPress={() => {
-              if (checkins.length === 0 && !checkinsLoadingRef.current) {
-                loadCheckins();
-              }
+              if (checkins.length === 0 && !checkinsLoadingRef.current) loadCheckins();
               setCheckinViewerVisible(true);
             }}
           >
