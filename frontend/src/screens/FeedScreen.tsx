@@ -20,11 +20,13 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { FeedItem } from '../types/feed';
 import { UserSearchResult } from '../types/user';
 import FeedCard from '../components/feed/FeedCard';
+import ImmersiveFeedList from '../components/feed/ImmersiveFeedList';
 import FeedTabs from '../components/common/FeedTabs';
 import EmptyState from '../components/common/EmptyState';
 import AppHeader from '../components/navigation/AppHeader';
 import CommentsSheet from '../components/comments/CommentsSheet';
 import Avatar from '../components/common/Avatar';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFeed } from '../hooks/useFeed';
 import { useToggleLike } from '../hooks/useToggleLike';
 import { usePollVote } from '../hooks/usePollVote';
@@ -56,9 +58,22 @@ export default function FeedScreen() {
   const handleLike = useToggleLike(updateItem);
   const handlePollVote = usePollVote(updateItem);
   const [commentItem, setCommentItem] = useState<FeedItem | null>(null);
+  const [containerHeight, setContainerHeight] = useState(0);
+  const [headerHeight, setHeaderHeight] = useState(0);
   const searchInputRef = useRef<TextInput>(null);
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
   const dropdownAnim = useRef(new Animated.Value(0)).current;
+
+  const insets = useSafeAreaInsets();
+  // Solid white nav bar: paddingTop(10) + FAB height(64) + bottom safe area
+  const bottomNavHeight = 74 + Math.max(insets.bottom, 16);
+  const isImmersive = activeTab !== 'main';
+
+  // Reset measured heights when switching between immersive ↔ main layouts
+  useEffect(() => {
+    setContainerHeight(0);
+    setHeaderHeight(0);
+  }, [isImmersive]);
 
   useEffect(() => {
     Animated.timing(dropdownAnim, {
@@ -106,6 +121,204 @@ export default function FeedScreen() {
     searchResults &&
     (searchResults.users.length > 0 || searchResults.posts.length > 0);
 
+  // ─── Immersive layout (Friends / Gym / Org tabs) ───────────────────────────
+  if (isImmersive) {
+    return (
+      <View style={styles.root}>
+        {/* Feed fills the full screen — posts render behind header and nav bar.
+            topInset/bottomInset tell the card where to place its interactive content. */}
+        <View
+          style={StyleSheet.absoluteFill}
+          onLayout={(e) => {
+            const h = e.nativeEvent.layout.height;
+            if (h > 0) setContainerHeight(h);
+          }}
+        >
+          {(containerHeight === 0 || (isLoading && items.length === 0)) ? (
+            <View style={styles.loader}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          ) : (
+            <ImmersiveFeedList
+              items={items}
+              itemHeight={containerHeight}
+              topInset={headerHeight}
+              bottomInset={bottomNavHeight}
+              activeTab={activeTab}
+              onLike={handleLike}
+              onComment={(item) => setCommentItem(item)}
+              onPollVote={(item, optionId) => handlePollVote(item, optionId)}
+              onRefresh={refresh}
+              isRefreshing={isRefreshing}
+              onEndReached={handleEndReached}
+              isLoadingMore={isLoadingMore}
+            />
+          )}
+        </View>
+
+        {/* Header — transparent dark overlay so the post shows through (TikTok-style).
+            Dark-to-transparent gradient keeps white icons readable on any post.
+            pointerEvents="box-none" lets the gradient pass touches to the feed. */}
+        <LinearGradient
+          colors={['rgba(0,0,0,0.65)', 'rgba(0,0,0,0.25)', 'transparent']}
+          locations={[0, 0.6, 1]}
+          style={styles.floatingHeader}
+          pointerEvents="box-none"
+          onLayout={(e) => {
+            const h = e.nativeEvent.layout.height;
+            if (h > 0) setHeaderHeight(h);
+          }}
+        >
+          <AppHeader />
+          <View style={styles.searchRow}>
+            <View style={styles.searchInputWrap}>
+              <Feather name="search" size={16} color="rgba(255,255,255,0.8)" />
+              <TextInput
+                ref={searchInputRef}
+                style={styles.searchInput}
+                value={searchQuery}
+                onChangeText={handleSearchChange}
+                placeholder="Search users or #hashtags..."
+                placeholderTextColor="rgba(255,255,255,0.6)"
+                returnKeyType="search"
+                autoCorrect={false}
+                autoCapitalize="none"
+              />
+              {searchQuery.length > 0 && (
+                <Pressable
+                  onPress={() => {
+                    clearSearch();
+                    searchInputRef.current?.blur();
+                  }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Feather name="x" size={16} color="rgba(255,255,255,0.9)" />
+                </Pressable>
+              )}
+            </View>
+          </View>
+          <FeedTabs
+            activeTab={activeTab}
+            onTabChange={(tab) => { setFilterDropdownOpen(false); changeTab(tab); }}
+            onDropdownPress={() => setFilterDropdownOpen((o) => !o)}
+          />
+        </LinearGradient>
+
+        {/* Search results — starts below the header */}
+        {showDropdown && (
+          <View style={[styles.dropdownOverlay, { top: headerHeight }]}>
+            {isSearching && !hasSearchResults ? (
+              <View style={styles.dropdownLoader}>
+                <ActivityIndicator size="small" color={colors.primary} />
+                <Text style={styles.dropdownLoadingText}>Searching...</Text>
+              </View>
+            ) : !hasSearchResults && searchResults !== null ? (
+              <View style={styles.dropdownEmpty}>
+                <Text style={styles.dropdownEmptyText}>No results for "{searchQuery}"</Text>
+              </View>
+            ) : searchResults === null ? (
+              <View style={styles.dropdownEmpty}>
+                <Text style={styles.dropdownEmptyText}>Type to search...</Text>
+              </View>
+            ) : (
+              <ScrollView
+                style={styles.dropdownScroll}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                {searchResults.users.length > 0 && (
+                  <View>
+                    <Text style={styles.dropdownSectionLabel}>People</Text>
+                    {searchResults.users.map((user) => (
+                      <UserResultRow
+                        key={user.id}
+                        user={user}
+                        onPress={() => {
+                          clearSearch();
+                          navigation.navigate('Profile', { username: user.username });
+                        }}
+                      />
+                    ))}
+                  </View>
+                )}
+                {searchResults.posts.length > 0 && (
+                  <View>
+                    <Text style={styles.dropdownSectionLabel}>Posts</Text>
+                    {searchResults.posts.map((item, index) => (
+                      <FeedCard
+                        key={`${item.type}-${item.id}`}
+                        item={item}
+                        index={index}
+                        onLike={() => handleLike(item)}
+                        onComment={() => {
+                          clearSearch();
+                          setCommentItem(item);
+                        }}
+                        onPollVote={(optionId: number | string) => handlePollVote(item, optionId)}
+                      />
+                    ))}
+                  </View>
+                )}
+              </ScrollView>
+            )}
+          </View>
+        )}
+
+        {/* Filter dropdown — appears above header when left tab chevron is tapped */}
+        {filterDropdownOpen && (
+          <>
+            <Pressable
+              style={StyleSheet.absoluteFill}
+              onPress={() => setFilterDropdownOpen(false)}
+            />
+            <Animated.View
+              style={[
+                styles.filterDropdown,
+                { top: headerHeight + 8 },
+                {
+                  opacity: dropdownAnim,
+                  transform: [{ translateY: dropdownAnim.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }],
+                },
+              ]}
+            >
+              {(
+                [
+                  { key: 'friends', label: 'Friends/Groups', icon: 'users' },
+                  { key: 'gym', label: 'Gym', icon: 'map-pin' },
+                  { key: 'org', label: 'Organizations', icon: 'flag' },
+                ] as { key: FeedTab; label: string; icon: React.ComponentProps<typeof Feather>['name'] }[]
+              ).map((option, i, arr) => (
+                <Pressable
+                  key={option.key}
+                  style={({ pressed }) => [
+                    styles.filterOption,
+                    i < arr.length - 1 && styles.filterOptionBorder,
+                    pressed && styles.filterOptionPressed,
+                  ]}
+                  onPress={() => handleDropdownSelect(option.key)}
+                >
+                  <Feather name={option.icon} size={16} color={activeTab === option.key ? colors.primary : colors.textSecondary} />
+                  <Text style={[styles.filterOptionText, activeTab === option.key && styles.filterOptionTextActive]}>
+                    {option.label}
+                  </Text>
+                  {activeTab === option.key && (
+                    <Feather name="check" size={16} color={colors.primary} />
+                  )}
+                </Pressable>
+              ))}
+            </Animated.View>
+          </>
+        )}
+
+        <CommentsSheet
+          item={commentItem}
+          onClose={() => setCommentItem(null)}
+        />
+      </View>
+    );
+  }
+
+  // ─── Main feed layout (unchanged) ──────────────────────────────────────────
   return (
     <View style={styles.root}>
       {/* Gradient header */}
@@ -152,7 +365,13 @@ export default function FeedScreen() {
       </LinearGradient>
 
       {/* Feed content — position: relative so dropdown can be absolute inside it */}
-      <View style={styles.feedContainer}>
+      <View
+        style={styles.feedContainer}
+        onLayout={(e) => {
+          const h = e.nativeEvent.layout.height;
+          if (h > 0) setContainerHeight(h);
+        }}
+      >
         {isLoading && items.length === 0 ? (
           <View style={styles.loader}>
             <ActivityIndicator size="large" color={colors.primary} />
@@ -339,6 +558,13 @@ const styles = StyleSheet.create({
   feedContainer: {
     flex: 1,
     backgroundColor: colors.background.base,
+  },
+  // Immersive layout — header floats over the feed
+  floatingHeader: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
   },
   loader: {
     flex: 1,
