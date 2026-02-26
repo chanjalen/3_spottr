@@ -537,20 +537,29 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
       Alert.alert('Permission needed', 'Allow access to your photo library.');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images', 'videos'],
-      allowsMultipleSelection: true,
-      quality: 0.85,
-    });
-    if (result.canceled) return;
+    let result: ImagePicker.ImagePickerResult;
+    try {
+      result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images', 'videos'],
+        allowsMultipleSelection: true,
+        preferredAssetRepresentationMode:
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+      });
+    } catch (err) {
+      Alert.alert('Error', 'Could not open photo library. Please try again.');
+      return;
+    }
+    if (result.canceled || !result.assets?.length) return;
     const assets = result.assets;
-    const kinds = assets.map(a => (a.type === 'video' ? 'video' : 'image') as 'image' | 'video');
+    const kinds = assets.map(
+      a => (a.type === 'video' || a.mimeType?.startsWith('video/') ? 'video' : 'image') as 'image' | 'video',
+    );
     const oversized = assets.some((a, i) => {
       const limit = kinds[i] === 'video' ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
       return a.fileSize != null && a.fileSize > limit;
     });
     if (oversized) {
-      Alert.alert('File too large', 'Images must be under 10MB and videos under 50MB.');
+      Alert.alert('File too large', 'Images must be under 10 MB and videos under 50 MB.');
       return;
     }
     const uris = assets.map(a => a.uri);
@@ -560,12 +569,13 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
     try {
       const ids: string[] = [];
       for (let i = 0; i < assets.length; i++) {
-        const res = await uploadMedia(assets[i].uri, kinds[i]);
+        const res = await uploadMedia(assets[i].uri, kinds[i], assets[i].mimeType ?? undefined);
         ids.push(res.asset_id);
       }
       setDraftMediaIds(prev => [...prev, ...ids]);
-    } catch {
-      Alert.alert('Upload error', 'Failed to upload one or more files.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to upload one or more files.';
+      Alert.alert('Upload failed', msg);
     } finally {
       setUploadingMedia(false);
     }

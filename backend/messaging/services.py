@@ -38,12 +38,36 @@ def _serialize_for_ws(message, recipient_id, client_msg_id=None):
     client_msg_id, if provided, is echoed back so the sender can reconcile their
     optimistic (pending) message with the confirmed server message.
     """
+    from media.models import MediaLink
+    from django.conf import settings
+
+    media_links = (
+        MediaLink.objects
+        .filter(destination_type='message', destination_id=str(message.id), type='inline')
+        .select_related('asset')
+        .order_by('position')
+    )
+    media = []
+    for link in media_links:
+        asset = link.asset
+        thumbnail_url = (
+            f"{settings.MEDIA_URL}{asset.thumbnail_key}" if asset.thumbnail_key else None
+        )
+        media.append({
+            'url': asset.url,
+            'kind': asset.kind,
+            'thumbnail_url': thumbnail_url,
+            'width': asset.width,
+            'height': asset.height,
+        })
+
     payload = {
         'id': message.id,
         'sender': message.sender_id,
         'sender_username': message.sender.username if message.sender else None,
         'sender_avatar_url': message.sender.avatar_url if message.sender else None,
         'content': message.content,
+        'media': media,
         'created_at': message.created_at.isoformat(),
         'is_read': False,
         'is_system': message.is_system,

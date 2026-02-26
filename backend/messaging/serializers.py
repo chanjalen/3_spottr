@@ -340,7 +340,7 @@ class UnreadCountSerializer(serializers.Serializer):
 
 class SendDMSerializer(serializers.Serializer):
     recipient_id = serializers.CharField()
-    content = serializers.CharField(max_length=5000, required=False, default='')
+    content = serializers.CharField(max_length=5000, required=False, default='', allow_blank=True)
     post_id = serializers.CharField(required=False, default=None)
     quick_workout_id = serializers.CharField(required=False, default=None)
     media_id = serializers.CharField(required=False, default=None)
@@ -352,7 +352,7 @@ class SendDMSerializer(serializers.Serializer):
 
 
 class SendGroupMessageSerializer(serializers.Serializer):
-    content = serializers.CharField(max_length=5000, required=False, default='')
+    content = serializers.CharField(max_length=5000, required=False, default='', allow_blank=True)
     post_id = serializers.CharField(required=False, default=None)
     quick_workout_id = serializers.CharField(required=False, default=None)
     media_id = serializers.CharField(required=False, default=None)
