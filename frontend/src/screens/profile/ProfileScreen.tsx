@@ -321,7 +321,8 @@ export default function ProfileScreen({ navigation, route }: Props) {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: 'videos',
       allowsEditing: false,
-      quality: 1,
+      preferredAssetRepresentationMode:
+        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
     });
     if (!result.canceled && result.assets?.[0]) {
       setPrVideoUri(result.assets[0].uri);

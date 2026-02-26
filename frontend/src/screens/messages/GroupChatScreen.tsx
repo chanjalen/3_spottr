@@ -83,6 +83,8 @@ export default function GroupChatScreen({ navigation, route }: Props) {
   const [text, setText] = useState('');
   const [pendingMediaUri, setPendingMediaUri] = useState<string | null>(null);
   const [pendingMediaKind, setPendingMediaKind] = useState<'image' | 'video' | null>(null);
+  const [pendingAssetId, setPendingAssetId] = useState<string | null>(null);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
   const [sendingMedia, setSendingMedia] = useState(false);
   const [userRole, setUserRole] = useState<'creator' | 'admin' | 'member' | null>(null);
   const [actingOnRequest, setActingOnRequest] = useState<string | null>(null);
@@ -307,34 +309,57 @@ export default function GroupChatScreen({ navigation, route }: Props) {
       Alert.alert('Permission needed', 'Allow access to your photo library.');
       return;
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images', 'videos'],
-      quality: 0.85,
-    });
-    if (result.canceled) return;
+    let result: ImagePicker.ImagePickerResult;
+    try {
+      result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images', 'videos'],
+        preferredAssetRepresentationMode:
+          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+      });
+    } catch (err) {
+      Alert.alert('Error', 'Could not open photo library. Please try again.');
+      return;
+    }
+    if (result.canceled || !result.assets?.length) return;
     const asset = result.assets[0];
-    const kind: 'image' | 'video' = asset.type === 'video' ? 'video' : 'image';
+    const kind: 'image' | 'video' =
+      asset.type === 'video' || asset.mimeType?.startsWith('video/') ? 'video' : 'image';
     const limit = kind === 'video' ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
     if (asset.fileSize != null && asset.fileSize > limit) {
       Alert.alert(
         'File too large',
-        kind === 'video' ? 'Videos must be under 50MB.' : 'Images must be under 10MB.',
+        kind === 'video' ? 'Videos must be under 50 MB.' : 'Images must be under 10 MB.',
       );
       return;
     }
     setPendingMediaUri(asset.uri);
     setPendingMediaKind(kind);
+    setPendingAssetId(null);
+    setUploadingMedia(true);
+    try {
+      const uploaded = await uploadMedia(asset.uri, kind, asset.mimeType ?? undefined);
+      setPendingAssetId(uploaded.asset_id);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to upload media. Please try again.';
+      Alert.alert('Upload failed', msg);
+      setPendingMediaUri(null);
+      setPendingMediaKind(null);
+    } finally {
+      setUploadingMedia(false);
+    }
   };
 
   const handleSendMedia = async () => {
-    if (!pendingMediaUri || !pendingMediaKind || sendingMedia) return;
+    if (!pendingMediaUri || !pendingMediaKind || !pendingAssetId || sendingMedia) return;
     const content = text.trim();
     const uri = pendingMediaUri;
     const kind = pendingMediaKind;
+    const assetId = pendingAssetId;
     const clientMsgId = genClientMsgId();
 
     setPendingMediaUri(null);
     setPendingMediaKind(null);
+    setPendingAssetId(null);
     setText('');
     setSendingMedia(true);
 
@@ -354,14 +379,15 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     setMessages((prev) => [optimisticMsg, ...prev]);
 
     try {
-      const uploaded = await uploadMedia(uri, kind);
-      const msg = await sendGroupMessage(groupId, content, uploaded.asset_id);
+      const msg = await sendGroupMessage(groupId, content, assetId);
       setMessages((prev) => {
         if (prev.some((m) => !('isDivider' in m) && String(m.id) === String(msg.id))) {
           return prev.filter((m) => ('isDivider' in m) || m.id !== clientMsgId);
         }
         return prev.map((m) =>
-          !('isDivider' in m) && m.id === clientMsgId ? { ...msg, status: 'sent' as const } : m,
+          !('isDivider' in m) && m.id === clientMsgId
+            ? { ...msg, media: [{ url: uri, kind, thumbnail_url: null, width: null, height: null }], status: 'sent' as const }
+            : m,
         );
       });
     } catch {
@@ -797,7 +823,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
               )}
               <Pressable
                 style={styles.pendingRemoveBtn}
-                onPress={() => { setPendingMediaUri(null); setPendingMediaKind(null); }}
+                onPress={() => { setPendingMediaUri(null); setPendingMediaKind(null); setPendingAssetId(null); }}
               >
                 <Feather name="x" size={12} color="#fff" />
               </Pressable>
@@ -805,7 +831,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
           </View>
         )}
         <View style={styles.inputBar}>
-          <Pressable style={styles.mediaPickBtn} onPress={handlePickMedia} disabled={sendingMedia}>
+          <Pressable style={styles.mediaPickBtn} onPress={handlePickMedia} disabled={sendingMedia || uploadingMedia}>
             <Feather name="image" size={22} color={colors.textMuted} />
           </Pressable>
           <TextInput
@@ -820,9 +846,9 @@ export default function GroupChatScreen({ navigation, route }: Props) {
           <Pressable
             style={[styles.sendBtn, (!text.trim() && !pendingMediaUri) && styles.sendBtnDisabled]}
             onPress={handleSend}
-            disabled={(!text.trim() && !pendingMediaUri) || sendingMedia}
+            disabled={(!text.trim() && !pendingMediaUri) || sendingMedia || uploadingMedia}
           >
-            {sendingMedia ? (
+            {sendingMedia || uploadingMedia ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
               <Feather name="send" size={18} color="#fff" />

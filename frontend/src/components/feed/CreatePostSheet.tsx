@@ -106,7 +106,8 @@ export default function CreatePostSheet({ sheetRef, onSuccess }: Props) {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: 'videos',
       allowsEditing: false,
-      quality: 1,
+      preferredAssetRepresentationMode:
+        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
     });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
