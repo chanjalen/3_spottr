@@ -181,7 +181,11 @@ export default function ProfileScreen({ navigation, route }: Props) {
       }
 
       if (thumbResult) {
-        setPosts((prev) => cursor ? [...prev, ...thumbResult!.items] : thumbResult!.items);
+        setPosts((prev) => {
+          if (!cursor) return thumbResult!.items;
+          const seen = new Set(prev.map((p) => p.id));
+          return [...prev, ...thumbResult!.items.filter((p) => !seen.has(p.id))];
+        });
         setPostsCursor(thumbResult.nextCursor);
         setPostsHasMore(!!thumbResult.nextCursor);
         postsLoadingRef.current = false;
@@ -196,7 +200,11 @@ export default function ProfileScreen({ navigation, route }: Props) {
       } else {
         // Fallback: load full posts directly
         const result = await fetchUserPosts(username, cursor);
-        setPosts((prev) => cursor ? [...prev, ...result.items] : result.items);
+        setPosts((prev) => {
+          if (!cursor) return result.items;
+          const seen = new Set(prev.map((p) => p.id));
+          return [...prev, ...result.items.filter((p) => !seen.has(p.id))];
+        });
         setPostsCursor(result.nextCursor);
         setPostsHasMore(!!result.nextCursor);
         postsLoadingRef.current = false;
@@ -229,7 +237,11 @@ export default function ProfileScreen({ navigation, route }: Props) {
     checkinsLoadingRef.current = true;
     try {
       const result = await fetchUserCheckins(username, cursor);
-      setCheckins((prev) => cursor ? [...prev, ...result.items] : result.items);
+      setCheckins((prev) => {
+        if (!cursor) return result.items;
+        const seen = new Set(prev.map((c) => c.id));
+        return [...prev, ...result.items.filter((c) => !seen.has(c.id))];
+      });
       setCheckinsCursor(result.nextCursor);
       setCheckinsHasMore(!!result.nextCursor);
     } catch {
