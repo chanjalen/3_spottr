@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Platform,
   KeyboardAvoidingView,
+  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -18,7 +19,9 @@ import * as ImagePicker from 'expo-image-picker';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { createCheckin } from '../../api/feed';
 import { fetchMyGyms } from '../../api/gyms';
+import { fetchRecentWorkouts } from '../../api/workouts';
 import { GymListItem } from '../../types/gym';
+import { RecentWorkout } from '../../types/workout';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 
@@ -42,6 +45,13 @@ const ACTIVITY_TYPES = [
 
 export default function QuickCheckinScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+
+  // Compute the same aspect ratio used by the feed's photo card so the preview
+  // shows exactly what will be visible above the nav bar in the immersive feed.
+  const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+  const bottomNavHeight = 74 + Math.max(insets.bottom, 16);
+  const feedPhotoAspectRatio = screenWidth / (screenHeight - bottomNavHeight);
+
   const [activity, setActivity] = useState('');
   const [description, setDescription] = useState('');
   const [photo, setPhoto] = useState<{ uri: string; name: string; type: string } | null>(null);
@@ -49,10 +59,18 @@ export default function QuickCheckinScreen({ navigation }: Props) {
   const [selectedGymId, setSelectedGymId] = useState<string | null>(null);
   const [locationName, setLocationName] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [recentWorkout, setRecentWorkout] = useState<RecentWorkout | null>(null);
+  const [selectedWorkoutId, setSelectedWorkoutId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMyGyms()
       .then(setGyms)
+      .catch(() => {});
+    fetchRecentWorkouts()
+      .then((workouts) => {
+        const completed = workouts.find((w) => !w.is_active);
+        if (completed) setRecentWorkout(completed);
+      })
       .catch(() => {});
   }, []);
 
@@ -64,9 +82,8 @@ export default function QuickCheckinScreen({ navigation }: Props) {
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
-      aspect: [4, 3],
       quality: 0.8,
+      // No allowsEditing / aspect — show the full photo as it will appear in the feed
     });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
@@ -88,6 +105,7 @@ export default function QuickCheckinScreen({ navigation }: Props) {
         gymId: selectedGymId ?? undefined,
         locationName: locationName.trim() || undefined,
         photo: photo ?? undefined,
+        workoutId: selectedWorkoutId ?? undefined,
       });
       navigation.goBack();
     } catch (err: any) {
@@ -166,7 +184,11 @@ export default function QuickCheckinScreen({ navigation }: Props) {
           <Text style={styles.sectionLabel}>Photo (optional)</Text>
           {photo ? (
             <View style={styles.photoPreviewWrap}>
-              <Image source={{ uri: photo.uri }} style={styles.photoPreview} />
+              <Image
+                source={{ uri: photo.uri }}
+                style={[styles.photoPreview, { aspectRatio: feedPhotoAspectRatio }]}
+                resizeMode="cover"
+              />
               <Pressable style={styles.photoRemove} onPress={() => setPhoto(null)}>
                 <Feather name="x" size={14} color="#fff" />
               </Pressable>
@@ -178,6 +200,52 @@ export default function QuickCheckinScreen({ navigation }: Props) {
             </Pressable>
           )}
         </View>
+
+        {/* Logged Workout — shown when the user has a recently completed workout */}
+        {recentWorkout && (
+          <View>
+            <Text style={styles.sectionLabel}>Attach Workout (optional)</Text>
+            <Pressable
+              style={({ pressed }) => [
+                styles.workoutChip,
+                selectedWorkoutId === recentWorkout.id && styles.workoutChipSelected,
+                pressed && styles.workoutChipPressed,
+              ]}
+              onPress={() =>
+                setSelectedWorkoutId((prev) =>
+                  prev === recentWorkout.id ? null : recentWorkout.id,
+                )
+              }
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: selectedWorkoutId === recentWorkout.id }}
+              accessibilityLabel={`Attach workout: ${recentWorkout.name}`}
+            >
+              <View style={[
+                styles.workoutChipIcon,
+                selectedWorkoutId === recentWorkout.id && styles.workoutChipIconSelected,
+              ]}>
+                <Feather
+                  name="activity"
+                  size={18}
+                  color={selectedWorkoutId === recentWorkout.id ? colors.primary : colors.textMuted}
+                />
+              </View>
+              <View style={styles.workoutChipInfo}>
+                <Text style={styles.workoutChipName} numberOfLines={1}>
+                  {recentWorkout.name}
+                </Text>
+                <Text style={styles.workoutChipMeta}>
+                  {recentWorkout.exercise_count} exercises · {recentWorkout.duration} · {recentWorkout.time_ago}
+                </Text>
+              </View>
+              <Feather
+                name={selectedWorkoutId === recentWorkout.id ? 'check-circle' : 'circle'}
+                size={20}
+                color={selectedWorkoutId === recentWorkout.id ? colors.primary : colors.border.default}
+              />
+            </Pressable>
+          </View>
+        )}
 
         {/* Gym / Location */}
         <View>
@@ -310,18 +378,67 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   photoPickText: { fontSize: typography.size.sm, fontWeight: '600', color: colors.primary },
-  photoPreviewWrap: { position: 'relative', alignSelf: 'flex-start' },
-  photoPreview: { width: 160, height: 120, borderRadius: 12 },
+  photoPreviewWrap: { position: 'relative', width: '100%' },
+  photoPreview: {
+    width: '100%',
+    // aspectRatio is set inline at runtime to match the visible feed photo area
+    borderRadius: 12,
+    overflow: 'hidden',
+    backgroundColor: '#000',
+  },
   photoRemove: {
     position: 'absolute',
-    top: 6,
-    right: 6,
+    top: 10,
+    right: 10,
     backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 12,
-    width: 24,
-    height: 24,
+    borderRadius: 14,
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+
+  // ─── Workout chip ───────────────────────────────────────────────────────────
+  workoutChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    backgroundColor: colors.surface,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: colors.border.default,
+    padding: spacing.md,
+  },
+  workoutChipSelected: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary + '0D',
+  },
+  workoutChipPressed: {
+    opacity: 0.75,
+  },
+  workoutChipIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: colors.background.elevated,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  workoutChipIconSelected: {
+    backgroundColor: colors.primary + '18',
+  },
+  workoutChipInfo: {
+    flex: 1,
+  },
+  workoutChipName: {
+    fontSize: typography.size.base,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  workoutChipMeta: {
+    fontSize: typography.size.sm,
+    color: colors.textMuted,
+    marginTop: 2,
   },
 
   gymRow: { flexDirection: 'row', gap: spacing.sm },

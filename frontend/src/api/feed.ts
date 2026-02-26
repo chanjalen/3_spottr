@@ -51,11 +51,13 @@ function adaptFeedItem(raw: any): FeedItem {
 }
 
 export async function fetchFeed(
-  tab: 'main' | 'friends',
+  tab: 'main' | 'friends' | 'gym' | 'org',
   cursor?: string,
+  limit?: number,
 ): Promise<{ items: FeedItem[]; nextCursor: string }> {
   const params: Record<string, string> = { tab };
   if (cursor) params.cursor = cursor;
+  if (limit) params.limit = String(limit);
 
   const response = await apiClient.get(ENDPOINTS.feed, { params });
   // Backend returns { items: [...], next_cursor: "..." } for AJAX requests
