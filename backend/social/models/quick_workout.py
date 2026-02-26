@@ -35,9 +35,6 @@ class QuickWorkout(BaseModel):
     description = models.TextField(blank=True)
     type = models.CharField(max_length=50)
 
-    # Controls which sub-feeds see this check-in (friends, org, gym).
-    # Default is friends-only. Future dropdown filter will use this field.
-    # Example: ['friends'], ['friends', 'gym'], ['org']
     audience = models.JSONField(default=list)
 
     class Meta:

@@ -87,9 +87,11 @@ export async function fetchUserPostThumbnails(
 export async function fetchUserPosts(
   username: string,
   cursor?: string,
+  thumbnailOnly?: boolean,
 ): Promise<{ items: FeedItem[]; nextCursor: string }> {
   const params: Record<string, string> = { limit: '9' };
   if (cursor) params.cursor = cursor;
+  if (thumbnailOnly) params.fields = 'thumbnail';
   const response = await apiClient.get(ENDPOINTS.userPosts(username), { params });
   const raw: any[] = Array.isArray(response.data)
     ? response.data
@@ -184,6 +186,38 @@ export async function fetchLikers(
 export async function fetchWorkoutDetail(workoutId: string): Promise<WorkoutDetail> {
   const response = await apiClient.get(`/api/workouts/${workoutId}/detail/`);
   return response.data;
+}
+
+export interface CheckinItem {
+  id: string;
+  type: 'checkin';
+  description: string;
+  location_name: string;
+  workout_type: string;
+  photo_url: string | null;
+  created_at: string;
+}
+
+export async function fetchUserCheckins(
+  username: string,
+  cursor?: string,
+): Promise<{ items: CheckinItem[]; nextCursor: string }> {
+  const params: Record<string, string> = { limit: '20' };
+  if (cursor) params.cursor = cursor;
+  const response = await apiClient.get(ENDPOINTS.userCheckins(username), { params });
+  const raw: any[] = Array.isArray(response.data)
+    ? response.data
+    : (response.data?.items ?? []);
+  const items: CheckinItem[] = raw.map((r) => ({
+    id: String(r.id ?? ''),
+    type: 'checkin',
+    description: r.description ?? '',
+    location_name: r.location_name ?? '',
+    workout_type: r.workout_type ?? '',
+    photo_url: r.photo_url ?? null,
+    created_at: r.created_at ?? new Date().toISOString(),
+  }));
+  return { items, nextCursor: response.data?.next_cursor ?? '' };
 }
 
 export async function createCheckin(params: {

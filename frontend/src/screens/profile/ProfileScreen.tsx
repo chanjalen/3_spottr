@@ -29,13 +29,14 @@ import CommentsSheet from '../../components/comments/CommentsSheet';
 import { useAuth } from '../../store/AuthContext';
 import { fetchProfile, toggleFollow, fetchUserPRs, savePR, deletePR } from '../../api/accounts';
 import { fetchExerciseCatalog, fetchCalendarPosts } from '../../api/workouts';
-import { fetchUserPostThumbnails, fetchUserPosts } from '../../api/feed';
+import { fetchUserPostThumbnails, fetchUserPosts, fetchUserCheckins, CheckinItem } from '../../api/feed';
+import CheckinViewer from '../../components/profile/CheckinViewer';
 import { fetchMyGyms } from '../../api/gyms';
 import { listMyOrgs, OrgListItem } from '../../api/organizations';
 import { useToggleLike } from '../../hooks/useToggleLike';
 import { usePollVote } from '../../hooks/usePollVote';
 import { UserProfile, PersonalRecord } from '../../types/user';
-import { ExerciseCatalogItem } from '../../types/workout';
+import { ExerciseCatalogItem, CalendarPost } from '../../types/workout';
 import { FeedItem } from '../../types/feed';
 import { Gym } from '../../types/gym';
 import { colors, spacing, typography } from '../../theme';
@@ -79,6 +80,13 @@ export default function ProfileScreen({ navigation, route }: Props) {
   const [prs, setPrs] = useState<PersonalRecord[]>([]);
   const [prsLoading, setPrsLoading] = useState(false);
   const prsLoaded = useRef(false);
+
+  // Checkins (for story-ring viewer)
+  const [checkins, setCheckins] = useState<CheckinItem[]>([]);
+  const [checkinsHasMore, setCheckinsHasMore] = useState(false);
+  const [checkinsCursor, setCheckinsCursor] = useState('');
+  const checkinsLoadingRef = useRef(false);
+  const [checkinViewerVisible, setCheckinViewerVisible] = useState(false);
 
   // Gyms + Orgs (own profile only)
   const [gyms, setGyms] = useState<Gym[]>([]);
@@ -173,7 +181,11 @@ export default function ProfileScreen({ navigation, route }: Props) {
       }
 
       if (thumbResult) {
-        setPosts((prev) => cursor ? [...prev, ...thumbResult!.items] : thumbResult!.items);
+        setPosts((prev) => {
+          if (!cursor) return thumbResult!.items;
+          const seen = new Set(prev.map((p) => p.id));
+          return [...prev, ...thumbResult!.items.filter((p) => !seen.has(p.id))];
+        });
         setPostsCursor(thumbResult.nextCursor);
         setPostsHasMore(!!thumbResult.nextCursor);
         postsLoadingRef.current = false;
@@ -188,7 +200,11 @@ export default function ProfileScreen({ navigation, route }: Props) {
       } else {
         // Fallback: load full posts directly
         const result = await fetchUserPosts(username, cursor);
-        setPosts((prev) => cursor ? [...prev, ...result.items] : result.items);
+        setPosts((prev) => {
+          if (!cursor) return result.items;
+          const seen = new Set(prev.map((p) => p.id));
+          return [...prev, ...result.items.filter((p) => !seen.has(p.id))];
+        });
         setPostsCursor(result.nextCursor);
         setPostsHasMore(!!result.nextCursor);
         postsLoadingRef.current = false;
@@ -211,6 +227,27 @@ export default function ProfileScreen({ navigation, route }: Props) {
       // silently handle
     } finally {
       setPrsLoading(false);
+    }
+  }, [username]);
+
+  // ── Load checkins ─────────────────────────────────────────────────────────────
+
+  const loadCheckins = useCallback(async (cursor?: string) => {
+    if (checkinsLoadingRef.current) return;
+    checkinsLoadingRef.current = true;
+    try {
+      const result = await fetchUserCheckins(username, cursor);
+      setCheckins((prev) => {
+        if (!cursor) return result.items;
+        const seen = new Set(prev.map((c) => c.id));
+        return [...prev, ...result.items.filter((c) => !seen.has(c.id))];
+      });
+      setCheckinsCursor(result.nextCursor);
+      setCheckinsHasMore(!!result.nextCursor);
+    } catch {
+      // silently handle
+    } finally {
+      checkinsLoadingRef.current = false;
     }
   }, [username]);
 
@@ -415,6 +452,9 @@ export default function ProfileScreen({ navigation, route }: Props) {
               prsLoaded.current = reloadPrs;
               setPosts([]);
               setPrs([]);
+              setCheckins([]);
+              setCheckinsCursor('');
+              setCheckinsHasMore(false);
               setShowAllPRs(false);
               load();
               loadPosts();
@@ -433,9 +473,18 @@ export default function ProfileScreen({ navigation, route }: Props) {
       >
         {/* ── Instagram-style summary row ─────────────────────────────────────── */}
         <View style={styles.summaryRow}>
-          <View style={styles.avatarWrap}>
+          <Pressable
+            style={[
+              styles.avatarWrap,
+              { borderColor: profile.has_checkin_today ? colors.primary : '#555' },
+            ]}
+            onPress={() => {
+              if (checkins.length === 0 && !checkinsLoadingRef.current) loadCheckins();
+              setCheckinViewerVisible(true);
+            }}
+          >
             <Avatar uri={profile.avatar_url} name={profile.display_name} size={76} />
-          </View>
+          </Pressable>
           <View style={styles.summaryStats}>
             <View style={styles.summaryStatItem}>
               <Text style={styles.summaryStatValue}>{profile.total_workouts}</Text>
@@ -530,7 +579,16 @@ export default function ProfileScreen({ navigation, route }: Props) {
           )}
 
           {activeTab === 'Calendar' && (
-            <CalendarTab posts={posts} postsLoading={postsLoading} onOpenPost={openPost} profileUsername={username} />
+            <CalendarTab
+              posts={posts}
+              postsLoading={postsLoading}
+              onOpenPost={openPost}
+              profileUsername={username}
+              profile={profile}
+              onLike={handleLike}
+              onComment={(item) => setCommentItem(item)}
+              onPollVote={handlePollVote}
+            />
           )}
 
           {activeTab === 'Records' && (
@@ -595,8 +653,18 @@ export default function ProfileScreen({ navigation, route }: Props) {
             )}
           />
         </View>
-        <CommentsSheet item={commentItem} onClose={() => setCommentItem(null)} />
       </Modal>
+      <CommentsSheet item={commentItem} onClose={() => setCommentItem(null)} />
+
+      <CheckinViewer
+        visible={checkinViewerVisible}
+        checkins={checkins}
+        onClose={() => setCheckinViewerVisible(false)}
+        onLoadMore={() => {
+          if (checkinsHasMore && !checkinsLoadingRef.current) loadCheckins(checkinsCursor);
+        }}
+        hasMore={checkinsHasMore}
+      />
 
       {/* ── All Posts grid modal ─────────────────────────────────────────── */}
       <Modal
@@ -1033,16 +1101,57 @@ function PostThumbnail({ item, onPress, size }: { item: FeedItem; onPress: () =>
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
+function calPostToFeedItem(cp: CalendarPost, profile: UserProfile): FeedItem {
+  return {
+    id: cp.id,
+    type: cp.type === 'checkin' ? 'checkin' : 'post',
+    user: {
+      id: profile.id,
+      username: profile.username,
+      display_name: profile.display_name,
+      avatar_url: profile.avatar_url,
+    },
+    created_at: cp.date,
+    description: cp.description,
+    location_name: cp.location_name || null,
+    photo_url: cp.photo_url,
+    link_url: null,
+    like_count: cp.like_count,
+    comment_count: cp.comment_count,
+    user_liked: cp.user_liked,
+    workout: cp.workout_name ? {
+      id: cp.id,
+      name: cp.workout_name,
+      exercise_count: cp.workout_exercises ?? 0,
+      total_sets: cp.workout_sets ?? 0,
+      duration: '',
+      exercises: [],
+    } : null,
+    personal_record: null,
+    poll: null,
+    workout_type: cp.type === 'checkin' ? cp.description : undefined,
+    visibility: 'main',
+  };
+}
+
 function CalendarTab({
   posts,
   postsLoading,
   onOpenPost,
   profileUsername,
+  profile,
+  onLike,
+  onComment,
+  onPollVote,
 }: {
   posts: FeedItem[];
   postsLoading: boolean;
   onOpenPost: (item: FeedItem) => void;
   profileUsername: string;
+  profile: UserProfile | null;
+  onLike: (item: FeedItem) => void;
+  onComment: (item: FeedItem) => void;
+  onPollVote: (item: FeedItem, optionId: number) => void;
 }) {
   const insets = useSafeAreaInsets();
   const now = new Date();
@@ -1054,6 +1163,8 @@ function CalendarTab({
   const [currentModalDay, setCurrentModalDay] = useState(1);
   const dayListRef = useRef<FlatList>(null);
 
+  // Fetch calendar data from the dedicated API — this returns ALL posts for
+  // the month so highlights are always complete and consistent on refresh.
   useEffect(() => {
     setRestDayNums(new Set());
     setWorkoutDayNums(new Set());
@@ -1081,9 +1192,6 @@ function CalendarTab({
     [workoutDayNums],
   );
 
-  const firstDay = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-
   const prevMonth = () => {
     if (month === 0) { setMonth(11); setYear((y) => y - 1); }
     else setMonth((m) => m - 1);
@@ -1099,9 +1207,8 @@ function CalendarTab({
     setDayModalVisible(true);
   };
 
-  if (postsLoading) {
-    return <View style={styles.emptyTab}><ActivityIndicator color={colors.primary} /></View>;
-  }
+  const firstDay = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
 
   return (
     <View style={styles.calendarWrap}>
@@ -1267,7 +1374,7 @@ function CalendarTab({
                           {item.workout && (
                             <Text style={styles.calDayCardMeta}>
                               {item.workout.exercise_count} exercises · {item.workout.total_sets} sets
-                              {item.workout.duration_minutes ? ` · ${item.workout.duration_minutes}min` : ''}
+                              {item.workout.duration ? ` · ${item.workout.duration}` : ''}
                             </Text>
                           )}
                           {item.personal_record && (

@@ -16,6 +16,7 @@ export interface UserProfile extends UserBrief {
   following_count: number;
   friend_count?: number;
   member_since: string;
+  has_checkin_today?: boolean;
 }
 
 export interface UserSearchResult extends UserBrief {
