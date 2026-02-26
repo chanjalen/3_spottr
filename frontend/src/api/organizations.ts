@@ -1,4 +1,4 @@
-import { apiClient } from './client';
+import { apiClient, getToken, API_BASE_URL } from './client';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -135,21 +135,42 @@ export interface UploadedAsset {
 // Media upload
 // ---------------------------------------------------------------------------
 
-export async function uploadMedia(uri: string, kind: 'image' | 'video'): Promise<UploadedAsset> {
+export async function uploadMedia(uri: string, kind: 'image' | 'video', mimeType?: string): Promise<UploadedAsset> {
   const form = new FormData();
-  const filename = uri.split('/').pop() ?? 'upload.jpg';
-  const ext = filename.split('.').pop()?.toLowerCase() ?? 'jpg';
-  const mime = kind === 'video'
+  const filename = uri.split('/').pop() ?? (kind === 'video' ? 'upload.mov' : 'upload.jpg');
+  const ext = filename.split('.').pop()?.toLowerCase() ?? (kind === 'video' ? 'mov' : 'jpg');
+  // Prefer the mimeType provided by expo-image-picker (accurate) over extension-guessing.
+  const mime = mimeType ?? (kind === 'video'
     ? (ext === 'mov' ? 'video/quicktime' : 'video/mp4')
-    : (ext === 'png' ? 'image/png' : 'image/jpeg');
+    : (ext === 'png' ? 'image/png' : 'image/jpeg'));
   form.append('file', { uri, type: mime, name: filename } as any);
   form.append('kind', kind);
-  // Do NOT set Content-Type manually — React Native's XHR sets it automatically
-  // with the correct multipart boundary when the body is FormData.
-  const { data } = await apiClient.post('/api/media/upload/', form, {
-    headers: { 'Content-Type': undefined },
-  });
-  return data;
+
+  // Use fetch directly so React Native sets Content-Type + multipart boundary automatically.
+  // axios 1.7 coerces `undefined` header values to the string "undefined", which breaks
+  // the boundary on large files (videos especially).
+  const token = await getToken();
+  const timeoutMs = kind === 'video' ? 120_000 : 30_000;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/media/upload/`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Token ${token}` } : {},
+      body: form as any,
+      signal: controller.signal,
+    });
+    if (response.status === 413) {
+      throw new Error('File too large. Images must be under 10 MB and videos under 50 MB.');
+    }
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error ?? `Upload failed (${response.status})`);
+    }
+    return response.json();
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 // ---------------------------------------------------------------------------

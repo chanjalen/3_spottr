@@ -10,19 +10,41 @@ from .base import *
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
-# Add your production domain(s) here
+# Add your production domain/IP here via ALLOWED_HOSTS env var (comma-separated)
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', '').split(',')
 
-# Security settings for production
+# CORS — allow the mobile app to reach the API
+CORS_ALLOW_ALL_ORIGINS = True
+
+# CSRF trusted origins — required for Django admin over HTTP during beta
+CSRF_TRUSTED_ORIGINS = [
+    f"http://{host}" for host in os.getenv('ALLOWED_HOSTS', '').split(',') if host
+]
+
+# Security headers (safe for HTTP)
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
-SECURE_SSL_REDIRECT = True
-SESSION_COOKIE_SECURE = True
-CSRF_COOKIE_SECURE = True
-SECURE_HSTS_SECONDS = 31536000  # 1 year
-SECURE_HSTS_INCLUDE_SUBDOMAINS = True
-SECURE_HSTS_PRELOAD = True
+
+# SSL/HTTPS — disabled for initial HTTP-only beta deployment.
+# Re-enable these once a domain + Let's Encrypt cert is in place.
+SECURE_SSL_REDIRECT = False
+SESSION_COOKIE_SECURE = False
+CSRF_COOKIE_SECURE = False
+
+# Static files — WhiteNoise serves them directly from Daphne (no separate nginx rule needed)
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+STORAGES = {
+    **STORAGES,
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
+    },
+}
+
+# Insert WhiteNoise middleware right after SecurityMiddleware
+MIDDLEWARE = list(MIDDLEWARE)
+MIDDLEWARE.insert(1, 'whitenoise.middleware.WhiteNoiseMiddleware')
 
 # Production database (configure via environment variables)
 DATABASES = {
@@ -34,17 +56,12 @@ DATABASES = {
         "HOST": os.getenv('DB_HOST', 'localhost'),
         "PORT": os.getenv('DB_PORT', '5432'),
         "OPTIONS": {
-            # Enforce TLS for all production DB connections
             "sslmode": os.getenv('DB_SSLMODE', 'require'),
         },
     }
 }
 
-# Static files
-STATIC_ROOT = BASE_DIR / 'staticfiles'
-
 # Cache — use Redis in production so cache is shared across all workers.
-# Set REDIS_URL in environment (e.g. redis://localhost:6379/1).
 _redis_url = os.getenv('REDIS_URL')
 if _redis_url:
     CACHES = {
@@ -53,7 +70,6 @@ if _redis_url:
             'LOCATION': _redis_url,
         }
     }
-# If REDIS_URL is not set, base.py LocMemCache is used — acceptable for single-worker deploys.
 
 # Logging — raise all app loggers to WARNING in production to reduce noise.
 LOGGING['loggers'].update({

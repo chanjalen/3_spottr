@@ -1441,7 +1441,7 @@ const styles = StyleSheet.create({
     minWidth: 20,
     height: 20,
     borderRadius: 10,
-    backgroundColor: colors.primary,
+    backgroundColor: '#E53935',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 4,

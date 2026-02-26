@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
   rowLast: { fontSize: typography.size.sm, color: colors.textSecondary },
   badge: {
     minWidth: 20, height: 20, borderRadius: 10,
-    backgroundColor: colors.primary,
+    backgroundColor: '#E53935',
     alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
   },
   badgeText: { fontSize: 11, fontWeight: '700', color: '#fff' },

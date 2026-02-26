@@ -860,48 +860,28 @@ def create_checkin_view(request):
         }, status=500)
 
 
-def get_user_posts(user, viewer=None):
+def get_user_posts(user, viewer=None, thumbnail=False):
     """
-    Get all posts and check-ins for a user.
+    Get all posts (not check-ins) for a user.
     viewer is the logged-in user (for user_liked checks).
+    thumbnail=True skips expensive per-item COUNT queries — returns minimal
+    data needed to render grid thumbnails immediately (Phase 1).
     """
-    quick_workouts = QuickWorkout.objects.filter(
-        user=user
-    ).select_related('location').order_by('-created_at')
-
     posts = Post.objects.filter(
         user=user
-    ).select_related('location').order_by('-created_at')
+    ).select_related('location', 'workout').order_by('-created_at')
 
     user_posts = []
 
-    for qw in quick_workouts:
-        like_count = Reaction.objects.filter(quick_workout=qw).count()
-        comment_count = Comment.objects.filter(quick_workout=qw).count()
-        user_liked = False
-        if viewer and viewer.is_authenticated:
-            user_liked = Reaction.objects.filter(quick_workout=qw, user=viewer).exists()
-
-        user_posts.append({
-            'type': 'checkin',
-            'id': qw.id,
-            'location': qw.location,
-            'location_name': qw.location_name or (qw.location.name if qw.location else ''),
-            'workout_type': qw.type.replace('_', ' ').title() if qw.type else '',
-            'description': qw.description,
-            'created_at': qw.created_at,
-            'photo_url': get_checkin_photo(qw.id),
-            'like_count': like_count,
-            'comment_count': comment_count,
-            'user_liked': user_liked,
-        })
-
     for post in posts:
-        like_count = Reaction.objects.filter(post=post).count()
-        comment_count = Comment.objects.filter(post=post).count()
-        user_liked = False
-        if viewer and viewer.is_authenticated:
-            user_liked = Reaction.objects.filter(post=post, user=viewer).exists()
+        if thumbnail:
+            like_count, comment_count, user_liked = 0, 0, False
+        else:
+            like_count = Reaction.objects.filter(post=post).count()
+            comment_count = Comment.objects.filter(post=post).count()
+            user_liked = False
+            if viewer and viewer.is_authenticated:
+                user_liked = Reaction.objects.filter(post=post, user=viewer).exists()
 
         post_data = {
             'type': 'workout' if post.workout else 'post',
@@ -919,11 +899,12 @@ def get_user_posts(user, viewer=None):
         # Add workout details if this is a workout post
         if post.workout:
             workout = post.workout
-            from workouts.models import Exercise, ExerciseSet
-
-            exercises = Exercise.objects.filter(workout=workout)
-            exercise_count = exercises.count()
-            total_sets = ExerciseSet.objects.filter(exercise__workout=workout).count()
+            if thumbnail:
+                exercise_count, total_sets = 0, 0
+            else:
+                from workouts.models import Exercise, ExerciseSet
+                exercise_count = Exercise.objects.filter(workout=workout).count()
+                total_sets = ExerciseSet.objects.filter(exercise__workout=workout).count()
 
             post_data['workout'] = {
                 'id': str(workout.id),

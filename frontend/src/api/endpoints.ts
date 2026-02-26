@@ -30,6 +30,7 @@ export const ENDPOINTS = {
 
   userPostThumbnails: (username: string) => `/accounts/api/user/${username}/post-thumbnails/`,
   userPosts: (username: string) => `/accounts/api/user/${username}/posts/`,
+  userCheckins: (username: string) => `/accounts/api/user/${username}/checkins/`,
 
   postLikers: (id: ID) => `${BASE}/post/${id}/likers/`,
   checkinLikers: (id: ID) => `${BASE}/checkin/${id}/likers/`,

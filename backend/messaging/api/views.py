@@ -119,7 +119,7 @@ def send_group_zap(request, group_id, target_user_id):
         return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
 
     return Response(
-        MessageSerializer(message, context={'request': request}).data,
+        MessageListSerializer(message, context={'request': request}).data,
         status=status.HTTP_201_CREATED,
     )
 
@@ -151,7 +151,7 @@ def send_group_message(request, group_id):
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     return Response(
-        MessageSerializer(message, context={'request': request}).data,
+        MessageListSerializer(message, context={'request': request}).data,
         status=status.HTTP_201_CREATED,
     )
 
