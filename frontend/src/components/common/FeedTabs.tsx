@@ -5,49 +5,58 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
 } from 'react-native-reanimated';
+import { Feather } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 
-export type FeedTab = 'main' | 'friends';
+export type FeedTab = 'main' | 'friends' | 'gym' | 'org';
+
+// Tabs that live inside the left dropdown group
+const DROPDOWN_TABS: FeedTab[] = ['friends', 'gym', 'org'];
+
+const LEFT_TAB_LABELS: Record<FeedTab, string> = {
+  friends: 'Friends/Groups',
+  gym: 'Gym',
+  org: 'Organizations',
+  main: 'Friends/Groups', // fallback, never shown as left label when main is active
+};
 
 interface FeedTabsProps {
   activeTab: FeedTab;
   onTabChange: (tab: FeedTab) => void;
+  /** Called when the left tab is tapped while already active — caller should open the dropdown */
+  onDropdownPress: () => void;
   streakCount?: number;
 }
 
-const TABS: { key: FeedTab; label: string }[] = [
-  { key: 'main', label: 'Discover' },
-  { key: 'friends', label: 'Following' },
-];
-
-export default function FeedTabs({ activeTab, onTabChange, streakCount }: FeedTabsProps) {
+export default function FeedTabs({
+  activeTab,
+  onTabChange,
+  onDropdownPress,
+  streakCount,
+}: FeedTabsProps) {
+  // Two visual positions: 0 = left (friends/gym/org), 1 = right (main)
   const tabWidths = React.useRef<number[]>([0, 0]);
   const tabPositions = React.useRef<number[]>([0, 0]);
   const indicatorX = useSharedValue(0);
   const indicatorWidth = useSharedValue(0);
 
+  const activeVisualIndex = activeTab === 'main' ? 1 : 0;
+
   const handleTabLayout = (index: number) => (e: LayoutChangeEvent) => {
     const { x, width } = e.nativeEvent.layout;
     tabWidths.current[index] = width;
     tabPositions.current[index] = x;
-
-    if (TABS[index].key === activeTab) {
+    if (index === activeVisualIndex) {
       indicatorX.value = x;
       indicatorWidth.value = width;
     }
   };
 
   React.useEffect(() => {
-    const index = TABS.findIndex((t) => t.key === activeTab);
-    if (tabPositions.current[index] !== undefined) {
-      indicatorX.value = withSpring(tabPositions.current[index], {
-        stiffness: 400,
-        damping: 35,
-      });
-      indicatorWidth.value = withSpring(tabWidths.current[index], {
-        stiffness: 400,
-        damping: 35,
-      });
+    const idx = activeVisualIndex;
+    if (tabPositions.current[idx] !== undefined) {
+      indicatorX.value = withSpring(tabPositions.current[idx], { stiffness: 400, damping: 35 });
+      indicatorWidth.value = withSpring(tabWidths.current[idx], { stiffness: 400, damping: 35 });
     }
   }, [activeTab]);
 
@@ -56,33 +65,69 @@ export default function FeedTabs({ activeTab, onTabChange, streakCount }: FeedTa
     width: indicatorWidth.value,
   }));
 
+  const isDropdownTab = DROPDOWN_TABS.includes(activeTab);
+  const leftLabel = isDropdownTab ? LEFT_TAB_LABELS[activeTab] : 'Friends/Groups';
+
+  const handleLeftTabPress = () => {
+    if (isDropdownTab) {
+      // Already on a dropdown tab — open the picker
+      onDropdownPress();
+    } else {
+      // On Main tab — switch to friends
+      onTabChange('friends');
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.row}>
         <View style={styles.tabRow}>
-          {TABS.map((tab, index) => {
-            const isActive = activeTab === tab.key;
-            return (
-              <Pressable
-                key={tab.key}
-                onPress={() => onTabChange(tab.key)}
-                onLayout={handleTabLayout(index)}
-                style={styles.tab}
-                accessibilityRole="tab"
-                accessibilityState={{ selected: isActive }}
-                accessibilityLabel={tab.label}
+          {/* Left tab — dropdown group trigger */}
+          <Pressable
+            onPress={handleLeftTabPress}
+            onLayout={handleTabLayout(0)}
+            style={styles.tab}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: isDropdownTab }}
+            accessibilityLabel={leftLabel}
+          >
+            <View style={styles.leftTabInner}>
+              <Text
+                style={[
+                  styles.tabLabel,
+                  isDropdownTab ? styles.tabLabelActive : styles.tabLabelInactive,
+                ]}
               >
-                <Text
-                  style={[
-                    styles.tabLabel,
-                    isActive ? styles.tabLabelActive : styles.tabLabelInactive,
-                  ]}
-                >
-                  {tab.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+                {leftLabel}
+              </Text>
+              <Feather
+                name={isDropdownTab ? 'chevron-down' : 'chevron-down'}
+                size={14}
+                color={isDropdownTab ? colors.textOnPrimary : 'rgba(255,255,255,0.65)'}
+                style={styles.chevron}
+              />
+            </View>
+          </Pressable>
+
+          {/* Right tab — Main */}
+          <Pressable
+            onPress={() => onTabChange('main')}
+            onLayout={handleTabLayout(1)}
+            style={styles.tab}
+            accessibilityRole="tab"
+            accessibilityState={{ selected: activeTab === 'main' }}
+            accessibilityLabel="Main"
+          >
+            <Text
+              style={[
+                styles.tabLabel,
+                activeTab === 'main' ? styles.tabLabelActive : styles.tabLabelInactive,
+              ]}
+            >
+              Main
+            </Text>
+          </Pressable>
+
           <Animated.View style={[styles.indicator, indicatorStyle]} />
         </View>
 
@@ -99,9 +144,7 @@ export default function FeedTabs({ activeTab, onTabChange, streakCount }: FeedTa
 }
 
 const styles = StyleSheet.create({
-  container: {
-    // transparent — sits inside the gradient wrapper in FeedScreen
-  },
+  container: {},
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -119,6 +162,14 @@ const styles = StyleSheet.create({
     paddingTop: spacing.xs,
     minHeight: 44,
     justifyContent: 'flex-end',
+  },
+  leftTabInner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  chevron: {
+    marginBottom: 1,
   },
   tabLabel: {
     fontSize: typography.size.base,
@@ -148,9 +199,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
-  streakIcon: {
-    fontSize: 14,
-  },
+  streakIcon: { fontSize: 14 },
   streakCount: {
     fontSize: typography.size.sm,
     fontFamily: typography.family.semibold,

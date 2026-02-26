@@ -235,28 +235,38 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
     user = request.user if request.user.is_authenticated else None
 
     # ── Feed split logic ─────────────────────────────────────────────────────
-    # Friends/Groups tab  → check-ins (QuickWorkout) only, from people you follow + yourself.
-    # Main tab            → posts (Post) only, filtered by visibility:
-    #                         'main'    = visible to everyone
-    #                         'friends' = visible only to followers of the author
+    # Friends/Groups tab → check-ins (QuickWorkout) only.
+    #   Visible authors: people you follow + members of any group you belong to
+    #   (excluding org groups, which live in a separate model) + yourself.
+    # Main tab           → public posts (visibility='main') from everyone.
+    #                      friends-only posts are NOT shown here.
     # ─────────────────────────────────────────────────────────────────────────
     if tab == 'friends' and user:
+        from groups.models import GroupMember
         following_ids = set(Follow.objects.filter(follower=user).values_list('following_id', flat=True))
-        visible_user_ids = following_ids | {user.id}
+        my_group_ids = GroupMember.objects.filter(user=user).values_list('group_id', flat=True)
+        group_peer_ids = set(GroupMember.objects.filter(group_id__in=my_group_ids).values_list('user_id', flat=True))
+        visible_user_ids = following_ids | group_peer_ids | {user.id}
+        qw_qs = QuickWorkout.objects.filter(user_id__in=visible_user_ids)
+        post_qs = Post.objects.none()
+    elif tab == 'gym' and user:
+        from accounts.models import User as AccUser
+        my_gym_ids = list(user.enrolled_gyms.values_list('id', flat=True))
+        gym_user_ids = set(AccUser.objects.filter(enrolled_gyms__id__in=my_gym_ids).values_list('id', flat=True))
+        visible_user_ids = gym_user_ids | {user.id}
+        qw_qs = QuickWorkout.objects.filter(user_id__in=visible_user_ids)
+        post_qs = Post.objects.none()
+    elif tab == 'org' and user:
+        from organizations.models import OrgMember
+        my_org_ids = list(OrgMember.objects.filter(user=user).values_list('org_id', flat=True))
+        org_user_ids = set(OrgMember.objects.filter(org_id__in=my_org_ids).values_list('user_id', flat=True))
+        visible_user_ids = org_user_ids | {user.id}
         qw_qs = QuickWorkout.objects.filter(user_id__in=visible_user_ids)
         post_qs = Post.objects.none()
     else:
-        # Main feed: everyone's public posts, plus friends-only posts from authors
-        # the current user follows.
+        # Main tab: only truly public posts — no follower-gated content here.
         qw_qs = QuickWorkout.objects.none()
-        if user:
-            following_ids = set(Follow.objects.filter(follower=user).values_list('following_id', flat=True))
-            post_qs = Post.objects.filter(
-                Q(visibility='main') |
-                Q(visibility='friends', user_id__in=following_ids | {user.id})
-            )
-        else:
-            post_qs = Post.objects.filter(visibility='main')
+        post_qs = Post.objects.filter(visibility='main')
 
     # Filter by hashtag if tag is provided
     if tag:
@@ -408,6 +418,29 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
                 summaries_by_wk[ex.workout_id].append({'name': ex.name, 'sets': ex.sets})
         exercise_summaries = dict(summaries_by_wk)
 
+    # Compute shared context tags for gym/org tabs (which gym/org each poster shares with viewer)
+    shared_context_by_user = {}  # user_id -> [name, ...]
+    if tab == 'gym' and user and checkin_objs:
+        my_gym_map = {g.id: g.name for g in user.enrolled_gyms.all()}
+        if my_gym_map:
+            poster_ids = list({obj.user_id for obj in checkin_objs.values()})
+            from accounts.models import User as AccUser
+            for u in AccUser.objects.filter(id__in=poster_ids).prefetch_related('enrolled_gyms').only('id'):
+                shared = [my_gym_map[g.id] for g in u.enrolled_gyms.all() if g.id in my_gym_map]
+                if shared:
+                    shared_context_by_user[u.id] = shared
+    elif tab == 'org' and user and checkin_objs:
+        from organizations.models import OrgMember
+        my_org_ids = set(OrgMember.objects.filter(user=user).values_list('org_id', flat=True))
+        if my_org_ids:
+            poster_ids = list({obj.user_id for obj in checkin_objs.values()})
+            org_qs = OrgMember.objects.filter(user_id__in=poster_ids, org_id__in=my_org_ids).select_related('org')
+            from collections import defaultdict as _dd
+            _orgs_by_user = _dd(list)
+            for m in org_qs:
+                _orgs_by_user[m.user_id].append(m.org.name)
+            shared_context_by_user = dict(_orgs_by_user)
+
     # Build feed items
     feed_items = []
     for item_type, created_at, item_id, obj in raw_items:
@@ -435,6 +468,7 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
                 'like_count': obj.like_count,
                 'comment_count': obj.comment_count,
                 'user_liked': bool(obj.user_liked) if user else False,
+                'shared_context': shared_context_by_user.get(obj.user_id, []),
                 'workout': {
                     'id': str(checkin_workout.id),
                     'name': checkin_workout.name,
@@ -547,7 +581,7 @@ def feed_view(request):
     AJAX requests (with cursor param or XMLHttpRequest) return JSON for infinite scroll.
     """
     tab = request.GET.get('tab', 'main')
-    if tab not in ('main', 'friends'):
+    if tab not in ('main', 'friends', 'gym', 'org'):
         tab = 'main'
 
     tag = request.GET.get('tag', '').strip()

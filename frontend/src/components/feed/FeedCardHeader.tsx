@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, ScrollView } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Avatar from '../common/Avatar';
 import { UserBrief } from '../../types/user';
@@ -11,6 +11,7 @@ interface FeedCardHeaderProps {
   createdAt: string;
   locationName: string | null;
   workoutType?: string;
+  sharedContext?: string[];
 }
 
 export default function FeedCardHeader({
@@ -18,8 +19,8 @@ export default function FeedCardHeader({
   createdAt,
   locationName,
   workoutType,
+  sharedContext,
 }: FeedCardHeaderProps) {
-  // Build the "Posted in X" subtitle: prefer workoutType, fall back to locationName
   const postedIn = workoutType ?? locationName;
 
   if (!user) return null;
@@ -29,9 +30,25 @@ export default function FeedCardHeader({
       <Avatar uri={user.avatar_url} name={user.display_name} size={40} />
 
       <View style={styles.info}>
-        <Text style={styles.name} numberOfLines={1}>
-          {user.display_name}
-        </Text>
+        <View style={styles.nameRow}>
+          <Text style={styles.name} numberOfLines={1}>
+            {user.display_name}
+          </Text>
+          {sharedContext && sharedContext.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.tagsScroll}
+              contentContainerStyle={styles.tagsContainer}
+            >
+              {sharedContext.map((tag, i) => (
+                <View key={i} style={styles.tag}>
+                  <Text style={styles.tagText}>{tag}</Text>
+                </View>
+              ))}
+            </ScrollView>
+          )}
+        </View>
         <Text style={styles.meta} numberOfLines={1}>
           {postedIn ? `Posted in ${postedIn} · ` : ''}{timeAgo(createdAt)}
         </Text>
@@ -60,11 +77,39 @@ const styles = StyleSheet.create({
   info: {
     flex: 1,
   },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    flexWrap: 'nowrap',
+  },
   name: {
     fontSize: 14,
     fontFamily: typography.family.semibold,
     color: colors.textPrimary,
     lineHeight: 20,
+    flexShrink: 1,
+  },
+  tagsScroll: {
+    flexShrink: 1,
+  },
+  tagsContainer: {
+    flexDirection: 'row',
+    gap: 4,
+    alignItems: 'center',
+  },
+  tag: {
+    backgroundColor: colors.primary + '18',
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: colors.primary + '30',
+  },
+  tagText: {
+    fontSize: 10,
+    fontFamily: typography.family.semibold,
+    color: colors.primary,
   },
   meta: {
     fontSize: 12,

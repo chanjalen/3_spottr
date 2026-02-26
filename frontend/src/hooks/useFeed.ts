@@ -15,7 +15,7 @@ export interface FeedSearchResults {
 
 export function useFeed() {
   const [items, setItems] = useState<FeedItem[]>(USE_SAMPLE_DATA ? SAMPLE_FEED : []);
-  const [activeTab, setActiveTab] = useState<FeedTab>('main');
+  const [activeTab, setActiveTab] = useState<FeedTab>('friends');
   const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -31,8 +31,8 @@ export function useFeed() {
     if (USE_SAMPLE_DATA) {
       const filtered =
         tab === 'friends'
-          ? SAMPLE_FEED.filter((i) => i.visibility === 'friends')
-          : SAMPLE_FEED;
+          ? SAMPLE_FEED.filter((i) => i.type === 'checkin')
+          : SAMPLE_FEED.filter((i) => i.type === 'post' && i.visibility === 'main');
       setItems(filtered);
       setNextCursor('');
       return;
@@ -50,9 +50,9 @@ export function useFeed() {
     }
   }, []);
 
-  // Load initial feed on mount
+  // Load initial feed on mount — Friends/Groups is the default tab
   useEffect(() => {
-    loadFeed('main');
+    loadFeed('friends');
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loadMore = useCallback(async () => {
