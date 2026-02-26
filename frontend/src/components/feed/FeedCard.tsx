@@ -37,6 +37,7 @@ export default function FeedCard({
           createdAt={item.created_at}
           locationName={item.location_name}
           workoutType={item.workout_type}
+          sharedContext={item.shared_context}
         />
         <FeedCardBody
           item={item}

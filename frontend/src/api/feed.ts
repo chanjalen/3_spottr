@@ -46,6 +46,7 @@ function adaptFeedItem(raw: any): FeedItem {
       : null,
     workout_type: raw.workout_type ?? undefined,
     visibility: raw.visibility ?? 'main',
+    shared_context: raw.shared_context?.length ? raw.shared_context : undefined,
   };
 }
 

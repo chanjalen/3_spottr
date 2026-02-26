@@ -83,6 +83,8 @@ export interface FeedItem {
   poll: Poll | null;
   workout_type?: string;
   visibility: 'main' | 'friends';
+  /** Names of shared gyms or orgs shown as tags on gym/org feed tabs */
+  shared_context?: string[];
 }
 
 export interface Comment {
