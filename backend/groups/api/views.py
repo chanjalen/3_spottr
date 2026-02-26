@@ -95,7 +95,18 @@ def group_create(request):
     serializer = CreateGroupSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
 
-    group = services.create_group(request.user, **serializer.validated_data)
+    data = serializer.validated_data.copy()
+    member_ids = data.pop('member_ids', [])
+
+    group = services.create_group(request.user, **data)
+
+    # Auto-add requested members (silently skip errors for invalid/already-member users)
+    for user_id in member_ids:
+        try:
+            services.add_member(request.user, group.id, user_id)
+        except Exception:
+            pass
+
     return Response(
         GroupDetailSerializer(group, context={'request': request}).data,
         status=status.HTTP_201_CREATED,

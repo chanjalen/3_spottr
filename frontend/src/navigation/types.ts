@@ -66,4 +66,7 @@ export type RootStackParamList = {
   UserList: UserListParams;
   CreatePost: undefined;
   QuickCheckin: undefined;
+  AllDMs: undefined;
+  AllGroupChats: undefined;
+  AllOrgs: undefined;
 };

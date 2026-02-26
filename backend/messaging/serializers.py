@@ -330,6 +330,7 @@ class GroupConversationSerializer(serializers.Serializer):
 class UnreadCountSerializer(serializers.Serializer):
     dm = serializers.IntegerField()
     group = serializers.IntegerField()
+    org = serializers.IntegerField()
     total = serializers.IntegerField()
 
 

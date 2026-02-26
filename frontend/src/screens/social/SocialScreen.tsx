@@ -25,8 +25,8 @@ import Avatar from '../../components/common/Avatar';
 import { fetchDMConversations, fetchGroupConversations, sendZap } from '../../api/messaging';
 import { Conversation, GroupConversation, Message as MessageType } from '../../types/messaging';
 import { wsManager } from '../../services/websocket';
-import { searchGroups, createGroup, joinViaCode, joinGroup, requestJoinGroup, GroupListItem } from '../../api/groups';
-import { listMyOrgs, discoverOrgs, createOrg, joinOrgViaCode, joinOrg, requestJoinOrg, OrgListItem } from '../../api/organizations';
+import { createGroup, joinViaCode } from '../../api/groups';
+import { listMyOrgs, discoverOrgs, createOrg, joinOrgViaCode, joinOrg, requestJoinOrg, OrgListItem, LatestAnnouncement } from '../../api/organizations';
 import { fetchFriends, searchUsers } from '../../api/accounts';
 import { UserBrief } from '../../types/user';
 import { colors, spacing, typography } from '../../theme';
@@ -43,11 +43,11 @@ type Props = {
   >;
 };
 
-type SocialTab = 'Messages' | 'Groups' | 'Orgs';
+type SocialTab = 'Messages' | 'Orgs';
 
 export default function SocialScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { optimisticDecrement, optimisticIncrement } = useUnreadCount();
+  const { dm, group, org, optimisticDecrement, optimisticIncrement } = useUnreadCount();
   const { user: me } = useAuth();
   const [activeTab, setActiveTab] = useState<SocialTab>('Messages');
 
@@ -57,12 +57,19 @@ export default function SocialScreen({ navigation }: Props) {
   const [loadingMessages, setLoadingMessages] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
-  // ── Groups tab state ──────────────────────────────────────────────────────
-  const [discoverGroups, setDiscoverGroups] = useState<GroupListItem[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [loadingGroups, setLoadingGroups] = useState(false);
-  const searchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const searchGenRef = useRef(0);
+  // ── Group modal (create / join) ───────────────────────────────────────────
+  const [groupModalVisible, setGroupModalVisible] = useState(false);
+  const [groupModalView, setGroupModalView] = useState<'options' | 'create' | 'join'>('options');
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupAvatarUri, setNewGroupAvatarUri] = useState<string | null>(null);
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [groupFriends, setGroupFriends] = useState<UserBrief[]>([]);
+  const [selectedFriendIds, setSelectedFriendIds] = useState<Set<string>>(new Set());
+  const [loadingGroupFriends, setLoadingGroupFriends] = useState(false);
+  const [friendSearchQuery, setFriendSearchQuery] = useState('');
+  const [friendsVisibleCount, setFriendsVisibleCount] = useState(7);
+  const [groupJoinCode, setGroupJoinCode] = useState('');
+  const [joiningGroupCode, setJoiningGroupCode] = useState(false);
 
   // ── Orgs tab state ────────────────────────────────────────────────────────
   const [myOrgs, setMyOrgs] = useState<OrgListItem[]>([]);
@@ -70,6 +77,7 @@ export default function SocialScreen({ navigation }: Props) {
   const [orgsView, setOrgsView] = useState<'Mine' | 'Discover'>('Mine');
   const [orgSearchQuery, setOrgSearchQuery] = useState('');
   const [loadingOrgs, setLoadingOrgs] = useState(false);
+  const [orgsRefreshing, setOrgsRefreshing] = useState(false);
   const orgSearchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const orgSearchGenRef = useRef(0);
   // ── Create org modal ──────────────────────────────────────────────────────
@@ -88,20 +96,8 @@ export default function SocialScreen({ navigation }: Props) {
   const [orgInviteCode, setOrgInviteCode] = useState('');
   const [joiningOrgCode, setJoiningOrgCode] = useState(false);
 
-  // ── Create group modal ────────────────────────────────────────────────────
-  const [createVisible, setCreateVisible] = useState(false);
-  const [newName, setNewName] = useState('');
-  const [newDesc, setNewDesc] = useState('');
-  const [newPrivacy, setNewPrivacy] = useState<'public' | 'private'>('public');
-  const [privacyOpen, setPrivacyOpen] = useState(false);
-  const [avatarUri, setAvatarUri] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-
   // ── Zap ───────────────────────────────────────────────────────────────────
   const [zapping, setZapping] = useState<string | null>(null); // partner_id being zapped
-
-  // ── Group join/request ────────────────────────────────────────────────────
-  const [joining, setJoining] = useState<string | null>(null); // group_id being joined/requested
 
   // ── New message modal ─────────────────────────────────────────────────────
   const [newMsgVisible, setNewMsgVisible] = useState(false);
@@ -112,10 +108,6 @@ export default function SocialScreen({ navigation }: Props) {
   const newMsgSearchGenRef = useRef(0);
   const newMsgSearchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // ── Join via code ─────────────────────────────────────────────────────────
-  const [joinModalVisible, setJoinModalVisible] = useState(false);
-  const [inviteCode, setInviteCode] = useState('');
-  const [joiningCode, setJoiningCode] = useState(false);
 
   // ── Data loaders ──────────────────────────────────────────────────────────
   const loadMessages = useCallback(async () => {
@@ -132,20 +124,6 @@ export default function SocialScreen({ navigation }: Props) {
     }
   }, []);
 
-  const loadGroups = useCallback(async (query?: string) => {
-    const gen = ++searchGenRef.current;
-    setLoadingGroups(true);
-    try {
-      const data = await searchGroups(query);
-      if (gen !== searchGenRef.current) return; // stale response, ignore
-      setDiscoverGroups(data);
-    } catch {
-      if (gen !== searchGenRef.current) return;
-      setDiscoverGroups([]);
-    } finally {
-      if (gen === searchGenRef.current) setLoadingGroups(false);
-    }
-  }, []);
 
   const loadMyOrgs = useCallback(async () => {
     setLoadingOrgs(true);
@@ -230,6 +208,35 @@ export default function SocialScreen({ navigation }: Props) {
     return () => wsManager.off('new_message', handler);
   }, [me?.id, loadMessages, optimisticIncrement]);
 
+  // Live WS updates for org announcement badges + preview (skip own posts for badge).
+  useEffect(() => {
+    const handler = (ann: {
+      org: string; author_id: string; author_display_name: string;
+      content: string; media: unknown[]; poll: unknown; created_at: string;
+    }) => {
+      const isOwn = String(ann.author_id) === String(me?.id);
+      const preview: LatestAnnouncement = {
+        author_display_name: ann.author_display_name,
+        content: ann.content,
+        has_media: ann.media.length > 0,
+        has_poll: ann.poll !== null,
+        created_at: ann.created_at,
+      };
+      setMyOrgs(prev => {
+        const idx = prev.findIndex(o => o.id === ann.org);
+        if (idx === -1) return prev;
+        const updated = {
+          ...prev[idx],
+          latest_announcement: preview,
+          unread_count: isOwn ? prev[idx].unread_count : prev[idx].unread_count + 1,
+        };
+        return prev.map((o, i) => i === idx ? updated : o);
+      });
+    };
+    wsManager.on('new_announcement', handler);
+    return () => wsManager.off('new_announcement', handler);
+  }, [me?.id]);
+
   // Reload messages every time this screen gains focus (returning from Chat, GroupChat, or other screens)
   useFocusEffect(
     useCallback(() => {
@@ -242,22 +249,48 @@ export default function SocialScreen({ navigation }: Props) {
   useEffect(() => {
     if (prevTabRef.current === null) { prevTabRef.current = activeTab; return; }
     if (activeTab === 'Messages') loadMessages();
-    if (activeTab === 'Groups') loadGroups();
     if (activeTab === 'Orgs') loadMyOrgs();
     prevTabRef.current = activeTab;
   }, [activeTab]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
-  const handleSearch = (q: string) => {
-    setSearchQuery(q);
-    setDiscoverGroups([]);
-    setLoadingGroups(true);
-    ++searchGenRef.current; // invalidate any in-flight request immediately
-    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current);
-    searchTimeoutRef.current = setTimeout(() => loadGroups(q || undefined), 400);
+  const openGroupModal = async () => {
+    setGroupModalVisible(true);
+    setGroupModalView('options');
+    setNewGroupName('');
+    setNewGroupAvatarUri(null);
+    setSelectedFriendIds(new Set());
+    setGroupJoinCode('');
   };
 
-  const handlePickAvatar = async () => {
+  const closeGroupModal = () => {
+    setGroupModalVisible(false);
+    setGroupModalView('options');
+    setNewGroupName('');
+    setNewGroupAvatarUri(null);
+    setSelectedFriendIds(new Set());
+    setGroupJoinCode('');
+    setGroupFriends([]);
+    setFriendSearchQuery('');
+    setFriendsVisibleCount(7);
+  };
+
+  const openCreateGroupView = async () => {
+    setGroupModalView('create');
+    setFriendSearchQuery('');
+    setFriendsVisibleCount(7);
+    setLoadingGroupFriends(true);
+    try {
+      const friends = await fetchFriends();
+      setGroupFriends(friends);
+    } catch {
+      setGroupFriends([]);
+    } finally {
+      setLoadingGroupFriends(false);
+    }
+  };
+
+  const handlePickGroupAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission needed', 'Allow access to your photo library to add a group photo.');
@@ -270,31 +303,49 @@ export default function SocialScreen({ navigation }: Props) {
       quality: 0.8,
     });
     if (!result.canceled) {
-      setAvatarUri(result.assets[0].uri);
+      setNewGroupAvatarUri(result.assets[0].uri);
     }
   };
 
+  const toggleFriend = (id: string) => {
+    setSelectedFriendIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
   const handleCreateGroup = async () => {
-    if (!newName.trim()) return;
-    setCreating(true);
+    if (!newGroupName.trim()) return;
+    setCreatingGroup(true);
     try {
       await createGroup({
-        name: newName.trim(),
-        description: newDesc.trim(),
-        privacy: newPrivacy,
-        avatarUri: avatarUri ?? undefined,
+        name: newGroupName.trim(),
+        avatarUri: newGroupAvatarUri ?? undefined,
+        member_ids: Array.from(selectedFriendIds),
       });
-      setCreateVisible(false);
-      setNewName('');
-      setNewDesc('');
-      setNewPrivacy('public');
-      setPrivacyOpen(false);
-      setAvatarUri(null);
-      loadGroups(searchQuery || undefined);
+      closeGroupModal();
+      loadMessages();
     } catch (e: any) {
       Alert.alert('Error', e?.response?.data?.error ?? 'Failed to create group');
     } finally {
-      setCreating(false);
+      setCreatingGroup(false);
+    }
+  };
+
+  const handleJoinGroupViaCode = async () => {
+    const code = groupJoinCode.trim();
+    if (!code) return;
+    setJoiningGroupCode(true);
+    try {
+      await joinViaCode(code);
+      closeGroupModal();
+      Alert.alert('Joined!', 'You have joined the group.');
+      loadMessages();
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.error ?? 'Invalid or expired invite code');
+    } finally {
+      setJoiningGroupCode(false);
     }
   };
 
@@ -362,22 +413,6 @@ export default function SocialScreen({ navigation }: Props) {
     });
   };
 
-  const handleJoinViaCode = async () => {
-    const code = inviteCode.trim();
-    if (!code) return;
-    setJoiningCode(true);
-    try {
-      await joinViaCode(code);
-      setInviteCode('');
-      setJoinModalVisible(false);
-      Alert.alert('Joined!', 'You have joined the group.');
-      loadMessages();
-    } catch (e: any) {
-      Alert.alert('Error', e?.response?.data?.error ?? 'Invalid or expired invite code');
-    } finally {
-      setJoiningCode(false);
-    }
-  };
 
   // ── Orgs handlers ─────────────────────────────────────────────────────────
   const handleOrgSearch = (q: string) => {
@@ -395,6 +430,23 @@ export default function SocialScreen({ navigation }: Props) {
     if (view === 'Mine') loadMyOrgs();
     else loadDiscoverOrgs();
   };
+
+  const handleOrgsRefresh = useCallback(async () => {
+    setOrgsRefreshing(true);
+    try {
+      if (orgsView === 'Mine') {
+        const data = await listMyOrgs();
+        setMyOrgs(data);
+      } else {
+        const data = await discoverOrgs(orgSearchQuery || undefined);
+        setDiscoverOrgsList(data);
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      setOrgsRefreshing(false);
+    }
+  }, [orgsView, orgSearchQuery]);
 
   const handleCreateOrg = async () => {
     if (!newOrgName.trim()) return;
@@ -444,20 +496,38 @@ export default function SocialScreen({ navigation }: Props) {
     }
   };
 
+  const annPreviewText = (ann: LatestAnnouncement): string => {
+    if (ann.content) return ann.content;
+    if (ann.has_poll) return '📊 Poll';
+    if (ann.has_media) return '🖼 Photo';
+    return '';
+  };
+
   const renderOrgCard = ({ item }: { item: OrgListItem }) => {
     const roleBg = item.user_role === 'creator'
       ? 'rgba(234,179,8,0.15)'
       : item.user_role === 'admin'
       ? 'rgba(79,195,224,0.15)'
       : 'rgba(0,0,0,0.06)';
+    const ann = item.user_role ? item.latest_announcement : null;
     return (
       <Pressable
         style={({ pressed }) => [styles.discoverRow, pressed && styles.convoRowPressed]}
-        onPress={() => navigation.navigate('OrgAnnouncements', {
-          orgId: item.id,
-          orgName: item.name,
-          orgAvatar: item.avatar_url,
-        })}
+        onPress={() => {
+          if (orgsView === 'Discover') {
+            navigation.navigate('OrgProfile', { orgId: item.id });
+            return;
+          }
+          if (item.unread_count > 0) {
+            optimisticDecrement(item.unread_count, 'org');
+            setMyOrgs(prev => prev.map(o => o.id === item.id ? { ...o, unread_count: 0 } : o));
+          }
+          navigation.navigate('OrgAnnouncements', {
+            orgId: item.id,
+            orgName: item.name,
+            orgAvatar: item.avatar_url,
+          });
+        }}
       >
         <Avatar uri={item.avatar_url} name={item.name} size={44} />
         <View style={styles.convoInfo}>
@@ -468,16 +538,29 @@ export default function SocialScreen({ navigation }: Props) {
                 <Feather name="lock" size={12} color={colors.textMuted} />
               )}
             </View>
-            <Text style={styles.memberCount}>{item.member_count} members</Text>
+            {ann
+              ? <Text style={styles.convoTime}>{timeAgo(ann.created_at)}</Text>
+              : <Text style={styles.memberCount}>{item.member_count} members</Text>
+            }
           </View>
-          {!!item.description && (
+          {ann ? (
+            <Text style={styles.convoLast} numberOfLines={1}>
+              {ann.author_display_name}: {annPreviewText(ann)}
+            </Text>
+          ) : !!item.description && (
             <Text style={styles.convoLast} numberOfLines={1}>{item.description}</Text>
           )}
         </View>
         {item.user_role ? (
-          <View style={[styles.joinedBadge, { backgroundColor: roleBg }]}>
-            <Text style={styles.joinedBadgeText}>{item.user_role}</Text>
-          </View>
+          item.unread_count > 0 ? (
+            <View style={styles.unreadBadge}>
+              <Text style={styles.unreadBadgeText}>{item.unread_count}</Text>
+            </View>
+          ) : (
+            <View style={[styles.joinedBadge, { backgroundColor: roleBg }]}>
+              <Text style={styles.joinedBadgeText}>{item.user_role}</Text>
+            </View>
+          )
         ) : requestedOrgIds.has(item.id) ? (
           <View style={styles.pendingBadge}>
             <Text style={styles.pendingBadgeText}>Requested</Text>
@@ -595,76 +678,6 @@ export default function SocialScreen({ navigation }: Props) {
     </Pressable>
   );
 
-  const handleJoinGroup = async (item: GroupListItem) => {
-    if (joining) return;
-    setJoining(item.id);
-    try {
-      if (item.privacy === 'public') {
-        await joinGroup(item.id);
-        setDiscoverGroups(prev =>
-          prev.map(g => g.id === item.id ? { ...g, is_member: true } : g),
-        );
-      } else {
-        await requestJoinGroup(item.id);
-        setDiscoverGroups(prev =>
-          prev.map(g => g.id === item.id ? { ...g, has_pending_request: true } : g),
-        );
-      }
-    } catch (err: any) {
-      const msg = err?.response?.data?.error ?? 'Something went wrong. Please try again.';
-      Alert.alert('Error', msg);
-    } finally {
-      setJoining(null);
-    }
-  };
-
-  const renderDiscoverGroup = ({ item }: { item: GroupListItem }) => {
-    const isJoining = joining === item.id;
-    return (
-      <Pressable
-        style={({ pressed }) => [styles.discoverRow, pressed && styles.convoRowPressed]}
-        onPress={() => navigation.navigate('GroupProfile', { groupId: item.id })}
-      >
-        <Avatar uri={item.avatar_url} name={item.name} size={44} />
-        <View style={styles.convoInfo}>
-          <View style={styles.convoTopRow}>
-            <Text style={styles.convoName} numberOfLines={1}>{item.name}</Text>
-            <Text style={styles.memberCount}>{item.member_count} members</Text>
-          </View>
-          {!!item.description && (
-            <Text style={styles.convoLast} numberOfLines={1}>{item.description}</Text>
-          )}
-        </View>
-        {item.is_member ? (
-          <View style={styles.joinedBadge}>
-            <Text style={styles.joinedBadgeText}>Joined</Text>
-          </View>
-        ) : item.has_pending_request ? (
-          <View style={styles.pendingBadge}>
-            <Text style={styles.pendingBadgeText}>Pending</Text>
-          </View>
-        ) : (
-          <Pressable
-            style={[
-              styles.joinBtn,
-              item.privacy === 'private' && styles.requestBtn,
-              (isJoining || !!joining) && styles.joinBtnDisabled,
-            ]}
-            onPress={() => handleJoinGroup(item)}
-            disabled={!!joining}
-          >
-            {isJoining ? (
-              <ActivityIndicator size="small" color={item.privacy === 'public' ? '#fff' : colors.primary} />
-            ) : (
-              <Text style={[styles.joinBtnText, item.privacy === 'private' && styles.requestBtnText]}>
-                {item.privacy === 'public' ? 'Join' : 'Request'}
-              </Text>
-            )}
-          </Pressable>
-        )}
-      </Pressable>
-    );
-  };
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -677,28 +690,33 @@ export default function SocialScreen({ navigation }: Props) {
 
         {/* Tab row */}
         <View style={styles.tabRow}>
-          {(['Messages', 'Groups', 'Orgs'] as SocialTab[]).map((tab) => (
-            <Pressable
-              key={tab}
-              style={styles.tab}
-              onPress={() => {
-                if (tab === 'Groups' && activeTab !== 'Groups') {
-                  setSearchQuery('');
-                  setDiscoverGroups([]);
-                  setLoadingGroups(true);
-                }
-                if (tab === 'Orgs' && activeTab !== 'Orgs') {
-                  setOrgsView('Mine');
-                  setOrgSearchQuery('');
-                  setLoadingOrgs(true);
-                }
-                setActiveTab(tab);
-              }}
-            >
-              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
-              {activeTab === tab && <View style={styles.tabIndicator} />}
-            </Pressable>
-          ))}
+          {(['Messages', 'Orgs'] as SocialTab[]).map((tab) => {
+            const tabCount = tab === 'Messages' ? dm + group : org;
+            return (
+              <Pressable
+                key={tab}
+                style={styles.tab}
+                onPress={() => {
+                  if (tab === 'Orgs' && activeTab !== 'Orgs') {
+                    setOrgsView('Mine');
+                    setOrgSearchQuery('');
+                    setLoadingOrgs(true);
+                  }
+                  setActiveTab(tab);
+                }}
+              >
+                <View style={styles.tabLabelRow}>
+                  <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
+                  {tabCount > 0 && (
+                    <View style={styles.tabBadge}>
+                      <Text style={styles.tabBadgeText}>{tabCount > 99 ? '99+' : tabCount}</Text>
+                    </View>
+                  )}
+                </View>
+                {activeTab === tab && <View style={styles.tabIndicator} />}
+              </Pressable>
+            );
+          })}
         </View>
       </LinearGradient>
 
@@ -734,81 +752,50 @@ export default function SocialScreen({ navigation }: Props) {
                 <Text style={styles.emptyText}>No conversations yet</Text>
               </View>
             ) : (
-              dms.map(renderDM)
+              <>
+                {dms.slice(0, 5).map(renderDM)}
+                {dms.length > 5 && (
+                  <Pressable
+                    style={styles.seeAllBtn}
+                    onPress={() => navigation.navigate('AllDMs')}
+                  >
+                    <Text style={styles.seeAllText}>See all ({dms.length})</Text>
+                    <Feather name="chevron-right" size={14} color={colors.primary} />
+                  </Pressable>
+                )}
+              </>
             )}
 
             {/* GROUP CHATS section */}
             <View style={[styles.sectionHeader, { marginTop: spacing.md }]}>
               <Text style={styles.sectionTitle}>GROUP CHATS</Text>
+              <Pressable
+                style={styles.addBtn}
+                onPress={openGroupModal}
+              >
+                <Feather name="plus" size={18} color="#fff" />
+              </Pressable>
             </View>
             {groupConvos.length === 0 ? (
               <View style={styles.emptySection}>
                 <Text style={styles.emptyText}>No group chats yet</Text>
               </View>
             ) : (
-              groupConvos.map(renderGroupConvo)
+              <>
+                {groupConvos.slice(0, 5).map(renderGroupConvo)}
+                {groupConvos.length > 5 && (
+                  <Pressable
+                    style={styles.seeAllBtn}
+                    onPress={() => navigation.navigate('AllGroupChats')}
+                  >
+                    <Text style={styles.seeAllText}>See all ({groupConvos.length})</Text>
+                    <Feather name="chevron-right" size={14} color={colors.primary} />
+                  </Pressable>
+                )}
+              </>
             )}
           </ScrollView>
         )
-      ) : activeTab === 'Groups' ? (
-        // ────────────────── Groups tab ──────────────────
-        <View style={{ flex: 1 }}>
-          {/* Header */}
-          <View style={styles.groupsHeader}>
-            <Text style={styles.sectionTitle}>DISCOVER GROUPS</Text>
-            <Pressable style={styles.createBtn} onPress={() => setCreateVisible(true)}>
-              <Feather name="plus" size={14} color="#fff" />
-              <Text style={styles.createBtnText}>Create Group</Text>
-            </Pressable>
-          </View>
-
-          {/* Search */}
-          <View style={styles.searchContainer}>
-            <Feather name="search" size={16} color={colors.textMuted} />
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search groups..."
-              placeholderTextColor={colors.textMuted}
-              value={searchQuery}
-              onChangeText={handleSearch}
-              returnKeyType="search"
-            />
-          </View>
-
-          {/* Groups list */}
-          {loadingGroups ? (
-            <View style={styles.center}>
-              <ActivityIndicator color={colors.primary} />
-            </View>
-          ) : (
-            <FlatList
-              data={searchQuery ? discoverGroups : discoverGroups.filter(g => !g.is_member)}
-              keyExtractor={(item) => item.id}
-              renderItem={renderDiscoverGroup}
-              style={{ flex: 1 }}
-              contentContainerStyle={{ flexGrow: 1, paddingBottom: spacing.md }}
-              ListEmptyComponent={
-                <View style={styles.center}>
-                  <Feather name="users" size={44} color={colors.textMuted} />
-                  <Text style={styles.emptyTitle}>No groups to discover</Text>
-                  <Text style={styles.emptySubtitle}>Create one to get started!</Text>
-                </View>
-              }
-            />
-          )}
-
-          {/* Join with invite code — tappable row, opens modal */}
-          <Pressable
-            style={[styles.joinRow, { marginBottom: Math.max(insets.bottom, 16) + 100 }]}
-            onPress={() => setJoinModalVisible(true)}
-          >
-            <View style={styles.joinIconWrap}>
-              <Feather name="key" size={16} color={colors.primary} />
-            </View>
-            <Text style={styles.joinRowText}>Join with Invite Code</Text>
-            <Feather name="chevron-right" size={16} color={colors.textMuted} />
-          </Pressable>
-        </View>
       ) : (
         // ────────────────── Orgs tab ──────────────────
         <View style={{ flex: 1 }}>
@@ -852,18 +839,25 @@ export default function SocialScreen({ navigation }: Props) {
           )}
 
           {/* Orgs list */}
-          {loadingOrgs ? (
+          {loadingOrgs && !orgsRefreshing ? (
             <View style={styles.center}>
               <ActivityIndicator color={colors.primary} />
             </View>
           ) : (
             <FlatList
-              data={orgsView === 'Mine' ? myOrgs : discoverOrgsList}
+              data={orgsView === 'Mine' ? myOrgs.slice(0, 5) : discoverOrgsList}
               keyExtractor={(item) => item.id}
               renderItem={renderOrgCard}
               extraData={requestedOrgIds}
               style={{ flex: 1 }}
               contentContainerStyle={{ flexGrow: 1, paddingBottom: spacing.md }}
+              refreshControl={
+                <RefreshControl
+                  refreshing={orgsRefreshing}
+                  onRefresh={handleOrgsRefresh}
+                  tintColor={colors.primary}
+                />
+              }
               ListEmptyComponent={
                 <View style={styles.center}>
                   <Feather name="award" size={44} color={colors.textMuted} />
@@ -874,6 +868,17 @@ export default function SocialScreen({ navigation }: Props) {
                     {orgsView === 'Mine' ? 'Create one to get started!' : 'Try a different search'}
                   </Text>
                 </View>
+              }
+              ListFooterComponent={
+                orgsView === 'Mine' && myOrgs.length > 5 ? (
+                  <Pressable
+                    style={styles.seeAllBtn}
+                    onPress={() => navigation.navigate('AllOrgs')}
+                  >
+                    <Text style={styles.seeAllText}>See all ({myOrgs.length})</Text>
+                    <Feather name="chevron-right" size={14} color={colors.primary} />
+                  </Pressable>
+                ) : null
               }
             />
           )}
@@ -960,165 +965,219 @@ export default function SocialScreen({ navigation }: Props) {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ── Join via Code Modal ── */}
+      {/* ── Group Modal (Create / Join) ── */}
       <Modal
-        visible={joinModalVisible}
+        visible={groupModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => { setJoinModalVisible(false); setInviteCode(''); }}
+        onRequestClose={closeGroupModal}
       >
         <KeyboardAvoidingView
           style={styles.modalOverlay}
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         >
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => { setJoinModalVisible(false); setInviteCode(''); }} />
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalTitle}>Join with Invite Code</Text>
-              <Pressable style={styles.modalCloseBtn} onPress={() => { setJoinModalVisible(false); setInviteCode(''); }}>
-                <Feather name="x" size={16} color={colors.textSecondary} />
-              </Pressable>
-            </View>
-            <Text style={styles.joinModalSubtitle}>Enter the 8-character code shared by a group admin.</Text>
-            <TextInput
-              style={styles.joinModalInput}
-              placeholder="e.g. ABC12345"
-              placeholderTextColor={colors.textMuted}
-              value={inviteCode}
-              onChangeText={setInviteCode}
-              autoCapitalize="characters"
-              autoFocus
-              maxLength={8}
-              returnKeyType="done"
-              onSubmitEditing={handleJoinViaCode}
-            />
-            <Pressable
-              style={[styles.createGroupBtn, (!inviteCode.trim() || joiningCode) && styles.createGroupBtnDisabled]}
-              onPress={handleJoinViaCode}
-              disabled={!inviteCode.trim() || joiningCode}
-            >
-              {joiningCode ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.createGroupBtnText}>Join Group</Text>
-              )}
-            </Pressable>
-          </View>
-        </KeyboardAvoidingView>
-      </Modal>
+          <Pressable style={StyleSheet.absoluteFill} onPress={closeGroupModal} />
 
-      {/* ── Create Group Modal ── */}
-      <Modal
-        visible={createVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => { setCreateVisible(false); setAvatarUri(null); }}
-      >
-        <KeyboardAvoidingView
-          style={styles.modalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        >
-          {/* Tap outside to close */}
-          <Pressable style={StyleSheet.absoluteFill} onPress={() => { setCreateVisible(false); setAvatarUri(null); }} />
-
-          <View style={styles.modalCard}>
-            {/* Header */}
-            <View style={styles.modalHeaderRow}>
-              <Text style={styles.modalTitle}>Create Group</Text>
-              <Pressable style={styles.modalCloseBtn} onPress={() => { setCreateVisible(false); setAvatarUri(null); }}>
-                <Feather name="x" size={16} color={colors.textSecondary} />
-              </Pressable>
-            </View>
-
-            {/* Avatar picker */}
-            <Pressable style={styles.avatarRow} onPress={handlePickAvatar}>
-              <View style={styles.avatarCircle}>
-                {avatarUri ? (
-                  <Image source={{ uri: avatarUri }} style={styles.avatarPreview} />
-                ) : (
-                  <Feather name="camera" size={22} color="#fff" />
-                )}
+          {groupModalView === 'options' && (
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeaderRow}>
+                <Text style={styles.modalTitle}>Group Chats</Text>
+                <Pressable style={styles.modalCloseBtn} onPress={closeGroupModal}>
+                  <Feather name="x" size={16} color={colors.textSecondary} />
+                </Pressable>
               </View>
-              <Text style={styles.addPhotoText}>{avatarUri ? 'Change Photo' : 'Add Photo'}</Text>
-            </Pressable>
 
-            {/* Group Name */}
-            <View style={styles.inputBlock}>
-              <Text style={styles.inputLabel}>Group Name</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="e.g., Morning Workout Crew"
-                placeholderTextColor={colors.textMuted}
-                value={newName}
-                onChangeText={setNewName}
-                maxLength={100}
-              />
-            </View>
-
-            {/* Description */}
-            <View style={styles.inputBlock}>
-              <Text style={styles.inputLabel}>Description (Optional)</Text>
-              <TextInput
-                style={[styles.modalInput, styles.modalInputMulti]}
-                placeholder="Describe your group..."
-                placeholderTextColor={colors.textMuted}
-                value={newDesc}
-                onChangeText={setNewDesc}
-                multiline
-                maxLength={500}
-                textAlignVertical="top"
-              />
-            </View>
-
-            {/* Privacy dropdown */}
-            <View style={styles.inputBlock}>
-              <Text style={styles.inputLabel}>Privacy</Text>
-              <Pressable style={styles.dropdown} onPress={() => setPrivacyOpen(!privacyOpen)}>
-                <Text style={styles.dropdownValue}>
-                  {newPrivacy === 'public' ? 'Public — Anyone can join' : 'Private — Approval required'}
-                </Text>
-                <Feather
-                  name={privacyOpen ? 'chevron-up' : 'chevron-down'}
-                  size={16}
-                  color={colors.textSecondary}
-                />
-              </Pressable>
-              {privacyOpen && (
-                <View style={styles.dropdownMenu}>
-                  {([
-                    { value: 'public', label: 'Public — Anyone can join' },
-                    { value: 'private', label: 'Private — Approval required' },
-                  ] as const).map((opt) => (
-                    <Pressable
-                      key={opt.value}
-                      style={[styles.dropdownItem, newPrivacy === opt.value && styles.dropdownItemActive]}
-                      onPress={() => { setNewPrivacy(opt.value); setPrivacyOpen(false); }}
-                    >
-                      <Text style={[styles.dropdownItemText, newPrivacy === opt.value && styles.dropdownItemTextActive]}>
-                        {opt.label}
-                      </Text>
-                      {newPrivacy === opt.value && (
-                        <Feather name="check" size={14} color={colors.primary} />
-                      )}
-                    </Pressable>
-                  ))}
+              <Pressable style={styles.groupOptionBtn} onPress={openCreateGroupView}>
+                <View style={styles.groupOptionIcon}>
+                  <Feather name="users" size={22} color={colors.primary} />
                 </View>
-              )}
-            </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.groupOptionTitle}>Create Group</Text>
+                  <Text style={styles.groupOptionSubtitle}>Start a private group with friends</Text>
+                </View>
+                <Feather name="chevron-right" size={16} color={colors.textMuted} />
+              </Pressable>
 
-            {/* Create button */}
-            <Pressable
-              style={[styles.createGroupBtn, (!newName.trim() || creating) && styles.createGroupBtnDisabled]}
-              onPress={handleCreateGroup}
-              disabled={!newName.trim() || creating}
-            >
-              {creating ? (
-                <ActivityIndicator color="#fff" />
-              ) : (
-                <Text style={styles.createGroupBtnText}>Create Group</Text>
-              )}
-            </Pressable>
-          </View>
+              <Pressable style={styles.groupOptionBtn} onPress={() => setGroupModalView('join')}>
+                <View style={styles.groupOptionIcon}>
+                  <Feather name="key" size={22} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.groupOptionTitle}>Join with Code</Text>
+                  <Text style={styles.groupOptionSubtitle}>Enter an invite code to join a group</Text>
+                </View>
+                <Feather name="chevron-right" size={16} color={colors.textMuted} />
+              </Pressable>
+            </View>
+          )}
+
+          {groupModalView === 'create' && (
+            <View style={[styles.modalCard, styles.groupCreateCard]}>
+              <View style={styles.modalHeaderRow}>
+                <Pressable onPress={() => setGroupModalView('options')}>
+                  <Feather name="arrow-left" size={20} color={colors.textPrimary} />
+                </Pressable>
+                <Text style={styles.modalTitle}>Create Group</Text>
+                <Pressable style={styles.modalCloseBtn} onPress={closeGroupModal}>
+                  <Feather name="x" size={16} color={colors.textSecondary} />
+                </Pressable>
+              </View>
+
+              {/* Avatar picker */}
+              <Pressable style={styles.avatarRow} onPress={handlePickGroupAvatar}>
+                <View style={styles.avatarCircle}>
+                  {newGroupAvatarUri ? (
+                    <Image source={{ uri: newGroupAvatarUri }} style={styles.avatarPreview} />
+                  ) : (
+                    <Feather name="camera" size={22} color="#fff" />
+                  )}
+                </View>
+                <Text style={styles.addPhotoText}>{newGroupAvatarUri ? 'Change Photo' : 'Add Photo'}</Text>
+              </Pressable>
+
+              {/* Group Name */}
+              <View style={styles.inputBlock}>
+                <Text style={styles.inputLabel}>Group Name</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="e.g., Morning Workout Crew"
+                  placeholderTextColor={colors.textMuted}
+                  value={newGroupName}
+                  onChangeText={setNewGroupName}
+                  maxLength={100}
+                />
+              </View>
+
+              {/* Friends list */}
+              <View style={styles.inputBlock}>
+                <Text style={styles.inputLabel}>Add Friends</Text>
+                {loadingGroupFriends ? (
+                  <ActivityIndicator color={colors.primary} style={{ marginVertical: 8 }} />
+                ) : (() => {
+                  const filtered = friendSearchQuery.trim()
+                    ? groupFriends.filter(f =>
+                        f.display_name.toLowerCase().includes(friendSearchQuery.toLowerCase()) ||
+                        f.username.toLowerCase().includes(friendSearchQuery.toLowerCase()),
+                      )
+                    : groupFriends;
+                  const displayed = filtered.slice(0, friendsVisibleCount);
+                  const hasMore = displayed.length < filtered.length;
+                  return (
+                    <>
+                      <View style={styles.friendSearchWrap}>
+                        <Feather name="search" size={14} color={colors.textMuted} />
+                        <TextInput
+                          style={styles.friendSearchInput}
+                          placeholder="Search friends..."
+                          placeholderTextColor={colors.textMuted}
+                          value={friendSearchQuery}
+                          onChangeText={(q) => {
+                            setFriendSearchQuery(q);
+                            setFriendsVisibleCount(7);
+                          }}
+                          returnKeyType="search"
+                        />
+                        {!!friendSearchQuery && (
+                          <Pressable onPress={() => { setFriendSearchQuery(''); setFriendsVisibleCount(7); }}>
+                            <Feather name="x" size={14} color={colors.textMuted} />
+                          </Pressable>
+                        )}
+                      </View>
+                      {groupFriends.length === 0 ? (
+                        <Text style={[styles.emptyText, { paddingVertical: 8 }]}>No friends to add</Text>
+                      ) : filtered.length === 0 ? (
+                        <Text style={[styles.emptyText, { paddingVertical: 8 }]}>No results</Text>
+                      ) : (
+                        <FlatList
+                          data={displayed}
+                          keyExtractor={(f) => String(f.id)}
+                          style={styles.friendsList}
+                          keyboardShouldPersistTaps="handled"
+                          onEndReachedThreshold={0.3}
+                          onEndReached={() => {
+                            if (hasMore) setFriendsVisibleCount(c => c + 7);
+                          }}
+                          ListFooterComponent={hasMore ? (
+                            <ActivityIndicator color={colors.primary} style={{ paddingVertical: 8 }} />
+                          ) : null}
+                          renderItem={({ item }) => {
+                            const selected = selectedFriendIds.has(String(item.id));
+                            return (
+                              <Pressable
+                                style={styles.friendRow}
+                                onPress={() => toggleFriend(String(item.id))}
+                              >
+                                <Avatar uri={item.avatar_url} name={item.display_name} size={36} />
+                                <View style={{ flex: 1 }}>
+                                  <Text style={styles.friendName}>{item.display_name}</Text>
+                                  <Text style={styles.friendUsername}>@{item.username}</Text>
+                                </View>
+                                <View style={[styles.friendCheckbox, selected && styles.friendCheckboxSelected]}>
+                                  {selected && <Feather name="check" size={12} color="#fff" />}
+                                </View>
+                              </Pressable>
+                            );
+                          }}
+                        />
+                      )}
+                    </>
+                  );
+                })()}
+              </View>
+
+              <Pressable
+                style={[styles.createGroupBtn, (!newGroupName.trim() || creatingGroup) && styles.createGroupBtnDisabled]}
+                onPress={handleCreateGroup}
+                disabled={!newGroupName.trim() || creatingGroup}
+              >
+                {creatingGroup ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.createGroupBtnText}>
+                    Create{selectedFriendIds.size > 0 ? ` & Add ${selectedFriendIds.size}` : ''}
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          )}
+
+          {groupModalView === 'join' && (
+            <View style={styles.modalCard}>
+              <View style={styles.modalHeaderRow}>
+                <Pressable onPress={() => setGroupModalView('options')}>
+                  <Feather name="arrow-left" size={20} color={colors.textPrimary} />
+                </Pressable>
+                <Text style={styles.modalTitle}>Join with Code</Text>
+                <Pressable style={styles.modalCloseBtn} onPress={closeGroupModal}>
+                  <Feather name="x" size={16} color={colors.textSecondary} />
+                </Pressable>
+              </View>
+              <Text style={styles.joinModalSubtitle}>Enter the 8-character code shared by a group member.</Text>
+              <TextInput
+                style={styles.joinModalInput}
+                placeholder="e.g. ABC12345"
+                placeholderTextColor={colors.textMuted}
+                value={groupJoinCode}
+                onChangeText={setGroupJoinCode}
+                autoCapitalize="characters"
+                autoFocus
+                maxLength={8}
+                returnKeyType="done"
+                onSubmitEditing={handleJoinGroupViaCode}
+              />
+              <Pressable
+                style={[styles.createGroupBtn, (!groupJoinCode.trim() || joiningGroupCode) && styles.createGroupBtnDisabled]}
+                onPress={handleJoinGroupViaCode}
+                disabled={!groupJoinCode.trim() || joiningGroupCode}
+              >
+                {joiningGroupCode ? (
+                  <ActivityIndicator color="#fff" />
+                ) : (
+                  <Text style={styles.createGroupBtnText}>Join Group</Text>
+                )}
+              </Pressable>
+            </View>
+          )}
         </KeyboardAvoidingView>
       </Modal>
 
@@ -1288,8 +1347,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   tab: { flex: 1, alignItems: 'center', paddingVertical: spacing.md },
+  tabLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   tabText: { fontSize: typography.size.sm, fontWeight: '500', color: colors.textSecondary },
   tabTextActive: { fontWeight: '700', color: colors.textPrimary },
+  tabBadge: {
+    backgroundColor: '#EF4444',
+    borderRadius: 8,
+    minWidth: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 3,
+  },
+  tabBadgeText: { fontSize: 9, fontWeight: '700', color: '#fff', lineHeight: 12 },
   tabIndicator: {
     position: 'absolute',
     bottom: 0,
@@ -1388,6 +1458,17 @@ const styles = StyleSheet.create({
   },
   emptySection: { paddingHorizontal: spacing.base, paddingVertical: spacing.md },
   emptyText: { fontSize: typography.size.sm, color: colors.textMuted },
+  seeAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.base,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.subtle,
+  },
+  seeAllText: { fontSize: typography.size.sm, fontWeight: '600', color: colors.primary },
   emptyTitle: { fontSize: typography.size.base, fontWeight: '600', color: colors.textPrimary },
   emptySubtitle: { fontSize: typography.size.sm, color: colors.textMuted },
 
@@ -1683,6 +1764,90 @@ const styles = StyleSheet.create({
   newMsgEmpty: {
     paddingVertical: spacing.lg,
     alignItems: 'center',
+  },
+
+  // ── Group modal ───────────────────────────────────────────────────────────
+  groupOptionBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    backgroundColor: colors.background.elevated,
+  },
+  groupOptionIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(79,195,224,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  groupOptionTitle: {
+    fontSize: typography.size.base,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  groupOptionSubtitle: {
+    fontSize: typography.size.xs,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  groupCreateCard: {
+    maxHeight: '85%',
+  },
+  friendSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    borderRadius: 8,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    backgroundColor: colors.background.elevated,
+    marginBottom: spacing.xs,
+  },
+  friendSearchInput: {
+    flex: 1,
+    fontSize: typography.size.sm,
+    color: colors.textPrimary,
+  },
+  friendsList: {
+    maxHeight: 220,
+  },
+  friendRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.subtle,
+  },
+  friendName: {
+    fontSize: typography.size.sm,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  friendUsername: {
+    fontSize: typography.size.xs,
+    color: colors.textMuted,
+  },
+  friendCheckbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: colors.border.default,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  friendCheckboxSelected: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
   },
 
   // ── Orgs tab ──────────────────────────────────────────────────────────────

@@ -33,6 +33,7 @@ urlpatterns = [
 
     # Announcements
     path('<str:org_id>/announcements/', views.announcements, name='announcements'),
+    path('<str:org_id>/announcements/read/', views.mark_announcements_read, name='announcements-read'),
     path('<str:org_id>/announcements/<str:announcement_id>/', views.announcement_delete, name='announcement-delete'),
     path('<str:org_id>/announcements/<str:announcement_id>/react/', views.announcement_react, name='announcement-react'),
     path('<str:org_id>/announcements/<str:announcement_id>/vote/', views.announcement_vote, name='announcement-vote'),

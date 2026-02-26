@@ -729,8 +729,8 @@ def mark_messages_as_read(user, message_ids):
 
 def get_unread_count(user):
     """
-    Get total unread message count for the user (DMs + group messages).
-    Reads directly from InboxEntry — O(1) aggregation.
+    Get total unread count for the user (DMs + group messages + org announcements).
+    Reads InboxEntry for messages (O(1)) and OrgMember for announcements.
     """
     from django.db.models import Sum, Q as DQ
     result = InboxEntry.objects.filter(user=user).aggregate(
@@ -739,7 +739,23 @@ def get_unread_count(user):
     )
     dm = result['dm'] or 0
     group = result['group'] or 0
-    return {'dm': dm, 'group': group, 'total': dm + group}
+
+    # Count unread org announcements (only for orgs the user has visited before).
+    # If last_announcements_read_at is null, we treat as 0 to avoid a huge initial badge.
+    from organizations.models import OrgMember, Announcement
+    from django.db.models import Q
+    memberships = list(
+        OrgMember.objects.filter(user=user, last_announcements_read_at__isnull=False)
+        .values('org_id', 'last_announcements_read_at')
+    )
+    org = 0
+    if memberships:
+        unread_q = Q()
+        for m in memberships:
+            unread_q |= Q(org_id=m['org_id'], created_at__gt=m['last_announcements_read_at'])
+        org = Announcement.objects.filter(unread_q).exclude(author=user).count()
+
+    return {'dm': dm, 'group': group, 'org': org, 'total': dm + group + org}
 
 
 # ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { Conversation, GroupConversation, Message, MessagePage, UnreadCount } from '../types/messaging';
+import { Conversation, GroupConversation, Message, MessagePage, MessageReaction, UnreadCount } from '../types/messaging';
 
 export async function fetchDMConversations(): Promise<Conversation[]> {
   const res = await apiClient.get('/api/messaging/dm/conversations/');
@@ -27,13 +27,17 @@ export async function fetchGroupMessages(
   return res.data as MessagePage;
 }
 
-export async function sendDM(recipientId: string, content: string): Promise<Message> {
-  const res = await apiClient.post('/api/messaging/dm/send/', { recipient_id: recipientId, content });
+export async function sendDM(recipientId: string, content: string, mediaId?: string): Promise<Message> {
+  const payload: Record<string, string> = { recipient_id: recipientId, content };
+  if (mediaId) payload.media_id = mediaId;
+  const res = await apiClient.post('/api/messaging/dm/send/', payload);
   return res.data;
 }
 
-export async function sendGroupMessage(groupId: string, content: string): Promise<Message> {
-  const res = await apiClient.post(`/api/messaging/groups/${groupId}/send/`, { content });
+export async function sendGroupMessage(groupId: string, content: string, mediaId?: string): Promise<Message> {
+  const payload: Record<string, string> = { content };
+  if (mediaId) payload.media_id = mediaId;
+  const res = await apiClient.post(`/api/messaging/groups/${groupId}/send/`, payload);
   return res.data;
 }
 
@@ -52,5 +56,13 @@ export async function markMessagesRead(messageIds: string[]): Promise<void> {
 
 export async function fetchUnreadCount(): Promise<UnreadCount> {
   const res = await apiClient.get('/api/messaging/unread-count/');
+  return res.data;
+}
+
+export async function reactToMessage(
+  messageId: string,
+  emoji: string,
+): Promise<{ reactions: MessageReaction[] }> {
+  const res = await apiClient.post(`/api/messaging/messages/${messageId}/react/`, { emoji });
   return res.data;
 }

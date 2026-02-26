@@ -34,6 +34,7 @@ import {
   deleteOrg,
   leaveOrg,
   joinOrgViaCode,
+  requestJoinOrg,
   OrgDetail,
   OrgMember,
   OrgJoinRequest,
@@ -80,6 +81,10 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
     setTimeout(() => setCodeCopied(false), 2000);
   };
 
+  // ── Join request ─────────────────────────────────────────────────────────
+  const [requested, setRequested] = useState(false);
+  const [requesting, setRequesting] = useState(false);
+
   // ── Join code modal ──────────────────────────────────────────────────────
   const [joinCodeVisible, setJoinCodeVisible] = useState(false);
   const [joinCode, setJoinCode] = useState('');
@@ -100,6 +105,7 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
       ]);
       setOrg(detail);
       setMembers(mems);
+      setRequested(detail.pending_request);
     } catch {
       // ignore
     } finally {
@@ -338,6 +344,20 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
     }
   };
 
+  // ── Request to join ──────────────────────────────────────────────────────
+
+  const handleRequestJoin = async () => {
+    setRequesting(true);
+    try {
+      await requestJoinOrg(orgId);
+      setRequested(true);
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.error ?? 'Failed to send join request.');
+    } finally {
+      setRequesting(false);
+    }
+  };
+
   // ── Tab content ──────────────────────────────────────────────────────────
 
   const renderInfoTab = () => (
@@ -527,6 +547,19 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
         <Text style={styles.orgName}>{org?.name}</Text>
         {!!org?.description && (
           <Text style={styles.orgDescription}>{org.description}</Text>
+        )}
+        {!isMember && org?.privacy === 'private' && (
+          requesting ? (
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 10 }} />
+          ) : requested ? (
+            <View style={styles.heroPendingBadge}>
+              <Text style={styles.heroPendingText}>Requested</Text>
+            </View>
+          ) : (
+            <Pressable style={styles.heroRequestBtn} onPress={handleRequestJoin}>
+              <Text style={styles.heroRequestBtnText}>Request</Text>
+            </Pressable>
+          )
         )}
         {org?.user_role && (
           <View style={[
@@ -793,6 +826,23 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.06)',
   },
   myRoleBadgeText: { fontSize: typography.size.xs, color: colors.textMuted, fontWeight: '600' },
+
+  heroRequestBtn: {
+    marginTop: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
+  },
+  heroRequestBtnText: { fontSize: typography.size.sm, color: '#fff', fontWeight: '700' },
+  heroPendingBadge: {
+    marginTop: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+  },
+  heroPendingText: { fontSize: typography.size.sm, color: colors.textMuted, fontWeight: '600' },
 
   tabRow: {
     flexDirection: 'row',
