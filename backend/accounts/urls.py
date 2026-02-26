@@ -25,6 +25,7 @@ urlpatterns = [
     path('api/me/', api_views.api_me_view, name='api_me'),
     path('api/me/avatar/', api_views.api_update_avatar_view, name='api_update_avatar'),
     path('api/profile/<str:username>/', api_views.api_profile_view, name='api_profile'),
+    path('api/user/<str:username>/post-thumbnails/', api_views.api_user_post_thumbnails_view, name='api_user_post_thumbnails'),
     path('api/user/<str:username>/posts/', api_views.api_user_posts_view, name='api_user_posts'),
     path('api/user/<str:username>/prs/', api_views.api_user_prs_view, name='api_user_prs'),
     path('api/user/<str:username>/checkins/', api_views.api_user_checkins_view, name='api_user_checkins'),

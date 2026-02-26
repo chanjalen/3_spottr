@@ -46,6 +46,7 @@ function adaptFeedItem(raw: any): FeedItem {
       : null,
     workout_type: raw.workout_type ?? undefined,
     visibility: raw.visibility ?? 'main',
+    shared_context: raw.shared_context?.length ? raw.shared_context : undefined,
   };
 }
 
@@ -58,6 +59,22 @@ export async function fetchFeed(
 
   const response = await apiClient.get(ENDPOINTS.feed, { params });
   // Backend returns { items: [...], next_cursor: "..." } for AJAX requests
+  const raw: any[] = Array.isArray(response.data)
+    ? response.data
+    : (response.data?.items ?? []);
+  return {
+    items: raw.map(adaptFeedItem),
+    nextCursor: response.data?.next_cursor ?? '',
+  };
+}
+
+export async function fetchUserPostThumbnails(
+  username: string,
+  cursor?: string,
+): Promise<{ items: FeedItem[]; nextCursor: string }> {
+  const params: Record<string, string> = { limit: '9' };
+  if (cursor) params.cursor = cursor;
+  const response = await apiClient.get(ENDPOINTS.userPostThumbnails(username), { params });
   const raw: any[] = Array.isArray(response.data)
     ? response.data
     : (response.data?.items ?? []);

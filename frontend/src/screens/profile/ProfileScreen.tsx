@@ -14,6 +14,7 @@ import {
   Platform,
   Alert,
   TextInput,
+  TouchableWithoutFeedback,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -28,7 +29,7 @@ import CommentsSheet from '../../components/comments/CommentsSheet';
 import { useAuth } from '../../store/AuthContext';
 import { fetchProfile, toggleFollow, fetchUserPRs, savePR, deletePR } from '../../api/accounts';
 import { fetchExerciseCatalog, fetchCalendarPosts } from '../../api/workouts';
-import { fetchUserPosts, fetchUserCheckins, CheckinItem } from '../../api/feed';
+import { fetchUserPostThumbnails, fetchUserPosts, fetchUserCheckins, CheckinItem } from '../../api/feed';
 import CheckinViewer from '../../components/profile/CheckinViewer';
 import { fetchMyGyms } from '../../api/gyms';
 import { listMyOrgs, OrgListItem } from '../../api/organizations';
@@ -49,8 +50,8 @@ type ProfileTab = 'Posts' | 'Calendar' | 'Records';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
+const POPUP_WIDTH = SCREEN_WIDTH - 48; // calModalCenter padding: 24 on each side
 const GRID_PADDING = spacing.xl * 2;
-const MODAL_PAGE_W = SCREEN_WIDTH - 48; // calendar day modal page width
 const THUMB_GAP = 1;
 const THUMB_SIZE = (SCREEN_WIDTH - GRID_PADDING - THUMB_GAP * 2) / 3;
 
@@ -171,21 +172,36 @@ export default function ProfileScreen({ navigation, route }: Props) {
     postsLoadingRef.current = true;
     setPostsLoading(true);
     try {
-      // Phase 1: thumbnails only — skips all COUNT queries on the backend,
-      // so the grid appears immediately with photos/type info.
-      const thumbResult = await fetchUserPosts(username, cursor, true);
-      setPosts((prev) => cursor ? [...prev, ...thumbResult.items] : thumbResult.items);
-      setPostsCursor(thumbResult.nextCursor);
-      setPostsHasMore(!!thumbResult.nextCursor);
-      setPostsLoading(false);
-      postsLoadingRef.current = false;
+      // Phase 1: fast thumbnails — grid shows immediately (~5 DB queries)
+      let thumbResult: Awaited<ReturnType<typeof fetchUserPostThumbnails>> | null = null;
+      try {
+        thumbResult = await fetchUserPostThumbnails(username, cursor);
+      } catch {
+        // thumbnail endpoint unavailable — fall through to full load
+      }
 
-      // Phase 2: full data in background — merges like counts, comment counts,
-      // workout details etc. into the existing items without any visible flash.
-      fetchUserPosts(username, cursor, false).then((fullResult) => {
-        const fullMap = new Map(fullResult.items.map((item) => [item.id, item]));
-        setPosts((prev) => prev.map((p) => fullMap.get(p.id) ?? p));
-      }).catch(() => {});
+      if (thumbResult) {
+        setPosts((prev) => cursor ? [...prev, ...thumbResult!.items] : thumbResult!.items);
+        setPostsCursor(thumbResult.nextCursor);
+        setPostsHasMore(!!thumbResult.nextCursor);
+        postsLoadingRef.current = false;
+        setPostsLoading(false);
+        // Phase 2: full data in background — merges like/comment counts silently
+        fetchUserPosts(username, cursor)
+          .then((fullResult) => {
+            const fullMap = new Map(fullResult.items.map((i) => [i.id, i]));
+            setPosts((prev) => prev.map((p) => fullMap.get(p.id) ?? p));
+          })
+          .catch(() => {});
+      } else {
+        // Fallback: load full posts directly
+        const result = await fetchUserPosts(username, cursor);
+        setPosts((prev) => cursor ? [...prev, ...result.items] : result.items);
+        setPostsCursor(result.nextCursor);
+        setPostsHasMore(!!result.nextCursor);
+        postsLoadingRef.current = false;
+        setPostsLoading(false);
+      }
     } catch {
       postsLoadingRef.current = false;
       setPostsLoading(false);
@@ -419,9 +435,9 @@ export default function ProfileScreen({ navigation, route }: Props) {
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              const reloadPRs = prsLoaded.current;
+              const reloadPrs = prsLoaded.current;
               postsLoaded.current = true;
-              prsLoaded.current = true;
+              prsLoaded.current = reloadPrs;
               setPosts([]);
               setPrs([]);
               setCheckins([]);
@@ -430,7 +446,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
               setShowAllPRs(false);
               load();
               loadPosts();
-              if (reloadPRs) loadPRs();
+              if (reloadPrs) loadPRs();
               if (isOwn) {
                 fetchMyGyms().then(setGyms).catch(() => {});
                 listMyOrgs().then(setOrgs).catch(() => {});
@@ -584,7 +600,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
         {isOwn && orgs.length > 0 && <OrgsSection orgs={orgs} navigation={navigation} />}
       </ScrollView>
 
-      {/* ── Post viewer modal (vertical scroll) ─────────────────────────────── */}
+      {/* ── Post viewer modal (vertical feed) ───────────────────────────────── */}
       <Modal
         visible={viewerStartIndex !== null}
         animationType="slide"
@@ -603,9 +619,17 @@ export default function ProfileScreen({ navigation, route }: Props) {
           </View>
 
           <FlatList
-            data={viewerStartIndex !== null ? posts.slice(viewerStartIndex) : []}
+            data={viewerStartIndex !== null ? posts.slice(viewerStartIndex) : posts}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.viewerScroll}
+            onEndReached={() => { if (postsHasMore && !postsLoadingRef.current) loadPosts(postsCursor); }}
+            onEndReachedThreshold={0.4}
+            ListFooterComponent={postsHasMore ? (
+              <View style={styles.feedFooter}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : null}
             renderItem={({ item }) => (
               <FeedCard
                 item={item}
@@ -662,6 +686,13 @@ export default function ProfileScreen({ navigation, route }: Props) {
             numColumns={3}
             contentContainerStyle={styles.allPostsGrid}
             columnWrapperStyle={styles.allPostsRow}
+            onEndReached={() => { if (postsHasMore && !postsLoadingRef.current) loadPosts(postsCursor); }}
+            onEndReachedThreshold={0.4}
+            ListFooterComponent={postsHasMore ? (
+              <View style={styles.feedFooter}>
+                <ActivityIndicator size="small" color={colors.primary} />
+              </View>
+            ) : null}
             renderItem={({ item }) => (
               <PostThumbnail
                 key={item.id}
@@ -1128,96 +1159,63 @@ function CalendarTab({
   onComment: (item: FeedItem) => void;
   onPollVote: (item: FeedItem, optionId: number) => void;
 }) {
+  const insets = useSafeAreaInsets();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
-  const [calendarData, setCalendarData] = useState<CalendarPost[]>([]);
-  const [calModalVisible, setCalModalVisible] = useState(false);
-  const [selectedDayIdx, setSelectedDayIdx] = useState(0);
-  const [pagerMountKey, setPagerMountKey] = useState(0);
-  const pagerRef = useRef<FlatList<number>>(null);
+  const [restDayNums, setRestDayNums] = useState<Set<number>>(new Set());
+  const [workoutDayNums, setWorkoutDayNums] = useState<Set<number>>(new Set());
+  const [dayModalVisible, setDayModalVisible] = useState(false);
+  const [currentModalDay, setCurrentModalDay] = useState(1);
+  const dayListRef = useRef<FlatList>(null);
 
   // Fetch calendar data from the dedicated API — this returns ALL posts for
   // the month so highlights are always complete and consistent on refresh.
   useEffect(() => {
-    setCalendarData([]);
+    setRestDayNums(new Set());
+    setWorkoutDayNums(new Set());
     fetchCalendarPosts(year, month + 1, profileUsername)
-      .then((res) => setCalendarData(res.posts))
+      .then((res) => {
+        const restNums = new Set<number>();
+        const workoutNums = new Set<number>();
+        for (const p of res.posts) {
+          const day = parseInt(p.date.split('-')[2], 10);
+          if (p.type === 'rest') {
+            restNums.add(day);
+          } else {
+            workoutNums.add(day);
+          }
+        }
+        setRestDayNums(restNums);
+        setWorkoutDayNums(workoutNums);
+      })
       .catch(() => {});
   }, [year, month, profileUsername]);
 
-  const workoutDays = useMemo(() => {
-    const s = new Set<number>();
-    calendarData.forEach((p) => {
-      if (p.type !== 'rest') s.add(parseInt(p.date.split('-')[2], 10));
-    });
-    return s;
-  }, [calendarData]);
-
-  const restDayNums = useMemo(() => {
-    const s = new Set<number>();
-    calendarData.forEach((p) => {
-      if (p.type === 'rest') s.add(parseInt(p.date.split('-')[2], 10));
-    });
-    return s;
-  }, [calendarData]);
-
-  // Sorted list of days that have workout posts — used as modal pager pages.
-  const workoutDayList = useMemo(
-    () => Array.from(workoutDays).sort((a, b) => a - b),
-    [workoutDays],
+  // Sorted array of days that have workout posts — each becomes one swipeable page
+  const sortedWorkoutDays = useMemo(
+    () => Array.from(workoutDayNums).sort((a, b) => a - b),
+    [workoutDayNums],
   );
 
-  // Group calendar posts by day number for the modal content.
-  const postsByDay = useMemo(() => {
-    const map = new Map<number, CalendarPost[]>();
-    calendarData.forEach((p) => {
-      if (p.type === 'rest') return;
-      const day = parseInt(p.date.split('-')[2], 10);
-      if (!map.has(day)) map.set(day, []);
-      map.get(day)!.push(p);
-    });
-    return map;
-  }, [calendarData]);
-
   const prevMonth = () => {
-    setCalModalVisible(false);
     if (month === 0) { setMonth(11); setYear((y) => y - 1); }
     else setMonth((m) => m - 1);
   };
   const nextMonth = () => {
-    setCalModalVisible(false);
     if (month === 11) { setMonth(0); setYear((y) => y + 1); }
     else setMonth((m) => m + 1);
   };
 
-  const openDayModal = (day: number) => {
-    const idx = workoutDayList.indexOf(day);
-    if (idx < 0) return;
-    setSelectedDayIdx(idx);
-    setPagerMountKey((k) => k + 1); // force FlatList remount at the correct initialScrollIndex
-    setCalModalVisible(true);
-  };
-
-  const goToPrev = () => {
-    const newIdx = selectedDayIdx - 1;
-    if (newIdx >= 0) {
-      setSelectedDayIdx(newIdx);
-      pagerRef.current?.scrollToIndex({ index: newIdx, animated: true });
-    }
+  const handleDayPress = (day: number) => {
+    if (!workoutDayNums.has(day)) return;
+    setCurrentModalDay(day);
+    setDayModalVisible(true);
   };
 
   const goToNext = () => {
-    const newIdx = selectedDayIdx + 1;
-    if (newIdx < workoutDayList.length) {
-      setSelectedDayIdx(newIdx);
-      pagerRef.current?.scrollToIndex({ index: newIdx, animated: true });
-    }
-  };
-
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const currentDay = workoutDayList[selectedDayIdx] ?? null;
 
   return (
     <View style={styles.calendarWrap}>
@@ -1245,9 +1243,8 @@ function CalendarTab({
           ))}
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const day = i + 1;
-            const hasWorkout = workoutDays.has(day);
+            const hasWorkout = workoutDayNums.has(day);
             const isRest = !hasWorkout && restDayNums.has(day);
-            const isSelected = calModalVisible && currentDay === day;
             return (
               <Pressable
                 key={day}
@@ -1255,16 +1252,14 @@ function CalendarTab({
                   styles.calDay,
                   hasWorkout && styles.calDayWorkout,
                   isRest && styles.calDayRest,
-                  isSelected && styles.calDaySelected,
                 ]}
-                onPress={() => openDayModal(day)}
+                onPress={() => handleDayPress(day)}
                 disabled={!hasWorkout}
               >
                 <Text style={[
                   styles.calDayText,
                   hasWorkout && styles.calDayTextWorkout,
                   isRest && styles.calDayTextRest,
-                  isSelected && styles.calDayTextSelected,
                 ]}>
                   {day}
                 </Text>
@@ -1275,102 +1270,135 @@ function CalendarTab({
         </View>
       </View>
 
-      {/* ── Floating day modal ──────────────────────────────────────────────────── */}
+      {/* Floating day popup */}
       <Modal
-        visible={calModalVisible}
+        visible={dayModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setCalModalVisible(false)}
+        onRequestClose={() => setDayModalVisible(false)}
       >
-        <View style={{ flex: 1 }}>
-          {/* Tap-outside-to-close backdrop */}
-          <Pressable style={styles.calModalBackdrop} onPress={() => setCalModalVisible(false)} />
-
-          {/* Card — pointerEvents="box-none" lets taps on the empty space around
-              the card fall through to the backdrop while the card captures its own. */}
-          <View style={styles.calModalCenter} pointerEvents="box-none">
-            <View style={styles.calModalCard}>
-
-              {/* Fixed header: prev arrow · date label · next arrow · close */}
-              <View style={styles.calModalHeaderRow}>
-                <Pressable
-                  onPress={goToPrev}
-                  style={[styles.calNavBtn, selectedDayIdx === 0 && { opacity: 0.3 }]}
-                  disabled={selectedDayIdx === 0}
-                >
-                  <Feather name="chevron-left" size={18} color={colors.textSecondary} />
-                </Pressable>
-                <Text style={styles.calModalDateLabel}>
-                  {currentDay != null ? `${MONTHS[month]} ${currentDay}` : ''}
-                </Text>
-                <Pressable
-                  onPress={goToNext}
-                  style={[styles.calNavBtn, selectedDayIdx === workoutDayList.length - 1 && { opacity: 0.3 }]}
-                  disabled={selectedDayIdx === workoutDayList.length - 1}
-                >
-                  <Feather name="chevron-right" size={18} color={colors.textSecondary} />
-                </Pressable>
-                <Pressable onPress={() => setCalModalVisible(false)} style={styles.calModalClose}>
-                  <Feather name="x" size={18} color={colors.textSecondary} />
-                </Pressable>
+        {/* Dark backdrop — tapping it closes the modal */}
+        <TouchableWithoutFeedback onPress={() => setDayModalVisible(false)}>
+          <View style={styles.calModalOverlay} />
+        </TouchableWithoutFeedback>
+        {/* Popup sits above the backdrop, pointer-events pass through the centering wrapper */}
+        <View style={styles.calModalCenter} pointerEvents="box-none">
+          <View style={styles.calModalPopup}>
+            {/* Header: prev arrow, date, next arrow, close */}
+            <View style={styles.calModalHeader}>
+              <Pressable
+                style={styles.calModalNavBtn}
+                onPress={() => {
+                  const idx = sortedWorkoutDays.indexOf(currentModalDay);
+                  if (idx > 0) {
+                    dayListRef.current?.scrollToIndex({ index: idx - 1, animated: true });
+                    setCurrentModalDay(sortedWorkoutDays[idx - 1]);
+                  }
+                }}
+                disabled={sortedWorkoutDays.indexOf(currentModalDay) === 0}
+              >
+                <Feather
+                  name="chevron-left"
+                  size={20}
+                  color={sortedWorkoutDays.indexOf(currentModalDay) === 0 ? colors.textMuted : colors.textPrimary}
+                />
+              </Pressable>
+              <View style={{ alignItems: 'center', flex: 1 }}>
+                <Text style={styles.calModalDate}>{MONTHS[month]} {currentModalDay}</Text>
+                <Text style={styles.calModalYear}>{year}</Text>
               </View>
-
-              <View style={{ height: 1, backgroundColor: colors.border.subtle }} />
-
-              {/* Horizontal pager — one page per workout day, swipe to navigate */}
-              <FlatList
-                key={pagerMountKey}
-                ref={pagerRef}
-                data={workoutDayList}
-                keyExtractor={(d) => String(d)}
-                horizontal
-                pagingEnabled
-                showsHorizontalScrollIndicator={false}
-                initialScrollIndex={selectedDayIdx}
-                getItemLayout={(_, index) => ({
-                  length: MODAL_PAGE_W,
-                  offset: MODAL_PAGE_W * index,
-                  index,
-                })}
-                onMomentumScrollEnd={(e) => {
-                  const idx = Math.round(e.nativeEvent.contentOffset.x / MODAL_PAGE_W);
-                  setSelectedDayIdx(idx);
+              <Pressable
+                style={styles.calModalNavBtn}
+                onPress={() => {
+                  const idx = sortedWorkoutDays.indexOf(currentModalDay);
+                  if (idx < sortedWorkoutDays.length - 1) {
+                    dayListRef.current?.scrollToIndex({ index: idx + 1, animated: true });
+                    setCurrentModalDay(sortedWorkoutDays[idx + 1]);
+                  }
                 }}
-                style={{ flex: 1 }}
-                renderItem={({ item: day }) => {
-                  const dayPosts = postsByDay.get(day) ?? [];
-                  return (
-                    <ScrollView
-                      style={{ width: MODAL_PAGE_W }}
-                      contentContainerStyle={{ paddingBottom: spacing.xl }}
-                      showsVerticalScrollIndicator={false}
-                    >
-                      {dayPosts.length === 0 ? (
-                        <View style={styles.emptyTab}>
-                          <Text style={styles.emptyText}>No posts for this day</Text>
-                        </View>
-                      ) : dayPosts.map((cp) => {
-                        // Use full FeedItem from paginated posts if available,
-                        // otherwise construct from CalendarPost data.
-                        const feedItem = posts.find((p) => p.id === cp.id)
-                          ?? (profile ? calPostToFeedItem(cp, profile) : null);
-                        if (!feedItem) return null;
-                        return (
-                          <FeedCard
-                            key={cp.id}
-                            item={feedItem}
-                            index={0}
-                            onLike={() => onLike(feedItem)}
-                            onComment={() => onComment(feedItem)}
-                            onPollVote={(optionId) => onPollVote(feedItem, optionId)}
-                          />
-                        );
-                      })}
-                    </ScrollView>
-                  );
-                }}
-              />
+                disabled={sortedWorkoutDays.indexOf(currentModalDay) === sortedWorkoutDays.length - 1}
+              >
+                <Feather
+                  name="chevron-right"
+                  size={20}
+                  color={sortedWorkoutDays.indexOf(currentModalDay) === sortedWorkoutDays.length - 1 ? colors.textMuted : colors.textPrimary}
+                />
+              </Pressable>
+              <Pressable style={styles.calModalNavBtn} onPress={() => setDayModalVisible(false)}>
+                <Feather name="x" size={18} color={colors.textMuted} />
+              </Pressable>
             </View>
+
+            {/* Swipeable pages — one per workout day */}
+            <FlatList
+              ref={dayListRef}
+              style={styles.calModalScroll}
+              data={sortedWorkoutDays}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(day) => String(day)}
+              initialScrollIndex={
+                sortedWorkoutDays.indexOf(currentModalDay) >= 0
+                  ? sortedWorkoutDays.indexOf(currentModalDay)
+                  : 0
+              }
+              getItemLayout={(_, index) => ({
+                length: POPUP_WIDTH,
+                offset: POPUP_WIDTH * index,
+                index,
+              })}
+              onMomentumScrollEnd={(e) => {
+                const idx = Math.round(e.nativeEvent.contentOffset.x / POPUP_WIDTH);
+                if (idx >= 0 && idx < sortedWorkoutDays.length) {
+                  setCurrentModalDay(sortedWorkoutDays[idx]);
+                }
+              }}
+              renderItem={({ item: day }) => {
+                const dayPosts = posts.filter((p) => {
+                  const d = new Date(p.created_at);
+                  return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
+                });
+                return (
+                  <ScrollView
+                    style={{ width: POPUP_WIDTH }}
+                    contentContainerStyle={{ padding: spacing.md, paddingBottom: 20 }}
+                    showsVerticalScrollIndicator={false}
+                    nestedScrollEnabled
+                  >
+                    {dayPosts.map((item) => (
+                      <View key={item.id} style={styles.calDayCard}>
+                        {item.photo_url && (
+                          <Image source={{ uri: item.photo_url }} style={styles.calDayCardImage} contentFit="cover" />
+                        )}
+                        <View style={styles.calDayCardBody}>
+                          <Text style={styles.calPostType}>
+                            {item.workout ? 'Workout' : item.personal_record ? 'Personal Record' : item.poll ? 'Poll' : 'Post'}
+                          </Text>
+                          {!!item.description && (
+                            <Text style={styles.calDayCardDesc}>{item.description}</Text>
+                          )}
+                          {item.workout && (
+                            <Text style={styles.calDayCardMeta}>
+                              {item.workout.exercise_count} exercises · {item.workout.total_sets} sets
+                              {item.workout.duration_minutes ? ` · ${item.workout.duration_minutes}min` : ''}
+                            </Text>
+                          )}
+                          {item.personal_record && (
+                            <Text style={styles.calDayCardMeta}>
+                              {item.personal_record.exercise_name}: {item.personal_record.value} {item.personal_record.unit}
+                            </Text>
+                          )}
+                          {item.poll && (
+                            <Text style={styles.calDayCardMeta}>{item.poll.question}</Text>
+                          )}
+                        </View>
+                      </View>
+                    ))}
+                  </ScrollView>
+                );
+              }}
+            />
           </View>
         </View>
       </Modal>
@@ -1646,6 +1674,7 @@ const styles = StyleSheet.create({
 
   // ── All posts modal grid ──
   allPostsGrid: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: 60 },
+  feedFooter: { paddingVertical: spacing.xl, alignItems: 'center' as const },
   allPostsRow: { gap: THUMB_GAP, marginBottom: THUMB_GAP },
 
   // ── View All / See All toggle button ──
@@ -1706,55 +1735,47 @@ const styles = StyleSheet.create({
   calDay: { width: `${100 / 7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 6 },
   calDayWorkout: { backgroundColor: 'rgba(79,195,224,0.15)' },
   calDayRest: { backgroundColor: 'rgba(156,163,175,0.15)' },
-  calDaySelected: { backgroundColor: colors.primary },
   calDayText: { fontSize: 13, fontWeight: '500', color: colors.textSecondary },
   calDayTextWorkout: { color: colors.primary, fontWeight: '700' },
   calDayTextRest: { color: colors.textMuted, fontWeight: '500' },
-  calDayTextSelected: { color: '#000', fontWeight: '700' },
   calDayRestMark: { fontSize: 7, lineHeight: 8 },
 
-  // ── Calendar day modal ──
-  calModalBackdrop: {
+  calModalOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.55)',
   },
   calModalCenter: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center', alignItems: 'center', padding: 24,
   },
-  calModalCard: {
-    width: MODAL_PAGE_W,
-    height: SCREEN_HEIGHT * 0.65,
-    backgroundColor: colors.surface,
-    borderRadius: 20,
-    overflow: 'hidden',
+  calModalPopup: {
+    width: '100%', height: SCREEN_HEIGHT * 0.55,
+    backgroundColor: colors.background.base,
+    borderRadius: 20, overflow: 'hidden',
     ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 12 },
-      android: { elevation: 8 },
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 20 },
+      android: { elevation: 12 },
     }),
   },
-  calModalHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.md,
-    gap: spacing.sm,
+  calModalHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: spacing.sm, paddingVertical: spacing.md,
+    borderBottomWidth: 1, borderBottomColor: colors.border.subtle,
   },
-  calModalDateLabel: {
-    flex: 1,
-    textAlign: 'center',
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.textPrimary,
+  calModalNavBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  calModalDate: { fontSize: 17, fontWeight: '700', color: colors.textPrimary },
+  calModalYear: { fontSize: 13, color: colors.textMuted, marginTop: 1 },
+  calModalScroll: { flex: 1 },
+  calDayCard: {
+    backgroundColor: colors.background.elevated, borderRadius: 12,
+    borderWidth: 1, borderColor: colors.border.subtle, overflow: 'hidden',
+    marginBottom: 10,
   },
-  calModalClose: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: spacing.xs,
-  },
+  calDayCardImage: { width: '100%', height: 160 },
+  calDayCardBody: { padding: spacing.md, gap: 4 },
+  calDayCardDesc: { fontSize: 14, color: colors.textPrimary, lineHeight: 19 },
+  calDayCardMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+
   calPostRow: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     backgroundColor: colors.background.elevated, borderRadius: 12,

@@ -2,15 +2,20 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
+import { FeedTab } from './FeedTabs';
 
 interface EmptyStateProps {
-  tab: 'main' | 'friends';
+  tab: FeedTab;
 }
 
 export default function EmptyState({ tab }: EmptyStateProps) {
   const message =
-    tab === 'friends'
-      ? "Your friends haven't posted yet. Be the first!"
+    tab === 'gym'
+      ? "No gym check-ins yet. Share yours first!"
+      : tab === 'org'
+      ? "No organization check-ins yet."
+      : tab === 'friends'
+      ? "Your friends haven't checked in yet. Be the first!"
       : 'No posts to show yet. Start by sharing a workout!';
 
   return (

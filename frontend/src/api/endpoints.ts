@@ -28,6 +28,7 @@ export const ENDPOINTS = {
   votePoll: (id: ID) => `${BASE}/poll/${id}/vote/`,
   pollVoters: (id: ID) => `${BASE}/poll/${id}/voters/`,
 
+  userPostThumbnails: (username: string) => `/accounts/api/user/${username}/post-thumbnails/`,
   userPosts: (username: string) => `/accounts/api/user/${username}/posts/`,
   userCheckins: (username: string) => `/accounts/api/user/${username}/checkins/`,
 

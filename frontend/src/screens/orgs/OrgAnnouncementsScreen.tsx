@@ -28,6 +28,7 @@ import {
   deleteAnnouncement,
   reactToAnnouncement,
   voteOnPoll,
+  markAnnouncementsRead,
   uploadMedia,
   fetchOrgDetail,
   Announcement,
@@ -36,6 +37,7 @@ import {
   CreateAnnouncementPayload,
 } from '../../api/organizations';
 import { useAuth } from '../../store/AuthContext';
+import { useUnreadCount } from '../../store/UnreadCountContext';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 import { timeAgo } from '../../utils/timeAgo';
@@ -56,11 +58,21 @@ type OptimisticAnnouncement = Announcement & {
   _retryPayload?: CreateAnnouncementPayload;
 };
 
+type AnnouncementDivider = { id: '__new_divider__'; isDivider: true };
+type AnnouncementListItem = OptimisticAnnouncement | AnnouncementDivider;
+
+function isAnn(item: AnnouncementListItem): item is OptimisticAnnouncement {
+  return !('isDivider' in item);
+}
+
 function genClientId(): string {
   return `opt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
 const EMOJI_QUICK = ['👍', '👎', '😂', '😡', '❤️'];
+
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50 MB
 
 // ---------------------------------------------------------------------------
 // Poll card
@@ -292,14 +304,27 @@ function AnnouncementBubble({
 
       {item.media.length > 0 && (
         <View style={styles.mediaGrid}>
-          {item.media.map((m, i) => (
-            <Image
-              key={i}
-              source={{ uri: m.thumbnail_url ?? m.url }}
-              style={styles.mediaThumb}
-              resizeMode="cover"
-            />
-          ))}
+          {item.media.map((m, i) =>
+            m.kind === 'video' ? (
+              <View key={i} style={[styles.mediaThumb, styles.videoThumb]}>
+                {m.thumbnail_url ? (
+                  <Image
+                    source={{ uri: m.thumbnail_url }}
+                    style={StyleSheet.absoluteFill}
+                    resizeMode="cover"
+                  />
+                ) : null}
+                <Feather name="play-circle" size={28} color="#fff" />
+              </View>
+            ) : (
+              <Image
+                key={i}
+                source={{ uri: m.thumbnail_url ?? m.url }}
+                style={styles.mediaThumb}
+                resizeMode="cover"
+              />
+            )
+          )}
         </View>
       )}
 
@@ -336,9 +361,10 @@ function AnnouncementBubble({
 export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { user: me } = useAuth();
+  const { refresh: refreshUnread } = useUnreadCount();
   const { orgId, orgName, orgAvatar } = route.params;
 
-  const [announcements, setAnnouncements] = useState<OptimisticAnnouncement[]>([]);
+  const [announcements, setAnnouncements] = useState<AnnouncementListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [oldestId, setOldestId] = useState<string | null>(null);
@@ -354,6 +380,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
   const [draftText, setDraftText] = useState('');
   const [draftMediaUris, setDraftMediaUris] = useState<string[]>([]);
   const [draftMediaIds, setDraftMediaIds] = useState<string[]>([]);
+  const [draftMediaTypes, setDraftMediaTypes] = useState<Array<'image' | 'video'>>([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   // Poll builder
   const [showPollBuilder, setShowPollBuilder] = useState(false);
@@ -374,10 +401,22 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
         fetchAnnouncements(orgId, { limit: 30 }),
         fetchOrgDetail(orgId),
       ]);
-      setAnnouncements(page.results);
+      // Insert "NEW" divider between unread (front/bottom) and read (back/top) announcements.
+      // API returns newest-first; FlatList is inverted so index 0 appears at the bottom.
+      const firstReadIdx = page.results.findIndex(a => a.is_read);
+      const listItems: AnnouncementListItem[] = firstReadIdx > 0
+        ? [
+            ...page.results.slice(0, firstReadIdx),
+            { id: '__new_divider__', isDivider: true as const },
+            ...page.results.slice(firstReadIdx),
+          ]
+        : page.results;
+      setAnnouncements(listItems);
       setHasMore(page.has_more);
       setOldestId(page.oldest_id);
       setUserRole(detail.user_role);
+      // Mark as read and refresh the global unread badge.
+      markAnnouncementsRead(orgId).then(refreshUnread).catch(() => {});
     } catch {
       // ignore
     } finally {
@@ -396,7 +435,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
       if (announcement.org !== orgId) return;
       setAnnouncements(prev => {
         // Dedup: skip if we already have an item with this real ID
-        if (prev.some(a => a.id === announcement.id)) return prev;
+        if (prev.some(a => isAnn(a) && a.id === announcement.id)) return prev;
         return [announcement, ...prev];
       });
     };
@@ -434,7 +473,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
     try {
       const res = await reactToAnnouncement(orgId, announcementId, emoji);
       setAnnouncements(prev =>
-        prev.map(a => a.id === announcementId ? { ...a, reactions: res.reactions } : a),
+        prev.map(a => isAnn(a) && a.id === announcementId ? { ...a, reactions: res.reactions } : a),
       );
     } catch {
       // ignore
@@ -445,7 +484,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
 
   const handlePollVoted = (announcementId: string, poll: AnnouncementPoll) => {
     setAnnouncements(prev =>
-      prev.map(a => a.id === announcementId ? { ...a, poll } : a),
+      prev.map(a => isAnn(a) && a.id === announcementId ? { ...a, poll } : a),
     );
   };
 
@@ -481,7 +520,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
         onPress: async () => {
           try {
             await deleteAnnouncement(orgId, contextItem.id);
-            setAnnouncements(prev => prev.filter(a => a.id !== contextItem.id));
+            setAnnouncements(prev => prev.filter(a => !isAnn(a) || a.id !== contextItem.id));
           } catch {
             Alert.alert('Error', 'Failed to delete announcement.');
           }
@@ -499,23 +538,34 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images',
+      mediaTypes: ['images', 'videos'],
       allowsMultipleSelection: true,
       quality: 0.85,
     });
     if (result.canceled) return;
-    const uris = result.assets.map(a => a.uri);
+    const assets = result.assets;
+    const kinds = assets.map(a => (a.type === 'video' ? 'video' : 'image') as 'image' | 'video');
+    const oversized = assets.some((a, i) => {
+      const limit = kinds[i] === 'video' ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
+      return a.fileSize != null && a.fileSize > limit;
+    });
+    if (oversized) {
+      Alert.alert('File too large', 'Images must be under 10MB and videos under 50MB.');
+      return;
+    }
+    const uris = assets.map(a => a.uri);
     setDraftMediaUris(prev => [...prev, ...uris]);
+    setDraftMediaTypes(prev => [...prev, ...kinds]);
     setUploadingMedia(true);
     try {
       const ids: string[] = [];
-      for (const uri of uris) {
-        const res = await uploadMedia(uri, 'image');
+      for (let i = 0; i < assets.length; i++) {
+        const res = await uploadMedia(assets[i].uri, kinds[i]);
         ids.push(res.asset_id);
       }
       setDraftMediaIds(prev => [...prev, ...ids]);
     } catch {
-      Alert.alert('Upload error', 'Failed to upload one or more images.');
+      Alert.alert('Upload error', 'Failed to upload one or more files.');
     } finally {
       setUploadingMedia(false);
     }
@@ -525,6 +575,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
     setDraftText('');
     setDraftMediaUris([]);
     setDraftMediaIds([]);
+    setDraftMediaTypes([]);
     setShowPollBuilder(false);
     setPollQuestion('');
     setPollOptions(['', '']);
@@ -537,15 +588,15 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
       const real = await createAnnouncement(orgId, payload);
       setAnnouncements(prev => {
         // If the WS push already added the real item, just remove the optimistic one
-        if (prev.some(a => a.id === real.id && !a._clientId)) {
-          return prev.filter(a => a._clientId !== clientId);
+        if (prev.some(a => isAnn(a) && a.id === real.id && !a._clientId)) {
+          return prev.filter(a => !isAnn(a) || a._clientId !== clientId);
         }
         // Otherwise replace the optimistic item with the confirmed one
-        return prev.map(a => (a._clientId === clientId ? { ...real } : a));
+        return prev.map(a => (isAnn(a) && a._clientId === clientId ? { ...real } : a));
       });
     } catch {
       setAnnouncements(prev =>
-        prev.map(a => (a._clientId === clientId ? { ...a, _status: 'failed' } : a)),
+        prev.map(a => (isAnn(a) && a._clientId === clientId ? { ...a, _status: 'failed' } : a)),
       );
     }
   };
@@ -607,7 +658,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
 
     // Reset to pending state
     setAnnouncements(prev =>
-      prev.map(a => (a._clientId === clientId ? { ...a, _status: 'pending' } : a)),
+      prev.map(a => (isAnn(a) && a._clientId === clientId ? { ...a, _status: 'pending' } : a)),
     );
 
     await submitPayload(payload, clientId);
@@ -615,17 +666,28 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
 
   // ── Render ───────────────────────────────────────────────────────────────
 
-  const renderItem = ({ item }: { item: OptimisticAnnouncement }) => (
-    <AnnouncementBubble
-      item={item}
-      orgId={orgId}
-      isAdmin={isAdmin}
-      onLongPress={handleLongPress}
-      onReact={handleReact}
-      onVoted={handlePollVoted}
-      onRetry={handleRetry}
-    />
-  );
+  const renderItem = ({ item }: { item: AnnouncementListItem }) => {
+    if (!isAnn(item)) {
+      return (
+        <View style={styles.dividerRow}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerLabel}>NEW</Text>
+          <View style={styles.dividerLine} />
+        </View>
+      );
+    }
+    return (
+      <AnnouncementBubble
+        item={item}
+        orgId={orgId}
+        isAdmin={isAdmin}
+        onLongPress={handleLongPress}
+        onReact={handleReact}
+        onVoted={handlePollVoted}
+        onRetry={handleRetry}
+      />
+    );
+  };
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background.base }}>
@@ -662,10 +724,14 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
         <FlatList
           ref={flatRef}
           data={announcements}
-          keyExtractor={(item) => item._clientId ?? item.id}
+          keyExtractor={(item) => isAnn(item) ? (item._clientId ?? item.id) : item.id}
           renderItem={renderItem}
           inverted
-          contentContainerStyle={{ paddingVertical: spacing.md, paddingHorizontal: spacing.base }}
+          contentContainerStyle={{
+            paddingTop: insets.bottom + (isAdmin ? 90 : 24),
+            paddingBottom: spacing.md,
+            paddingHorizontal: spacing.base,
+          }}
           onEndReached={loadMore}
           onEndReachedThreshold={0.3}
           ListFooterComponent={
@@ -769,12 +835,19 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 8 }}>
                   {draftMediaUris.map((uri, i) => (
                     <View key={i} style={styles.draftMediaWrap}>
-                      <Image source={{ uri }} style={styles.draftMediaThumb} resizeMode="cover" />
+                      {draftMediaTypes[i] === 'video' ? (
+                        <View style={[styles.draftMediaThumb, styles.draftVideoPlaceholder]}>
+                          <Feather name="video" size={20} color="#fff" />
+                        </View>
+                      ) : (
+                        <Image source={{ uri }} style={styles.draftMediaThumb} resizeMode="cover" />
+                      )}
                       <Pressable
                         style={styles.draftMediaRemove}
                         onPress={() => {
                           setDraftMediaUris(prev => prev.filter((_, j) => j !== i));
                           setDraftMediaIds(prev => prev.filter((_, j) => j !== i));
+                          setDraftMediaTypes(prev => prev.filter((_, j) => j !== i));
                         }}
                       >
                         <Feather name="x" size={12} color="#fff" />
@@ -897,6 +970,26 @@ const styles = StyleSheet.create({
   headerSubtitle: { fontSize: typography.size.xs, color: colors.textSecondary },
   profileBtn: { padding: 6 },
 
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginVertical: spacing.sm,
+    paddingHorizontal: spacing.sm,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.primary,
+    opacity: 0.4,
+  },
+  dividerLabel: {
+    fontSize: typography.size.xs,
+    fontWeight: '700',
+    color: colors.primary,
+    letterSpacing: 1,
+  },
+
   center: {
     flex: 1,
     alignItems: 'center',
@@ -941,6 +1034,8 @@ const styles = StyleSheet.create({
 
   mediaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 8 },
   mediaThumb: { width: 100, height: 100, borderRadius: 8 },
+  videoThumb: { backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  draftVideoPlaceholder: { backgroundColor: colors.background.elevated, alignItems: 'center', justifyContent: 'center' },
 
   // Retry row (failed state)
   retryRow: {

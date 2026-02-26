@@ -3,7 +3,10 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from django.utils import timezone
+
 from organizations import services
+from organizations.models import OrgMember
 from organizations.exceptions import (
     OrgNotFoundError, NotOrgMemberError, NotOrgAdminError,
     AlreadyOrgMemberError, JoinRequestNotFoundError, DuplicateJoinRequestError,
@@ -29,8 +32,67 @@ from organizations.api.serializers import (
 def org_list_create(request):
     """GET: list the user's orgs. POST: create a new org."""
     if request.method == 'GET':
+        from django.db.models import Q, Count
+        from organizations.models import Announcement
         orgs = services.list_user_orgs(request.user)
-        serializer = OrgListSerializer(orgs, many=True, context={'request': request})
+        # Build per-org unread announcement counts in 2 queries.
+        memberships = {
+            str(m['org_id']): m['last_announcements_read_at']
+            for m in OrgMember.objects.filter(
+                user=request.user,
+                org__in=orgs,
+                last_announcements_read_at__isnull=False,
+            ).values('org_id', 'last_announcements_read_at')
+        }
+        unread_map = {}
+        if memberships:
+            unread_q = Q()
+            for org_id_str, last_read_at in memberships.items():
+                unread_q |= Q(org_id=org_id_str, created_at__gt=last_read_at)
+            for row in (
+                Announcement.objects
+                .filter(unread_q)
+                .exclude(author=request.user)
+                .values('org_id')
+                .annotate(count=Count('id'))
+            ):
+                unread_map[str(row['org_id'])] = row['count']
+        # Latest announcement preview per org (single DISTINCT ON query + 2 batch lookups).
+        from organizations.models import AnnouncementPoll
+        from media.models import MediaLink
+        org_ids = [o.pk for o in orgs]
+        latest_ann_map = {}
+        if org_ids:
+            latest_anns = (
+                Announcement.objects
+                .filter(org_id__in=org_ids)
+                .order_by('org_id', '-created_at')
+                .distinct('org_id')
+                .select_related('author')
+            )
+            ann_ids = [a.id for a in latest_anns]
+            ann_with_media = set(
+                MediaLink.objects
+                .filter(destination_type='announcement', destination_id__in=[str(i) for i in ann_ids], type='inline')
+                .values_list('destination_id', flat=True)
+            )
+            ann_with_poll = set(
+                AnnouncementPoll.objects
+                .filter(announcement_id__in=ann_ids)
+                .values_list('announcement_id', flat=True)
+            )
+            for ann in latest_anns:
+                latest_ann_map[str(ann.org_id)] = {
+                    'author_display_name': ann.author.display_name or ann.author.username,
+                    'content': ann.content,
+                    'has_media': str(ann.id) in ann_with_media,
+                    'has_poll': ann.id in ann_with_poll,
+                    'created_at': ann.created_at.isoformat(),
+                }
+        serializer = OrgListSerializer(
+            orgs, many=True,
+            context={'request': request, 'unread_map': unread_map, 'latest_ann_map': latest_ann_map},
+        )
         return Response(serializer.data)
 
     serializer = CreateOrgSerializer(data=request.data)
@@ -327,7 +389,11 @@ def announcements(request, org_id):
         except AnnouncementNotFoundError as e:
             return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
-        serializer = AnnouncementSerializer(anns, many=True, context={'request': request})
+        member = OrgMember.objects.filter(org_id=org_id, user=request.user).first()
+        last_read_at = member.last_announcements_read_at if member else None
+        serializer = AnnouncementSerializer(
+            anns, many=True, context={'request': request, 'last_read_at': last_read_at}
+        )
         oldest_id = str(anns[-1].id) if anns else None
         return Response({'results': serializer.data, 'has_more': has_more, 'oldest_id': oldest_id})
 
@@ -348,6 +414,18 @@ def announcements(request, org_id):
     except (NotOrgAdminError, NotOrgMemberError) as e:
         return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
     return Response(AnnouncementSerializer(ann, context={'request': request}).data, status=status.HTTP_201_CREATED)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def mark_announcements_read(request, org_id):
+    """Mark all announcements as read for the requesting user."""
+    member = OrgMember.objects.filter(org_id=org_id, user=request.user).first()
+    if not member:
+        return Response({'error': 'Not a member.'}, status=status.HTTP_403_FORBIDDEN)
+    member.last_announcements_read_at = timezone.now()
+    member.save(update_fields=['last_announcements_read_at'])
+    return Response({'ok': True})
 
 
 @api_view(['DELETE'])
