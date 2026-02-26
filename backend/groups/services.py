@@ -483,15 +483,10 @@ def deny_join_request(admin_user, request_id):
 
 def update_group_streaks_for_user(user):
     """
-    Called after a user logs activity. Marks their check-in date on all their
-    group memberships, then tries to advance each group's streak.
-
-    Also backfills last_checkin_date for other group members whose personal
-    streak is already current today but whose last_checkin_date hasn't been set
-    (e.g. they logged activity before this field existed).
+    Called after a user logs activity. Updates their last_checkin_date on all
+    their group memberships (for display), then recalculates each group's streak.
     """
     from workouts.services.streak_service import get_streak_date
-    from workouts.models import Streak
 
     today = get_streak_date()
     memberships = GroupMember.objects.filter(user=user).select_related('group')
@@ -501,78 +496,61 @@ def update_group_streaks_for_user(user):
             membership.last_checkin_date = today
             membership.save(update_fields=['last_checkin_date', 'updated_at'])
 
-        # Backfill last_checkin_date for other members who have a streak today
-        # but whose last_checkin_date is stale or null (logged before this field existed).
-        # Use a single batch query instead of N+1 per stale member.
-        stale_members = list(
-            GroupMember.objects.filter(group=membership.group)
-            .exclude(user=user)
-            .exclude(last_checkin_date=today)
-            .values_list('id', 'user_id')
-        )
-        if stale_members:
-            stale_member_map = {user_id: member_id for member_id, user_id in stale_members}
-            checked_in_user_ids = set(
-                Streak.objects.filter(
-                    user_id__in=stale_member_map.keys(),
-                    last_streak_date=today,
-                ).values_list('user_id', flat=True)
-            )
-            ids_to_update = [
-                stale_member_map[uid] for uid in checked_in_user_ids
-            ]
-            if ids_to_update:
-                from django.utils import timezone as tz
-                GroupMember.objects.filter(id__in=ids_to_update).update(
-                    last_checkin_date=today,
-                    updated_at=tz.now(),
-                )
-
-        _try_advance_group_streak(membership.group, today)
+        _recalculate_group_streak(membership.group)
 
 
-def _try_advance_group_streak(group, today):
+def _recalculate_group_streak(group):
     """
-    Advance the group streak if all members have checked in today.
-    Handles gap detection: if a previous day was skipped, streak resets to 1.
+    Group streak = min(current_streak) across all members, when every member
+    has an active individual streak (current_streak > 0). If any member has
+    current_streak == 0, the group streak is 0.
+
+    This means the group streak activates the moment the last member starts
+    their individual streak, and its value is the 'weakest link' streak.
     Uses select_for_update to prevent race conditions.
     """
     from django.db import transaction
-    from datetime import timedelta
+    from accounts.models import User
+    from workouts.services.streak_service import get_streak_date
 
-    # Fast path: skip acquiring the lock if already advanced today.
-    # This avoids lock contention when multiple users in the same group
-    # log activity concurrently — only the first one needs the lock.
-    if Group.objects.filter(id=group.id, last_streak_date=today).exists():
+    member_user_ids = list(
+        GroupMember.objects.filter(group=group).values_list('user_id', flat=True)
+    )
+    if not member_user_ids:
+        return
+
+    streaks = list(
+        User.objects.filter(id__in=member_user_ids).values_list('current_streak', flat=True)
+    )
+    if not streaks:
+        return
+
+    new_streak = 0 if min(streaks) == 0 else min(streaks)
+
+    # Fast path — nothing changed
+    if group.group_streak == new_streak:
         return
 
     with transaction.atomic():
         group = Group.objects.select_for_update().get(id=group.id)
 
-        # Double-check after acquiring the lock (another worker may have advanced it)
-        if group.last_streak_date == today:
+        # Re-read inside the lock
+        streaks = list(
+            User.objects.filter(id__in=member_user_ids).values_list('current_streak', flat=True)
+        )
+        new_streak = 0 if min(streaks) == 0 else min(streaks)
+
+        if group.group_streak == new_streak:
             return
 
-        # Check if all members have checked in today
-        all_checked_in = not GroupMember.objects.filter(group=group).exclude(
-            last_checkin_date=today
-        ).exists()
+        group.group_streak = new_streak
+        if new_streak > group.longest_group_streak:
+            group.longest_group_streak = new_streak
+        # Keep last_streak_date current so reset_stale_group_streaks doesn't
+        # incorrectly zero out an active streak.
+        if new_streak > 0:
+            group.last_streak_date = get_streak_date()
 
-        if not all_checked_in:
-            return
-
-        # All members checked in — determine streak value
-        yesterday = today - timedelta(days=1)
-        if group.last_streak_date == yesterday:
-            group.group_streak += 1
-        else:
-            # Gap or fresh start
-            group.group_streak = 1
-
-        if group.group_streak > group.longest_group_streak:
-            group.longest_group_streak = group.group_streak
-
-        group.last_streak_date = today
         group.save(update_fields=[
             'group_streak', 'longest_group_streak', 'last_streak_date', 'updated_at',
         ])
@@ -625,6 +603,17 @@ def get_group_streak_details(group_id, requesting_user):
 
     members_qs = GroupMember.objects.filter(group=group).select_related('user')
 
+    # Use Streak.last_streak_date as source of truth for has_activity_today
+    # (same as _try_advance_group_streak — avoids stale last_checkin_date reads)
+    from workouts.models import Streak
+    member_user_ids = [m.user_id for m in members_qs]
+    checked_in_today = set(
+        Streak.objects.filter(
+            user_id__in=member_user_ids,
+            last_streak_date=today,
+        ).values_list('user_id', flat=True)
+    )
+
     members_data = []
     for m in members_qs:
         members_data.append({
@@ -633,7 +622,7 @@ def get_group_streak_details(group_id, requesting_user):
             'display_name': m.user.display_name,
             'avatar_url': m.user.avatar_url or None,
             'current_streak': m.user.current_streak,
-            'has_activity_today': m.last_checkin_date == today,
+            'has_activity_today': m.user_id in checked_in_today,
         })
 
     return {

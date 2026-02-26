@@ -323,7 +323,7 @@ class GroupConversationSerializer(serializers.Serializer):
     group_streak = serializers.IntegerField()
     avatar_url = serializers.CharField(allow_null=True)
     member_count = serializers.IntegerField()
-    latest_message = MessageListSerializer()
+    latest_message = MessageListSerializer(allow_null=True)
     unread_count = serializers.IntegerField()
 
 

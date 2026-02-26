@@ -57,10 +57,11 @@ class OrgListSerializer(serializers.ModelSerializer):
     user_role = serializers.SerializerMethodField()
     unread_count = serializers.SerializerMethodField()
     latest_announcement = serializers.SerializerMethodField()
+    pending_request = serializers.SerializerMethodField()
 
     class Meta:
         model = Organization
-        fields = ['id', 'name', 'description', 'privacy', 'avatar_url', 'member_count', 'user_role', 'unread_count', 'latest_announcement', 'created_at']
+        fields = ['id', 'name', 'description', 'privacy', 'avatar_url', 'member_count', 'user_role', 'unread_count', 'latest_announcement', 'pending_request', 'created_at']
 
     def get_avatar_url(self, obj):
         return obj.avatar_url
@@ -83,25 +84,24 @@ class OrgListSerializer(serializers.ModelSerializer):
         latest_ann_map = self.context.get('latest_ann_map', {})
         return latest_ann_map.get(str(obj.id))  # None if org has no announcements
 
-
-class OrgDetailSerializer(OrgListSerializer):
-    """Full detail including creator info and invite code."""
-    created_by_username = serializers.CharField(source='created_by.username', read_only=True)
-    invite_code = serializers.SerializerMethodField()
-    pending_request = serializers.SerializerMethodField()
-
-    class Meta(OrgListSerializer.Meta):
-        fields = OrgListSerializer.Meta.fields + ['created_by_username', 'invite_code', 'pending_request']
-
-    def get_invite_code(self, obj):
-        code = obj.invite_codes.filter(is_active=True).first()
-        return code.code if code else None
-
     def get_pending_request(self, obj):
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             return OrgJoinRequest.objects.filter(org=obj, user=request.user, status='pending').exists()
         return False
+
+
+class OrgDetailSerializer(OrgListSerializer):
+    """Full detail including creator info and invite code."""
+    created_by_username = serializers.CharField(source='created_by.username', read_only=True)
+    invite_code = serializers.SerializerMethodField()
+
+    class Meta(OrgListSerializer.Meta):
+        fields = OrgListSerializer.Meta.fields + ['created_by_username', 'invite_code']
+
+    def get_invite_code(self, obj):
+        code = obj.invite_codes.filter(is_active=True).first()
+        return code.code if code else None
 
 
 # ---------------------------------------------------------------------------

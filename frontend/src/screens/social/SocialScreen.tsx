@@ -80,6 +80,8 @@ export default function SocialScreen({ navigation }: Props) {
   const [orgsRefreshing, setOrgsRefreshing] = useState(false);
   const orgSearchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const orgSearchGenRef = useRef(0);
+  const orgsViewRef = useRef<'Mine' | 'Discover'>('Mine');
+  const orgSearchQueryRef = useRef('');
   // ── Create org modal ──────────────────────────────────────────────────────
   const [createOrgVisible, setCreateOrgVisible] = useState(false);
   const [newOrgName, setNewOrgName] = useState('');
@@ -144,6 +146,13 @@ export default function SocialScreen({ navigation }: Props) {
       const data = await discoverOrgs(query);
       if (gen !== orgSearchGenRef.current) return;
       setDiscoverOrgsList(data);
+      // Sync requestedOrgIds with server-side pending_request flags so that
+      // requests made from OrgProfileScreen are reflected here on re-fetch.
+      setRequestedOrgIds(prev => {
+        const updated = new Set(prev);
+        data.forEach(o => { if (o.pending_request) updated.add(o.id); });
+        return updated;
+      });
     } catch {
       if (gen !== orgSearchGenRef.current) return;
       setDiscoverOrgsList([]);
@@ -237,11 +246,25 @@ export default function SocialScreen({ navigation }: Props) {
     return () => wsManager.off('new_announcement', handler);
   }, [me?.id]);
 
+  // Keep refs in sync with state so focus effects can read the latest values.
+  orgsViewRef.current = orgsView;
+  orgSearchQueryRef.current = orgSearchQuery;
+
   // Reload messages every time this screen gains focus (returning from Chat, GroupChat, or other screens)
   useFocusEffect(
     useCallback(() => {
       loadMessages();
     }, [loadMessages]),
+  );
+
+  // Re-fetch discover orgs on focus so requests made inside OrgProfileScreen
+  // (pending_request flag) are reflected back in the list without manual refresh.
+  useFocusEffect(
+    useCallback(() => {
+      if (orgsViewRef.current === 'Discover') {
+        loadDiscoverOrgs(orgSearchQueryRef.current || undefined);
+      }
+    }, [loadDiscoverOrgs]),
   );
 
   // Reload when switching tabs internally
@@ -561,7 +584,7 @@ export default function SocialScreen({ navigation }: Props) {
               <Text style={styles.joinedBadgeText}>{item.user_role}</Text>
             </View>
           )
-        ) : requestedOrgIds.has(item.id) ? (
+        ) : (item.pending_request || requestedOrgIds.has(item.id)) ? (
           <View style={styles.pendingBadge}>
             <Text style={styles.pendingBadgeText}>Requested</Text>
           </View>

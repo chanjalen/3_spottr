@@ -362,6 +362,7 @@ def send_group_zap(sender, group_id, target_user_id):
     except Group.DoesNotExist:
         raise ConversationNotFoundError("Group not found.")
 
+    _check_not_self(sender, target_user_id)
     _check_group_member(group, sender)
     target = _get_user(target_user_id)
     _check_group_member(group, target)
@@ -546,7 +547,7 @@ def list_group_conversations(user):
     from django.db.models import Count
     return (
         InboxEntry.objects
-        .filter(user=user, conversation_type='group', latest_message__isnull=False)
+        .filter(user=user, conversation_type='group')
         .select_related('group', 'latest_message__sender')
         .annotate(member_count=Count('group__members'))
         .order_by('-latest_message_at')

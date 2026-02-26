@@ -111,6 +111,8 @@ def send_group_zap(request, group_id, target_user_id):
     """Send a zap to a specific member in a group chat."""
     try:
         message = services.send_group_zap(request.user, group_id, target_user_id)
+    except CannotMessageSelfError as e:
+        return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
     except ConversationNotFoundError as e:
         return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
     except NotGroupMemberError as e:

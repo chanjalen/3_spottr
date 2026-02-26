@@ -364,6 +364,12 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
                 <Text style={styles.memberName}>{member.display_name || member.username}</Text>
                 <Text style={styles.memberUsername}>@{member.username}</Text>
               </View>
+              {member.current_streak > 0 && (
+                <View style={styles.memberStreakBadge}>
+                  <Text style={styles.memberStreakEmoji}>🔥</Text>
+                  <Text style={styles.memberStreakText}>{member.current_streak}d</Text>
+                </View>
+              )}
             </View>
           ))}
         </View>
@@ -696,6 +702,21 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     fontFamily: typography.family.regular,
     color: colors.text.muted,
+  },
+  memberStreakBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(249,115,22,0.10)',
+    borderRadius: 20,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  memberStreakEmoji: { fontSize: 11 },
+  memberStreakText: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.medium,
+    color: '#F97316',
   },
   memberActions: {
     flexDirection: 'row',

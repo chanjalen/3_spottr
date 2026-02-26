@@ -10,11 +10,12 @@ class GroupMemberSerializer(serializers.ModelSerializer):
     username = serializers.CharField(source='user.username', read_only=True)
     display_name = serializers.CharField(source='user.display_name', read_only=True)
     avatar_url = serializers.SerializerMethodField()
+    current_streak = serializers.IntegerField(source='user.current_streak', read_only=True)
 
     class Meta:
         model = GroupMember
-        fields = ['id', 'user', 'username', 'display_name', 'role', 'joined_at', 'avatar_url']
-        read_only_fields = ['id', 'user', 'username', 'display_name', 'role', 'joined_at', 'avatar_url']
+        fields = ['id', 'user', 'username', 'display_name', 'role', 'joined_at', 'avatar_url', 'current_streak']
+        read_only_fields = ['id', 'user', 'username', 'display_name', 'role', 'joined_at', 'avatar_url', 'current_streak']
 
     def get_avatar_url(self, obj):
         return obj.user.avatar_url or None
