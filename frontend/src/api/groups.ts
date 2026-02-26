@@ -23,6 +23,7 @@ export interface GroupMember {
   role: 'creator' | 'admin' | 'member';
   joined_at: string;
   avatar_url: string | null;
+  current_streak: number;
 }
 
 export interface GroupDetail {

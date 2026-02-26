@@ -107,6 +107,20 @@ def group_create(request):
         except Exception:
             pass
 
+    # Create an InboxEntry for the creator so the new group immediately appears
+    # in their messaging inbox (even before any messages are sent).
+    try:
+        from messaging.models import InboxEntry
+        from django.utils import timezone as tz
+        InboxEntry.objects.get_or_create(
+            user=request.user,
+            conversation_type='group',
+            group=group,
+            defaults={'unread_count': 0, 'latest_message_at': tz.now()},
+        )
+    except Exception:
+        pass
+
     return Response(
         GroupDetailSerializer(group, context={'request': request}).data,
         status=status.HTTP_201_CREATED,

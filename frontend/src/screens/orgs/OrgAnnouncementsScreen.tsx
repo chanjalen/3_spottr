@@ -616,15 +616,17 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
     const payload: CreateAnnouncementPayload = {};
     if (draftText.trim()) payload.content = draftText.trim();
     if (draftMediaIds.length > 0) payload.media_ids = draftMediaIds;
-    if (showPollBuilder && pollQuestion.trim()) {
+    if (showPollBuilder) {
       const opts = pollOptions.filter(o => o.trim());
-      if (opts.length >= 2) {
-        payload.poll = {
-          question: pollQuestion.trim(),
-          duration_hours: pollDuration,
-          options: opts,
-        };
+      if (!pollQuestion.trim() || opts.length < 2) {
+        Alert.alert('Incomplete poll', 'Please fill in the poll question and at least 2 options before posting.');
+        return;
       }
+      payload.poll = {
+        question: pollQuestion.trim(),
+        duration_hours: pollDuration,
+        options: opts,
+      };
     }
     if (!payload.content && !payload.media_ids && !payload.poll) {
       Alert.alert('Empty announcement', 'Add text, media, or a poll.');

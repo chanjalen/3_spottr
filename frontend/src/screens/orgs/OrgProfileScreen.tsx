@@ -33,6 +33,7 @@ import {
   updateOrgAvatar,
   deleteOrg,
   leaveOrg,
+  joinOrg,
   joinOrgViaCode,
   requestJoinOrg,
   OrgDetail,
@@ -81,9 +82,10 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
     setTimeout(() => setCodeCopied(false), 2000);
   };
 
-  // ── Join request ─────────────────────────────────────────────────────────
+  // ── Join (public) / Request (private) ───────────────────────────────────
   const [requested, setRequested] = useState(false);
   const [requesting, setRequesting] = useState(false);
+  const [joining, setJoining] = useState(false);
 
   // ── Join code modal ──────────────────────────────────────────────────────
   const [joinCodeVisible, setJoinCodeVisible] = useState(false);
@@ -99,13 +101,17 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [detail, mems] = await Promise.all([
-        fetchOrgDetail(orgId),
-        listOrgMembers(orgId),
-      ]);
+      const detail = await fetchOrgDetail(orgId);
       setOrg(detail);
-      setMembers(mems);
       setRequested(detail.pending_request);
+      // Members list may be restricted for private orgs — fetch separately so
+      // a 403 here doesn't wipe the whole profile view.
+      try {
+        const mems = await listOrgMembers(orgId);
+        setMembers(mems);
+      } catch {
+        setMembers([]);
+      }
     } catch {
       // ignore
     } finally {
@@ -344,7 +350,21 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
     }
   };
 
-  // ── Request to join ──────────────────────────────────────────────────────
+  // ── Join public org ──────────────────────────────────────────────────────
+
+  const handleJoin = async () => {
+    setJoining(true);
+    try {
+      await joinOrg(orgId);
+      load();
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.error ?? 'Failed to join organization.');
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  // ── Request to join private org ──────────────────────────────────────────
 
   const handleRequestJoin = async () => {
     setRequesting(true);
@@ -548,6 +568,15 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
         {!!org?.description && (
           <Text style={styles.orgDescription}>{org.description}</Text>
         )}
+        {!isMember && org?.privacy === 'public' && (
+          joining ? (
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 10 }} />
+          ) : (
+            <Pressable style={styles.heroJoinBtn} onPress={handleJoin}>
+              <Text style={styles.heroJoinBtnText}>Join</Text>
+            </Pressable>
+          )
+        )}
         {!isMember && org?.privacy === 'private' && (
           requesting ? (
             <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 10 }} />
@@ -557,7 +586,7 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
             </View>
           ) : (
             <Pressable style={styles.heroRequestBtn} onPress={handleRequestJoin}>
-              <Text style={styles.heroRequestBtnText}>Request</Text>
+              <Text style={styles.heroRequestBtnText}>Request to Join</Text>
             </Pressable>
           )
         )}
@@ -684,15 +713,26 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
                   />
 
                   <Text style={styles.settingsFieldLabel}>Privacy</Text>
-                  <Pressable
-                    style={styles.settingsPrivacyRow}
-                    onPress={() => setEditPrivacy(editPrivacy === 'public' ? 'private' : 'public')}
-                  >
-                    <Text style={styles.settingsPrivacyText}>
-                      {editPrivacy === 'public' ? 'Public' : 'Private'}
-                    </Text>
-                    <Feather name="chevron-down" size={16} color={colors.textMuted} />
-                  </Pressable>
+                  <View style={styles.settingsPrivacyRow}>
+                    <Pressable
+                      style={[styles.settingsPrivacyOption, editPrivacy === 'public' && styles.settingsPrivacyOptionActive]}
+                      onPress={() => setEditPrivacy('public')}
+                    >
+                      <Feather name="globe" size={13} color={editPrivacy === 'public' ? '#fff' : colors.textMuted} />
+                      <Text style={[styles.settingsPrivacyOptionText, editPrivacy === 'public' && styles.settingsPrivacyOptionTextActive]}>
+                        Public
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.settingsPrivacyOption, editPrivacy === 'private' && styles.settingsPrivacyOptionActive]}
+                      onPress={() => setEditPrivacy('private')}
+                    >
+                      <Feather name="lock" size={13} color={editPrivacy === 'private' ? '#fff' : colors.textMuted} />
+                      <Text style={[styles.settingsPrivacyOptionText, editPrivacy === 'private' && styles.settingsPrivacyOptionTextActive]}>
+                        Private
+                      </Text>
+                    </Pressable>
+                  </View>
 
                   <Pressable
                     style={[styles.saveBtn, (!editName.trim() || saving) && styles.saveBtnDisabled]}
@@ -827,14 +867,24 @@ const styles = StyleSheet.create({
   },
   myRoleBadgeText: { fontSize: typography.size.xs, color: colors.textMuted, fontWeight: '600' },
 
+  heroJoinBtn: {
+    marginTop: 10,
+    paddingHorizontal: 28,
+    paddingVertical: 9,
+    borderRadius: 20,
+    backgroundColor: colors.primary,
+  },
+  heroJoinBtnText: { fontSize: typography.size.sm, color: '#fff', fontWeight: '700' },
   heroRequestBtn: {
     marginTop: 10,
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: colors.primary,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    backgroundColor: 'transparent',
   },
-  heroRequestBtnText: { fontSize: typography.size.sm, color: '#fff', fontWeight: '700' },
+  heroRequestBtnText: { fontSize: typography.size.sm, color: colors.primary, fontWeight: '700' },
   heroPendingBadge: {
     marginTop: 10,
     paddingHorizontal: 16,
@@ -1237,16 +1287,32 @@ const styles = StyleSheet.create({
   },
   settingsPrivacyRow: {
     flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  settingsPrivacyOption: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
+    gap: 5,
     borderWidth: 1.5,
     borderColor: colors.borderColor,
     borderRadius: 10,
-    paddingHorizontal: spacing.md,
     paddingVertical: 9,
     backgroundColor: colors.background.base,
   },
-  settingsPrivacyText: { fontSize: typography.size.sm, color: colors.textPrimary },
+  settingsPrivacyOptionActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  settingsPrivacyOptionText: {
+    fontSize: typography.size.sm,
+    color: colors.textMuted,
+  },
+  settingsPrivacyOptionTextActive: {
+    color: '#fff',
+    fontWeight: '600',
+  },
 
   // Danger Zone tab
   settingsDangerContent: { padding: spacing.md, paddingBottom: spacing.lg },

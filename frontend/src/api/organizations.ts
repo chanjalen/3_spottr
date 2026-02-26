@@ -25,6 +25,7 @@ export interface OrgListItem {
   user_role: OrgRole | null;
   unread_count: number;
   latest_announcement: LatestAnnouncement | null;
+  pending_request: boolean;
   created_at: string;
 }
 

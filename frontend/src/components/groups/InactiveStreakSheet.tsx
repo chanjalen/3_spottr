@@ -40,6 +40,8 @@ export default function InactiveStreakSheet({
 
   const hasActiveStreak = groupStreak > 0;
 
+  // Active streak: show who hasn't logged today (at risk of breaking it).
+  // No streak: show who still has current_streak === 0 (blocking activation).
   const flagged = hasActiveStreak
     ? members.filter((m) => !m.has_activity_today)
     : members.filter((m) => m.current_streak === 0);
@@ -94,11 +96,11 @@ export default function InactiveStreakSheet({
     [zapping, me?.id, handleZap],
   );
 
-  const title = hasActiveStreak ? 'Not Checked In Today' : 'No Active Streak';
-  const emptyTitle = hasActiveStreak ? "Everyone's checked in!" : "All members are on a streak!";
+  const title = hasActiveStreak ? 'Not Checked In Today' : 'Missing Individual Streaks';
+  const emptyTitle = hasActiveStreak ? "Everyone's checked in!" : 'All streaks active!';
   const emptySubtitle = hasActiveStreak
-    ? 'All members have logged activity today.'
-    : 'Every member has an active personal streak.';
+    ? 'All members have logged activity today. Streak is safe!'
+    : 'Every member has an active streak. Group streak should be live!';
 
   return (
     <Modal
