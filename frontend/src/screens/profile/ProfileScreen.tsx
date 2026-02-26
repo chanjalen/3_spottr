@@ -639,15 +639,6 @@ export default function ProfileScreen({ navigation, route }: Props) {
                 onPollVote={(optionId) => handlePollVote(item, optionId)}
               />
             )}
-            onEndReached={() => {
-              if (postsHasMore && !postsLoadingRef.current) loadPosts(postsCursor);
-            }}
-            onEndReachedThreshold={0.4}
-            ListFooterComponent={
-              postsHasMore
-                ? <View style={styles.feedFooter}><ActivityIndicator color={colors.primary} /></View>
-                : null
-            }
           />
         </View>
       </Modal>
@@ -703,15 +694,6 @@ export default function ProfileScreen({ navigation, route }: Props) {
                 }}
               />
             )}
-            onEndReached={() => {
-              if (postsHasMore && !postsLoadingRef.current) loadPosts(postsCursor);
-            }}
-            onEndReachedThreshold={0.4}
-            ListFooterComponent={
-              postsHasMore
-                ? <View style={styles.feedFooter}><ActivityIndicator color={colors.primary} /></View>
-                : null
-            }
             ListEmptyComponent={
               <View style={styles.emptyTab}>
                 <Feather name="image" size={36} color={colors.textMuted} />
@@ -1213,7 +1195,6 @@ function CalendarTab({
     setDayModalVisible(true);
   };
 
-  const goToNext = () => {
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
@@ -1381,7 +1362,7 @@ function CalendarTab({
                           {item.workout && (
                             <Text style={styles.calDayCardMeta}>
                               {item.workout.exercise_count} exercises · {item.workout.total_sets} sets
-                              {item.workout.duration_minutes ? ` · ${item.workout.duration_minutes}min` : ''}
+                              {item.workout.duration ? ` · ${item.workout.duration}` : ''}
                             </Text>
                           )}
                           {item.personal_record && (
