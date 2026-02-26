@@ -167,6 +167,106 @@ def api_profile_view(request, username):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def api_user_post_thumbnails_view(request, username):
+    """
+    Fast thumbnail endpoint for the profile grid.
+    Skips per-post like/comment queries — fetches photo URLs in two bulk queries.
+    Total: ~5 DB queries regardless of post count (vs N*3 in the full endpoint).
+    """
+    try:
+        target = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        limit = max(1, min(int(request.GET.get('limit', 9)), 50))
+        offset = max(0, int(request.GET.get('cursor', 0)))
+    except (ValueError, TypeError):
+        limit, offset = 9, 0
+
+    from social.models import Post, QuickWorkout
+    from social.views import _bulk_media_urls, build_media_url
+    from workouts.models import PersonalRecord
+    from django.core.files.storage import default_storage
+
+    # 2 queries — one for posts, one for checkins
+    posts = list(
+        Post.objects.filter(user=target)
+        .select_related('workout')
+        .order_by('-created_at')
+        .only('id', 'created_at', 'description', 'photo', 'workout')
+    )
+    checkins = list(
+        QuickWorkout.objects.filter(user=target)
+        .order_by('-created_at')
+        .only('id', 'created_at', 'description', 'type')
+    )
+
+    post_ids = [p.id for p in posts]
+    checkin_ids = [c.id for c in checkins]
+
+    # 2 bulk queries for photos (instead of 1 per post)
+    post_photos = _bulk_media_urls('post', post_ids)
+    checkin_photos = _bulk_media_urls('quick_workout', checkin_ids)
+
+    # 1 query for PRs linked to these posts
+    pr_map = {}
+    for pr in PersonalRecord.objects.filter(post_id__in=post_ids).values(
+        'post_id', 'exercise_name', 'value', 'unit'
+    ):
+        pr_map[pr['post_id']] = pr
+
+    items = []
+    for p in posts:
+        photo_url = post_photos.get(str(p.id)) or (build_media_url(p.photo.name) if p.photo else None)
+        pr = pr_map.get(p.id)
+        items.append({
+            'id': p.id,
+            'type': 'post',
+            'created_at': p.created_at.isoformat(),
+            'description': p.description,
+            'photo_url': photo_url,
+            'workout': {
+                'id': str(p.workout.id),
+                'exercise_count': 0,
+                'total_sets': 0,
+                'duration_minutes': 0,
+                'exercises': [],
+            } if p.workout else None,
+            'personal_record': {
+                'exercise_name': pr['exercise_name'],
+                'value': pr['value'],
+                'unit': pr['unit'],
+            } if pr else None,
+        })
+
+    for c in checkins:
+        photo_url = checkin_photos.get(str(c.id))
+        if not photo_url:
+            path = f'checkins/{c.id}.jpg'
+            try:
+                if default_storage.exists(path):
+                    photo_url = build_media_url(path)
+            except Exception:
+                pass
+        items.append({
+            'id': c.id,
+            'type': 'checkin',
+            'created_at': c.created_at.isoformat(),
+            'description': c.description,
+            'photo_url': photo_url,
+            'workout_type': c.type.replace('_', ' ').title() if c.type else '',
+        })
+
+    items.sort(key=lambda x: x['created_at'], reverse=True)
+    total = len(items)
+    page = items[offset:offset + limit]
+    next_cursor = str(offset + limit) if (offset + limit) < total else ''
+    return Response({'items': page, 'next_cursor': next_cursor})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def api_user_posts_view(request, username):
     """Return all posts and check-ins for a given user."""
     try:

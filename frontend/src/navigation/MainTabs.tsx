@@ -29,6 +29,9 @@ import QuickCheckinScreen from '../screens/social/QuickCheckinScreen';
 import AllDMsScreen from '../screens/social/AllDMsScreen';
 import AllGroupChatsScreen from '../screens/social/AllGroupChatsScreen';
 import AllOrgsScreen from '../screens/social/AllOrgsScreen';
+import CheckInSelectionScreen from '../screens/social/CheckInSelectionScreen';
+import CameraCaptureScreen from '../screens/social/CameraCaptureScreen';
+import CheckInReviewScreen from '../screens/social/CheckInReviewScreen';
 
 // ─── Stack Navigators ─────────────────────────────────────────────────────────
 
@@ -120,6 +123,9 @@ export default function MainTabs() {
       <Root.Screen name="AllDMs" component={AllDMsScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="AllGroupChats" component={AllGroupChatsScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="AllOrgs" component={AllOrgsScreen} options={{ presentation: 'card' }} />
+      <Root.Screen name="CheckInSelection" component={CheckInSelectionScreen} options={{ presentation: 'modal', gestureEnabled: true }} />
+      <Root.Screen name="CameraCapture" component={CameraCaptureScreen} options={{ presentation: 'fullScreenModal', gestureEnabled: false }} />
+      <Root.Screen name="CheckInReview" component={CheckInReviewScreen} options={{ presentation: 'card', gestureEnabled: true }} />
     </Root.Navigator>
   );
 }
