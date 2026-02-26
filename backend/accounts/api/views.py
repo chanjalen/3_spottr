@@ -138,7 +138,8 @@ def api_profile_view(request, username):
     except User.DoesNotExist:
         return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
 
-    from social.models import Follow
+    from social.models import Follow, QuickWorkout
+    from django.utils import timezone as tz
     is_following = Follow.objects.filter(follower=request.user, following=target).exists()
     follower_count = Follow.objects.filter(following=target).count()
     following_count = Follow.objects.filter(follower=target).count()
@@ -147,6 +148,8 @@ def api_profile_view(request, username):
         follower=target,
         following__in=Follow.objects.filter(following=target).values('follower'),
     ).count()
+    today = tz.now().date()
+    has_checkin_today = QuickWorkout.objects.filter(user=target, created_at__date=today).exists()
 
     return Response({
         'id': str(target.id),
@@ -162,6 +165,7 @@ def api_profile_view(request, username):
         'following_count': following_count,
         'friend_count': friend_count,
         'member_since': target.member_since,
+        'has_checkin_today': has_checkin_today,
     })
 
 
@@ -175,7 +179,8 @@ def api_user_posts_view(request, username):
         return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
 
     from social.views import get_user_posts, _serialize_feed_items_for_json
-    all_posts = get_user_posts(target, viewer=request.user)
+    thumbnail = request.GET.get('fields') == 'thumbnail'
+    all_posts = get_user_posts(target, viewer=request.user, thumbnail=thumbnail)
     for post in all_posts:
         post['user'] = target
 
@@ -285,3 +290,41 @@ def api_user_prs_view(request, username):
             'created_at': pr.achieved_date.isoformat() if pr.achieved_date else None,
         })
     return Response(results)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_user_checkins_view(request, username):
+    """Return check-ins (QuickWorkout) for a given user, newest first."""
+    try:
+        target = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    from social.models import QuickWorkout
+    from social.views import get_checkin_photo
+
+    try:
+        limit = max(1, min(int(request.GET.get('limit', 20)), 100))
+        offset = max(0, int(request.GET.get('cursor', 0)))
+    except (ValueError, TypeError):
+        limit, offset = 20, 0
+
+    qs = QuickWorkout.objects.filter(user=target).select_related('location').order_by('-created_at')
+    total = qs.count()
+    page = qs[offset:offset + limit]
+
+    results = []
+    for qw in page:
+        results.append({
+            'id': str(qw.id),
+            'type': 'checkin',
+            'description': qw.description,
+            'location_name': qw.location_name or (qw.location.name if qw.location else ''),
+            'workout_type': qw.type.replace('_', ' ').title() if qw.type else '',
+            'photo_url': get_checkin_photo(qw.id),
+            'created_at': qw.created_at.isoformat(),
+        })
+
+    next_cursor = str(offset + limit) if (offset + limit) < total else ''
+    return Response({'items': results, 'next_cursor': next_cursor})
