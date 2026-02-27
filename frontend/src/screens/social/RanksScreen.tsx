@@ -14,6 +14,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Feather } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import Avatar from '../../components/common/Avatar';
 import AppHeader from '../../components/navigation/AppHeader';
 import { fetchLeaderboard, LeaderboardEntry, LeaderboardResponse } from '../../api/leaderboards';
@@ -26,7 +27,11 @@ type RootNav = NativeStackNavigationProp<RootStackParamList>;
 
 // Podium: visual order is [2nd, 1st, 3rd] — indices into top3 array [0,1,2]
 const PODIUM_VISUAL_ORDER = [1, 0, 2];
-const PODIUM_COLORS = ['#C9A84C', '#9CA3AF', '#CD7F32']; // gold, silver, bronze — indexed by rank-1
+// All indexed by rank-1 (pos): 0=gold, 1=silver, 2=bronze
+const PODIUM_COLORS = ['#C9A84C', '#9CA3AF', '#CD7F32'];
+const PODIUM_MEDALS = ['🥇', '🥈', '🥉'];
+// Large height differences so the steps are visually clear
+const PODIUM_BAR_HEIGHTS = [100, 60, 35];
 
 export default function RanksScreen() {
   const insets = useSafeAreaInsets();
@@ -47,7 +52,6 @@ export default function RanksScreen() {
       const gymId = forceGymId ?? selectedGymId;
       const data = await fetchLeaderboard(tab, gymId);
       setResponse(data);
-      // If backend picked the first gym for us, save it
       if (data.gym_id && !selectedGymId) setSelectedGymId(data.gym_id);
     } catch {
       // ignore
@@ -82,19 +86,26 @@ export default function RanksScreen() {
           {PODIUM_VISUAL_ORDER.map((pos) => {
             const entry = top3[pos];
             if (!entry) return <View key={pos} style={styles.podiumSlot} />;
-            const isFirst = pos === 0;
+            const medalColor = PODIUM_COLORS[pos] ?? colors.primary;
+            const barHeight = PODIUM_BAR_HEIGHTS[pos] ?? 35;
+            const medal = PODIUM_MEDALS[pos] ?? '🏅';
             return (
               <Pressable
                 key={entry.user.id}
-                style={[styles.podiumSlot, isFirst && styles.podiumSlotFirst]}
+                style={styles.podiumSlot}
                 onPress={() => goToProfile(entry.user.username)}
               >
-                <Avatar uri={entry.user.avatar_url} name={entry.user.display_name} size={isFirst ? 64 : 48} />
+                {/* Same structure for all 3 — bar height alone determines visual level */}
+                <Text style={styles.podiumMedal}>{medal}</Text>
+                <Avatar uri={entry.user.avatar_url} name={entry.user.display_name} size={54} />
                 <Text style={styles.podiumName} numberOfLines={1}>{entry.user.display_name}</Text>
-                <View style={[styles.podiumMedal, { backgroundColor: PODIUM_COLORS[pos] ?? colors.primary }]}>
-                  <Text style={styles.podiumMedalText}>#{entry.rank}</Text>
-                </View>
                 <Text style={styles.podiumStreak}>{entry.user.current_streak} 🔥</Text>
+                <Text style={styles.podiumWorkouts}>{entry.user.total_workouts} workouts</Text>
+
+                {/* Platform step — height difference creates the podium levels */}
+                <View style={[styles.podiumBar, { height: barHeight, backgroundColor: medalColor }]}>
+                  <Text style={styles.podiumBarRank}>#{entry.rank}</Text>
+                </View>
               </Pressable>
             );
           })}
@@ -108,14 +119,17 @@ export default function RanksScreen() {
     return (
       <Pressable style={[styles.rankRow, isMe && styles.rankRowMe]} onPress={() => goToProfile(item.user.username)}>
         <Text style={[styles.rankNum, isMe && { color: colors.primary }]}>#{item.rank}</Text>
-        <Avatar uri={item.user.avatar_url} name={item.user.display_name} size={36} />
+        <Avatar uri={item.user.avatar_url} name={item.user.display_name} size={40} />
         <View style={{ flex: 1 }}>
           <Text style={[styles.rankName, isMe && { color: colors.primary }]} numberOfLines={1}>
             {item.user.display_name}
           </Text>
           <Text style={styles.rankUsername}>@{item.user.username}</Text>
         </View>
-        <Text style={styles.rankStreak}>{item.user.current_streak} 🔥</Text>
+        <View style={styles.rankStats}>
+          <Text style={styles.rankStreak}>{item.user.current_streak} 🔥</Text>
+          <Text style={styles.rankWorkouts}>{item.user.total_workouts} workouts</Text>
+        </View>
       </Pressable>
     );
   };
@@ -125,11 +139,17 @@ export default function RanksScreen() {
     const myEntry = leaderboard.find(e => e.user.username === myUsername);
     return (
       <View style={styles.myRankCard}>
-        <Text style={styles.myRankLabel}>Your Rank</Text>
+        <View style={styles.myRankHeader}>
+          <Feather name="award" size={13} color={colors.primary} />
+          <Text style={styles.myRankLabel}>Your Rank</Text>
+        </View>
         <View style={styles.myRankRow}>
           <Text style={styles.myRankNum}>#{myRank}</Text>
-          <Avatar uri={user.avatar_url ?? null} name={user.display_name} size={36} />
-          <Text style={styles.myRankName} numberOfLines={1}>{user.display_name}</Text>
+          <Avatar uri={user.avatar_url ?? null} name={user.display_name} size={40} />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.myRankName} numberOfLines={1}>{user.display_name}</Text>
+            <Text style={styles.myRankWorkouts}>{myEntry?.user.total_workouts ?? 0} workouts</Text>
+          </View>
           <Text style={styles.myRankStreak}>{myEntry?.user.current_streak ?? 0} 🔥</Text>
         </View>
       </View>
@@ -197,17 +217,23 @@ export default function RanksScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background.base }}>
-      <AppHeader />
+      {/* Gradient header — matches Gyms screen */}
+      <LinearGradient
+        colors={['#4FC3E0', '#6DCFE8', '#A8E2F4', '#D6F2FB', '#FFFFFF']}
+        locations={[0, 0.2, 0.5, 0.75, 1]}
+      >
+        <AppHeader />
 
-      {/* Tab row */}
-      <View style={styles.tabRow}>
-        {(['Friends', 'My Gym'] as RanksTab[]).map((tab) => (
-          <Pressable key={tab} style={styles.tab} onPress={() => setActiveTab(tab)}>
-            <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
-            {activeTab === tab && <View style={styles.tabIndicator} />}
-          </Pressable>
-        ))}
-      </View>
+        {/* Tab row */}
+        <View style={styles.tabRow}>
+          {(['Friends', 'My Gym'] as RanksTab[]).map((tab) => (
+            <Pressable key={tab} style={styles.tab} onPress={() => setActiveTab(tab)}>
+              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>{tab}</Text>
+              {activeTab === tab && <View style={styles.tabIndicator} />}
+            </Pressable>
+          ))}
+        </View>
+      </LinearGradient>
 
       {renderGymSelector()}
 
@@ -245,7 +271,7 @@ export default function RanksScreen() {
             />
           }
           ItemSeparatorComponent={() => (
-            <View style={{ height: 1, backgroundColor: colors.border.subtle, marginLeft: spacing.base + 36 + spacing.md }} />
+            <View style={{ height: 1, backgroundColor: colors.border.subtle, marginLeft: spacing.base + 40 + spacing.md }} />
           )}
         />
       )}
@@ -257,10 +283,10 @@ const styles = StyleSheet.create({
   tabRow: {
     flexDirection: 'row',
     borderBottomWidth: 1,
-    borderBottomColor: colors.border.default,
+    borderBottomColor: 'rgba(255,255,255,0.4)',
   },
   tab: { flex: 1, alignItems: 'center', paddingVertical: spacing.md },
-  tabText: { fontSize: typography.size.sm, fontWeight: '500', color: colors.textSecondary },
+  tabText: { fontSize: typography.size.sm, fontWeight: '500', color: 'rgba(0,0,0,0.45)' },
   tabTextActive: { fontWeight: '700', color: colors.textPrimary },
   tabIndicator: {
     position: 'absolute', bottom: 0, left: '25%', right: '25%',
@@ -341,38 +367,72 @@ const styles = StyleSheet.create({
   // Podium
   podiumSection: {
     backgroundColor: colors.background.elevated,
-    paddingBottom: spacing.base,
+    paddingBottom: 0,
     marginBottom: spacing.sm,
   },
   podium: {
-    flexDirection: 'row', alignItems: 'flex-end',
-    justifyContent: 'center', paddingTop: spacing.xl,
-    gap: spacing.base,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    paddingTop: spacing.xl,
+    paddingHorizontal: spacing.sm,
   },
-  podiumSlot: { flex: 1, alignItems: 'center', gap: spacing.xs, maxWidth: 110 },
-  podiumSlotFirst: { paddingBottom: spacing.lg },
-  podiumName: {
-    fontSize: typography.size.xs, fontWeight: '600',
-    color: colors.textPrimary, textAlign: 'center',
+  podiumSlot: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 3,
+    maxWidth: 120,
   },
   podiumMedal: {
-    paddingHorizontal: spacing.sm, paddingVertical: 2,
-    borderRadius: 8,
+    fontSize: 24,
   },
-  podiumMedalText: { fontSize: typography.size.xs, fontWeight: '700', color: '#fff' },
-  podiumStreak: { fontSize: typography.size.sm, fontWeight: '700', color: colors.textPrimary },
+  podiumName: {
+    fontSize: typography.size.xs,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    textAlign: 'center',
+    marginTop: 2,
+  },
+  podiumStreak: {
+    fontSize: typography.size.sm,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  podiumWorkouts: {
+    fontSize: 10,
+    fontWeight: '500',
+    color: colors.textMuted,
+    marginBottom: spacing.xs,
+  },
+  podiumBar: {
+    width: '100%',
+    borderTopLeftRadius: 6,
+    borderTopRightRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: spacing.xs,
+  },
+  podiumBarRank: {
+    fontSize: typography.size.base,
+    fontWeight: '800',
+    color: '#fff',
+  },
 
   // Ranked rows
   rankRow: {
-    flexDirection: 'row', alignItems: 'center',
-    gap: spacing.md, paddingVertical: spacing.sm + 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm + 2,
     paddingHorizontal: spacing.base,
   },
   rankRowMe: { backgroundColor: colors.primary + '0D' },
   rankNum: { width: 36, fontSize: typography.size.sm, fontWeight: '700', color: colors.textMuted },
   rankName: { fontSize: typography.size.base, fontWeight: '500', color: colors.textPrimary },
   rankUsername: { fontSize: typography.size.xs, color: colors.textMuted },
+  rankStats: { alignItems: 'flex-end', gap: 2 },
   rankStreak: { fontSize: typography.size.base, fontWeight: '700', color: colors.textPrimary },
+  rankWorkouts: { fontSize: 11, fontWeight: '500', color: colors.textMuted },
 
   // My rank card
   myRankCard: {
@@ -388,9 +448,15 @@ const styles = StyleSheet.create({
       android: { elevation: 2 },
     }),
   },
+  myRankHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   myRankLabel: { fontSize: typography.size.xs, fontWeight: '600', color: colors.primary, textTransform: 'uppercase', letterSpacing: 0.5 },
   myRankRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   myRankNum: { fontSize: typography.size.lg, fontWeight: '800', color: colors.primary, minWidth: 40 },
-  myRankName: { flex: 1, fontSize: typography.size.base, fontWeight: '600', color: colors.textPrimary },
+  myRankName: { fontSize: typography.size.base, fontWeight: '600', color: colors.textPrimary },
+  myRankWorkouts: { fontSize: typography.size.xs, color: colors.textMuted, fontWeight: '500' },
   myRankStreak: { fontSize: typography.size.base, fontWeight: '700', color: colors.textPrimary },
 });

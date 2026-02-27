@@ -245,7 +245,7 @@ def get_streak_details(user):
     )
 
     # Build per-day status list for the 7 bubbles (Sun=0 … Sat=6)
-    day_labels = ['S', 'M', 'T', 'W', 'Th', 'F', 'S']
+    day_labels = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
     week_days = []
     for i in range(7):
         day = week_start + timedelta(days=i)
