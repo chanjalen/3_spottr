@@ -1,21 +1,24 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
+  FlatList,
   Pressable,
   StyleSheet,
   ActivityIndicator,
   RefreshControl,
   Platform,
-  Alert,
   Modal,
+  Dimensions,
+  TouchableWithoutFeedback,
 } from 'react-native';
+import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { fetchStreakInfo, updateWorkoutGoal, takeRestDay, fetchCalendarPosts } from '../../api/workouts';
+import { fetchStreakInfo, updateWorkoutGoal, fetchCalendarPosts } from '../../api/workouts';
 import { StreakDetails, CalendarPost } from '../../types/workout';
 import { useAuth } from '../../store/AuthContext';
 import { colors, spacing, typography } from '../../theme';
@@ -29,6 +32,9 @@ const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
   'July', 'August', 'September', 'October', 'November', 'December',
 ];
+const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const POPUP_WIDTH = SCREEN_WIDTH - 48;
 
 export default function StreakDetailsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
@@ -37,7 +43,6 @@ export default function StreakDetailsScreen({ navigation }: Props) {
   const [streakData, setStreakData] = useState<StreakDetails | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [restLoading, setRestLoading] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [showGoalPicker, setShowGoalPicker] = useState(false);
 
@@ -45,9 +50,12 @@ export default function StreakDetailsScreen({ navigation }: Props) {
   const now = new Date();
   const [calYear, setCalYear] = useState(now.getFullYear());
   const [calMonth, setCalMonth] = useState(now.getMonth() + 1); // 1-indexed
-  const [activeDates, setActiveDates] = useState<Set<string>>(new Set());
-  const [restDates, setRestDates] = useState<Set<string>>(new Set());
-  const [calLoading, setCalLoading] = useState(false);
+  const [workoutDayNums, setWorkoutDayNums] = useState<Set<number>>(new Set());
+  const [restDayNums, setRestDayNums] = useState<Set<number>>(new Set());
+  const [calPosts, setCalPosts] = useState<CalendarPost[]>([]);
+  const [dayModalVisible, setDayModalVisible] = useState(false);
+  const [currentModalDay, setCurrentModalDay] = useState(1);
+  const dayListRef = useRef<FlatList>(null);
 
   const loadStreak = useCallback(async () => {
     try {
@@ -63,58 +71,27 @@ export default function StreakDetailsScreen({ navigation }: Props) {
   }, [setCurrentStreak]);
 
   const loadCalendar = useCallback(async (year: number, month: number) => {
-    setCalLoading(true);
     try {
       const res = await fetchCalendarPosts(year, month);
-      const active = new Set<string>();
-      const rest = new Set<string>();
+      const workoutNums = new Set<number>();
+      const restNums = new Set<number>();
       for (const p of res.posts) {
-        if (p.type === 'rest') rest.add(p.date);
-        else active.add(p.date);
+        const day = parseInt(p.date.split('-')[2], 10);
+        if (p.type === 'rest') restNums.add(day);
+        else workoutNums.add(day);
       }
-      setActiveDates(active);
-      setRestDates(rest);
+      setWorkoutDayNums(workoutNums);
+      setRestDayNums(restNums);
+      setCalPosts(res.posts);
     } catch {
-      setActiveDates(new Set());
-      setRestDates(new Set());
-    } finally {
-      setCalLoading(false);
+      setWorkoutDayNums(new Set());
+      setRestDayNums(new Set());
+      setCalPosts([]);
     }
   }, []);
 
   useEffect(() => { loadStreak(); }, [loadStreak]);
   useEffect(() => { loadCalendar(calYear, calMonth); }, [loadCalendar, calYear, calMonth]);
-
-  const handleRestDay = () => {
-    if (!streakData) return;
-    const used = streakData.rest_info.rest_days_used;
-    const remaining = streakData.rest_info.rest_days_remaining;
-    const allowed = streakData.rest_info.rest_days_allowed;
-
-    Alert.alert(
-      'Take a Rest Day?',
-      `You've used ${used} of ${allowed} rest days this week.\n${remaining - 1 >= 0 ? remaining - 1 : 0} will remain after this.\n\nRest days protect your streak on recovery days.`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Log Rest Day',
-          style: 'default',
-          onPress: async () => {
-            setRestLoading(true);
-            try {
-              await takeRestDay();
-              loadStreak();
-            } catch (err: any) {
-              const msg = err?.response?.data?.error ?? 'Could not take rest day.';
-              Alert.alert('Rest Day', msg);
-            } finally {
-              setRestLoading(false);
-            }
-          },
-        },
-      ],
-    );
-  };
 
   const handleGoalChange = () => setShowGoalPicker(true);
 
@@ -141,6 +118,20 @@ export default function StreakDetailsScreen({ navigation }: Props) {
     return calYear >= today.getFullYear() && calMonth >= today.getMonth() + 1;
   };
 
+  // Must be before any early returns — Hook rules
+  const sortedWorkoutDays = useMemo(
+    () => Array.from(workoutDayNums).sort((a, b) => a - b),
+    [workoutDayNums],
+  );
+  const calFirstDay = new Date(calYear, calMonth - 1, 1).getDay();
+  const calDaysInMonth = new Date(calYear, calMonth, 0).getDate();
+
+  const handleDayPress = (day: number) => {
+    if (!workoutDayNums.has(day)) return;
+    setCurrentModalDay(day);
+    setDayModalVisible(true);
+  };
+
   if (loading) {
     return (
       <View style={[styles.center, { paddingTop: insets.top }]}>
@@ -152,7 +143,6 @@ export default function StreakDetailsScreen({ navigation }: Props) {
   const streak = streakData!;
   const isActive = streak.current_streak > 0;
   const goalHit = streak.weekly_workout_count >= streak.weekly_workout_goal;
-  const canRestDay = !streak.has_activity_today && !streak.has_rest_today;
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background.base }}>
@@ -249,58 +239,77 @@ export default function StreakDetailsScreen({ navigation }: Props) {
             ))}
           </View>
 
-          <Text style={styles.weekFooter}>
-            {streak.weekly_workout_count}/{streak.weekly_workout_goal} workouts
-            {' · '}{streak.rest_info.rest_days_used}/{streak.rest_info.rest_days_allowed} rest days
-          </Text>
-
-          <Pressable
-            style={[styles.restDayBtn, (!canRestDay || restLoading) && styles.restDayBtnDisabled]}
-            onPress={handleRestDay}
-            disabled={!canRestDay || restLoading}
-          >
-            {restLoading ? (
-              <ActivityIndicator size="small" color={colors.primary} />
-            ) : (
-              <>
-                <Feather name="moon" size={16} color={canRestDay ? colors.primary : colors.textMuted} />
-                <Text style={[styles.restDayBtnText, !canRestDay && { color: colors.textMuted }]}>
-                  {streak.has_rest_today
-                    ? 'Rest day logged'
-                    : streak.has_activity_today
-                      ? 'Already active today'
-                      : 'Take Rest Day'}
-                </Text>
-              </>
-            )}
-          </Pressable>
+          <View style={styles.weekStats}>
+            <View style={[styles.weekStatItem, goalHit && styles.weekStatItemGoalHit]}>
+              <Text style={[styles.weekStatNum, goalHit && styles.weekStatNumGoalHit]}>
+                {streak.weekly_workout_count}/{streak.weekly_workout_goal}
+              </Text>
+              <Text style={styles.weekStatLabel}>workouts</Text>
+            </View>
+            <View style={styles.weekStatDivider} />
+            <View style={styles.weekStatItem}>
+              <Text style={styles.weekStatNum}>
+                {streak.rest_info.rest_days_used}/{streak.rest_info.rest_days_allowed}
+              </Text>
+              <Text style={styles.weekStatLabel}>rest days</Text>
+            </View>
+          </View>
         </View>
 
         {/* Calendar */}
         <View style={styles.card}>
-          <View style={styles.rowBetween}>
-            <Pressable onPress={prevMonth} style={styles.calNavBtn}>
-              <Feather name="chevron-left" size={20} color={colors.textSecondary} />
+          <View style={calStyles.calNav}>
+            <Pressable style={calStyles.calNavBtn} onPress={prevMonth}>
+              <Feather name="chevron-left" size={18} color={colors.textSecondary} />
             </Pressable>
-            <Text style={styles.cardTitle}>
-              {MONTH_NAMES[calMonth - 1]} {calYear}
-            </Text>
+            <Text style={styles.cardTitle}>{MONTH_NAMES[calMonth - 1]} {calYear}</Text>
             <Pressable
+              style={[calStyles.calNavBtn, isNextDisabled() && { opacity: 0.3 }]}
               onPress={nextMonth}
-              style={[styles.calNavBtn, isNextDisabled() && { opacity: 0.3 }]}
               disabled={isNextDisabled()}
             >
-              <Feather name="chevron-right" size={20} color={colors.textSecondary} />
+              <Feather name="chevron-right" size={18} color={colors.textSecondary} />
             </Pressable>
           </View>
 
-          {calLoading ? (
-            <View style={styles.calLoadingRow}>
-              <ActivityIndicator size="small" color={colors.primary} />
-            </View>
-          ) : (
-            <CalendarGrid year={calYear} month={calMonth} activeDates={activeDates} restDates={restDates} />
-          )}
+          <View style={calStyles.calWeekdays}>
+            {WEEKDAYS.map((d, i) => (
+              <Text key={i} style={calStyles.calWeekday}>{d}</Text>
+            ))}
+          </View>
+
+          <View style={calStyles.calDays}>
+            {Array.from({ length: calFirstDay }).map((_, i) => (
+              <View key={`e-${i}`} style={calStyles.calDay} />
+            ))}
+            {Array.from({ length: calDaysInMonth }).map((_, i) => {
+              const day = i + 1;
+              const hasWorkout = workoutDayNums.has(day);
+              const isRest = !hasWorkout && restDayNums.has(day);
+              return (
+                <Pressable
+                  key={day}
+                  style={calStyles.calDay}
+                  onPress={() => handleDayPress(day)}
+                  disabled={!hasWorkout}
+                >
+                  <View style={[
+                    calStyles.calDayBubble,
+                    hasWorkout && calStyles.calDayBubbleWorkout,
+                    isRest && calStyles.calDayBubbleRest,
+                  ]}>
+                    <Text style={[
+                      calStyles.calDayText,
+                      hasWorkout && calStyles.calDayTextWorkout,
+                      isRest && calStyles.calDayTextRest,
+                    ]}>
+                      {day}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
       </ScrollView>
 
@@ -328,6 +337,134 @@ export default function StreakDetailsScreen({ navigation }: Props) {
         </Pressable>
       </Modal>
 
+      {/* Day workout modal */}
+      <Modal
+        visible={dayModalVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setDayModalVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={() => setDayModalVisible(false)}>
+          <View style={calStyles.calModalOverlay} />
+        </TouchableWithoutFeedback>
+        <View style={calStyles.calModalCenter} pointerEvents="box-none">
+          <View style={calStyles.calModalPopup}>
+            <View style={calStyles.calModalHeader}>
+              <Pressable
+                style={calStyles.calModalNavBtn}
+                onPress={() => {
+                  const idx = sortedWorkoutDays.indexOf(currentModalDay);
+                  if (idx > 0) {
+                    dayListRef.current?.scrollToIndex({ index: idx - 1, animated: true });
+                    setCurrentModalDay(sortedWorkoutDays[idx - 1]);
+                  }
+                }}
+                disabled={sortedWorkoutDays.indexOf(currentModalDay) === 0}
+              >
+                <Feather
+                  name="chevron-left"
+                  size={20}
+                  color={sortedWorkoutDays.indexOf(currentModalDay) === 0 ? colors.textMuted : colors.textPrimary}
+                />
+              </Pressable>
+              <View style={{ alignItems: 'center', flex: 1 }}>
+                <Text style={calStyles.calModalDate}>{MONTH_NAMES[calMonth - 1]} {currentModalDay}</Text>
+                <Text style={calStyles.calModalYear}>{calYear}</Text>
+              </View>
+              <Pressable
+                style={calStyles.calModalNavBtn}
+                onPress={() => {
+                  const idx = sortedWorkoutDays.indexOf(currentModalDay);
+                  if (idx < sortedWorkoutDays.length - 1) {
+                    dayListRef.current?.scrollToIndex({ index: idx + 1, animated: true });
+                    setCurrentModalDay(sortedWorkoutDays[idx + 1]);
+                  }
+                }}
+                disabled={sortedWorkoutDays.indexOf(currentModalDay) === sortedWorkoutDays.length - 1}
+              >
+                <Feather
+                  name="chevron-right"
+                  size={20}
+                  color={sortedWorkoutDays.indexOf(currentModalDay) === sortedWorkoutDays.length - 1 ? colors.textMuted : colors.textPrimary}
+                />
+              </Pressable>
+              <Pressable style={calStyles.calModalNavBtn} onPress={() => setDayModalVisible(false)}>
+                <Feather name="x" size={18} color={colors.textMuted} />
+              </Pressable>
+            </View>
+
+            <FlatList
+              ref={dayListRef}
+              style={calStyles.calModalScroll}
+              data={sortedWorkoutDays}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={(day) => String(day)}
+              initialScrollIndex={
+                sortedWorkoutDays.indexOf(currentModalDay) >= 0
+                  ? sortedWorkoutDays.indexOf(currentModalDay)
+                  : 0
+              }
+              getItemLayout={(_, index) => ({
+                length: POPUP_WIDTH,
+                offset: POPUP_WIDTH * index,
+                index,
+              })}
+              onMomentumScrollEnd={(e) => {
+                const idx = Math.round(e.nativeEvent.contentOffset.x / POPUP_WIDTH);
+                if (idx >= 0 && idx < sortedWorkoutDays.length) {
+                  setCurrentModalDay(sortedWorkoutDays[idx]);
+                }
+              }}
+              renderItem={({ item: day }) => {
+                const dayPosts = calPosts.filter(
+                  p => parseInt(p.date.split('-')[2], 10) === day
+                );
+                return (
+                  <ScrollView
+                    style={{ width: POPUP_WIDTH }}
+                    contentContainerStyle={{ padding: spacing.md, paddingBottom: 20 }}
+                    showsVerticalScrollIndicator={false}
+                    nestedScrollEnabled
+                  >
+                    {dayPosts.map((item) => (
+                      <View key={item.id} style={calStyles.calDayCard}>
+                        {item.photo_url && (
+                          <Image
+                            source={{ uri: item.photo_url }}
+                            style={calStyles.calDayCardImage}
+                            contentFit="cover"
+                          />
+                        )}
+                        <View style={calStyles.calDayCardBody}>
+                          <Text style={calStyles.calPostType}>
+                            {item.type === 'checkin' ? 'Check-In' : item.type === 'workout' ? 'Workout' : 'Post'}
+                          </Text>
+                          {!!item.description && (
+                            <Text style={calStyles.calDayCardDesc}>{item.description}</Text>
+                          )}
+                          {item.workout_name && (
+                            <Text style={calStyles.calDayCardMeta}>
+                              {item.workout_name}
+                              {item.workout_exercises ? ` · ${item.workout_exercises} exercises` : ''}
+                              {item.workout_sets ? ` · ${item.workout_sets} sets` : ''}
+                            </Text>
+                          )}
+                          {item.location_name ? (
+                            <Text style={calStyles.calDayCardMeta}>📍 {item.location_name}</Text>
+                          ) : null}
+                        </View>
+                      </View>
+                    ))}
+                  </ScrollView>
+                );
+              }}
+            />
+          </View>
+        </View>
+      </Modal>
+
       {/* Info modal */}
       <Modal visible={showInfo} transparent animationType="fade" onRequestClose={() => setShowInfo(false)}>
         <Pressable style={styles.modalOverlay} onPress={() => setShowInfo(false)}>
@@ -347,60 +484,6 @@ export default function StreakDetailsScreen({ navigation }: Props) {
   );
 }
 
-// ─── Calendar grid ────────────────────────────────────────────────────────────
-
-function CalendarGrid({
-  year, month, activeDates, restDates,
-}: { year: number; month: number; activeDates: Set<string>; restDates: Set<string> }) {
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const firstDayOfWeek = new Date(year, month - 1, 1).getDay();
-
-  const today = new Date();
-  const todayKey = `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
-
-  const cells: (number | null)[] = [
-    ...Array(firstDayOfWeek).fill(null),
-    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
-  ];
-  while (cells.length % 7 !== 0) cells.push(null);
-
-  const DAY_HEADERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
-
-  return (
-    <View style={calStyles.grid}>
-      <View style={calStyles.headerRow}>
-        {DAY_HEADERS.map((d, i) => (
-          <Text key={i} style={calStyles.headerCell}>{d}</Text>
-        ))}
-      </View>
-      {Array.from({ length: cells.length / 7 }, (_, rowIdx) => (
-        <View key={rowIdx} style={calStyles.row}>
-          {cells.slice(rowIdx * 7, rowIdx * 7 + 7).map((day, colIdx) => {
-            if (!day) return <View key={colIdx} style={calStyles.cell} />;
-            const key = `${year}-${month}-${day}`;
-            const isActive = activeDates.has(key);
-            const isRest = !isActive && restDates.has(key);
-            const isToday = key === todayKey;
-            return (
-              <View key={colIdx} style={[calStyles.cell, isToday && calStyles.cellToday]}>
-                <Text style={[
-                  calStyles.dayNum,
-                  isActive && calStyles.dayNumActive,
-                  isRest && calStyles.dayNumRest,
-                  isToday && calStyles.dayNumToday,
-                ]}>
-                  {day}
-                </Text>
-                {isActive && <View style={calStyles.dot} />}
-                {isRest && <Text style={calStyles.restMark}>🌙</Text>}
-              </View>
-            );
-          })}
-        </View>
-      ))}
-    </View>
-  );
-}
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -496,17 +579,43 @@ const styles = StyleSheet.create({
   bubbleToday: { borderWidth: 2, borderColor: colors.primary },
   bubbleFuture: { opacity: 0.35 },
   bubbleRestText: { fontSize: typography.size.xs, fontWeight: '700', color: '#fff' },
-  weekFooter: { fontSize: typography.size.xs, color: colors.textSecondary, textAlign: 'center' },
-  restDayBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: spacing.sm, borderRadius: 12, paddingVertical: spacing.md,
-    borderWidth: 1.5, borderColor: colors.primary,
+  weekStats: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    backgroundColor: colors.background.elevated,
+    borderRadius: 14,
+    overflow: 'hidden',
   },
-  restDayBtnDisabled: { borderColor: colors.border.default },
-  restDayBtnText: { fontSize: typography.size.sm, fontWeight: '600', color: colors.primary },
-
-  calNavBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
-  calLoadingRow: { alignItems: 'center', paddingVertical: spacing.xl },
+  weekStatItem: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    gap: 4,
+  },
+  weekStatItemGoalHit: {
+    backgroundColor: colors.primary + '18',
+  },
+  weekStatNum: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    lineHeight: 32,
+  },
+  weekStatNumGoalHit: {
+    color: colors.primary,
+  },
+  weekStatLabel: {
+    fontSize: typography.size.xs,
+    fontWeight: '600',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  weekStatDivider: {
+    width: 1,
+    backgroundColor: colors.border.subtle,
+    marginVertical: spacing.md,
+  },
 
   // Goal picker modal
   goalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
@@ -538,26 +647,81 @@ const styles = StyleSheet.create({
 });
 
 const calStyles = StyleSheet.create({
-  grid: { gap: 2 },
-  headerRow: { flexDirection: 'row' },
-  headerCell: {
+  // Grid
+  calNav: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'space-between', marginBottom: spacing.md,
+  },
+  calNavBtn: {
+    width: 36, height: 36, backgroundColor: colors.background.elevated,
+    borderRadius: 8, borderWidth: 1, borderColor: colors.border.subtle,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  calWeekdays: { flexDirection: 'row', marginBottom: spacing.sm },
+  calWeekday: {
     flex: 1, textAlign: 'center',
-    fontSize: typography.size.xs, fontWeight: '600', color: colors.textMuted,
-    paddingBottom: spacing.xs,
+    fontSize: 12, fontWeight: '500', color: colors.textMuted, paddingVertical: 4,
   },
-  row: { flexDirection: 'row' },
-  cell: {
-    flex: 1, alignItems: 'center', paddingVertical: 4, gap: 2,
-    borderRadius: 8,
+  calDays: { flexDirection: 'row', flexWrap: 'wrap' },
+  calDay: {
+    width: `${100 / 7}%` as any,
+    aspectRatio: 1,
+    padding: 2,
+    alignItems: 'center', justifyContent: 'center',
   },
-  cellToday: { backgroundColor: colors.background.elevated },
-  dayNum: { fontSize: typography.size.sm, color: colors.textSecondary },
-  dayNumActive: { color: colors.primary, fontWeight: '700' },
-  dayNumRest: { color: colors.textMuted, fontWeight: '500' },
-  dayNumToday: { fontWeight: '700', color: colors.textPrimary },
-  dot: {
-    width: 5, height: 5, borderRadius: 2.5,
-    backgroundColor: colors.primary,
+  calDayBubble: {
+    flex: 1, width: '100%',
+    alignItems: 'center', justifyContent: 'center',
+    borderRadius: 999,
+    backgroundColor: 'rgba(120,120,128,0.15)',
   },
-  restMark: { fontSize: 8, lineHeight: 10 },
+  calDayBubbleWorkout: { backgroundColor: colors.primary },
+  calDayBubbleRest: { backgroundColor: '#F59E0B' },
+  calDayText: { fontSize: 14, fontWeight: '500', color: colors.textSecondary },
+  calDayTextWorkout: { color: '#fff', fontWeight: '700' },
+  calDayTextRest: { color: '#fff', fontWeight: '700' },
+
+  // Modal
+  calModalOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+  },
+  calModalCenter: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'center', alignItems: 'center', padding: 24,
+  },
+  calModalPopup: {
+    width: '100%',
+    height: Dimensions.get('window').height * 0.55,
+    backgroundColor: colors.background.base,
+    borderRadius: 20, overflow: 'hidden',
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 20 },
+      android: { elevation: 12 },
+    }),
+  },
+  calModalHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: spacing.sm, paddingVertical: spacing.md,
+    borderBottomWidth: 1, borderBottomColor: colors.border.subtle,
+  },
+  calModalNavBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  calModalDate: { fontSize: 17, fontWeight: '700', color: colors.textPrimary },
+  calModalYear: { fontSize: 13, color: colors.textMuted, marginTop: 1 },
+  calModalScroll: { flex: 1 },
+
+  // Day cards inside modal
+  calDayCard: {
+    backgroundColor: colors.background.elevated, borderRadius: 12,
+    borderWidth: 1, borderColor: colors.border.subtle, overflow: 'hidden',
+    marginBottom: 10,
+  },
+  calDayCardImage: { width: '100%', height: 160 },
+  calDayCardBody: { padding: spacing.md, gap: 4 },
+  calDayCardDesc: { fontSize: 14, color: colors.textPrimary, lineHeight: 19 },
+  calDayCardMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
+  calPostType: {
+    fontSize: 11, fontWeight: '600', color: colors.primary,
+    marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.5,
+  },
 });

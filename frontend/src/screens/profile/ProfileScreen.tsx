@@ -1201,6 +1201,10 @@ function CalendarTab({
     if (month === 11) { setMonth(0); setYear((y) => y + 1); }
     else setMonth((m) => m + 1);
   };
+  const isNextDisabled = () => {
+    const today = new Date();
+    return year >= today.getFullYear() && month >= today.getMonth();
+  };
 
   const handleDayPress = (day: number) => {
     if (!workoutDayNums.has(day)) return;
@@ -1220,7 +1224,11 @@ function CalendarTab({
             <Feather name="chevron-left" size={18} color={colors.textSecondary} />
           </Pressable>
           <Text style={styles.calMonthLabel}>{MONTHS[month]} {year}</Text>
-          <Pressable style={styles.calNavBtn} onPress={nextMonth}>
+          <Pressable
+            style={[styles.calNavBtn, isNextDisabled() && { opacity: 0.3 }]}
+            onPress={nextMonth}
+            disabled={isNextDisabled()}
+          >
             <Feather name="chevron-right" size={18} color={colors.textSecondary} />
           </Pressable>
         </View>
@@ -1242,22 +1250,23 @@ function CalendarTab({
             return (
               <Pressable
                 key={day}
-                style={[
-                  styles.calDay,
-                  hasWorkout && styles.calDayWorkout,
-                  isRest && styles.calDayRest,
-                ]}
+                style={styles.calDay}
                 onPress={() => handleDayPress(day)}
                 disabled={!hasWorkout}
               >
-                <Text style={[
-                  styles.calDayText,
-                  hasWorkout && styles.calDayTextWorkout,
-                  isRest && styles.calDayTextRest,
+                <View style={[
+                  styles.calDayBubble,
+                  hasWorkout && styles.calDayBubbleWorkout,
+                  isRest && styles.calDayBubbleRest,
                 ]}>
-                  {day}
-                </Text>
-                {isRest && <Text style={styles.calDayRestMark}>🌙</Text>}
+                  <Text style={[
+                    styles.calDayText,
+                    hasWorkout && styles.calDayTextWorkout,
+                    isRest && styles.calDayTextRest,
+                  ]}>
+                    {day}
+                  </Text>
+                </View>
               </Pressable>
             );
           })}
@@ -1726,13 +1735,18 @@ const styles = StyleSheet.create({
   calWeekdays: { flexDirection: 'row', marginBottom: spacing.sm },
   calWeekday: { flex: 1, textAlign: 'center', fontSize: 12, fontWeight: '500', color: colors.textMuted, paddingVertical: 4 },
   calDays: { flexDirection: 'row', flexWrap: 'wrap' },
-  calDay: { width: `${100 / 7}%`, aspectRatio: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 6 },
-  calDayWorkout: { backgroundColor: 'rgba(79,195,224,0.15)' },
-  calDayRest: { backgroundColor: 'rgba(156,163,175,0.15)' },
-  calDayText: { fontSize: 13, fontWeight: '500', color: colors.textSecondary },
-  calDayTextWorkout: { color: colors.primary, fontWeight: '700' },
-  calDayTextRest: { color: colors.textMuted, fontWeight: '500' },
-  calDayRestMark: { fontSize: 7, lineHeight: 8 },
+  calDay: { width: `${100 / 7}%`, aspectRatio: 1, padding: 2, alignItems: 'center', justifyContent: 'center' },
+  calDayBubble: {
+    flex: 1, width: '100%',
+    alignItems: 'center', justifyContent: 'center',
+    borderRadius: 999,
+    backgroundColor: 'rgba(120,120,128,0.15)',
+  },
+  calDayBubbleWorkout: { backgroundColor: colors.primary },
+  calDayBubbleRest: { backgroundColor: '#F59E0B' },
+  calDayText: { fontSize: 14, fontWeight: '500', color: colors.textSecondary },
+  calDayTextWorkout: { color: '#fff', fontWeight: '700' },
+  calDayTextRest: { color: '#fff', fontWeight: '700' },
 
   calModalOverlay: {
     ...StyleSheet.absoluteFillObject,
