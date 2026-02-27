@@ -81,7 +81,6 @@ TEMPLATES = [
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
                 "gyms.context_processors.gyms_context",
-                "allauth.account.context_processors.account",
             ],
         },
     },

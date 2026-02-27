@@ -7,3 +7,4 @@ psycopg2-binary==2.9.10
 Pillow==12.1.1
 matplotlib==3.10.8
 django-allauth[google]>=65.0.0
+PyJWT>=2.0.0
