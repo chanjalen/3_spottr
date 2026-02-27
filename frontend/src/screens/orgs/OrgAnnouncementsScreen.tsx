@@ -18,10 +18,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as ImagePicker from 'expo-image-picker';
+import { pickMedia } from '../../utils/pickMedia';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
+import VideoThumbnail from '../../components/common/VideoThumbnail';
 import {
   fetchAnnouncements,
   createAnnouncement,
@@ -71,8 +73,6 @@ function genClientId(): string {
 
 const EMOJI_QUICK = ['👍', '👎', '😂', '😡', '❤️'];
 
-const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
-const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50 MB
 
 // ---------------------------------------------------------------------------
 // Poll card
@@ -256,6 +256,27 @@ const rxStyles = StyleSheet.create({
 });
 
 // ---------------------------------------------------------------------------
+// Video player modal
+// ---------------------------------------------------------------------------
+
+function VideoPlayerModal({ url, onClose }: { url: string; onClose: () => void }) {
+  const player = useVideoPlayer(url, (p) => { p.play(); });
+  return (
+    <Modal visible animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        <VideoView player={player} style={{ flex: 1 }} nativeControls contentFit="contain" />
+        <Pressable
+          onPress={onClose}
+          style={{ position: 'absolute', top: 52, right: 20, padding: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 }}
+        >
+          <Feather name="x" size={24} color="#fff" />
+        </Pressable>
+      </View>
+    </Modal>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Announcement bubble
 // ---------------------------------------------------------------------------
 
@@ -267,6 +288,7 @@ function AnnouncementBubble({
   onReact,
   onVoted,
   onRetry,
+  onVideoPress,
 }: {
   item: OptimisticAnnouncement;
   orgId: string;
@@ -275,6 +297,7 @@ function AnnouncementBubble({
   onReact: (announcementId: string, emoji: string) => void;
   onVoted: (announcementId: string, poll: AnnouncementPoll) => void;
   onRetry: (item: OptimisticAnnouncement) => void;
+  onVideoPress: (url: string) => void;
 }) {
   const isPending = item._status === 'pending';
   const isFailed = item._status === 'failed';
@@ -306,16 +329,13 @@ function AnnouncementBubble({
         <View style={styles.mediaGrid}>
           {item.media.map((m, i) =>
             m.kind === 'video' ? (
-              <View key={i} style={[styles.mediaThumb, styles.videoThumb]}>
-                {m.thumbnail_url ? (
-                  <Image
-                    source={{ uri: m.thumbnail_url }}
-                    style={StyleSheet.absoluteFill}
-                    resizeMode="cover"
-                  />
-                ) : null}
-                <Feather name="play-circle" size={28} color="#fff" />
-              </View>
+              <Pressable key={i} onPress={() => onVideoPress(m.url)}>
+                <VideoThumbnail
+                  videoUrl={m.url}
+                  thumbnailUrl={m.thumbnail_url}
+                  style={styles.mediaThumb}
+                />
+              </Pressable>
             ) : (
               <Image
                 key={i}
@@ -391,6 +411,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
 
   const isAdmin = userRole === 'creator' || userRole === 'admin';
   const flatRef = useRef<FlatList>(null);
+  const [videoPlayerUrl, setVideoPlayerUrl] = useState<string | null>(null);
 
   // ── Load announcements ───────────────────────────────────────────────────
 
@@ -532,44 +553,15 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
   // ── Create announcement (optimistic) ────────────────────────────────────
 
   const handlePickMedia = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow access to your photo library.');
-      return;
-    }
-    let result: ImagePicker.ImagePickerResult;
-    try {
-      result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images', 'videos'],
-        allowsMultipleSelection: true,
-        preferredAssetRepresentationMode:
-          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
-      });
-    } catch (err) {
-      Alert.alert('Error', 'Could not open photo library. Please try again.');
-      return;
-    }
-    if (result.canceled || !result.assets?.length) return;
-    const assets = result.assets;
-    const kinds = assets.map(
-      a => (a.type === 'video' || a.mimeType?.startsWith('video/') ? 'video' : 'image') as 'image' | 'video',
-    );
-    const oversized = assets.some((a, i) => {
-      const limit = kinds[i] === 'video' ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
-      return a.fileSize != null && a.fileSize > limit;
-    });
-    if (oversized) {
-      Alert.alert('File too large', 'Images must be under 10 MB and videos under 50 MB.');
-      return;
-    }
-    const uris = assets.map(a => a.uri);
-    setDraftMediaUris(prev => [...prev, ...uris]);
-    setDraftMediaTypes(prev => [...prev, ...kinds]);
+    const items = await pickMedia({ allowsMultiple: true });
+    if (!items) return;
+    setDraftMediaUris(prev => [...prev, ...items.map(i => i.uri)]);
+    setDraftMediaTypes(prev => [...prev, ...items.map(i => i.kind)]);
     setUploadingMedia(true);
     try {
       const ids: string[] = [];
-      for (let i = 0; i < assets.length; i++) {
-        const res = await uploadMedia(assets[i].uri, kinds[i], assets[i].mimeType ?? undefined);
+      for (const item of items) {
+        const res = await uploadMedia(item.uri, item.kind, item.mimeType);
         ids.push(res.asset_id);
       }
       setDraftMediaIds(prev => [...prev, ...ids]);
@@ -697,6 +689,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
         onReact={handleReact}
         onVoted={handlePollVoted}
         onRetry={handleRetry}
+        onVideoPress={setVideoPlayerUrl}
       />
     );
   };
@@ -809,6 +802,10 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
         </Pressable>
       </Modal>
 
+      {videoPlayerUrl != null && (
+        <VideoPlayerModal url={videoPlayerUrl} onClose={() => setVideoPlayerUrl(null)} />
+      )}
+
       {/* Create announcement bottom sheet */}
       <Modal
         visible={sheetVisible}
@@ -848,9 +845,12 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
                   {draftMediaUris.map((uri, i) => (
                     <View key={i} style={styles.draftMediaWrap}>
                       {draftMediaTypes[i] === 'video' ? (
-                        <View style={[styles.draftMediaThumb, styles.draftVideoPlaceholder]}>
-                          <Feather name="video" size={20} color="#fff" />
-                        </View>
+                        <VideoThumbnail
+                          videoUrl={uri}
+                          thumbnailUrl={null}
+                          style={styles.draftMediaThumb}
+                          iconSize={16}
+                        />
                       ) : (
                         <Image source={{ uri }} style={styles.draftMediaThumb} resizeMode="cover" />
                       )}

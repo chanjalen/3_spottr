@@ -17,10 +17,12 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as ImagePicker from 'expo-image-picker';
+import { pickMedia } from '../../utils/pickMedia';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
+import VideoThumbnail from '../../components/common/VideoThumbnail';
 import { fetchGroupMessages, markMessagesRead, reactToMessage, sendGroupMessage } from '../../api/messaging';
 import { uploadMedia } from '../../api/organizations';
 import { Message, MessageReaction } from '../../types/messaging';
@@ -39,8 +41,6 @@ const SEND_TIMEOUT_MS = 12_000;
 
 const EMOJI_QUICK = ['👍', '👎', '😂', '😡', '❤️'];
 
-const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
-const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50 MB
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -67,6 +67,25 @@ function MsgStatusIcon({ status }: { status: NonNullable<Message['status']> }) {
   return null;
 }
 
+// ── Video player modal ────────────────────────────────────────────────────────
+
+function VideoPlayerModal({ url, onClose }: { url: string; onClose: () => void }) {
+  const player = useVideoPlayer(url, (p) => { p.play(); });
+  return (
+    <Modal visible animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        <VideoView player={player} style={{ flex: 1 }} nativeControls contentFit="contain" />
+        <Pressable
+          onPress={onClose}
+          style={{ position: 'absolute', top: 52, right: 20, padding: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 }}
+        >
+          <Feather name="x" size={24} color="#fff" />
+        </Pressable>
+      </View>
+    </Modal>
+  );
+}
+
 // ── Screen ───────────────────────────────────────────────────────────────────
 
 export default function GroupChatScreen({ navigation, route }: Props) {
@@ -83,6 +102,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
   const [text, setText] = useState('');
   const [pendingMediaUri, setPendingMediaUri] = useState<string | null>(null);
   const [pendingMediaKind, setPendingMediaKind] = useState<'image' | 'video' | null>(null);
+  const [pendingMediaThumb, setPendingMediaThumb] = useState<string | null>(null);
   const [pendingAssetId, setPendingAssetId] = useState<string | null>(null);
   const [uploadingMedia, setUploadingMedia] = useState(false);
   const [sendingMedia, setSendingMedia] = useState(false);
@@ -90,6 +110,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
   const [actingOnRequest, setActingOnRequest] = useState<string | null>(null);
   const [contextMsg, setContextMsg] = useState<Message | null>(null);
   const [contextVisible, setContextVisible] = useState(false);
+  const [videoPlayerUrl, setVideoPlayerUrl] = useState<string | null>(null);
   const flatRef = useRef<FlatList>(null);
   const newestIdRef = useRef<string | null>(null);
   const pendingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -304,40 +325,16 @@ export default function GroupChatScreen({ navigation, route }: Props) {
   };
 
   const handlePickMedia = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow access to your photo library.');
-      return;
-    }
-    let result: ImagePicker.ImagePickerResult;
-    try {
-      result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images', 'videos'],
-        preferredAssetRepresentationMode:
-          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
-      });
-    } catch (err) {
-      Alert.alert('Error', 'Could not open photo library. Please try again.');
-      return;
-    }
-    if (result.canceled || !result.assets?.length) return;
-    const asset = result.assets[0];
-    const kind: 'image' | 'video' =
-      asset.type === 'video' || asset.mimeType?.startsWith('video/') ? 'video' : 'image';
-    const limit = kind === 'video' ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
-    if (asset.fileSize != null && asset.fileSize > limit) {
-      Alert.alert(
-        'File too large',
-        kind === 'video' ? 'Videos must be under 50 MB.' : 'Images must be under 10 MB.',
-      );
-      return;
-    }
-    setPendingMediaUri(asset.uri);
+    const items = await pickMedia();
+    if (!items) return;
+    const { uri, kind, mimeType, thumbnailUri } = items[0];
+    setPendingMediaUri(uri);
     setPendingMediaKind(kind);
+    setPendingMediaThumb(thumbnailUri ?? null);
     setPendingAssetId(null);
     setUploadingMedia(true);
     try {
-      const uploaded = await uploadMedia(asset.uri, kind, asset.mimeType ?? undefined);
+      const uploaded = await uploadMedia(uri, kind, mimeType);
       setPendingAssetId(uploaded.asset_id);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to upload media. Please try again.';
@@ -354,11 +351,13 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     const content = text.trim();
     const uri = pendingMediaUri;
     const kind = pendingMediaKind;
+    const thumb = pendingMediaThumb;
     const assetId = pendingAssetId;
     const clientMsgId = genClientMsgId();
 
     setPendingMediaUri(null);
     setPendingMediaKind(null);
+    setPendingMediaThumb(null);
     setPendingAssetId(null);
     setText('');
     setSendingMedia(true);
@@ -369,7 +368,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
       sender_username: null,
       sender_avatar_url: null,
       content,
-      media: [{ url: uri, kind, thumbnail_url: null, width: null, height: null }],
+      media: [{ url: uri, kind, thumbnail_url: thumb, width: null, height: null }],
       created_at: new Date().toISOString(),
       is_read: true,
       group_id: groupId,
@@ -386,7 +385,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
         }
         return prev.map((m) =>
           !('isDivider' in m) && m.id === clientMsgId
-            ? { ...msg, media: [{ url: uri, kind, thumbnail_url: null, width: null, height: null }], status: 'sent' as const }
+            ? { ...msg, media: [{ url: uri, kind, thumbnail_url: thumb, width: null, height: null }], status: 'sent' as const }
             : m,
         );
       });
@@ -701,12 +700,13 @@ export default function GroupChatScreen({ navigation, route }: Props) {
                   <View style={styles.msgMediaGrid}>
                     {item.media.map((m, idx) =>
                       m.kind === 'video' ? (
-                        <View key={idx} style={[styles.msgMediaThumb, styles.msgMediaVideo]}>
-                          {m.thumbnail_url ? (
-                            <Image source={{ uri: m.thumbnail_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                          ) : null}
-                          <Feather name="play-circle" size={28} color="#fff" />
-                        </View>
+                        <Pressable key={idx} onPress={() => setVideoPlayerUrl(m.url)}>
+                          <VideoThumbnail
+                            videoUrl={m.url}
+                            thumbnailUrl={m.thumbnail_url}
+                            style={styles.msgMediaThumb}
+                          />
+                        </Pressable>
                       ) : (
                         <Image key={idx} source={{ uri: m.thumbnail_url ?? m.url }} style={styles.msgMediaThumb} resizeMode="cover" />
                       )
@@ -815,15 +815,18 @@ export default function GroupChatScreen({ navigation, route }: Props) {
           <View style={styles.pendingMediaPreview}>
             <View style={styles.pendingMediaWrap}>
               {pendingMediaKind === 'video' ? (
-                <View style={[styles.pendingThumb, styles.pendingThumbVideo]}>
-                  <Feather name="video" size={18} color="#fff" />
-                </View>
+                <VideoThumbnail
+                  videoUrl={pendingMediaUri!}
+                  thumbnailUrl={pendingMediaThumb}
+                  style={styles.pendingThumb}
+                  iconSize={18}
+                />
               ) : (
-                <Image source={{ uri: pendingMediaUri }} style={styles.pendingThumb} resizeMode="cover" />
+                <Image source={{ uri: pendingMediaUri! }} style={styles.pendingThumb} resizeMode="cover" />
               )}
               <Pressable
                 style={styles.pendingRemoveBtn}
-                onPress={() => { setPendingMediaUri(null); setPendingMediaKind(null); setPendingAssetId(null); }}
+                onPress={() => { setPendingMediaUri(null); setPendingMediaKind(null); setPendingMediaThumb(null); setPendingAssetId(null); }}
               >
                 <Feather name="x" size={12} color="#fff" />
               </Pressable>
@@ -876,6 +879,10 @@ export default function GroupChatScreen({ navigation, route }: Props) {
           </View>
         </Pressable>
       </Modal>
+
+      {videoPlayerUrl != null && (
+        <VideoPlayerModal url={videoPlayerUrl} onClose={() => setVideoPlayerUrl(null)} />
+      )}
     </KeyboardAvoidingView>
   );
 }

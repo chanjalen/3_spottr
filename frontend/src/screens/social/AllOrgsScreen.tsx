@@ -25,8 +25,8 @@ type Props = {
 
 const annPreviewText = (ann: LatestAnnouncement): string => {
   if (ann.content) return ann.content;
-  if (ann.has_poll) return '📊 Poll';
-  if (ann.has_media) return '🖼 Photo';
+  if (ann.has_poll) return 'Poll';
+  if (ann.has_media) return 'Photo';
   return '';
 };
 

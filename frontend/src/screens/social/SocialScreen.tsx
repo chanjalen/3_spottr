@@ -521,8 +521,8 @@ export default function SocialScreen({ navigation }: Props) {
 
   const annPreviewText = (ann: LatestAnnouncement): string => {
     if (ann.content) return ann.content;
-    if (ann.has_poll) return '📊 Poll';
-    if (ann.has_media) return '🖼 Photo';
+    if (ann.has_poll) return 'Poll';
+    if (ann.has_media) return 'Photo';
     return '';
   };
 
@@ -633,7 +633,15 @@ export default function SocialScreen({ navigation }: Props) {
           )}
         </View>
         <Text style={styles.convoLast} numberOfLines={1}>
-          {item.latest_message?.content ?? 'No messages yet'}
+          {!item.latest_message
+            ? 'No messages yet'
+            : item.latest_message.content
+            ? item.latest_message.content
+            : item.latest_message.media?.length
+            ? (item.latest_message.media.some((m: any) => m.kind === 'video') ? 'Video' : 'Photo')
+            : item.latest_message.shared_post
+            ? 'Shared a post'
+            : ''}
         </Text>
       </View>
       {item.unread_count > 0 && (
@@ -688,9 +696,16 @@ export default function SocialScreen({ navigation }: Props) {
           )}
         </View>
         <Text style={styles.convoLast} numberOfLines={1}>
-          {item.latest_message
-            ? `${item.latest_message.sender_username ?? ''}: ${item.latest_message.content}`
-            : 'No messages yet'}
+          {!item.latest_message
+            ? 'No messages yet'
+            : (() => {
+                const sender = item.latest_message.sender_username ? `${item.latest_message.sender_username}: ` : '';
+                if (item.latest_message.content) return `${sender}${item.latest_message.content}`;
+                if (item.latest_message.media?.length)
+                  return `${sender}${item.latest_message.media.some((m: any) => m.kind === 'video') ? 'Video' : 'Photo'}`;
+                if (item.latest_message.shared_post) return `${sender}Shared a post`;
+                return '';
+              })()}
         </Text>
       </View>
       {item.unread_count > 0 && (
