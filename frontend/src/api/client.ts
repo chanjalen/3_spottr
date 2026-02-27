@@ -15,6 +15,11 @@ export const getToken = async (): Promise<string | null> => {
   return token ?? null;
 };
 
+/** Called by AuthContext.signIn/signOut to keep the in-memory cache in sync. */
+export const setTokenCache = (token: string | undefined) => {
+  _tokenCache = token;
+};
+
 const deleteToken = async () => {
   _tokenCache = undefined; // invalidate cache so next login re-reads from store
   if (Platform.OS === 'web') { localStorage.removeItem('auth_token'); return; }

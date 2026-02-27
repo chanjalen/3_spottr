@@ -9,11 +9,12 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
+  Alert,
 } from 'react-native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../navigation/types';
-import { useAuth } from '../../store/AuthContext';
 import { apiSignup } from '../../api/accounts';
 import { colors, spacing, typography } from '../../theme';
 
@@ -21,58 +22,92 @@ type Props = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Signup'>;
 };
 
-interface FieldErrors {
-  username?: string;
-  email?: string;
-  display_name?: string;
-  phone_number?: string;
-  birthday?: string;
-  password?: string;
-  password_confirm?: string;
+type PasswordStrength = 'weak' | 'fair' | 'strong';
+
+function getPasswordStrength(password: string): { level: PasswordStrength; hint: string } {
+  if (!password) return { level: 'weak', hint: '' };
+  const hasUpper = /[A-Z]/.test(password);
+  const hasLower = /[a-z]/.test(password);
+  const hasDigit = /[0-9]/.test(password);
+  const hasSpecial = /[^A-Za-z0-9]/.test(password);
+  const long = password.length >= 12;
+
+  const score = [hasUpper, hasLower, hasDigit, hasSpecial, long].filter(Boolean).length;
+
+  if (score <= 2 || password.length < 10) {
+    const missing = [];
+    if (!hasUpper) missing.push('uppercase letter');
+    if (!hasLower) missing.push('lowercase letter');
+    if (!hasDigit) missing.push('number');
+    if (password.length < 10) missing.push('10+ characters');
+    return { level: 'weak', hint: missing.length ? `Add a ${missing[0]}` : 'Too weak' };
+  }
+  if (score <= 3) {
+    return { level: 'fair', hint: hasSpecial ? 'Getting there!' : 'Add a special character for stronger security' };
+  }
+  return { level: 'strong', hint: 'Strong password!' };
+}
+
+function formatDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function formatDisplayDate(d: Date): string {
+  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 export default function SignupScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { signIn } = useAuth();
 
-  const [form, setForm] = useState({
-    username: '',
-    email: '',
-    display_name: '',
-    phone_number: '',
-    birthday: '',
-    password: '',
-    password_confirm: '',
-  });
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [birthday, setBirthday] = useState<Date | null>(null);
+  const [showPicker, setShowPicker] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({});
 
-  const setField = (key: keyof typeof form) => (val: string) => {
-    setForm((f) => ({ ...f, [key]: val }));
-    setFieldErrors((e) => ({ ...e, [key]: undefined }));
-  };
+  const strength = getPasswordStrength(password);
 
-  const validate = (): boolean => {
-    const errs: FieldErrors = {};
-    if (!form.username.trim()) errs.username = 'Required';
-    if (!form.email.trim()) errs.email = 'Required';
-    if (!form.display_name.trim()) errs.display_name = 'Required';
-    if (!form.phone_number.trim()) errs.phone_number = 'Required';
-    if (!form.birthday.trim()) errs.birthday = 'Required (YYYY-MM-DD)';
-    if (!form.password) errs.password = 'Required';
-    if (form.password !== form.password_confirm) errs.password_confirm = 'Passwords do not match';
-    setFieldErrors(errs);
-    return Object.keys(errs).length === 0;
+  const strengthColor =
+    strength.level === 'strong' ? colors.success :
+    strength.level === 'fair' ? colors.warning :
+    colors.error;
+
+  const strengthBarWidth =
+    strength.level === 'strong' ? '100%' :
+    strength.level === 'fair' ? '66%' :
+    password.length > 0 ? '33%' : '0%';
+
+  const handleDateChange = (event: DateTimePickerEvent, selected?: Date) => {
+    if (Platform.OS === 'android') setShowPicker(false);
+    if (event.type === 'dismissed') { setShowPicker(false); return; }
+    if (selected) setBirthday(selected);
   };
 
   const handleSignup = async () => {
-    if (!validate()) return;
+    if (!email.trim()) { setError('Email is required.'); return; }
+    if (!password) { setError('Password is required.'); return; }
+    if (strength.level === 'weak') { setError('Please choose a stronger password.'); return; }
+    if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
+    if (!birthday) { setError('Birthday is required.'); return; }
+
     setLoading(true);
     setError(null);
     try {
-      const { token, user } = await apiSignup(form);
-      await signIn(token, user);
+      const { token, user } = await apiSignup({
+        email: email.trim().toLowerCase(),
+        password,
+        birthday: formatDate(birthday),
+      });
+      // Do NOT call signIn yet — navigate to email verification with provisional token
+      navigation.navigate('EmailVerification', {
+        email: email.trim().toLowerCase(),
+        token,
+      });
     } catch (e: any) {
       const msg = e?.response?.data?.error ?? 'Signup failed. Please try again.';
       setError(msg);
@@ -81,32 +116,12 @@ export default function SignupScreen({ navigation }: Props) {
     }
   };
 
-  const renderField = (
-    label: string,
-    key: keyof typeof form,
-    opts?: {
-      placeholder?: string;
-      secure?: boolean;
-      keyboard?: 'default' | 'email-address' | 'phone-pad';
-      autoCapitalize?: 'none' | 'words';
-    },
-  ) => (
-    <View style={styles.field} key={key}>
-      <Text style={styles.label}>{label}</Text>
-      <TextInput
-        style={[styles.input, fieldErrors[key] ? styles.inputError : null]}
-        value={form[key]}
-        onChangeText={setField(key)}
-        secureTextEntry={opts?.secure}
-        keyboardType={opts?.keyboard ?? 'default'}
-        autoCapitalize={opts?.autoCapitalize ?? 'none'}
-        autoCorrect={false}
-        placeholder={opts?.placeholder}
-        placeholderTextColor={colors.textMuted}
-      />
-      {fieldErrors[key] ? <Text style={styles.fieldError}>{fieldErrors[key]}</Text> : null}
-    </View>
-  );
+  const handleGoogleSignIn = () => {
+    Alert.alert('Coming Soon', 'Google sign-in is coming soon!');
+  };
+
+  const maxBirthday = new Date();
+  maxBirthday.setFullYear(maxBirthday.getFullYear() - 13);
 
   return (
     <KeyboardAvoidingView
@@ -130,13 +145,94 @@ export default function SignupScreen({ navigation }: Props) {
             </View>
           )}
 
-          {renderField('Display Name', 'display_name', { placeholder: 'Jane Doe', autoCapitalize: 'words' })}
-          {renderField('Username', 'username', { placeholder: 'jane_doe' })}
-          {renderField('Email', 'email', { placeholder: 'jane@example.com', keyboard: 'email-address' })}
-          {renderField('Phone Number', 'phone_number', { placeholder: '+1 555 000 0000', keyboard: 'phone-pad' })}
-          {renderField('Birthday', 'birthday', { placeholder: 'YYYY-MM-DD' })}
-          {renderField('Password', 'password', { placeholder: '••••••••', secure: true })}
-          {renderField('Confirm Password', 'password_confirm', { placeholder: '••••••••', secure: true })}
+          {/* Email */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Email</Text>
+            <TextInput
+              style={styles.input}
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="you@example.com"
+              placeholderTextColor={colors.textMuted}
+            />
+          </View>
+
+          {/* Password with strength meter */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Password</Text>
+            <TextInput
+              style={styles.input}
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              placeholder="Min 10 chars, upper, lower, number"
+              placeholderTextColor={colors.textMuted}
+            />
+            {password.length > 0 && (
+              <View style={styles.strengthContainer}>
+                <View style={styles.strengthBarTrack}>
+                  <View style={[styles.strengthBarFill, { width: strengthBarWidth as any, backgroundColor: strengthColor }]} />
+                </View>
+                <Text style={[styles.strengthLabel, { color: strengthColor }]}>
+                  {strength.level.charAt(0).toUpperCase() + strength.level.slice(1)}
+                  {strength.hint ? ` — ${strength.hint}` : ''}
+                </Text>
+              </View>
+            )}
+          </View>
+
+          {/* Confirm Password */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Confirm Password</Text>
+            <TextInput
+              style={[
+                styles.input,
+                confirmPassword.length > 0 && confirmPassword !== password && styles.inputError,
+              ]}
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+              placeholder="Re-enter your password"
+              placeholderTextColor={colors.textMuted}
+            />
+            {confirmPassword.length > 0 && confirmPassword !== password && (
+              <Text style={styles.fieldError}>Passwords do not match</Text>
+            )}
+          </View>
+
+          {/* Birthday */}
+          <View style={styles.field}>
+            <Text style={styles.label}>Birthday</Text>
+            <Pressable
+              style={styles.dateButton}
+              onPress={() => setShowPicker(true)}
+            >
+              <Text style={birthday ? styles.dateText : styles.datePlaceholder}>
+                {birthday ? formatDisplayDate(birthday) : 'Select your birthday'}
+              </Text>
+            </Pressable>
+            {showPicker && (
+              <DateTimePicker
+                value={birthday ?? maxBirthday}
+                mode="date"
+                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                maximumDate={maxBirthday}
+                minimumDate={new Date(1900, 0, 1)}
+                onChange={handleDateChange}
+              />
+            )}
+            {showPicker && Platform.OS === 'ios' && (
+              <Pressable
+                style={styles.pickerDoneBtn}
+                onPress={() => setShowPicker(false)}
+              >
+                <Text style={styles.pickerDoneText}>Done</Text>
+              </Pressable>
+            )}
+          </View>
 
           <Pressable
             style={({ pressed }) => [styles.btn, pressed && styles.btnPressed]}
@@ -146,9 +242,29 @@ export default function SignupScreen({ navigation }: Props) {
             {loading ? (
               <ActivityIndicator color={colors.textOnPrimary} />
             ) : (
-              <Text style={styles.btnText}>Create Account</Text>
+              <Text style={styles.btnText}>Continue</Text>
             )}
           </Pressable>
+
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <Pressable
+            style={({ pressed }) => [styles.googleBtn, pressed && styles.btnPressed]}
+            onPress={handleGoogleSignIn}
+          >
+            <Text style={styles.googleBtnText}>Continue with Google</Text>
+          </Pressable>
+
+          <Text style={styles.consent}>
+            By continuing, you agree to our{' '}
+            <Text style={styles.consentLink}>Terms of Service</Text>
+            {' '}and{' '}
+            <Text style={styles.consentLink}>Privacy Policy</Text>
+          </Text>
 
           <Pressable onPress={() => navigation.navigate('Login')} style={styles.link}>
             <Text style={styles.linkText}>
@@ -213,12 +329,56 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     backgroundColor: colors.background.elevated,
   },
+  strengthContainer: {
+    gap: 4,
+    marginTop: 4,
+  },
+  strengthBarTrack: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.borderColor,
+    overflow: 'hidden',
+  },
+  strengthBarFill: {
+    height: 4,
+    borderRadius: 2,
+  },
+  strengthLabel: {
+    fontSize: typography.size.xs,
+    fontWeight: '500',
+  },
   inputError: {
     borderColor: colors.error,
   },
   fieldError: {
     fontSize: typography.size.xs,
     color: colors.error,
+  },
+  dateButton: {
+    borderWidth: 1.5,
+    borderColor: colors.borderColor,
+    borderRadius: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    backgroundColor: colors.background.elevated,
+  },
+  dateText: {
+    fontSize: typography.size.base,
+    color: colors.textPrimary,
+  },
+  datePlaceholder: {
+    fontSize: typography.size.base,
+    color: colors.textMuted,
+  },
+  pickerDoneBtn: {
+    alignSelf: 'flex-end',
+    paddingVertical: spacing.xs,
+    paddingHorizontal: spacing.md,
+  },
+  pickerDoneText: {
+    color: colors.primary,
+    fontWeight: '600',
+    fontSize: typography.size.base,
   },
   btn: {
     backgroundColor: colors.primary,
@@ -234,6 +394,42 @@ const styles = StyleSheet.create({
     color: colors.textOnPrimary,
     fontSize: typography.size.base,
     fontWeight: '700',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.borderColor,
+  },
+  dividerText: {
+    fontSize: typography.size.sm,
+    color: colors.textMuted,
+  },
+  googleBtn: {
+    borderWidth: 1.5,
+    borderColor: colors.borderColor,
+    borderRadius: 12,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    backgroundColor: colors.background.base,
+  },
+  googleBtnText: {
+    color: colors.textPrimary,
+    fontSize: typography.size.base,
+    fontWeight: '600',
+  },
+  consent: {
+    fontSize: typography.size.xs,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  consentLink: {
+    color: colors.primary,
   },
   link: {
     alignItems: 'center',

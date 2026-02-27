@@ -25,12 +25,19 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     # Auth fields
     email = models.EmailField(unique=True)
-    phone_number = models.CharField(max_length=20, unique=True)
+    phone_number = models.CharField(max_length=20, unique=True, null=True, blank=True)
     username = models.CharField(max_length=30, unique=True)
 
     # Profile fields
-    display_name = models.CharField(max_length=50)
+    display_name = models.CharField(max_length=50, blank=True, default='')
     birthday = models.DateField()
+
+    # Email verification + onboarding
+    is_email_verified = models.BooleanField(default=False)
+    email_verification_token = models.CharField(max_length=64, blank=True, null=True)
+    email_verification_token_expires = models.DateTimeField(null=True, blank=True)
+    # default=5 so all existing users skip the onboarding flow
+    onboarding_step = models.IntegerField(default=5)
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
     bio = models.TextField(max_length=500, blank=True)
 
@@ -104,7 +111,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     objects = UserManager()
 
     USERNAME_FIELD = 'username'
-    REQUIRED_FIELDS = ['email', 'phone_number', 'display_name', 'birthday']
+    REQUIRED_FIELDS = ['email', 'birthday']
 
     class Meta:
         ordering = ['username']
