@@ -3,6 +3,7 @@ import { wsManager } from '../../services/websocket';
 import {
   Alert,
   Image,
+  ScrollView,
   View,
   Text,
   FlatList,
@@ -47,6 +48,17 @@ const EMOJI_QUICK = ['👍', '👎', '😂', '😡', '❤️'];
 
 type NewDivider = { id: '__new_divider__'; isDivider: true };
 type ListItem = Message | NewDivider;
+
+interface PendingAttachment {
+  localId: string;
+  uri: string;
+  kind: 'image' | 'video';
+  mimeType: string;
+  thumbUri: string | null;
+  assetId: string | null;
+  uploading: boolean;
+  failed: boolean;
+}
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Chat'>;
@@ -102,12 +114,11 @@ export default function ChatScreen({ navigation, route }: Props) {
   const [oldestId, setOldestId] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [text, setText] = useState('');
-  const [pendingMediaUri, setPendingMediaUri] = useState<string | null>(null);
-  const [pendingMediaKind, setPendingMediaKind] = useState<'image' | 'video' | null>(null);
-  const [pendingMediaThumb, setPendingMediaThumb] = useState<string | null>(null);
-  const [pendingAssetId, setPendingAssetId] = useState<string | null>(null);
-  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const [picking, setPicking] = useState(false);
   const [sendingMedia, setSendingMedia] = useState(false);
+  const uploadingMedia = pendingAttachments.some(a => a.uploading);
+  const hasReadyAttachment = pendingAttachments.some(a => !!a.assetId && !a.failed);
   const [contextMsg, setContextMsg] = useState<Message | null>(null);
   const [contextVisible, setContextVisible] = useState(false);
   const [videoPlayerUrl, setVideoPlayerUrl] = useState<string | null>(null);
@@ -322,83 +333,110 @@ export default function ChatScreen({ navigation, route }: Props) {
   };
 
   const handlePickMedia = async () => {
-    const items = await pickMedia();
-    if (!items) return;
-    const { uri, kind, mimeType, thumbnailUri } = items[0];
-    setPendingMediaUri(uri);
-    setPendingMediaKind(kind);
-    setPendingMediaThumb(thumbnailUri ?? null);
-    setPendingAssetId(null);
-    setUploadingMedia(true);
+    setPicking(true);
+    let items;
     try {
-      const uploaded = await uploadMedia(uri, kind, mimeType);
-      setPendingAssetId(uploaded.asset_id);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to upload media. Please try again.';
-      Alert.alert('Upload failed', msg);
-      setPendingMediaUri(null);
-      setPendingMediaKind(null);
+      items = await pickMedia({ allowsMultiple: true });
     } finally {
-      setUploadingMedia(false);
+      setPicking(false);
     }
+    if (!items) return;
+    const newAttachments: PendingAttachment[] = items.map(item => ({
+      localId: genClientMsgId(),
+      uri: item.uri,
+      kind: item.kind,
+      mimeType: item.mimeType,
+      thumbUri: item.thumbnailUri ?? null,
+      assetId: null,
+      uploading: true,
+      failed: false,
+    }));
+    setPendingAttachments(prev => [...prev, ...newAttachments]);
+    await Promise.all(newAttachments.map(async (att) => {
+      try {
+        const uploaded = await uploadMedia(att.uri, att.kind, att.mimeType);
+        setPendingAttachments(prev =>
+          prev.map(a => a.localId === att.localId ? { ...a, assetId: uploaded.asset_id, uploading: false } : a)
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to upload media. Please try again.';
+        Alert.alert('Upload failed', msg);
+        setPendingAttachments(prev =>
+          prev.map(a => a.localId === att.localId ? { ...a, uploading: false, failed: true } : a)
+        );
+      }
+    }));
   };
 
   const handleSendMedia = async () => {
-    if (!pendingMediaUri || !pendingMediaKind || !pendingAssetId || sendingMedia) return;
+    const ready = pendingAttachments.filter(a => !!a.assetId && !a.uploading && !a.failed);
+    if (!ready.length || sendingMedia) return;
     const content = text.trim();
-    const uri = pendingMediaUri;
-    const kind = pendingMediaKind;
-    const thumb = pendingMediaThumb;
-    const assetId = pendingAssetId;
-    const clientMsgId = genClientMsgId();
-
-    setPendingMediaUri(null);
-    setPendingMediaKind(null);
-    setPendingMediaThumb(null);
-    setPendingAssetId(null);
+    setPendingAttachments(prev => prev.filter(a => !ready.some(r => r.localId === a.localId)));
     setText('');
     setSendingMedia(true);
 
-    const optimisticMsg: Message = {
-      id: clientMsgId,
-      sender: String(me?.id ?? ''),
-      sender_username: null,
-      sender_avatar_url: null,
-      content,
-      media: [{ url: uri, kind, thumbnail_url: thumb, width: null, height: null }],
-      created_at: new Date().toISOString(),
-      is_read: true,
-      client_msg_id: clientMsgId,
-      status: 'sending',
-    };
-    setMessages((prev) => [optimisticMsg, ...prev]);
-
-    try {
-      const msg = await sendDM(partnerId, content, assetId);
-      setMessages((prev) => {
-        if (prev.some((m) => !('isDivider' in m) && String(m.id) === String(msg.id))) {
-          return prev.filter((m) => ('isDivider' in m) || m.id !== clientMsgId);
-        }
-        return prev.map((m) =>
-          !('isDivider' in m) && m.id === clientMsgId
-            ? { ...msg, media: [{ url: uri, kind, thumbnail_url: thumb, width: null, height: null }], status: 'sent' as const }
-            : m,
+    await Promise.all(ready.map(async (att) => {
+      const clientMsgId = genClientMsgId();
+      const optimisticMsg: Message = {
+        id: clientMsgId,
+        sender: String(me?.id ?? ''),
+        sender_username: null,
+        sender_avatar_url: null,
+        content: '',
+        media: [{ url: att.uri, kind: att.kind, thumbnail_url: att.thumbUri, width: null, height: null }],
+        created_at: new Date().toISOString(),
+        is_read: true,
+        client_msg_id: clientMsgId,
+        status: 'sending',
+      };
+      setMessages(prev => [optimisticMsg, ...prev]);
+      try {
+        const msg = await sendDM(partnerId, '', att.assetId!);
+        setMessages(prev => {
+          if (prev.some(m => !('isDivider' in m) && String(m.id) === String(msg.id))) {
+            return prev.filter(m => ('isDivider' in m) || m.id !== clientMsgId);
+          }
+          return prev.map(m =>
+            !('isDivider' in m) && m.id === clientMsgId
+              ? { ...msg, media: [{ url: att.uri, kind: att.kind, thumbnail_url: att.thumbUri, width: null, height: null }], status: 'sent' as const }
+              : m,
+          );
+        });
+      } catch {
+        setMessages(prev =>
+          prev.map(m => !('isDivider' in m) && m.id === clientMsgId ? { ...m, status: 'failed' as const } : m),
         );
-      });
-    } catch {
-      setMessages((prev) =>
-        prev.map((m) =>
-          !('isDivider' in m) && m.id === clientMsgId ? { ...m, status: 'failed' as const } : m,
-        ),
-      );
-      Alert.alert('Error', 'Failed to send media.');
-    } finally {
-      setSendingMedia(false);
+      }
+    }));
+
+    if (content) {
+      const clientMsgId = genClientMsgId();
+      const optimisticMsg: Message = {
+        id: clientMsgId,
+        sender: String(me?.id ?? ''),
+        sender_username: null,
+        sender_avatar_url: null,
+        content,
+        created_at: new Date().toISOString(),
+        is_read: true,
+        client_msg_id: clientMsgId,
+        status: 'sending',
+      };
+      setMessages(prev => [optimisticMsg, ...prev]);
+      const result = wsManager.sendMessage({ type: 'send_message', content, recipient_id: partnerId, client_msg_id: clientMsgId });
+      if (result === 'queued') {
+        setMessages(prev => prev.map(m => !('isDivider' in m) && m.id === clientMsgId ? { ...m, status: 'waiting' as const } : m));
+      } else {
+        _startSendTimer(clientMsgId);
+      }
     }
+
+    setSendingMedia(false);
   };
 
   const handleSend = () => {
-    if (pendingMediaUri) {
+    if (hasReadyAttachment) {
       handleSendMedia();
       return;
     }
@@ -708,31 +746,51 @@ export default function ChatScreen({ navigation, route }: Props) {
 
       {/* Input bar */}
       <View style={[styles.inputArea, { paddingBottom: insets.bottom + spacing.sm }]}>
-        {pendingMediaUri != null && (
-          <View style={styles.pendingMediaPreview}>
-            <View style={styles.pendingMediaWrap}>
-              {pendingMediaKind === 'video' ? (
-                <VideoThumbnail
-                  videoUrl={pendingMediaUri!}
-                  thumbnailUrl={pendingMediaThumb}
-                  style={styles.pendingThumb}
-                  iconSize={18}
-                />
-              ) : (
-                <Image source={{ uri: pendingMediaUri! }} style={styles.pendingThumb} resizeMode="cover" />
-              )}
-              <Pressable
-                style={styles.pendingRemoveBtn}
-                onPress={() => { setPendingMediaUri(null); setPendingMediaKind(null); setPendingMediaThumb(null); setPendingAssetId(null); }}
-              >
-                <Feather name="x" size={12} color="#fff" />
-              </Pressable>
-            </View>
-          </View>
+        {pendingAttachments.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.pendingMediaPreview}
+            contentContainerStyle={{ gap: spacing.sm, paddingVertical: 4 }}
+          >
+            {pendingAttachments.map((att) => (
+              <View key={att.localId} style={styles.pendingMediaWrap}>
+                {att.kind === 'video' ? (
+                  <VideoThumbnail
+                    videoUrl={att.uri}
+                    thumbnailUrl={att.thumbUri}
+                    style={styles.pendingThumb}
+                    iconSize={18}
+                  />
+                ) : (
+                  <Image source={{ uri: att.uri }} style={styles.pendingThumb} resizeMode="cover" />
+                )}
+                {att.uploading && (
+                  <View style={styles.pendingUploadOverlay}>
+                    <ActivityIndicator size="small" color="#fff" />
+                  </View>
+                )}
+                {att.failed && (
+                  <View style={styles.pendingUploadOverlay}>
+                    <Feather name="alert-circle" size={16} color="#ff6b6b" />
+                  </View>
+                )}
+                <Pressable
+                  style={styles.pendingRemoveBtn}
+                  onPress={() => setPendingAttachments(prev => prev.filter(a => a.localId !== att.localId))}
+                >
+                  <Feather name="x" size={12} color="#fff" />
+                </Pressable>
+              </View>
+            ))}
+          </ScrollView>
         )}
         <View style={styles.inputBar}>
-          <Pressable style={styles.mediaPickBtn} onPress={handlePickMedia} disabled={sendingMedia || uploadingMedia}>
-            <Feather name="image" size={22} color={colors.textMuted} />
+          <Pressable style={styles.mediaPickBtn} onPress={handlePickMedia} disabled={sendingMedia || uploadingMedia || picking}>
+            {picking
+              ? <ActivityIndicator size="small" color={colors.textMuted} />
+              : <Feather name="image" size={22} color={colors.textMuted} />
+            }
           </Pressable>
           <TextInput
             style={styles.input}
@@ -745,9 +803,9 @@ export default function ChatScreen({ navigation, route }: Props) {
             returnKeyType="default"
           />
           <Pressable
-            style={[styles.sendBtn, (!text.trim() && !pendingMediaUri) && styles.sendBtnDisabled]}
+            style={[styles.sendBtn, (!text.trim() && !hasReadyAttachment) && styles.sendBtnDisabled]}
             onPress={handleSend}
-            disabled={(!text.trim() && !pendingMediaUri) || sendingMedia || uploadingMedia}
+            disabled={(!text.trim() && !hasReadyAttachment) || sendingMedia || uploadingMedia}
           >
             {sendingMedia || uploadingMedia ? (
               <ActivityIndicator size="small" color="#fff" />
@@ -840,7 +898,6 @@ const styles = StyleSheet.create({
   },
   pendingMediaPreview: {
     marginBottom: spacing.sm,
-    flexDirection: 'row',
   },
   pendingMediaWrap: {
     position: 'relative',
@@ -850,8 +907,10 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 8,
   },
-  pendingThumbVideo: {
-    backgroundColor: '#333',
+  pendingUploadOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },

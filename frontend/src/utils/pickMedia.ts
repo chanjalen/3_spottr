@@ -194,10 +194,8 @@ async function processAssets(
 
     if (!uri) {
       Alert.alert(
-        kind === 'video' ? 'Video not accessible' : 'Image not accessible',
-        kind === 'video'
-          ? 'This video could not be read. Please download it in the Photos app and try again.'
-          : 'This image could not be read from your library.',
+        'Could not load media',
+        'The file could not be downloaded from iCloud. Please check your connection and try again.',
       );
       return null;
     }
@@ -241,15 +239,24 @@ function resolveMimeType(
 /**
  * On iOS: verifies the picker-returned URI is a locally readable file://.
  * With .Automatic mode the picker writes assets to a temp dir, so this is
- * almost always a no-op fast-path. The cache copy is a safety net only.
+ * almost always a no-op fast-path (info.exists = true immediately).
+ *
+ * If the file isn't local yet (iCloud-offloaded asset where the picker
+ * returned a URI but bytes haven't been materialized), we retry copyAsync
+ * with exponential back-off. Each copyAsync attempt triggers iOS to download
+ * the asset from iCloud and blocks until done or until the OS errors out.
+ * We keep retrying up to ICLOUD_WAIT_MS before giving up.
  *
  * On Android: not called — content:// URIs work natively with fetch FormData.
  */
+const ICLOUD_WAIT_MS = 120_000;
+
 async function resolveLocalUriIOS(
   uri: string,
   kind: 'image' | 'video',
   mimeType: string,
 ): Promise<string | null> {
+  // Fast path: file is already on-device (normal case with .Automatic mode).
   try {
     const info = await FileSystem.getInfoAsync(uri);
     if (info.exists) return uri;
@@ -257,23 +264,32 @@ async function resolveLocalUriIOS(
     console.warn('[pickMedia] getInfoAsync failed:', uri, infoErr);
   }
 
-  const cacheDir = FileSystem.cacheDirectory ?? 'file:///tmp/';
+  // iCloud asset: bytes not materialized yet. Build a stable dest path
+  // (single file, retries overwrite it) and retry until download completes.
   const ext =
     mimeType === 'video/quicktime' ? 'mov' :
     mimeType === 'video/mp4'       ? 'mp4' :
     mimeType === 'image/png'       ? 'png' : 'jpg';
-  const dest = `${cacheDir}spottr_${kind}_${Date.now()}.${ext}`;
+  const dest = `${FileSystem.cacheDirectory ?? 'file:///tmp/'}spottr_${kind}_${Date.now()}.${ext}`;
 
-  try {
-    await FileSystem.copyAsync({ from: uri, to: dest });
-    const info = await FileSystem.getInfoAsync(dest);
-    if (info.exists) {
-      console.log('[pickMedia] Resolved via cache copy:', dest);
-      return dest;
+  const start = Date.now();
+  let delay = 500;
+
+  while (Date.now() - start < ICLOUD_WAIT_MS) {
+    try {
+      await FileSystem.copyAsync({ from: uri, to: dest });
+      const info = await FileSystem.getInfoAsync(dest);
+      if (info.exists) {
+        console.log('[pickMedia] Resolved after iCloud wait:', dest);
+        return dest;
+      }
+    } catch (err) {
+      console.warn('[pickMedia] iCloud copy attempt failed, retrying…', err);
     }
-  } catch (copyErr) {
-    console.error('[pickMedia] cache copy failed:', uri, copyErr);
+    await new Promise(r => setTimeout(r, delay));
+    delay = Math.min(4000, Math.round(delay * 1.6));
   }
 
+  console.error('[pickMedia] timed out waiting for iCloud download:', uri);
   return null;
 }

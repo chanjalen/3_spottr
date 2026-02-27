@@ -402,6 +402,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
   const [draftMediaIds, setDraftMediaIds] = useState<string[]>([]);
   const [draftMediaTypes, setDraftMediaTypes] = useState<Array<'image' | 'video'>>([]);
   const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [picking, setPicking] = useState(false);
   // Poll builder
   const [showPollBuilder, setShowPollBuilder] = useState(false);
   const [pollQuestion, setPollQuestion] = useState('');
@@ -553,7 +554,13 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
   // ── Create announcement (optimistic) ────────────────────────────────────
 
   const handlePickMedia = async () => {
-    const items = await pickMedia({ allowsMultiple: true });
+    setPicking(true);
+    let items;
+    try {
+      items = await pickMedia({ allowsMultiple: true });
+    } finally {
+      setPicking(false);
+    }
     if (!items) return;
     setDraftMediaUris(prev => [...prev, ...items.map(i => i.uri)]);
     setDraftMediaTypes(prev => [...prev, ...items.map(i => i.kind)]);
@@ -937,8 +944,11 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
 
             {/* Action bar */}
             <View style={styles.sheetActions}>
-              <Pressable style={styles.sheetActionBtn} onPress={handlePickMedia}>
-                <Feather name="image" size={20} color={colors.primary} />
+              <Pressable style={styles.sheetActionBtn} onPress={handlePickMedia} disabled={picking || uploadingMedia}>
+                {picking
+                  ? <ActivityIndicator size="small" color={colors.primary} />
+                  : <Feather name="image" size={20} color={colors.primary} />
+                }
               </Pressable>
               <Pressable
                 style={[styles.sheetActionBtn, showPollBuilder && styles.sheetActionBtnActive]}
