@@ -11,7 +11,7 @@ urlpatterns = [
     path("", feed_view, name="home"),
     path("admin/", admin.site.urls),
     path("accounts/", include("accounts.urls")),
-    path("accounts/", include("allauth.socialaccount.urls")),  # Google OAuth callbacks
+    path("accounts/", include("allauth.urls")),  # Google OAuth callbacks
     path("gyms/", include("gyms.urls")),
     path("social/", include("social.urls")),
     path("workouts/", include("workouts.urls")),

@@ -6,7 +6,7 @@ import os
 from pathlib import Path
 from .base import *
 
-DEBUG = True
+DEBUG = False
 
 ALLOWED_HOSTS = [
     os.getenv('PYTHONANYWHERE_DOMAIN', 'aidangilbert.pythonanywhere.com'),
