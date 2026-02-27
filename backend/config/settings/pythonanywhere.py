@@ -9,10 +9,16 @@ from .base import *
 DEBUG = False
 
 ALLOWED_HOSTS = [
-    os.getenv('PYTHONANYWHERE_DOMAIN', ''),
+    os.getenv('PYTHONANYWHERE_DOMAIN', 'aidangilbert.pythonanywhere.com'),
     'localhost',
     '127.0.0.1',
 ]
+
+# django.contrib.sites — allauth uses this to build OAuth redirect URIs.
+# After running migrate, update the Site record in the admin panel:
+#   Domain name: aidangilbert.pythonanywhere.com
+#   Display name: Spottr
+SITE_ID = 1
 
 # ── Database — SQLite for PythonAnywhere deployment ───────────────────────────
 DATABASES = {
@@ -34,6 +40,12 @@ CSRF_COOKIE_SECURE = False
 DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
 MEDIA_ROOT = BASE_DIR / 'media_uploads'
 MEDIA_URL = '/media/'
+
+# ── Strip out heavy apps not needed on PythonAnywhere ────────────────────────
+# Remove daphne (ASGI server), channels, storages — not used here.
+INSTALLED_APPS = [app for app in INSTALLED_APPS if app not in (
+    'daphne', 'channels', 'storages',
+)]
 
 # ── Channel layer — in-memory (no Redis needed) ───────────────────────────────
 CHANNEL_LAYERS = {

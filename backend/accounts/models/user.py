@@ -25,12 +25,12 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     # Auth fields
     email = models.EmailField(unique=True)
-    phone_number = models.CharField(max_length=20, unique=True)
+    phone_number = models.CharField(max_length=20, unique=True, blank=True, null=True)
     username = models.CharField(max_length=30, unique=True)
 
     # Profile fields
     display_name = models.CharField(max_length=50)
-    birthday = models.DateField()
+    birthday = models.DateField(blank=True, null=True)
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
     bio = models.TextField(max_length=500, blank=True)
 

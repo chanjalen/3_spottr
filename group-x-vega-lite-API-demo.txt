@@ -1,0 +1,48 @@
+{
+  "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+  "title": {
+    "text": "Spottr – Gym Membership Counts",
+    "subtitle": "Data sourced live from Spottr public API",
+    "fontSize": 16,
+    "subtitleFontSize": 12,
+    "color": "#333",
+    "subtitleColor": "#666"
+  },
+  "width": 500,
+  "height": 300,
+  "data": {
+    "url": "https://aidangilbert.pythonanywhere.com/gyms/api/summary/",
+    "format": {"type": "json"}
+  },
+  "mark": {
+    "type": "bar",
+    "cornerRadiusTopLeft": 4,
+    "cornerRadiusTopRight": 4,
+    "tooltip": true
+  },
+  "encoding": {
+    "x": {
+      "field": "name",
+      "type": "nominal",
+      "title": "Gym Name",
+      "axis": {"labelAngle": -35, "labelLimit": 120}
+    },
+    "y": {
+      "field": "member_count",
+      "type": "quantitative",
+      "title": "Number of Members",
+      "axis": {"tickMinStep": 1}
+    },
+    "color": {
+      "field": "member_count",
+      "type": "quantitative",
+      "scale": {"scheme": "purples"},
+      "legend": {"title": "Members"}
+    },
+    "tooltip": [
+      {"field": "name", "type": "nominal", "title": "Gym"},
+      {"field": "member_count", "type": "quantitative", "title": "Members"},
+      {"field": "rating", "type": "quantitative", "title": "Rating", "format": ".1f"}
+    ]
+  }
+}
