@@ -2,11 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { wsManager } from '../../services/websocket';
 import {
   Alert,
-  Image,
   ScrollView,
   View,
   Text,
-  FlatList,
   TextInput,
   Pressable,
   StyleSheet,
@@ -15,6 +13,8 @@ import {
   ActivityIndicator,
   Modal,
 } from 'react-native';
+import { Image } from 'expo-image';
+import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -24,14 +24,14 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
 import VideoThumbnail from '../../components/common/VideoThumbnail';
+import MessageRow, { type ListItem } from '../../components/messages/MessageRow';
 import { fetchGroupMessages, markMessagesRead, reactToMessage, sendGroupMessage } from '../../api/messaging';
 import { uploadMedia } from '../../api/organizations';
-import { Message, MessageReaction } from '../../types/messaging';
+import { Message } from '../../types/messaging';
 import { useAuth } from '../../store/AuthContext';
 import { useUnreadCount } from '../../store/UnreadCountContext';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
-import { fetchGroupDetail, acceptJoinRequest, denyJoinRequest } from '../../api/groups';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -42,11 +42,7 @@ const SEND_TIMEOUT_MS = 12_000;
 
 const EMOJI_QUICK = ['👍', '👎', '😂', '😡', '❤️'];
 
-
 // ── Types ────────────────────────────────────────────────────────────────────
-
-type NewDivider = { id: '__new_divider__'; isDivider: true };
-type ListItem = Message | NewDivider;
 
 interface PendingAttachment {
   localId: string;
@@ -63,21 +59,6 @@ type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'GroupChat'>;
   route: RouteProp<RootStackParamList, 'GroupChat'>;
 };
-
-// ── Status icon ───────────────────────────────────────────────────────────────
-
-function MsgStatusIcon({ status }: { status: NonNullable<Message['status']> }) {
-  if (status === 'sending' || status === 'waiting') {
-    return <Feather name="clock" size={10} color="rgba(255,255,255,0.65)" />;
-  }
-  if (status === 'sent') {
-    return <Feather name="check" size={10} color="rgba(255,255,255,0.85)" />;
-  }
-  if (status === 'failed') {
-    return <Feather name="alert-circle" size={10} color="#ff6b6b" />;
-  }
-  return null;
-}
 
 // ── Video player modal ────────────────────────────────────────────────────────
 
@@ -106,8 +87,12 @@ export default function GroupChatScreen({ navigation, route }: Props) {
   const { refresh: refreshUnread } = useUnreadCount();
   const { groupId, groupName, groupAvatar } = route.params;
 
+  // Data is stored oldest-first so FlashList renders naturally (oldest at top, newest at bottom).
   const [messages, setMessages] = useState<ListItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  // listVisible stays false until the list has been scrolled to the bottom for the first time,
+  // preventing the 1-2 frame flash of the top of the list before the snap-to-bottom.
+  const [listVisible, setListVisible] = useState(false);
+  const dataLoadedRef = useRef(false); // gates onContentSizeChange so it doesn't fire on empty mount
   const [hasMore, setHasMore] = useState(false);
   const [oldestId, setOldestId] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -117,14 +102,24 @@ export default function GroupChatScreen({ navigation, route }: Props) {
   const [sendingMedia, setSendingMedia] = useState(false);
   const uploadingMedia = pendingAttachments.some(a => a.uploading);
   const hasReadyAttachment = pendingAttachments.some(a => !!a.assetId && !a.failed);
-  const [userRole, setUserRole] = useState<'creator' | 'admin' | 'member' | null>(null);
-  const [actingOnRequest, setActingOnRequest] = useState<string | null>(null);
   const [contextMsg, setContextMsg] = useState<Message | null>(null);
   const [contextVisible, setContextVisible] = useState(false);
   const [videoPlayerUrl, setVideoPlayerUrl] = useState<string | null>(null);
-  const flatRef = useRef<FlatList>(null);
+  const flatRef = useRef<FlashList<ListItem>>(null);
   const newestIdRef = useRef<string | null>(null);
   const pendingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const initialScrollDone = useRef(false);
+  // Set to true once the list has been revealed; gates re-scrolls in onContentSizeChange.
+  const listRevealedRef = useRef(false);
+  // Track scroll position so we know whether to auto-scroll when a new message arrives.
+  const scrollOffsetRef = useRef(0);
+  const contentHeightRef = useRef(0);
+  const listHeightRef = useRef(0);
+  const isNearBottom = () =>
+    contentHeightRef.current - scrollOffsetRef.current - listHeightRef.current < 150;
+
+  const myId = String(me?.id ?? '');
+  const _mountTime = useRef(Date.now());
 
   // ── Cleanup timers on unmount ──────────────────────────────────────────────
   useEffect(() => {
@@ -136,29 +131,44 @@ export default function GroupChatScreen({ navigation, route }: Props) {
   // ── Initial load ──────────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
+    const t0 = Date.now();
     try {
-      const [page, detail] = await Promise.all([
-        fetchGroupMessages(groupId),
-        fetchGroupDetail(groupId).catch(() => null),
-      ]);
-      const reversed = [...page.results].reverse();
-      const firstReadIdx = reversed.findIndex((m) => m.is_read);
-      const listItems: ListItem[] = firstReadIdx > 0
-        ? [...reversed.slice(0, firstReadIdx), { id: '__new_divider__', isDivider: true as const }, ...reversed.slice(firstReadIdx)]
-        : reversed;
+      const page = await fetchGroupMessages(groupId);
+      const fetchMs = Date.now() - t0;
+      // Backend sends oldest-first — keep that order.
+      const firstUnreadIdx = page.results.findIndex(m => !m.is_read);
+      const listItems: ListItem[] = firstUnreadIdx > 0
+        ? [
+            ...page.results.slice(0, firstUnreadIdx),
+            { id: '__new_divider__', isDivider: true as const },
+            ...page.results.slice(firstUnreadIdx),
+          ]
+        : [...page.results];
+      dataLoadedRef.current = true; // must be set before setMessages triggers onContentSizeChange
       setMessages(listItems);
       setHasMore(page.has_more);
       setOldestId(page.oldest_id ?? null);
       newestIdRef.current = page.newest_id ?? null;
-      if (detail) setUserRole(detail.user_role);
       const unread = page.results
-        .filter((m) => !m.is_read && String(m.sender) !== String(me?.id))
-        .map((m) => String(m.id));
+        .filter(m => !m.is_read && String(m.sender) !== myId)
+        .map(m => String(m.id));
       if (unread.length) markMessagesRead(unread).then(refreshUnread).catch(() => {});
-    } finally {
-      setLoading(false);
+      // Empty conversation: no content size change will fire, so reveal directly.
+      if (listItems.length === 0) { listRevealedRef.current = true; setListVisible(true); }
+      if (__DEV__) {
+        const mediaCount = page.results.filter(m => m.media && m.media.length > 0).length;
+        const totalMs = Date.now() - _mountTime.current;
+        console.log(
+          `[ChatLoad] Group | group=${groupId} | fetch=${fetchMs}ms | total=${totalMs}ms` +
+          ` | msgs=${page.results.length} | withMedia=${mediaCount} | hasMore=${page.has_more}`,
+        );
+      }
+    } catch {
+      // On error, reveal the (empty) list so the screen isn't stuck on the spinner.
+      listRevealedRef.current = true;
+      setListVisible(true);
     }
-  }, [groupId, me?.id]);
+  }, [groupId, myId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -175,7 +185,8 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     setLoadingMore(true);
     try {
       const page = await fetchGroupMessages(groupId, { before_id: oldestId });
-      setMessages((prev) => [...prev, ...[...page.results].reverse()]);
+      // Older messages prepend to the front of the list.
+      setMessages(prev => [...page.results, ...prev]);
       setHasMore(page.has_more);
       setOldestId(page.oldest_id ?? null);
     } finally {
@@ -183,7 +194,6 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     }
   }, [hasMore, loadingMore, oldestId, groupId]);
 
-  // Silently refresh on focus (e.g. after zap from InactiveStreakSheet).
   const initialMountRef = useRef(true);
   useFocusEffect(
     useCallback(() => {
@@ -191,17 +201,17 @@ export default function GroupChatScreen({ navigation, route }: Props) {
         initialMountRef.current = false;
         return;
       }
-      fetchGroupMessages(groupId).then((page) => {
-        setMessages([...page.results].reverse());
+      fetchGroupMessages(groupId).then(page => {
+        setMessages([...page.results]);
         setHasMore(page.has_more);
         setOldestId(page.oldest_id ?? null);
         newestIdRef.current = page.newest_id ?? null;
         const unread = page.results
-          .filter((m) => !m.is_read && String(m.sender) !== String(me?.id))
-          .map((m) => String(m.id));
+          .filter(m => !m.is_read && String(m.sender) !== myId)
+          .map(m => String(m.id));
         if (unread.length) markMessagesRead(unread).then(refreshUnread).catch(() => {});
       }).catch(() => {});
-    }, [groupId, me?.id]),
+    }, [groupId, myId]),
   );
 
   // ── WS: incoming messages ─────────────────────────────────────────────────
@@ -210,11 +220,12 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     const handler = (msg: Message) => {
       if (String(msg.group_id) !== String(groupId)) return;
 
-      setMessages((prev) => {
-        // Reconcile optimistic message by client_msg_id.
+      const nearBottom = isNearBottom();
+      let appended = false;
+      setMessages(prev => {
         if (msg.client_msg_id) {
           const pendingIdx = prev.findIndex(
-            (m) => !('isDivider' in m) && m.id === msg.client_msg_id,
+            m => !('isDivider' in m) && m.id === msg.client_msg_id,
           );
           if (pendingIdx !== -1) {
             const timer = pendingTimers.current.get(msg.client_msg_id);
@@ -227,20 +238,26 @@ export default function GroupChatScreen({ navigation, route }: Props) {
             return updated;
           }
         }
-        if (prev.some((m) => !('isDivider' in m) && String(m.id) === String(msg.id))) return prev;
-        return [msg, ...prev];
+        if (prev.some(m => !('isDivider' in m) && String(m.id) === String(msg.id))) return prev;
+        appended = true;
+        return [...prev, msg];
       });
+
+      // Auto-scroll to bottom when a genuinely new message arrives and user was already near bottom.
+      if (appended && nearBottom) {
+        requestAnimationFrame(() => flatRef.current?.scrollToEnd({ animated: true }));
+      }
 
       newestIdRef.current = String(msg.id);
 
-      if (String(msg.sender) !== String(me?.id)) {
+      if (String(msg.sender) !== myId) {
         markMessagesRead([String(msg.id)]).then(refreshUnread).catch(() => {});
       }
     };
 
     wsManager.on('new_message', handler);
     return () => wsManager.off('new_message', handler);
-  }, [groupId, me?.id, refreshUnread]);
+  }, [groupId, myId, refreshUnread]);
 
   // ── WS: gap-sync on reconnect ─────────────────────────────────────────────
 
@@ -248,27 +265,27 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     const handler = () => {
       const nid = newestIdRef.current;
       if (!nid) return;
-      fetchGroupMessages(groupId, { after_id: nid, limit: 50 }).then((page) => {
+      fetchGroupMessages(groupId, { after_id: nid, limit: 50 }).then(page => {
         if (!page.results.length) return;
         newestIdRef.current = page.newest_id ?? nid;
-        setMessages((prev) => {
+        setMessages(prev => {
           const existingIds = new Set(
-            prev.filter((m): m is Message => !('isDivider' in m)).map((m) => String(m.id))
+            prev.filter((m): m is Message => !('isDivider' in m)).map(m => String(m.id))
           );
-          const fresh = [...page.results].reverse().filter((m) => !existingIds.has(String(m.id)));
+          const fresh = page.results.filter(m => !existingIds.has(String(m.id)));
           if (!fresh.length) return prev;
-          return [...fresh, ...prev];
+          return [...prev, ...fresh];
         });
         const unread = page.results
-          .filter((m) => !m.is_read && String(m.sender) !== String(me?.id))
-          .map((m) => String(m.id));
+          .filter(m => !m.is_read && String(m.sender) !== myId)
+          .map(m => String(m.id));
         if (unread.length) markMessagesRead(unread).then(refreshUnread).catch(() => {});
       }).catch(() => {});
     };
 
     wsManager.on('connected', handler);
     return () => wsManager.off('connected', handler);
-  }, [groupId, me?.id, refreshUnread]);
+  }, [groupId, myId, refreshUnread]);
 
   // ── WS: send error ────────────────────────────────────────────────────────
 
@@ -280,8 +297,8 @@ export default function GroupChatScreen({ navigation, route }: Props) {
         clearTimeout(timer);
         pendingTimers.current.delete(client_msg_id);
       }
-      setMessages((prev) =>
-        prev.map((m) =>
+      setMessages(prev =>
+        prev.map(m =>
           !('isDivider' in m) && m.id === client_msg_id
             ? { ...m, status: 'failed' as const }
             : m,
@@ -296,16 +313,16 @@ export default function GroupChatScreen({ navigation, route }: Props) {
 
   useEffect(() => {
     const handler = ({ client_msg_id }: { client_msg_id: string }) => {
-      setMessages((prev) =>
-        prev.map((m) =>
+      setMessages(prev =>
+        prev.map(m =>
           !('isDivider' in m) && m.id === client_msg_id && m.status === 'waiting'
             ? { ...m, status: 'sending' as const }
             : m,
         ),
       );
       const timeout = setTimeout(() => {
-        setMessages((prev) =>
-          prev.map((m) =>
+        setMessages(prev =>
+          prev.map(m =>
             !('isDivider' in m) && m.id === client_msg_id && m.status === 'sending'
               ? { ...m, status: 'failed' as const }
               : m,
@@ -323,8 +340,8 @@ export default function GroupChatScreen({ navigation, route }: Props) {
 
   const _startSendTimer = (clientMsgId: string) => {
     const timeout = setTimeout(() => {
-      setMessages((prev) =>
-        prev.map((m) =>
+      setMessages(prev =>
+        prev.map(m =>
           !('isDivider' in m) && m.id === clientMsgId && m.status === 'sending'
             ? { ...m, status: 'failed' as const }
             : m,
@@ -383,7 +400,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
       const clientMsgId = genClientMsgId();
       const optimisticMsg: Message = {
         id: clientMsgId,
-        sender: String(me?.id ?? ''),
+        sender: myId,
         sender_username: null,
         sender_avatar_url: null,
         content: '',
@@ -394,7 +411,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
         client_msg_id: clientMsgId,
         status: 'sending',
       };
-      setMessages(prev => [optimisticMsg, ...prev]);
+      setMessages(prev => [...prev, optimisticMsg]);
       try {
         const msg = await sendGroupMessage(groupId, '', att.assetId!);
         setMessages(prev => {
@@ -418,7 +435,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
       const clientMsgId = genClientMsgId();
       const optimisticMsg: Message = {
         id: clientMsgId,
-        sender: String(me?.id ?? ''),
+        sender: myId,
         sender_username: null,
         sender_avatar_url: null,
         content,
@@ -428,7 +445,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
         client_msg_id: clientMsgId,
         status: 'sending',
       };
-      setMessages(prev => [optimisticMsg, ...prev]);
+      setMessages(prev => [...prev, optimisticMsg]);
       const result = wsManager.sendMessage({ type: 'send_message', content, group_id: groupId, client_msg_id: clientMsgId });
       if (result === 'queued') {
         setMessages(prev => prev.map(m => !('isDivider' in m) && m.id === clientMsgId ? { ...m, status: 'waiting' as const } : m));
@@ -453,7 +470,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
 
     const optimisticMsg: Message = {
       id: clientMsgId,
-      sender: String(me?.id ?? ''),
+      sender: myId,
       sender_username: null,
       sender_avatar_url: null,
       content,
@@ -463,7 +480,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
       client_msg_id: clientMsgId,
       status: 'sending',
     };
-    setMessages((prev) => [optimisticMsg, ...prev]);
+    setMessages(prev => [...prev, optimisticMsg]);
 
     const result = wsManager.sendMessage({
       type: 'send_message',
@@ -473,8 +490,8 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     });
 
     if (result === 'queued') {
-      setMessages((prev) =>
-        prev.map((m) =>
+      setMessages(prev =>
+        prev.map(m =>
           !('isDivider' in m) && m.id === clientMsgId
             ? { ...m, status: 'waiting' as const }
             : m,
@@ -505,8 +522,8 @@ export default function GroupChatScreen({ navigation, route }: Props) {
       client_msg_id: clientMsgId,
     });
 
-    setMessages((prev) =>
-      prev.map((m) =>
+    setMessages(prev =>
+      prev.map(m =>
         !('isDivider' in m) && m.id === clientMsgId
           ? { ...m, status: result === 'queued' ? 'waiting' as const : 'sending' as const }
           : m,
@@ -531,7 +548,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
             style: 'destructive' as const,
             onPress: () => {
               if (msg.client_msg_id) wsManager.removeFromQueue(msg.client_msg_id);
-              setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+              setMessages(prev => prev.filter(m => m.id !== msg.id));
             },
           },
           { text: 'Cancel', style: 'cancel' as const },
@@ -550,8 +567,8 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     setContextMsg(null);
     try {
       const res = await reactToMessage(msg.id, emoji);
-      setMessages((prev) =>
-        prev.map((m) =>
+      setMessages(prev =>
+        prev.map(m =>
           !('isDivider' in m) && String(m.id) === String(msg.id)
             ? { ...m, reactions: res.reactions }
             : m,
@@ -563,8 +580,8 @@ export default function GroupChatScreen({ navigation, route }: Props) {
   const handleTapReaction = useCallback(async (msg: Message, emoji: string) => {
     try {
       const res = await reactToMessage(msg.id, emoji);
-      setMessages((prev) =>
-        prev.map((m) =>
+      setMessages(prev =>
+        prev.map(m =>
           !('isDivider' in m) && String(m.id) === String(msg.id)
             ? { ...m, reactions: res.reactions }
             : m,
@@ -573,220 +590,45 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     } catch {}
   }, []);
 
-  // ── Join request handlers ─────────────────────────────────────────────────
+  // ── List helpers ──────────────────────────────────────────────────────────
 
-  const handleAccept = async (requestId: string) => {
-    if (actingOnRequest) return;
-    setActingOnRequest(requestId);
-    try {
-      await acceptJoinRequest(groupId, requestId);
-      setMessages((prev) =>
-        prev.map((m) => {
-          if ('isDivider' in m) return m;
-          return m.join_request_id === requestId
-            ? { ...m, join_request_status: 'accepted' }
-            : m;
-        }),
-      );
-    } finally {
-      setActingOnRequest(null);
+  const handleNavigateToProfile = useCallback((username: string | null) => {
+    if (username) navigation.navigate('Profile', { username });
+  }, [navigation]);
+
+  const keyExtractor = useCallback((item: ListItem) => String(item.id), []);
+
+  const ItemSeparator = useCallback(() => <View style={{ height: spacing.sm }} />, []);
+
+  const overrideItemLayout = useCallback((
+    layout: { span?: number; size?: number },
+    item: ListItem,
+  ) => {
+    if ('isDivider' in item) {
+      layout.size = 36;
+    } else if (item.is_system) {
+      layout.size = 44;
+    } else if (item.media && item.media.length > 0) {
+      layout.size = 204;
+    } else {
+      layout.size = 56;
     }
-  };
+  }, []);
 
-  const handleDeny = async (requestId: string) => {
-    if (actingOnRequest) return;
-    setActingOnRequest(requestId);
-    try {
-      await denyJoinRequest(groupId, requestId);
-      setMessages((prev) =>
-        prev.map((m) => {
-          if ('isDivider' in m) return m;
-          return m.join_request_id === requestId
-            ? { ...m, join_request_status: 'denied' }
-            : m;
-        }),
-      );
-    } finally {
-      setActingOnRequest(null);
-    }
-  };
-
-  const canManageRequests = userRole === 'creator' || userRole === 'admin';
+  const renderItem = useCallback(({ item }: { item: ListItem }) => (
+    <MessageRow
+      item={item}
+      myId={myId}
+      isGroup
+      onNavigateToProfile={handleNavigateToProfile}
+      onRetry={handleRetry}
+      onLongPress={handleLongPress}
+      onTapReaction={handleTapReaction}
+      onVideoPress={setVideoPlayerUrl}
+    />
+  ), [myId, handleNavigateToProfile, handleRetry, handleLongPress, handleTapReaction]);
 
   // ── Render ────────────────────────────────────────────────────────────────
-
-  const renderItem = useCallback(({ item }: { item: ListItem }) => {
-    if ('isDivider' in item) {
-      return (
-        <View style={styles.dividerRow}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerLabel}>NEW</Text>
-          <View style={styles.dividerLine} />
-        </View>
-      );
-    }
-
-    const isOwn = String(item.sender) === String(me?.id);
-    const isSystem = item.is_system;
-    const isFailed = item.status === 'failed';
-
-    if (isSystem) {
-      const hasRequest = !!item.join_request_id;
-      const isPending = item.join_request_status === 'pending';
-      const isActing = actingOnRequest === item.join_request_id;
-
-      return (
-        <View style={styles.systemMsg}>
-          <Text style={styles.systemMsgText}>{item.content}</Text>
-          {hasRequest && canManageRequests && isPending && (
-            <View style={styles.requestActions}>
-              <Pressable
-                style={[styles.acceptBtn, isActing && styles.actionBtnDisabled]}
-                onPress={() => handleAccept(item.join_request_id!)}
-                disabled={!!actingOnRequest}
-              >
-                {isActing ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.acceptBtnText}>Accept</Text>
-                )}
-              </Pressable>
-              <Pressable
-                style={[styles.denyBtn, isActing && styles.actionBtnDisabled]}
-                onPress={() => handleDeny(item.join_request_id!)}
-                disabled={!!actingOnRequest}
-              >
-                <Text style={styles.denyBtnText}>Deny</Text>
-              </Pressable>
-            </View>
-          )}
-          {hasRequest && !isPending && (
-            <Text style={styles.requestStatusText}>
-              {item.join_request_status === 'accepted' ? 'Accepted' : 'Denied'}
-            </Text>
-          )}
-        </View>
-      );
-    }
-
-    const reactions = item.reactions ?? [];
-
-    return (
-      <View style={[styles.msgWrap, isOwn ? styles.msgWrapOwn : styles.msgWrapOther]}>
-        {!isOwn && (
-          <Pressable
-            onPress={() => {
-              if (item.sender_username) {
-                navigation.navigate('Profile', { username: item.sender_username });
-              }
-            }}
-          >
-            <Avatar
-              uri={item.sender_avatar_url}
-              name={item.sender_username ?? '?'}
-              size={28}
-            />
-          </Pressable>
-        )}
-        <View style={{ maxWidth: '75%' }}>
-          {isFailed ? (
-            <Pressable
-              onPress={() => handleRetry(item)}
-              onLongPress={() => handleLongPress(item)}
-              delayLongPress={400}
-            >
-              <View style={styles.msgContent}>
-                {!isOwn && (
-                  <Text style={styles.senderName}>{item.sender_username ?? ''}</Text>
-                )}
-                {item.media && item.media.length > 0 && (
-                  <View style={[styles.msgMediaGrid, { opacity: 0.7 }]}>
-                    {item.media.map((m, idx) =>
-                      m.kind === 'video' ? (
-                        <View key={idx} style={[styles.msgMediaThumb, styles.msgMediaVideo]}>
-                          {m.thumbnail_url ? (
-                            <Image source={{ uri: m.thumbnail_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                          ) : null}
-                          <Feather name="play-circle" size={28} color="#fff" />
-                        </View>
-                      ) : (
-                        <Image key={idx} source={{ uri: m.thumbnail_url ?? m.url }} style={styles.msgMediaThumb} resizeMode="cover" />
-                      )
-                    )}
-                  </View>
-                )}
-                {!!item.content && (
-                  <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther, styles.bubbleFailed]}>
-                    <Text style={[styles.bubbleText, isOwn ? styles.bubbleTextOwn : styles.bubbleTextOther]}>
-                      {item.content}
-                    </Text>
-                  </View>
-                )}
-                {isOwn && item.status != null && (
-                  <View style={styles.msgStatus}>
-                    <MsgStatusIcon status={item.status} />
-                  </View>
-                )}
-              </View>
-            </Pressable>
-          ) : (
-            <Pressable onLongPress={() => handleLongPress(item)} delayLongPress={400}>
-              <View style={styles.msgContent}>
-                {!isOwn && (
-                  <Text style={styles.senderName}>{item.sender_username ?? ''}</Text>
-                )}
-                {item.media && item.media.length > 0 && (
-                  <View style={styles.msgMediaGrid}>
-                    {item.media.map((m, idx) =>
-                      m.kind === 'video' ? (
-                        <Pressable key={idx} onPress={() => setVideoPlayerUrl(m.url)}>
-                          <VideoThumbnail
-                            videoUrl={m.url}
-                            thumbnailUrl={m.thumbnail_url}
-                            style={styles.msgMediaThumb}
-                          />
-                        </Pressable>
-                      ) : (
-                        <Image key={idx} source={{ uri: m.thumbnail_url ?? m.url }} style={styles.msgMediaThumb} resizeMode="cover" />
-                      )
-                    )}
-                  </View>
-                )}
-                {!!item.content && (
-                  <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
-                    <Text style={[styles.bubbleText, isOwn ? styles.bubbleTextOwn : styles.bubbleTextOther]}>
-                      {item.content}
-                    </Text>
-                  </View>
-                )}
-                {isOwn && item.status != null && (
-                  <View style={styles.msgStatus}>
-                    <MsgStatusIcon status={item.status} />
-                  </View>
-                )}
-              </View>
-            </Pressable>
-          )}
-          {reactions.length > 0 && (
-            <View style={[styles.reactionsRow, isOwn && styles.reactionsRowOwn]}>
-              {reactions.map((r: MessageReaction) => (
-                <Pressable
-                  key={r.emoji}
-                  style={[styles.reactionChip, r.user_reacted && styles.reactionChipActive]}
-                  onPress={() => handleTapReaction(item, r.emoji)}
-                >
-                  <Text style={styles.reactionEmoji}>{r.emoji}</Text>
-                  <Text style={[styles.reactionCount, r.user_reacted && styles.reactionCountActive]}>
-                    {r.count}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
-        </View>
-      </View>
-    );
-  }, [me?.id, actingOnRequest, canManageRequests, navigation, handleRetry, handleLongPress, handleTapReaction]);
 
   return (
     <KeyboardAvoidingView
@@ -821,32 +663,61 @@ export default function GroupChatScreen({ navigation, route }: Props) {
         </View>
       </LinearGradient>
 
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={colors.primary} />
+      <View style={{ flex: 1 }}>
+        {!listVisible && (
+          <View style={[StyleSheet.absoluteFill, styles.center]}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        )}
+        <View style={{ flex: 1, opacity: listVisible ? 1 : 0 }}>
+          <FlashList
+            ref={flatRef}
+            data={messages}
+            keyExtractor={keyExtractor}
+            renderItem={renderItem}
+            estimatedItemSize={80}
+            overrideItemLayout={overrideItemLayout}
+            ItemSeparatorComponent={ItemSeparator}
+            contentContainerStyle={{ padding: spacing.base, paddingBottom: 16 }}
+            // Scroll to the bottom (newest messages) on first render, then reveal.
+            onContentSizeChange={() => {
+              if (!dataLoadedRef.current || listRevealedRef.current) return;
+              // Re-scroll on every content size change while hidden — FlashList remeasures
+              // items (especially media) multiple times, so we must keep chasing the real bottom.
+              flatRef.current?.scrollToEnd({ animated: false });
+              if (!initialScrollDone.current) {
+                initialScrollDone.current = true;
+                setTimeout(() => {
+                  listRevealedRef.current = true;
+                  setListVisible(true);
+                }, 150);
+              }
+            }}
+            onScroll={({ nativeEvent }) => {
+              scrollOffsetRef.current = nativeEvent.contentOffset.y;
+              contentHeightRef.current = nativeEvent.contentSize.height;
+              listHeightRef.current = nativeEvent.layoutMeasurement.height;
+            }}
+            scrollEventThrottle={100}
+            onStartReached={loadMore}
+            onStartReachedThreshold={0.3}
+            // Keep the scroll position anchored when older messages are prepended.
+            // autoscrollToBottomThreshold is intentionally omitted — it misfires when
+            // prepending items. New-message auto-scroll is handled explicitly in the WS handler.
+            maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+            ListHeaderComponent={
+              loadingMore
+                ? <ActivityIndicator style={{ paddingVertical: spacing.md }} color={colors.primary} />
+                : null
+            }
+            ListEmptyComponent={
+              <View style={styles.center}>
+                <Text style={styles.emptyText}>No messages yet</Text>
+              </View>
+            }
+          />
         </View>
-      ) : (
-        <FlatList
-          ref={flatRef}
-          inverted
-          data={messages}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderItem}
-          contentContainerStyle={{ padding: spacing.base, gap: spacing.sm, paddingTop: 16 }}
-          onEndReached={loadMore}
-          onEndReachedThreshold={0.2}
-          ListFooterComponent={
-            loadingMore
-              ? <ActivityIndicator style={{ paddingVertical: spacing.md }} color={colors.primary} />
-              : null
-          }
-          ListEmptyComponent={
-            <View style={styles.center}>
-              <Text style={styles.emptyText}>No messages yet</Text>
-            </View>
-          }
-        />
-      )}
+      </View>
 
       {/* Input bar */}
       <View style={[styles.inputArea, { paddingBottom: insets.bottom + spacing.sm }]}>
@@ -867,7 +738,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
                     iconSize={18}
                   />
                 ) : (
-                  <Image source={{ uri: att.uri }} style={styles.pendingThumb} resizeMode="cover" />
+                  <Image source={{ uri: att.uri }} style={styles.pendingThumb} contentFit="cover" />
                 )}
                 {att.uploading && (
                   <View style={styles.pendingUploadOverlay}>
@@ -964,79 +835,6 @@ const styles = StyleSheet.create({
   },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   emptyText: { fontSize: typography.size.sm, color: colors.textMuted, textAlign: 'center' },
-  systemMsg: {
-    alignSelf: 'center',
-    backgroundColor: colors.background.elevated,
-    borderRadius: 12,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    marginVertical: spacing.xs,
-    alignItems: 'center',
-    gap: spacing.sm,
-    maxWidth: '85%',
-  },
-  systemMsgText: { fontSize: typography.size.xs, color: colors.textMuted, textAlign: 'center' },
-  requestActions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  acceptBtn: {
-    backgroundColor: colors.primary,
-    borderRadius: 8,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    minWidth: 72,
-    alignItems: 'center',
-  },
-  denyBtn: {
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: colors.border.default,
-    borderRadius: 8,
-    paddingHorizontal: spacing.md,
-    paddingVertical: 6,
-    minWidth: 72,
-    alignItems: 'center',
-  },
-  actionBtnDisabled: { opacity: 0.5 },
-  acceptBtnText: { fontSize: typography.size.xs, fontWeight: '700', color: '#fff' },
-  denyBtnText: { fontSize: typography.size.xs, fontWeight: '600', color: colors.textSecondary },
-  requestStatusText: {
-    fontSize: typography.size.xs,
-    fontWeight: '600',
-    color: colors.textMuted,
-    fontStyle: 'italic',
-  },
-  msgWrap: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: spacing.xs,
-    marginBottom: spacing.xs,
-  },
-  msgWrapOwn: { justifyContent: 'flex-end' },
-  msgWrapOther: { justifyContent: 'flex-start' },
-  msgContent: { gap: 2 },
-  senderName: {
-    fontSize: typography.size.xs,
-    color: colors.textSecondary,
-    marginLeft: spacing.xs,
-  },
-  bubble: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: 16,
-  },
-  bubbleOwn: { backgroundColor: colors.primary, borderBottomRightRadius: 4 },
-  bubbleOther: { backgroundColor: colors.background.elevated, borderBottomLeftRadius: 4 },
-  bubbleFailed: { opacity: 0.7 },
-  bubbleText: { fontSize: typography.size.sm, lineHeight: 20 },
-  bubbleTextOwn: { color: '#fff' },
-  bubbleTextOther: { color: colors.textPrimary },
-  msgStatus: {
-    alignSelf: 'flex-end',
-    marginTop: 2,
-    marginRight: 4,
-  },
   inputArea: {
     paddingHorizontal: spacing.base,
     paddingTop: spacing.sm,
@@ -1084,20 +882,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  msgMediaGrid: {
-    marginBottom: 4,
-  },
-  msgMediaThumb: {
-    width: 180,
-    height: 180,
-    borderRadius: 12,
-  },
-  msgMediaVideo: {
-    backgroundColor: '#000',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
-  },
   input: {
     flex: 1,
     borderWidth: 1.5,
@@ -1119,51 +903,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sendBtnDisabled: { backgroundColor: colors.iconInactive },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginVertical: spacing.sm,
-    paddingHorizontal: spacing.sm,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.primary,
-    opacity: 0.4,
-  },
-  dividerLabel: {
-    fontSize: typography.size.xs,
-    fontWeight: '700',
-    color: colors.primary,
-    letterSpacing: 1,
-  },
-  reactionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-    marginTop: 4,
-    alignSelf: 'flex-start',
-  },
-  reactionsRowOwn: { alignSelf: 'flex-end' },
-  reactionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border.subtle,
-    backgroundColor: colors.background.elevated,
-    gap: 3,
-  },
-  reactionChipActive: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(79,195,224,0.12)',
-  },
-  reactionEmoji: { fontSize: 13 },
-  reactionCount: { fontSize: 11, color: colors.textMuted },
-  reactionCountActive: { color: colors.primary, fontWeight: '600' },
   contextOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',

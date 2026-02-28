@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { MainTabParamList, FeedStackParamList, GymsStackParamList, SocialStackParamList, RanksStackParamList, RootStackParamList } from './types';
@@ -32,6 +32,10 @@ import AllOrgsScreen from '../screens/social/AllOrgsScreen';
 import CheckInSelectionScreen from '../screens/social/CheckInSelectionScreen';
 import CameraCaptureScreen from '../screens/social/CameraCaptureScreen';
 import CheckInReviewScreen from '../screens/social/CheckInReviewScreen';
+import { staleCache } from '../utils/staleCache';
+import { fetchGyms } from '../api/gyms';
+import { fetchDMConversations, fetchGroupConversations } from '../api/messaging';
+import { listMyOrgs } from '../api/organizations';
 
 // ─── Stack Navigators ─────────────────────────────────────────────────────────
 
@@ -88,6 +92,18 @@ const Tab = createBottomTabNavigator<MainTabParamList>();
 const Root = createNativeStackNavigator<RootStackParamList>();
 
 function TabNavigator() {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      Promise.allSettled([
+        fetchGyms().then(data => staleCache.set('gyms', data, 5 * 60 * 1000)),
+        fetchDMConversations().then(data => staleCache.set('social:messages:dm', data, 2 * 60 * 1000)),
+        fetchGroupConversations().then(data => staleCache.set('social:messages:groups', data, 2 * 60 * 1000)),
+        listMyOrgs().then(data => staleCache.set('social:orgs', data, 2 * 60 * 1000)),
+      ]);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <Tab.Navigator
       id="MainTabs"

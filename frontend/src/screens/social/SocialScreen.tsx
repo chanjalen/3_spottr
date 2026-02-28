@@ -35,6 +35,7 @@ import AppHeader from '../../components/navigation/AppHeader';
 import { useUnreadCount } from '../../store/UnreadCountContext';
 import { useAuth } from '../../store/AuthContext';
 import { timeAgo } from '../../utils/timeAgo';
+import { staleCache } from '../../utils/staleCache';
 
 type Props = {
   navigation: CompositeNavigationProp<
@@ -113,13 +114,24 @@ export default function SocialScreen({ navigation }: Props) {
 
   // ── Data loaders ──────────────────────────────────────────────────────────
   const loadMessages = useCallback(async () => {
+    const t0 = Date.now();
+    const [cachedDms, cachedGroups] = await Promise.all([
+      staleCache.get<Conversation[]>('social:messages:dm'),
+      staleCache.get<GroupConversation[]>('social:messages:groups'),
+    ]);
+    if (cachedDms) { setDms(cachedDms); setLoadingMessages(false); }
+    if (cachedGroups) { setGroupConvos(cachedGroups); setLoadingMessages(false); }
+
     try {
       const [dmData, groupData] = await Promise.all([
-        fetchDMConversations().catch(() => []),
-        fetchGroupConversations().catch(() => []),
+        fetchDMConversations().catch(() => [] as Conversation[]),
+        fetchGroupConversations().catch(() => [] as GroupConversation[]),
       ]);
+      staleCache.set('social:messages:dm', dmData, 2 * 60 * 1000);
+      staleCache.set('social:messages:groups', groupData, 2 * 60 * 1000);
       setDms(dmData);
       setGroupConvos(groupData);
+      console.log(`[PERF] Social/Messages: loaded ${dmData.length} DMs + ${groupData.length} groups in ${Date.now() - t0}ms`);
     } finally {
       setLoadingMessages(false);
       setRefreshing(false);
@@ -128,12 +140,17 @@ export default function SocialScreen({ navigation }: Props) {
 
 
   const loadMyOrgs = useCallback(async () => {
-    setLoadingOrgs(true);
+    const t0 = Date.now();
+    const cached = await staleCache.get<OrgListItem[]>('social:orgs');
+    if (cached) { setMyOrgs(cached); } else { setLoadingOrgs(true); }
+
     try {
       const data = await listMyOrgs();
+      staleCache.set('social:orgs', data, 2 * 60 * 1000);
       setMyOrgs(data);
+      console.log(`[PERF] Social/Orgs: loaded ${data.length} orgs in ${Date.now() - t0}ms`);
     } catch {
-      setMyOrgs([]);
+      if (!cached) setMyOrgs([]);
     } finally {
       setLoadingOrgs(false);
     }

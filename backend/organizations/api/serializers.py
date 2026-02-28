@@ -152,6 +152,10 @@ class AnnouncementPollSerializer(serializers.ModelSerializer):
         return obj.get_total_votes()
 
     def get_user_voted_option_id(self, obj):
+        votes = getattr(obj, 'requesting_user_votes', None)
+        if votes is not None:
+            return str(votes[0].option_id) if votes else None
+        # Fallback: per-announcement query (no prefetch)
         request = self.context.get('request')
         if not request or not request.user.is_authenticated:
             return None
@@ -188,9 +192,16 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         return obj.author.display_name or obj.author.username
 
     def get_author_avatar_url(self, obj):
+        avatar_map = self.context.get('author_avatar_map')
+        if avatar_map is not None:
+            return avatar_map.get(str(obj.author_id)) or None
         return obj.author.avatar_url or None
 
     def get_media(self, obj):
+        media_map = self.context.get('media_map')
+        if media_map is not None:
+            return media_map.get(str(obj.id), [])
+        # Fallback: per-announcement query (e.g. WS push, no bulk prefetch)
         from media.models import MediaLink
         from django.conf import settings
         links = (
@@ -224,24 +235,39 @@ class AnnouncementSerializer(serializers.ModelSerializer):
         return AnnouncementPollSerializer(poll, context=self.context).data
 
     def get_reactions(self, obj):
-        rows = (
-            obj.reactions
-            .values('emoji')
-            .annotate(count=Count('id'))
-            .order_by('-count', 'emoji')
-        )
-        request = self.context.get('request')
-        user_emojis = set()
-        if request and request.user.is_authenticated:
-            user_emojis = set(
+        reactions = getattr(obj, 'prefetched_reactions', None)
+        if reactions is None:
+            # Fallback: per-announcement queries (no prefetch, e.g. WS push)
+            rows = (
                 obj.reactions
-                .filter(user=request.user)
-                .values_list('emoji', flat=True)
+                .values('emoji')
+                .annotate(count=Count('id'))
+                .order_by('-count', 'emoji')
             )
-        return [
-            {'emoji': r['emoji'], 'count': r['count'], 'user_reacted': r['emoji'] in user_emojis}
-            for r in rows
-        ]
+            request = self.context.get('request')
+            user_emojis = set()
+            if request and request.user.is_authenticated:
+                user_emojis = set(
+                    obj.reactions
+                    .filter(user=request.user)
+                    .values_list('emoji', flat=True)
+                )
+            return [
+                {'emoji': r['emoji'], 'count': r['count'], 'user_reacted': r['emoji'] in user_emojis}
+                for r in rows
+            ]
+        request = self.context.get('request')
+        user_id = str(request.user.id) if (request and request.user.is_authenticated) else None
+        counts = {}
+        user_emojis = set()
+        for r in reactions:
+            counts[r.emoji] = counts.get(r.emoji, 0) + 1
+            if user_id and str(r.user_id) == user_id:
+                user_emojis.add(r.emoji)
+        return sorted(
+            [{'emoji': e, 'count': c, 'user_reacted': e in user_emojis} for e, c in counts.items()],
+            key=lambda x: -x['count'],
+        )
 
     def get_is_read(self, obj):
         last_read_at = self.context.get('last_read_at')

@@ -4,6 +4,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from django.utils import timezone
+from django.core.cache import cache
 
 from organizations import services
 from organizations.models import OrgMember
@@ -24,14 +25,73 @@ from organizations.api.serializers import (
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _build_avatar_map(user_ids):
+    """
+    Bulk-fetch user avatar URLs for all user_ids in one query.
+    Returns a dict mapping str(user_id) → url string.
+    """
+    from media.models import MediaLink
+    ids = [str(uid) for uid in user_ids if uid is not None]
+    if not ids:
+        return {}
+    links = (
+        MediaLink.objects
+        .filter(destination_type='user', destination_id__in=ids, type='avatar')
+        .select_related('asset')
+    )
+    return {link.destination_id: link.asset.url for link in links}
+
+
+def _build_media_map(destination_type, items):
+    """
+    Bulk-fetch MediaLink rows for all items in one query.
+    Returns a dict mapping str(item.id) → list of media dicts.
+    """
+    from media.models import MediaLink
+    from django.conf import settings
+    ids = [str(m.id) for m in items]
+    if not ids:
+        return {}
+    links = (
+        MediaLink.objects
+        .filter(destination_type=destination_type, destination_id__in=ids, type='inline')
+        .select_related('asset')
+        .order_by('destination_id', 'position')
+    )
+    media_map = {}
+    for link in links:
+        asset = link.asset
+        thumbnail_url = (
+            f"{settings.MEDIA_URL}{asset.thumbnail_key}" if asset.thumbnail_key else None
+        )
+        media_map.setdefault(link.destination_id, []).append({
+            'url': asset.url, 'kind': asset.kind,
+            'thumbnail_url': thumbnail_url,
+            'width': asset.width, 'height': asset.height,
+        })
+    return media_map
+
+
+# ---------------------------------------------------------------------------
 # Organization CRUD
 # ---------------------------------------------------------------------------
+
+ORG_LIST_TTL = 2 * 60  # 2 minutes
+
 
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def org_list_create(request):
     """GET: list the user's orgs. POST: create a new org."""
     if request.method == 'GET':
+        cache_key = f'org:list:{request.user.id}'
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
+
         from django.db.models import Q, Count
         from organizations.models import Announcement
         orgs = services.list_user_orgs(request.user)
@@ -93,8 +153,11 @@ def org_list_create(request):
             orgs, many=True,
             context={'request': request, 'unread_map': unread_map, 'latest_ann_map': latest_ann_map},
         )
-        return Response(serializer.data)
+        data = serializer.data
+        cache.set(cache_key, data, ORG_LIST_TTL)
+        return Response(data)
 
+    # POST — create
     serializer = CreateOrgSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     d = serializer.validated_data
@@ -104,6 +167,7 @@ def org_list_create(request):
         description=d['description'],
         privacy=d['privacy'],
     )
+    cache.delete(f'org:list:{request.user.id}')
     return Response(OrgDetailSerializer(org, context={'request': request}).data, status=status.HTTP_201_CREATED)
 
 
@@ -198,6 +262,7 @@ def org_join(request, org_id):
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     except NotOrgAdminError as e:
         return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
+    cache.delete(f'org:list:{request.user.id}')
     return Response({'joined': True})
 
 
@@ -213,6 +278,7 @@ def org_leave(request, org_id):
         return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
     except CannotRemoveCreatorError as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    cache.delete(f'org:list:{request.user.id}')
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -391,8 +457,13 @@ def announcements(request, org_id):
 
         member = OrgMember.objects.filter(org_id=org_id, user=request.user).first()
         last_read_at = member.last_announcements_read_at if member else None
+        media_map = _build_media_map('announcement', anns)
+        author_avatar_map = _build_avatar_map({a.author_id for a in anns})
         serializer = AnnouncementSerializer(
-            anns, many=True, context={'request': request, 'last_read_at': last_read_at}
+            anns, many=True, context={
+                'request': request, 'last_read_at': last_read_at,
+                'media_map': media_map, 'author_avatar_map': author_avatar_map,
+            }
         )
         oldest_id = str(anns[-1].id) if anns else None
         return Response({'results': serializer.data, 'has_more': has_more, 'oldest_id': oldest_id})

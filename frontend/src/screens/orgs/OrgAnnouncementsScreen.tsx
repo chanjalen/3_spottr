@@ -413,16 +413,19 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
   const isAdmin = userRole === 'creator' || userRole === 'admin';
   const flatRef = useRef<FlatList>(null);
   const [videoPlayerUrl, setVideoPlayerUrl] = useState<string | null>(null);
+  const _mountTime = useRef(Date.now());
 
   // ── Load announcements ───────────────────────────────────────────────────
 
   const loadInitial = useCallback(async () => {
     setLoading(true);
+    const t0 = Date.now();
     try {
       const [page, detail] = await Promise.all([
         fetchAnnouncements(orgId, { limit: 30 }),
         fetchOrgDetail(orgId),
       ]);
+      const fetchMs = Date.now() - t0;
       // Insert "NEW" divider between unread (front/bottom) and read (back/top) announcements.
       // API returns newest-first; FlatList is inverted so index 0 appears at the bottom.
       const firstReadIdx = page.results.findIndex(a => a.is_read);
@@ -439,6 +442,14 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
       setUserRole(detail.user_role);
       // Mark as read and refresh the global unread badge.
       markAnnouncementsRead(orgId).then(refreshUnread).catch(() => {});
+      if (__DEV__) {
+        const mediaCount = page.results.filter(a => a.media && a.media.length > 0).length;
+        const totalMs = Date.now() - _mountTime.current;
+        console.log(
+          `[ChatLoad] Announcements | org=${orgId} | fetch=${fetchMs}ms | total=${totalMs}ms` +
+          ` | posts=${page.results.length} | withMedia=${mediaCount} | hasMore=${page.has_more}`,
+        );
+      }
     } catch {
       // ignore
     } finally {
