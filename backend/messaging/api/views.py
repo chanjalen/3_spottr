@@ -159,18 +159,79 @@ def send_group_message(request, group_id):
 
 
 # ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _build_avatar_map(user_ids):
+    """
+    Bulk-fetch user avatar URLs for all user_ids in one query.
+    Returns a dict mapping str(user_id) → url string.
+    """
+    from media.models import MediaLink
+    ids = [str(uid) for uid in user_ids if uid is not None]
+    if not ids:
+        return {}
+    links = (
+        MediaLink.objects
+        .filter(destination_type='user', destination_id__in=ids, type='avatar')
+        .select_related('asset')
+    )
+    return {link.destination_id: link.asset.url for link in links}
+
+
+def _build_media_map(destination_type, items):
+    """
+    Bulk-fetch MediaLink rows for all items in one query.
+    Returns a dict mapping str(item.id) → list of media dicts.
+    """
+    from media.models import MediaLink
+    from django.conf import settings
+    ids = [str(m.id) for m in items]
+    if not ids:
+        return {}
+    links = (
+        MediaLink.objects
+        .filter(destination_type=destination_type, destination_id__in=ids, type='inline')
+        .select_related('asset')
+        .order_by('destination_id', 'position')
+    )
+    media_map = {}
+    for link in links:
+        asset = link.asset
+        thumbnail_url = (
+            f"{settings.MEDIA_URL}{asset.thumbnail_key}" if asset.thumbnail_key else None
+        )
+        media_map.setdefault(link.destination_id, []).append({
+            'url': asset.url, 'kind': asset.kind,
+            'thumbnail_url': thumbnail_url,
+            'width': asset.width, 'height': asset.height,
+        })
+    return media_map
+
+
+# ---------------------------------------------------------------------------
 # Conversations
 # ---------------------------------------------------------------------------
 
-def _partner_has_activity_today(partner):
-    """Return True if the partner has already checked in today (workout, check-in, or rest day)."""
+def _get_activity_map(partner_ids):
+    """
+    Batch lookup: returns a dict mapping str(user_id) → bool (has activity today).
+    Fires exactly 2 queries regardless of how many partners there are.
+    """
     from workouts.services.streak_service import get_streak_date
     from workouts.models import Streak, RestDay
     today = get_streak_date()
-    streak_obj = Streak.objects.filter(user=partner).first()
-    already_active = streak_obj is not None and streak_obj.last_streak_date == today
-    already_rested = RestDay.objects.filter(user=partner, streak_date=today).exists()
-    return already_active or already_rested
+    active = set(
+        Streak.objects
+        .filter(user_id__in=partner_ids, last_streak_date=today)
+        .values_list('user_id', flat=True)
+    )
+    rested = set(
+        RestDay.objects
+        .filter(user_id__in=partner_ids, streak_date=today)
+        .values_list('user_id', flat=True)
+    )
+    return {str(pid): (pid in active or pid in rested) for pid in partner_ids}
 
 
 @api_view(['GET'])
@@ -180,7 +241,10 @@ def dm_conversations(request):
     List all DM conversations with the latest message per partner.
     Reads directly from InboxEntry — no correlated subqueries or separate unread query.
     """
-    entries = services.list_dm_conversations(request.user)
+    entries = list(services.list_dm_conversations(request.user))
+
+    partner_ids = [entry.partner_id for entry in entries]
+    activity_map = _get_activity_map(partner_ids)
 
     conversations = []
     for entry in entries:
@@ -191,7 +255,7 @@ def dm_conversations(request):
             'partner_avatar_url': entry.partner.avatar_url or None,
             'latest_message': entry.latest_message,
             'unread_count': entry.unread_count,
-            'partner_has_activity_today': _partner_has_activity_today(entry.partner),
+            'partner_has_activity_today': activity_map.get(str(entry.partner_id), False),
         })
 
     serializer = ConversationSerializer(
@@ -268,7 +332,12 @@ def dm_messages(request, partner_id):
     except MessageNotFoundError as e:
         return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
 
-    serializer = MessageListSerializer(messages, many=True, context={'request': request})
+    media_map = _build_media_map('message', messages)
+    sender_ids = {m.sender_id for m in messages}
+    sender_avatar_map = _build_avatar_map(sender_ids)
+    serializer = MessageListSerializer(messages, many=True, context={
+        'request': request, 'media_map': media_map, 'sender_avatar_map': sender_avatar_map,
+    })
 
     # Messages are always returned oldest-first. oldest_id = messages[0], newest_id = messages[-1].
     oldest_id = str(messages[0].id) if messages else None
@@ -315,7 +384,12 @@ def group_messages(request, group_id):
     except MessageNotFoundError as e:
         return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
 
-    serializer = MessageListSerializer(messages, many=True, context={'request': request})
+    media_map = _build_media_map('message', messages)
+    sender_ids = {m.sender_id for m in messages}
+    sender_avatar_map = _build_avatar_map(sender_ids)
+    serializer = MessageListSerializer(messages, many=True, context={
+        'request': request, 'media_map': media_map, 'sender_avatar_map': sender_avatar_map,
+    })
 
     oldest_id = str(messages[0].id) if messages else None
     newest_id = str(messages[-1].id) if messages else None

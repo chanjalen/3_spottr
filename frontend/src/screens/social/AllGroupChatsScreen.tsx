@@ -19,6 +19,16 @@ import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 import { useUnreadCount } from '../../store/UnreadCountContext';
 import { timeAgo } from '../../utils/timeAgo';
+import { Message } from '../../types/messaging';
+
+function groupMsgPreview(msg: Message | null | undefined): string {
+  if (!msg) return 'No messages yet';
+  const sender = msg.sender_username ? `${msg.sender_username}: ` : '';
+  if (msg.content) return `${sender}${msg.content}`;
+  if (msg.media?.length) return `${sender}${msg.media.some(m => m.kind === 'video') ? 'Video' : 'Photo'}`;
+  if (msg.shared_post) return `${sender}Shared a post`;
+  return '';
+}
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AllGroupChats'>;
@@ -135,9 +145,7 @@ export default function AllGroupChatsScreen({ navigation }: Props) {
                   )}
                 </View>
                 <Text style={styles.rowLast} numberOfLines={1}>
-                  {item.latest_message
-                    ? `${item.latest_message.sender_username ?? ''}: ${item.latest_message.content}`
-                    : 'No messages yet'}
+                  {groupMsgPreview(item.latest_message)}
                 </Text>
               </View>
               {item.unread_count > 0 && (

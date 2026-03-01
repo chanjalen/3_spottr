@@ -19,6 +19,15 @@ import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 import { useUnreadCount } from '../../store/UnreadCountContext';
 import { timeAgo } from '../../utils/timeAgo';
+import { Message } from '../../types/messaging';
+
+function msgPreview(msg: Message | null | undefined): string {
+  if (!msg) return 'No messages yet';
+  if (msg.content) return msg.content;
+  if (msg.media?.length) return msg.media.some(m => m.kind === 'video') ? 'Video' : 'Photo';
+  if (msg.shared_post) return 'Shared a post';
+  return '';
+}
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AllDMs'>;
@@ -137,7 +146,7 @@ export default function AllDMsScreen({ navigation }: Props) {
                   )}
                 </View>
                 <Text style={styles.rowLast} numberOfLines={1}>
-                  {item.latest_message?.content ?? 'No messages yet'}
+                  {msgPreview(item.latest_message)}
                 </Text>
               </View>
               {item.unread_count > 0 && (

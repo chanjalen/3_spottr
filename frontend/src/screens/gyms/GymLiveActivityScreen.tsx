@@ -124,6 +124,7 @@ export default function GymLiveActivityScreen({ navigation, route }: Props) {
   useFocusEffect(
     useCallback(() => {
       if (!isToday) return;
+      load(selectedDate);
       intervalRef.current = setInterval(() => load(selectedDate), 60_000);
       return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
     }, [isToday, selectedDate, load]),

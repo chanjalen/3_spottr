@@ -18,12 +18,11 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNavigation } from '@react-navigation/native';
 import {
   fetchGyms,
-  fetchBusyLevel,
-  fetchGymLeaderboard,
   enrollGym,
   unenrollGym,
 } from '../../api/gyms';
-import { GymListItem, BusyLevel, TopLifter } from '../../types/gym';
+import { GymListItem } from '../../types/gym';
+import { staleCache } from '../../utils/staleCache';
 import Avatar from '../../components/common/Avatar';
 import { colors, spacing, typography } from '../../theme';
 import { GymsStackParamList, RootStackParamList } from '../../navigation/types';
@@ -71,8 +70,6 @@ export default function GymListScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchText, setSearchText] = useState('');
-  const [busyLevels, setBusyLevels] = useState<Record<string, BusyLevel>>({});
-  const [topLifters, setTopLifters] = useState<Record<string, TopLifter | null>>({});
   const [enrolling, setEnrolling] = useState<Set<string>>(new Set());
   const [selectedGymId, setSelectedGymId] = useState<string | null>(null);
 
@@ -80,45 +77,28 @@ export default function GymListScreen({ navigation }: Props) {
     ? gyms.filter(g => g.id === selectedGymId)
     : gyms;
 
-  const loadExtended = useCallback(async (gymList: GymListItem[]) => {
-    const results = await Promise.allSettled(
-      gymList.map(async (g) => {
-        const [busy, lifters] = await Promise.allSettled([
-          fetchBusyLevel(g.id),
-          fetchGymLeaderboard(g.id, 'total'),
-        ]);
-        return {
-          id: g.id,
-          busy: busy.status === 'fulfilled' ? busy.value : null,
-          topLifter: lifters.status === 'fulfilled' ? (lifters.value[0] ?? null) : null,
-        };
-      }),
-    );
-    const newBusy: Record<string, BusyLevel> = {};
-    const newLifters: Record<string, TopLifter | null> = {};
-    results.forEach((r) => {
-      if (r.status === 'fulfilled') {
-        if (r.value.busy) newBusy[r.value.id] = r.value.busy;
-        newLifters[r.value.id] = r.value.topLifter;
-      }
-    });
-    setBusyLevels(newBusy);
-    setTopLifters(newLifters);
-  }, []);
-
   const load = useCallback(async () => {
+    const t0 = Date.now();
+    const cached = await staleCache.get<GymListItem[]>('gyms');
+    if (cached) {
+      setAllGyms(cached);
+      setGyms(cached);
+      setLoading(false);
+    }
+
     try {
       const data = await fetchGyms();
+      console.log(`[PERF] GymList: fetchGyms took ${Date.now() - t0}ms (${data.length} gyms)`);
+      staleCache.set('gyms', data, 5 * 60 * 1000);
       setAllGyms(data);
       setGyms(data);
-      loadExtended(data);
     } catch {
-      // ignore
+      // ignore if cached
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [loadExtended]);
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
@@ -172,8 +152,8 @@ export default function GymListScreen({ navigation }: Props) {
   })();
 
   const renderGym = ({ item }: { item: GymListItem }) => {
-    const busy = busyLevels[item.id] ?? null;
-    const lifter = topLifters[item.id] ?? null;
+    const busy = item.busy_level;
+    const lifter = item.top_lifter;
     const isEnrolling = enrolling.has(item.id);
     const busyColor = busyLevelColor(busy?.level ?? null);
 
@@ -330,7 +310,7 @@ export default function GymListScreen({ navigation }: Props) {
                         coordinate={{ latitude: parseFloat(g.latitude!), longitude: parseFloat(g.longitude!) }}
                         title={g.name}
                         description={g.address ?? undefined}
-                        pinColor={busyLevelColor(busyLevels[g.id]?.level ?? null)}
+                        pinColor={busyLevelColor(g.busy_level?.level ?? null)}
                         onPress={() => setSelectedGymId(prev => prev === g.id ? null : g.id)}
                         onCalloutPress={() => navigation.navigate('GymDetail', { gymId: g.id, gymName: g.name })}
                       />

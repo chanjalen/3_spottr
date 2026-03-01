@@ -608,7 +608,12 @@ def get_dm_messages(user, partner_id, limit=50, before_id=None, after_id=None):
             'read_receipts',
             queryset=MessageRead.objects.filter(user=user),
             to_attr='user_read_receipts',
-        )
+        ),
+        Prefetch(
+            'reactions',
+            queryset=MessageReaction.objects.select_related('user'),
+            to_attr='prefetched_reactions',
+        ),
     )
 
     if before_id:
@@ -671,7 +676,12 @@ def get_group_messages(user, group_id, limit=50, before_id=None, after_id=None):
             'read_receipts',
             queryset=MessageRead.objects.filter(user=user),
             to_attr='user_read_receipts',
-        )
+        ),
+        Prefetch(
+            'reactions',
+            queryset=MessageReaction.objects.select_related('user'),
+            to_attr='prefetched_reactions',
+        ),
     )
 
     if before_id:

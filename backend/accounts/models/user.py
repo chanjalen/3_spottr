@@ -1,3 +1,5 @@
+from functools import cached_property
+
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin
 from django.db import models
 from django.utils import timezone
@@ -116,7 +118,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     class Meta:
         ordering = ['username']
 
-    @property
+    @cached_property
     def avatar_url(self):
         from media.utils import get_media_url, build_media_url
         url = get_media_url('user', self.pk, 'avatar')

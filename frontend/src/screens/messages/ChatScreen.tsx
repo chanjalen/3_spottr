@@ -2,10 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { wsManager } from '../../services/websocket';
 import {
   Alert,
-  Image,
+  ScrollView,
   View,
   Text,
-  FlatList,
   TextInput,
   Pressable,
   StyleSheet,
@@ -14,16 +13,21 @@ import {
   ActivityIndicator,
   Modal,
 } from 'react-native';
+import { Image } from 'expo-image';
+import { FlashList } from '@shopify/flash-list';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
-import * as ImagePicker from 'expo-image-picker';
+import { pickMedia } from '../../utils/pickMedia';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
+import VideoThumbnail from '../../components/common/VideoThumbnail';
+import MessageRow, { type ListItem } from '../../components/messages/MessageRow';
 import { fetchDMMessages, markMessagesRead, reactToMessage, sendDM } from '../../api/messaging';
 import { uploadMedia } from '../../api/organizations';
-import { Message, MessageReaction } from '../../types/messaging';
+import { Message } from '../../types/messaging';
 import { useAuth } from '../../store/AuthContext';
 import { useUnreadCount } from '../../store/UnreadCountContext';
 import { colors, spacing, typography } from '../../theme';
@@ -31,41 +35,48 @@ import { RootStackParamList } from '../../navigation/types';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Generate a lightweight unique ID for client-side message correlation. */
 const genClientMsgId = (): string =>
   `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 
-/** Timeout before a 'sending' message is marked as failed (ms). */
 const SEND_TIMEOUT_MS = 12_000;
 
 const EMOJI_QUICK = ['👍', '👎', '😂', '😡', '❤️'];
 
-const MAX_IMAGE_SIZE = 10 * 1024 * 1024; // 10 MB
-const MAX_VIDEO_SIZE = 50 * 1024 * 1024; // 50 MB
-
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type NewDivider = { id: '__new_divider__'; isDivider: true };
-type ListItem = Message | NewDivider;
+interface PendingAttachment {
+  localId: string;
+  uri: string;
+  kind: 'image' | 'video';
+  mimeType: string;
+  thumbUri: string | null;
+  assetId: string | null;
+  uploading: boolean;
+  failed: boolean;
+}
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Chat'>;
   route: RouteProp<RootStackParamList, 'Chat'>;
 };
 
-// ── Status icon (own messages only) ──────────────────────────────────────────
+// ── Video player modal ────────────────────────────────────────────────────────
 
-function MsgStatusIcon({ status }: { status: NonNullable<Message['status']> }) {
-  if (status === 'sending' || status === 'waiting') {
-    return <Feather name="clock" size={10} color="rgba(255,255,255,0.65)" />;
-  }
-  if (status === 'sent') {
-    return <Feather name="check" size={10} color="rgba(255,255,255,0.85)" />;
-  }
-  if (status === 'failed') {
-    return <Feather name="alert-circle" size={10} color="#ff6b6b" />;
-  }
-  return null;
+function VideoPlayerModal({ url, onClose }: { url: string; onClose: () => void }) {
+  const player = useVideoPlayer(url, (p) => { p.play(); });
+  return (
+    <Modal visible animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        <VideoView player={player} style={{ flex: 1 }} nativeControls contentFit="contain" />
+        <Pressable
+          onPress={onClose}
+          style={{ position: 'absolute', top: 52, right: 20, padding: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 }}
+        >
+          <Feather name="x" size={24} color="#fff" />
+        </Pressable>
+      </View>
+    </Modal>
+  );
 }
 
 // ── Screen ───────────────────────────────────────────────────────────────────
@@ -76,25 +87,40 @@ export default function ChatScreen({ navigation, route }: Props) {
   const { refresh: refreshUnread } = useUnreadCount();
   const { partnerId, partnerName, partnerUsername, partnerAvatar } = route.params;
 
-  // Stored newest-first so inverted FlatList shows newest at the bottom naturally.
+  // Data is stored oldest-first so FlashList renders naturally (oldest at top, newest at bottom).
   const [messages, setMessages] = useState<ListItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  // listVisible stays false until the list has been scrolled to the bottom for the first time,
+  // preventing the 1-2 frame flash of the top of the list before the snap-to-bottom.
+  const [listVisible, setListVisible] = useState(false);
+  const dataLoadedRef = useRef(false); // gates onContentSizeChange so it doesn't fire on empty mount
   const [hasMore, setHasMore] = useState(false);
   const [oldestId, setOldestId] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [text, setText] = useState('');
-  const [pendingMediaUri, setPendingMediaUri] = useState<string | null>(null);
-  const [pendingMediaKind, setPendingMediaKind] = useState<'image' | 'video' | null>(null);
-  const [pendingAssetId, setPendingAssetId] = useState<string | null>(null);
-  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
+  const [picking, setPicking] = useState(false);
   const [sendingMedia, setSendingMedia] = useState(false);
+  const uploadingMedia = pendingAttachments.some(a => a.uploading);
+  const hasReadyAttachment = pendingAttachments.some(a => !!a.assetId && !a.failed);
   const [contextMsg, setContextMsg] = useState<Message | null>(null);
   const [contextVisible, setContextVisible] = useState(false);
-  const flatRef = useRef<FlatList>(null);
-  // Tracks the newest confirmed (server) message ID for gap-sync on reconnect.
+  const [videoPlayerUrl, setVideoPlayerUrl] = useState<string | null>(null);
+  const flatRef = useRef<FlashList<ListItem>>(null);
   const newestIdRef = useRef<string | null>(null);
-  // Maps client_msg_id → timeout handle for the 12 s send deadline.
   const pendingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  // Scroll to bottom once after the first content render.
+  const initialScrollDone = useRef(false);
+  // Set to true once the list has been revealed; gates re-scrolls in onContentSizeChange.
+  const listRevealedRef = useRef(false);
+  // Track scroll position so we know whether to auto-scroll when a new message arrives.
+  const scrollOffsetRef = useRef(0);
+  const contentHeightRef = useRef(0);
+  const listHeightRef = useRef(0);
+  const isNearBottom = () =>
+    contentHeightRef.current - scrollOffsetRef.current - listHeightRef.current < 150;
+
+  const myId = String(me?.id ?? '');
+  const _mountTime = useRef(Date.now());
 
   // ── Cleanup timers on unmount ──────────────────────────────────────────────
   useEffect(() => {
@@ -106,37 +132,55 @@ export default function ChatScreen({ navigation, route }: Props) {
   // ── Initial load ──────────────────────────────────────────────────────────
 
   const load = useCallback(async () => {
+    const t0 = Date.now();
     try {
       const page = await fetchDMMessages(partnerId);
-      // Backend returns oldest-first; reverse so index 0 = newest (required for inverted list).
-      const reversed = [...page.results].reverse();
-      // Insert "NEW" divider between unread (front) and read (back) messages on first open.
-      const firstReadIdx = reversed.findIndex((m) => m.is_read);
-      const listItems: ListItem[] = firstReadIdx > 0
-        ? [...reversed.slice(0, firstReadIdx), { id: '__new_divider__', isDivider: true as const }, ...reversed.slice(firstReadIdx)]
-        : reversed;
+      const fetchMs = Date.now() - t0;
+      // Backend sends oldest-first — keep that order so index 0 = oldest (top), last = newest (bottom).
+      const firstUnreadIdx = page.results.findIndex(m => !m.is_read);
+      const listItems: ListItem[] = firstUnreadIdx > 0
+        ? [
+            ...page.results.slice(0, firstUnreadIdx),
+            { id: '__new_divider__', isDivider: true as const },
+            ...page.results.slice(firstUnreadIdx),
+          ]
+        : [...page.results];
+      dataLoadedRef.current = true; // must be set before setMessages triggers onContentSizeChange
       setMessages(listItems);
       setHasMore(page.has_more);
       setOldestId(page.oldest_id ?? null);
       newestIdRef.current = page.newest_id ?? null;
       const unread = page.results
-        .filter((m) => !m.is_read && String(m.sender) !== String(me?.id))
-        .map((m) => String(m.id));
+        .filter(m => !m.is_read && String(m.sender) !== myId)
+        .map(m => String(m.id));
       if (unread.length) markMessagesRead(unread).then(refreshUnread).catch(() => {});
-    } finally {
-      setLoading(false);
+      // Empty conversation: no content size change will fire, so reveal directly.
+      if (listItems.length === 0) { listRevealedRef.current = true; setListVisible(true); }
+      if (__DEV__) {
+        const mediaCount = page.results.filter(m => m.media && m.media.length > 0).length;
+        const totalMs = Date.now() - _mountTime.current;
+        console.log(
+          `[ChatLoad] DM | partner=${partnerId} | fetch=${fetchMs}ms | total=${totalMs}ms` +
+          ` | msgs=${page.results.length} | withMedia=${mediaCount} | hasMore=${page.has_more}`,
+        );
+      }
+    } catch {
+      // On error, reveal the (empty) list so the screen isn't stuck on the spinner.
+      listRevealedRef.current = true;
+      setListVisible(true);
     }
-  }, [partnerId, me?.id]);
+  }, [partnerId, myId]);
 
   useEffect(() => { load(); }, [load]);
 
-  // Load older messages when the user scrolls to the visual top (onEndReached in inverted mode).
+  // Load older messages when user scrolls to the top (onStartReached).
   const loadMore = useCallback(async () => {
     if (!hasMore || loadingMore || !oldestId) return;
     setLoadingMore(true);
     try {
       const page = await fetchDMMessages(partnerId, { before_id: oldestId });
-      setMessages((prev) => [...prev, ...[...page.results].reverse()]);
+      // Older messages prepend to the front of the list (above existing).
+      setMessages(prev => [...page.results, ...prev]);
       setHasMore(page.has_more);
       setOldestId(page.oldest_id ?? null);
     } finally {
@@ -144,7 +188,6 @@ export default function ChatScreen({ navigation, route }: Props) {
     }
   }, [hasMore, loadingMore, oldestId, partnerId]);
 
-  // Silently refresh when the screen regains focus (e.g. after a zap from another screen).
   const initialMountRef = useRef(true);
   useFocusEffect(
     useCallback(() => {
@@ -152,17 +195,17 @@ export default function ChatScreen({ navigation, route }: Props) {
         initialMountRef.current = false;
         return;
       }
-      fetchDMMessages(partnerId).then((page) => {
-        setMessages([...page.results].reverse());
+      fetchDMMessages(partnerId).then(page => {
+        setMessages([...page.results]);
         setHasMore(page.has_more);
         setOldestId(page.oldest_id ?? null);
         newestIdRef.current = page.newest_id ?? null;
         const unread = page.results
-          .filter((m) => !m.is_read && String(m.sender) !== String(me?.id))
-          .map((m) => String(m.id));
+          .filter(m => !m.is_read && String(m.sender) !== myId)
+          .map(m => String(m.id));
         if (unread.length) markMessagesRead(unread).then(refreshUnread).catch(() => {});
       }).catch(() => {});
-    }, [partnerId, me?.id]),
+    }, [partnerId, myId]),
   );
 
   // ── WS: incoming messages ─────────────────────────────────────────────────
@@ -174,11 +217,12 @@ export default function ChatScreen({ navigation, route }: Props) {
         String(msg.dm_recipient_id) === String(partnerId);
       if (!isThisConversation) return;
 
-      setMessages((prev) => {
-        // Reconcile: if the echo carries client_msg_id matching a pending message, replace it.
+      const nearBottom = isNearBottom();
+      let appended = false;
+      setMessages(prev => {
         if (msg.client_msg_id) {
           const pendingIdx = prev.findIndex(
-            (m) => !('isDivider' in m) && m.id === msg.client_msg_id,
+            m => !('isDivider' in m) && m.id === msg.client_msg_id,
           );
           if (pendingIdx !== -1) {
             const timer = pendingTimers.current.get(msg.client_msg_id);
@@ -191,21 +235,27 @@ export default function ChatScreen({ navigation, route }: Props) {
             return updated;
           }
         }
-        // Normal path: dedup by server message ID.
-        if (prev.some((m) => !('isDivider' in m) && String(m.id) === String(msg.id))) return prev;
-        return [msg, ...prev];
+        if (prev.some(m => !('isDivider' in m) && String(m.id) === String(msg.id))) return prev;
+        // Append new message to the end (newest = bottom).
+        appended = true;
+        return [...prev, msg];
       });
+
+      // Auto-scroll to bottom when a genuinely new message arrives and user was already near bottom.
+      if (appended && nearBottom) {
+        requestAnimationFrame(() => flatRef.current?.scrollToEnd({ animated: true }));
+      }
 
       newestIdRef.current = String(msg.id);
 
-      if (String(msg.sender) !== String(me?.id)) {
+      if (String(msg.sender) !== myId) {
         markMessagesRead([String(msg.id)]).then(refreshUnread).catch(() => {});
       }
     };
 
     wsManager.on('new_message', handler);
     return () => wsManager.off('new_message', handler);
-  }, [partnerId, me?.id, refreshUnread]);
+  }, [partnerId, myId, refreshUnread]);
 
   // ── WS: gap-sync on reconnect ─────────────────────────────────────────────
 
@@ -213,27 +263,28 @@ export default function ChatScreen({ navigation, route }: Props) {
     const handler = () => {
       const nid = newestIdRef.current;
       if (!nid) return;
-      fetchDMMessages(partnerId, { after_id: nid, limit: 50 }).then((page) => {
+      fetchDMMessages(partnerId, { after_id: nid, limit: 50 }).then(page => {
         if (!page.results.length) return;
         newestIdRef.current = page.newest_id ?? nid;
-        setMessages((prev) => {
+        setMessages(prev => {
           const existingIds = new Set(
-            prev.filter((m): m is Message => !('isDivider' in m)).map((m) => String(m.id))
+            prev.filter((m): m is Message => !('isDivider' in m)).map(m => String(m.id))
           );
-          const fresh = [...page.results].reverse().filter((m) => !existingIds.has(String(m.id)));
+          // page.results is already oldest-first; filter dupes and append to end.
+          const fresh = page.results.filter(m => !existingIds.has(String(m.id)));
           if (!fresh.length) return prev;
-          return [...fresh, ...prev];
+          return [...prev, ...fresh];
         });
         const unread = page.results
-          .filter((m) => !m.is_read && String(m.sender) !== String(me?.id))
-          .map((m) => String(m.id));
+          .filter(m => !m.is_read && String(m.sender) !== myId)
+          .map(m => String(m.id));
         if (unread.length) markMessagesRead(unread).then(refreshUnread).catch(() => {});
       }).catch(() => {});
     };
 
     wsManager.on('connected', handler);
     return () => wsManager.off('connected', handler);
-  }, [partnerId, me?.id]);
+  }, [partnerId, myId]);
 
   // ── WS: send error ────────────────────────────────────────────────────────
 
@@ -245,8 +296,8 @@ export default function ChatScreen({ navigation, route }: Props) {
         clearTimeout(timer);
         pendingTimers.current.delete(client_msg_id);
       }
-      setMessages((prev) =>
-        prev.map((m) =>
+      setMessages(prev =>
+        prev.map(m =>
           !('isDivider' in m) && m.id === client_msg_id
             ? { ...m, status: 'failed' as const }
             : m,
@@ -257,20 +308,20 @@ export default function ChatScreen({ navigation, route }: Props) {
     return () => wsManager.off('send_error', handler);
   }, []);
 
-  // ── WS: queue item flushed (waiting → sending, start timer) ───────────────
+  // ── WS: queue item flushed ────────────────────────────────────────────────
 
   useEffect(() => {
     const handler = ({ client_msg_id }: { client_msg_id: string }) => {
-      setMessages((prev) =>
-        prev.map((m) =>
+      setMessages(prev =>
+        prev.map(m =>
           !('isDivider' in m) && m.id === client_msg_id && m.status === 'waiting'
             ? { ...m, status: 'sending' as const }
             : m,
         ),
       );
       const timeout = setTimeout(() => {
-        setMessages((prev) =>
-          prev.map((m) =>
+        setMessages(prev =>
+          prev.map(m =>
             !('isDivider' in m) && m.id === client_msg_id && m.status === 'sending'
               ? { ...m, status: 'failed' as const }
               : m,
@@ -288,8 +339,8 @@ export default function ChatScreen({ navigation, route }: Props) {
 
   const _startSendTimer = (clientMsgId: string) => {
     const timeout = setTimeout(() => {
-      setMessages((prev) =>
-        prev.map((m) =>
+      setMessages(prev =>
+        prev.map(m =>
           !('isDivider' in m) && m.id === clientMsgId && m.status === 'sending'
             ? { ...m, status: 'failed' as const }
             : m,
@@ -301,106 +352,111 @@ export default function ChatScreen({ navigation, route }: Props) {
   };
 
   const handlePickMedia = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Allow access to your photo library.');
-      return;
-    }
-    let result: ImagePicker.ImagePickerResult;
+    setPicking(true);
+    let items;
     try {
-      result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images', 'videos'],
-        preferredAssetRepresentationMode:
-          ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
-      });
-    } catch (err) {
-      Alert.alert('Error', 'Could not open photo library. Please try again.');
-      return;
-    }
-    if (result.canceled || !result.assets?.length) return;
-    const asset = result.assets[0];
-    // expo-image-picker 17 provides mimeType directly — use it over extension guessing.
-    const kind: 'image' | 'video' =
-      asset.type === 'video' || asset.mimeType?.startsWith('video/') ? 'video' : 'image';
-    const limit = kind === 'video' ? MAX_VIDEO_SIZE : MAX_IMAGE_SIZE;
-    if (asset.fileSize != null && asset.fileSize > limit) {
-      Alert.alert(
-        'File too large',
-        kind === 'video' ? 'Videos must be under 50 MB.' : 'Images must be under 10 MB.',
-      );
-      return;
-    }
-    setPendingMediaUri(asset.uri);
-    setPendingMediaKind(kind);
-    setPendingAssetId(null);
-    setUploadingMedia(true);
-    try {
-      const uploaded = await uploadMedia(asset.uri, kind, asset.mimeType ?? undefined);
-      setPendingAssetId(uploaded.asset_id);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to upload media. Please try again.';
-      Alert.alert('Upload failed', msg);
-      setPendingMediaUri(null);
-      setPendingMediaKind(null);
+      items = await pickMedia({ allowsMultiple: true });
     } finally {
-      setUploadingMedia(false);
+      setPicking(false);
     }
+    if (!items) return;
+    const newAttachments: PendingAttachment[] = items.map(item => ({
+      localId: genClientMsgId(),
+      uri: item.uri,
+      kind: item.kind,
+      mimeType: item.mimeType,
+      thumbUri: item.thumbnailUri ?? null,
+      assetId: null,
+      uploading: true,
+      failed: false,
+    }));
+    setPendingAttachments(prev => [...prev, ...newAttachments]);
+    await Promise.all(newAttachments.map(async (att) => {
+      try {
+        const uploaded = await uploadMedia(att.uri, att.kind, att.mimeType);
+        setPendingAttachments(prev =>
+          prev.map(a => a.localId === att.localId ? { ...a, assetId: uploaded.asset_id, uploading: false } : a)
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Failed to upload media. Please try again.';
+        Alert.alert('Upload failed', msg);
+        setPendingAttachments(prev =>
+          prev.map(a => a.localId === att.localId ? { ...a, uploading: false, failed: true } : a)
+        );
+      }
+    }));
   };
 
   const handleSendMedia = async () => {
-    if (!pendingMediaUri || !pendingMediaKind || !pendingAssetId || sendingMedia) return;
+    const ready = pendingAttachments.filter(a => !!a.assetId && !a.uploading && !a.failed);
+    if (!ready.length || sendingMedia) return;
     const content = text.trim();
-    const uri = pendingMediaUri;
-    const kind = pendingMediaKind;
-    const assetId = pendingAssetId;
-    const clientMsgId = genClientMsgId();
-
-    setPendingMediaUri(null);
-    setPendingMediaKind(null);
-    setPendingAssetId(null);
+    setPendingAttachments(prev => prev.filter(a => !ready.some(r => r.localId === a.localId)));
     setText('');
     setSendingMedia(true);
 
-    const optimisticMsg: Message = {
-      id: clientMsgId,
-      sender: String(me?.id ?? ''),
-      sender_username: null,
-      sender_avatar_url: null,
-      content,
-      media: [{ url: uri, kind, thumbnail_url: null, width: null, height: null }],
-      created_at: new Date().toISOString(),
-      is_read: true,
-      client_msg_id: clientMsgId,
-      status: 'sending',
-    };
-    setMessages((prev) => [optimisticMsg, ...prev]);
-
-    try {
-      const msg = await sendDM(partnerId, content, assetId);
-      setMessages((prev) => {
-        if (prev.some((m) => !('isDivider' in m) && String(m.id) === String(msg.id))) {
-          return prev.filter((m) => ('isDivider' in m) || m.id !== clientMsgId);
-        }
-        return prev.map((m) =>
-          !('isDivider' in m) && m.id === clientMsgId
-            ? { ...msg, media: [{ url: uri, kind, thumbnail_url: null, width: null, height: null }], status: 'sent' as const }
-            : m,
+    await Promise.all(ready.map(async (att) => {
+      const clientMsgId = genClientMsgId();
+      const optimisticMsg: Message = {
+        id: clientMsgId,
+        sender: myId,
+        sender_username: null,
+        sender_avatar_url: null,
+        content: '',
+        media: [{ url: att.uri, kind: att.kind, thumbnail_url: att.thumbUri, width: null, height: null }],
+        created_at: new Date().toISOString(),
+        is_read: true,
+        client_msg_id: clientMsgId,
+        status: 'sending',
+      };
+      // Append optimistic message to end (newest = bottom).
+      setMessages(prev => [...prev, optimisticMsg]);
+      try {
+        const msg = await sendDM(partnerId, '', att.assetId!);
+        setMessages(prev => {
+          if (prev.some(m => !('isDivider' in m) && String(m.id) === String(msg.id))) {
+            return prev.filter(m => ('isDivider' in m) || m.id !== clientMsgId);
+          }
+          return prev.map(m =>
+            !('isDivider' in m) && m.id === clientMsgId
+              ? { ...msg, media: [{ url: att.uri, kind: att.kind, thumbnail_url: att.thumbUri, width: null, height: null }], status: 'sent' as const }
+              : m,
+          );
+        });
+      } catch {
+        setMessages(prev =>
+          prev.map(m => !('isDivider' in m) && m.id === clientMsgId ? { ...m, status: 'failed' as const } : m),
         );
-      });
-    } catch {
-      setMessages((prev) =>
-        prev.map((m) =>
-          !('isDivider' in m) && m.id === clientMsgId ? { ...m, status: 'failed' as const } : m,
-        ),
-      );
-      Alert.alert('Error', 'Failed to send media.');
-    } finally {
-      setSendingMedia(false);
+      }
+    }));
+
+    if (content) {
+      const clientMsgId = genClientMsgId();
+      const optimisticMsg: Message = {
+        id: clientMsgId,
+        sender: myId,
+        sender_username: null,
+        sender_avatar_url: null,
+        content,
+        created_at: new Date().toISOString(),
+        is_read: true,
+        client_msg_id: clientMsgId,
+        status: 'sending',
+      };
+      setMessages(prev => [...prev, optimisticMsg]);
+      const result = wsManager.sendMessage({ type: 'send_message', content, recipient_id: partnerId, client_msg_id: clientMsgId });
+      if (result === 'queued') {
+        setMessages(prev => prev.map(m => !('isDivider' in m) && m.id === clientMsgId ? { ...m, status: 'waiting' as const } : m));
+      } else {
+        _startSendTimer(clientMsgId);
+      }
     }
+
+    setSendingMedia(false);
   };
 
   const handleSend = () => {
-    if (pendingMediaUri) {
+    if (hasReadyAttachment) {
       handleSendMedia();
       return;
     }
@@ -410,10 +466,9 @@ export default function ChatScreen({ navigation, route }: Props) {
     const clientMsgId = genClientMsgId();
     setText('');
 
-    // Add optimistic message immediately.
     const optimisticMsg: Message = {
       id: clientMsgId,
-      sender: String(me?.id ?? ''),
+      sender: myId,
       sender_username: null,
       sender_avatar_url: null,
       content,
@@ -422,7 +477,8 @@ export default function ChatScreen({ navigation, route }: Props) {
       client_msg_id: clientMsgId,
       status: 'sending',
     };
-    setMessages((prev) => [optimisticMsg, ...prev]);
+    // Append to end — newest message shows at the bottom.
+    setMessages(prev => [...prev, optimisticMsg]);
 
     const result = wsManager.sendMessage({
       type: 'send_message',
@@ -432,9 +488,8 @@ export default function ChatScreen({ navigation, route }: Props) {
     });
 
     if (result === 'queued') {
-      // WS was down — show waiting state, queue will drain on reconnect.
-      setMessages((prev) =>
-        prev.map((m) =>
+      setMessages(prev =>
+        prev.map(m =>
           !('isDivider' in m) && m.id === clientMsgId
             ? { ...m, status: 'waiting' as const }
             : m,
@@ -443,7 +498,6 @@ export default function ChatScreen({ navigation, route }: Props) {
       return;
     }
 
-    // WS delivered — start 12 s failure deadline.
     _startSendTimer(clientMsgId);
   };
 
@@ -451,14 +505,12 @@ export default function ChatScreen({ navigation, route }: Props) {
     const clientMsgId = msg.client_msg_id;
     if (!clientMsgId || !msg.content || (msg.media && msg.media.length > 0)) return;
 
-    // Clear any stale timer.
     const existing = pendingTimers.current.get(clientMsgId);
     if (existing) {
       clearTimeout(existing);
       pendingTimers.current.delete(clientMsgId);
     }
 
-    // Remove from queue in case it's still sitting there.
     wsManager.removeFromQueue(clientMsgId);
 
     const result = wsManager.sendMessage({
@@ -468,8 +520,8 @@ export default function ChatScreen({ navigation, route }: Props) {
       client_msg_id: clientMsgId,
     });
 
-    setMessages((prev) =>
-      prev.map((m) =>
+    setMessages(prev =>
+      prev.map(m =>
         !('isDivider' in m) && m.id === clientMsgId
           ? { ...m, status: result === 'queued' ? 'waiting' as const : 'sending' as const }
           : m,
@@ -494,7 +546,7 @@ export default function ChatScreen({ navigation, route }: Props) {
             style: 'destructive' as const,
             onPress: () => {
               if (msg.client_msg_id) wsManager.removeFromQueue(msg.client_msg_id);
-              setMessages((prev) => prev.filter((m) => m.id !== msg.id));
+              setMessages(prev => prev.filter(m => m.id !== msg.id));
             },
           },
           { text: 'Cancel', style: 'cancel' as const },
@@ -513,8 +565,8 @@ export default function ChatScreen({ navigation, route }: Props) {
     setContextMsg(null);
     try {
       const res = await reactToMessage(msg.id, emoji);
-      setMessages((prev) =>
-        prev.map((m) =>
+      setMessages(prev =>
+        prev.map(m =>
           !('isDivider' in m) && String(m.id) === String(msg.id)
             ? { ...m, reactions: res.reactions }
             : m,
@@ -526,8 +578,8 @@ export default function ChatScreen({ navigation, route }: Props) {
   const handleTapReaction = useCallback(async (msg: Message, emoji: string) => {
     try {
       const res = await reactToMessage(msg.id, emoji);
-      setMessages((prev) =>
-        prev.map((m) =>
+      setMessages(prev =>
+        prev.map(m =>
           !('isDivider' in m) && String(m.id) === String(msg.id)
             ? { ...m, reactions: res.reactions }
             : m,
@@ -536,122 +588,46 @@ export default function ChatScreen({ navigation, route }: Props) {
     } catch {}
   }, []);
 
-  // ── Render ────────────────────────────────────────────────────────────────
+  // ── List helpers ──────────────────────────────────────────────────────────
 
-  const renderItem = useCallback(({ item }: { item: ListItem }) => {
+  const handleNavigateToProfile = useCallback((_username: string | null) => {
+    navigation.navigate('Profile', { username: partnerUsername });
+  }, [navigation, partnerUsername]);
+
+  const keyExtractor = useCallback((item: ListItem) => String(item.id), []);
+
+  const ItemSeparator = useCallback(() => <View style={{ height: spacing.sm }} />, []);
+
+  // Give FlashList accurate height hints per item type to avoid layout thrashing.
+  const overrideItemLayout = useCallback((
+    layout: { span?: number; size?: number },
+    item: ListItem,
+  ) => {
     if ('isDivider' in item) {
-      return (
-        <View style={styles.dividerRow}>
-          <View style={styles.dividerLine} />
-          <Text style={styles.dividerLabel}>NEW</Text>
-          <View style={styles.dividerLine} />
-        </View>
-      );
+      layout.size = 36;
+    } else if (item.is_system) {
+      layout.size = 44;
+    } else if (item.media && item.media.length > 0) {
+      layout.size = 204; // 180px thumb + padding + separator
+    } else {
+      layout.size = 56;
     }
+  }, []);
 
-    const isOwn = String(item.sender) === String(me?.id);
-    const isFailed = item.status === 'failed';
-    const reactions = item.reactions ?? [];
+  const renderItem = useCallback(({ item }: { item: ListItem }) => (
+    <MessageRow
+      item={item}
+      myId={myId}
+      isGroup={false}
+      onNavigateToProfile={handleNavigateToProfile}
+      onRetry={handleRetry}
+      onLongPress={handleLongPress}
+      onTapReaction={handleTapReaction}
+      onVideoPress={setVideoPlayerUrl}
+    />
+  ), [myId, handleNavigateToProfile, handleRetry, handleLongPress, handleTapReaction]);
 
-    return (
-      <View style={[styles.msgWrap, isOwn ? styles.msgWrapOwn : styles.msgWrapOther]}>
-        {!isOwn && (
-          <Pressable onPress={() => navigation.navigate('Profile', { username: partnerUsername })}>
-            <Avatar
-              uri={item.sender_avatar_url}
-              name={item.sender_username ?? '?'}
-              size={28}
-            />
-          </Pressable>
-        )}
-        <View style={{ maxWidth: '75%' }}>
-          {isFailed ? (
-            <Pressable
-              onPress={() => handleRetry(item)}
-              onLongPress={() => handleLongPress(item)}
-              delayLongPress={400}
-            >
-              {item.media && item.media.length > 0 && (
-                <View style={[styles.msgMediaGrid, { opacity: 0.7 }]}>
-                  {item.media.map((m, idx) =>
-                    m.kind === 'video' ? (
-                      <View key={idx} style={[styles.msgMediaThumb, styles.msgMediaVideo]}>
-                        {m.thumbnail_url ? (
-                          <Image source={{ uri: m.thumbnail_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                        ) : null}
-                        <Feather name="play-circle" size={28} color="#fff" />
-                      </View>
-                    ) : (
-                      <Image key={idx} source={{ uri: m.thumbnail_url ?? m.url }} style={styles.msgMediaThumb} resizeMode="cover" />
-                    )
-                  )}
-                </View>
-              )}
-              {!!item.content && (
-                <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther, styles.bubbleFailed]}>
-                  <Text style={[styles.bubbleText, isOwn ? styles.bubbleTextOwn : styles.bubbleTextOther]}>
-                    {item.content}
-                  </Text>
-                </View>
-              )}
-              {isOwn && item.status != null && (
-                <View style={styles.msgStatus}>
-                  <MsgStatusIcon status={item.status} />
-                </View>
-              )}
-            </Pressable>
-          ) : (
-            <Pressable onLongPress={() => handleLongPress(item)} delayLongPress={400}>
-              {item.media && item.media.length > 0 && (
-                <View style={styles.msgMediaGrid}>
-                  {item.media.map((m, idx) =>
-                    m.kind === 'video' ? (
-                      <View key={idx} style={[styles.msgMediaThumb, styles.msgMediaVideo]}>
-                        {m.thumbnail_url ? (
-                          <Image source={{ uri: m.thumbnail_url }} style={StyleSheet.absoluteFill} resizeMode="cover" />
-                        ) : null}
-                        <Feather name="play-circle" size={28} color="#fff" />
-                      </View>
-                    ) : (
-                      <Image key={idx} source={{ uri: m.thumbnail_url ?? m.url }} style={styles.msgMediaThumb} resizeMode="cover" />
-                    )
-                  )}
-                </View>
-              )}
-              {!!item.content && (
-                <View style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther]}>
-                  <Text style={[styles.bubbleText, isOwn ? styles.bubbleTextOwn : styles.bubbleTextOther]}>
-                    {item.content}
-                  </Text>
-                </View>
-              )}
-              {isOwn && item.status != null && (
-                <View style={styles.msgStatus}>
-                  <MsgStatusIcon status={item.status} />
-                </View>
-              )}
-            </Pressable>
-          )}
-          {reactions.length > 0 && (
-            <View style={[styles.reactionsRow, isOwn && styles.reactionsRowOwn]}>
-              {reactions.map((r: MessageReaction) => (
-                <Pressable
-                  key={r.emoji}
-                  style={[styles.reactionChip, r.user_reacted && styles.reactionChipActive]}
-                  onPress={() => handleTapReaction(item, r.emoji)}
-                >
-                  <Text style={styles.reactionEmoji}>{r.emoji}</Text>
-                  <Text style={[styles.reactionCount, r.user_reacted && styles.reactionCountActive]}>
-                    {r.count}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
-        </View>
-      </View>
-    );
-  }, [me?.id, partnerUsername, navigation, handleRetry, handleLongPress, handleTapReaction]);
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <KeyboardAvoidingView
@@ -680,57 +656,111 @@ export default function ChatScreen({ navigation, route }: Props) {
         </View>
       </LinearGradient>
 
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={colors.primary} />
+      <View style={{ flex: 1 }}>
+        {!listVisible && (
+          <View style={[StyleSheet.absoluteFill, styles.center]}>
+            <ActivityIndicator color={colors.primary} />
+          </View>
+        )}
+        <View style={{ flex: 1, opacity: listVisible ? 1 : 0 }}>
+          <FlashList
+            ref={flatRef}
+            data={messages}
+            keyExtractor={keyExtractor}
+            renderItem={renderItem}
+            estimatedItemSize={80}
+            overrideItemLayout={overrideItemLayout}
+            ItemSeparatorComponent={ItemSeparator}
+            contentContainerStyle={{ padding: spacing.base, paddingBottom: 16 }}
+            // Scroll to the bottom (newest messages) on first render, then reveal.
+            onContentSizeChange={() => {
+              if (!dataLoadedRef.current || listRevealedRef.current) return;
+              // Re-scroll on every content size change while hidden — FlashList remeasures
+              // items (especially media) multiple times, so we must keep chasing the real bottom.
+              flatRef.current?.scrollToEnd({ animated: false });
+              if (!initialScrollDone.current) {
+                initialScrollDone.current = true;
+                setTimeout(() => {
+                  listRevealedRef.current = true;
+                  setListVisible(true);
+                }, 150);
+              }
+            }}
+            // Track scroll position so the WS handler can decide whether to auto-scroll.
+            onScroll={({ nativeEvent }) => {
+              scrollOffsetRef.current = nativeEvent.contentOffset.y;
+              contentHeightRef.current = nativeEvent.contentSize.height;
+              listHeightRef.current = nativeEvent.layoutMeasurement.height;
+            }}
+            scrollEventThrottle={100}
+            // Load older messages when user scrolls near the top.
+            onStartReached={loadMore}
+            onStartReachedThreshold={0.3}
+            // Keep the scroll position anchored when older messages are prepended.
+            // autoscrollToBottomThreshold is intentionally omitted — it misfires when
+            // prepending items. New-message auto-scroll is handled explicitly in the WS handler.
+            maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+            ListHeaderComponent={
+              loadingMore
+                ? <ActivityIndicator style={{ paddingVertical: spacing.md }} color={colors.primary} />
+                : null
+            }
+            ListEmptyComponent={
+              <View style={styles.center}>
+                <Text style={styles.emptyText}>Send a message to start the conversation</Text>
+              </View>
+            }
+          />
         </View>
-      ) : (
-        <FlatList
-          ref={flatRef}
-          inverted
-          data={messages}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={renderItem}
-          contentContainerStyle={{ padding: spacing.base, gap: spacing.sm, paddingTop: 16 }}
-          onEndReached={loadMore}
-          onEndReachedThreshold={0.2}
-          ListFooterComponent={
-            loadingMore
-              ? <ActivityIndicator style={{ paddingVertical: spacing.md }} color={colors.primary} />
-              : null
-          }
-          ListEmptyComponent={
-            <View style={styles.center}>
-              <Text style={styles.emptyText}>Send a message to start the conversation</Text>
-            </View>
-          }
-        />
-      )}
+      </View>
 
       {/* Input bar */}
       <View style={[styles.inputArea, { paddingBottom: insets.bottom + spacing.sm }]}>
-        {pendingMediaUri != null && (
-          <View style={styles.pendingMediaPreview}>
-            <View style={styles.pendingMediaWrap}>
-              {pendingMediaKind === 'video' ? (
-                <View style={[styles.pendingThumb, styles.pendingThumbVideo]}>
-                  <Feather name="video" size={18} color="#fff" />
-                </View>
-              ) : (
-                <Image source={{ uri: pendingMediaUri }} style={styles.pendingThumb} resizeMode="cover" />
-              )}
-              <Pressable
-                style={styles.pendingRemoveBtn}
-                onPress={() => { setPendingMediaUri(null); setPendingMediaKind(null); setPendingAssetId(null); }}
-              >
-                <Feather name="x" size={12} color="#fff" />
-              </Pressable>
-            </View>
-          </View>
+        {pendingAttachments.length > 0 && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.pendingMediaPreview}
+            contentContainerStyle={{ gap: spacing.sm, paddingVertical: 4 }}
+          >
+            {pendingAttachments.map((att) => (
+              <View key={att.localId} style={styles.pendingMediaWrap}>
+                {att.kind === 'video' ? (
+                  <VideoThumbnail
+                    videoUrl={att.uri}
+                    thumbnailUrl={att.thumbUri}
+                    style={styles.pendingThumb}
+                    iconSize={18}
+                  />
+                ) : (
+                  <Image source={{ uri: att.uri }} style={styles.pendingThumb} contentFit="cover" />
+                )}
+                {att.uploading && (
+                  <View style={styles.pendingUploadOverlay}>
+                    <ActivityIndicator size="small" color="#fff" />
+                  </View>
+                )}
+                {att.failed && (
+                  <View style={styles.pendingUploadOverlay}>
+                    <Feather name="alert-circle" size={16} color="#ff6b6b" />
+                  </View>
+                )}
+                <Pressable
+                  style={styles.pendingRemoveBtn}
+                  onPress={() => setPendingAttachments(prev => prev.filter(a => a.localId !== att.localId))}
+                >
+                  <Feather name="x" size={12} color="#fff" />
+                </Pressable>
+              </View>
+            ))}
+          </ScrollView>
         )}
         <View style={styles.inputBar}>
-          <Pressable style={styles.mediaPickBtn} onPress={handlePickMedia} disabled={sendingMedia || uploadingMedia}>
-            <Feather name="image" size={22} color={colors.textMuted} />
+          <Pressable style={styles.mediaPickBtn} onPress={handlePickMedia} disabled={sendingMedia || uploadingMedia || picking}>
+            {picking
+              ? <ActivityIndicator size="small" color={colors.textMuted} />
+              : <Feather name="image" size={22} color={colors.textMuted} />
+            }
           </Pressable>
           <TextInput
             style={styles.input}
@@ -743,9 +773,9 @@ export default function ChatScreen({ navigation, route }: Props) {
             returnKeyType="default"
           />
           <Pressable
-            style={[styles.sendBtn, (!text.trim() && !pendingMediaUri) && styles.sendBtnDisabled]}
+            style={[styles.sendBtn, (!text.trim() && !hasReadyAttachment) && styles.sendBtnDisabled]}
             onPress={handleSend}
-            disabled={(!text.trim() && !pendingMediaUri) || sendingMedia || uploadingMedia}
+            disabled={(!text.trim() && !hasReadyAttachment) || sendingMedia || uploadingMedia}
           >
             {sendingMedia || uploadingMedia ? (
               <ActivityIndicator size="small" color="#fff" />
@@ -775,6 +805,10 @@ export default function ChatScreen({ navigation, route }: Props) {
           </View>
         </Pressable>
       </Modal>
+
+      {videoPlayerUrl != null && (
+        <VideoPlayerModal url={videoPlayerUrl} onClose={() => setVideoPlayerUrl(null)} />
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -796,30 +830,6 @@ const styles = StyleSheet.create({
   },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl },
   emptyText: { fontSize: typography.size.sm, color: colors.textMuted, textAlign: 'center' },
-  msgWrap: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: spacing.xs,
-    marginBottom: spacing.xs,
-  },
-  msgWrapOwn: { justifyContent: 'flex-end' },
-  msgWrapOther: { justifyContent: 'flex-start' },
-  bubble: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: 16,
-  },
-  bubbleOwn: { backgroundColor: colors.primary, borderBottomRightRadius: 4 },
-  bubbleOther: { backgroundColor: colors.background.elevated, borderBottomLeftRadius: 4 },
-  bubbleFailed: { opacity: 0.7 },
-  bubbleText: { fontSize: typography.size.sm, lineHeight: 20 },
-  bubbleTextOwn: { color: '#fff' },
-  bubbleTextOther: { color: colors.textPrimary },
-  msgStatus: {
-    alignSelf: 'flex-end',
-    marginTop: 2,
-    marginRight: 4,
-  },
   inputArea: {
     paddingHorizontal: spacing.base,
     paddingTop: spacing.sm,
@@ -834,7 +844,6 @@ const styles = StyleSheet.create({
   },
   pendingMediaPreview: {
     marginBottom: spacing.sm,
-    flexDirection: 'row',
   },
   pendingMediaWrap: {
     position: 'relative',
@@ -844,8 +853,10 @@ const styles = StyleSheet.create({
     height: 60,
     borderRadius: 8,
   },
-  pendingThumbVideo: {
-    backgroundColor: '#333',
+  pendingUploadOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -865,20 +876,6 @@ const styles = StyleSheet.create({
     height: 36,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  msgMediaGrid: {
-    marginBottom: 4,
-  },
-  msgMediaThumb: {
-    width: 180,
-    height: 180,
-    borderRadius: 12,
-  },
-  msgMediaVideo: {
-    backgroundColor: '#000',
-    alignItems: 'center',
-    justifyContent: 'center',
-    overflow: 'hidden',
   },
   input: {
     flex: 1,
@@ -901,51 +898,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   sendBtnDisabled: { backgroundColor: colors.iconInactive },
-  dividerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginVertical: spacing.sm,
-    paddingHorizontal: spacing.sm,
-  },
-  dividerLine: {
-    flex: 1,
-    height: 1,
-    backgroundColor: colors.primary,
-    opacity: 0.4,
-  },
-  dividerLabel: {
-    fontSize: typography.size.xs,
-    fontWeight: '700',
-    color: colors.primary,
-    letterSpacing: 1,
-  },
-  reactionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 4,
-    marginTop: 4,
-    alignSelf: 'flex-start',
-  },
-  reactionsRowOwn: { alignSelf: 'flex-end' },
-  reactionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border.subtle,
-    backgroundColor: colors.background.elevated,
-    gap: 3,
-  },
-  reactionChipActive: {
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(79,195,224,0.12)',
-  },
-  reactionEmoji: { fontSize: 13 },
-  reactionCount: { fontSize: 11, color: colors.textMuted },
-  reactionCountActive: { color: colors.primary, fontWeight: '600' },
   contextOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.45)',

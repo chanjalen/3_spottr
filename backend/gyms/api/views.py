@@ -4,6 +4,11 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from django.db.models import Avg, Count
+from django.core.cache import cache
+from datetime import timedelta
+from collections import defaultdict
 
 from gyms.models import Gym, BusyLevel
 from gyms import services
@@ -33,6 +38,10 @@ from gyms.exceptions import (
 )
 
 
+BUSY_LABELS = {1: 'Not crowded', 2: 'Not too crowded', 3: 'Moderately crowded', 4: 'Crowded', 5: 'Very crowded'}
+LEADERBOARD_TTL = 15 * 60  # 15 minutes
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def gym_list(request):
@@ -42,7 +51,100 @@ def gym_list(request):
     offset = int(request.query_params.get('offset', 0))
 
     gyms = services.search_gyms(query=query or None, limit=limit, offset=offset)
-    serializer = GymListSerializer(gyms, many=True, context={'request': request})
+    gym_ids = [str(g.id) for g in gyms]
+
+    # Batch busy level (1 aggregation query)
+    one_hour_ago = timezone.now() - timedelta(hours=1)
+    busy_map = {}
+    for row in (BusyLevel.objects
+                .filter(gym_id__in=gym_ids, timestamp__gte=one_hour_ago)
+                .values('gym_id')
+                .annotate(avg=Avg('survey_response'), count=Count('id'))):
+        level = round(row['avg']) if row['avg'] else None
+        busy_map[str(row['gym_id'])] = {
+            'level': level,
+            'label': BUSY_LABELS.get(level),
+            'total_responses': row['count'],
+        }
+
+    # Batch top lifter (2 queries: enrollments + PRs)
+    from accounts.models import User
+    from workouts.models import PersonalRecord
+
+    EnrolledGym = User.enrolled_gyms.through
+    enrollments = EnrolledGym.objects.filter(gym_id__in=gym_ids).values('gym_id', 'user_id')
+    gym_users = defaultdict(set)
+    for e in enrollments:
+        gym_users[str(e['gym_id'])].add(e['user_id'])
+
+    all_user_ids = {uid for uids in gym_users.values() for uid in uids}
+    user_totals = {}
+    if all_user_ids:
+        for pr in (PersonalRecord.objects
+                   .filter(user_id__in=all_user_ids,
+                           exercise_name__in=['Bench Press', 'Squat', 'Deadlift'],
+                           video__isnull=False)
+                   .exclude(video='')
+                   .values('user_id', 'exercise_name', 'value', 'unit',
+                           'user__username', 'user__display_name')):
+            try:
+                val = float(pr['value'])
+            except (ValueError, TypeError):
+                continue
+            if pr['unit'] == 'kg':
+                val *= 2.205
+            uid = pr['user_id']
+            if uid not in user_totals:
+                user_totals[uid] = {
+                    'username': pr['user__username'],
+                    'display_name': pr['user__display_name'] or pr['user__username'],
+                    'bench': 0, 'squat': 0, 'deadlift': 0,
+                }
+            ex = pr['exercise_name'].lower()
+            if 'bench' in ex:
+                user_totals[uid]['bench'] = max(user_totals[uid]['bench'], val)
+            elif 'squat' in ex:
+                user_totals[uid]['squat'] = max(user_totals[uid]['squat'], val)
+            elif 'deadlift' in ex:
+                user_totals[uid]['deadlift'] = max(user_totals[uid]['deadlift'], val)
+
+        # Batch-fetch avatar URLs for all users who have PRs (1 query)
+        from media.models import MediaLink
+        from django.conf import settings
+        avatar_rows = (
+            MediaLink.objects
+            .filter(destination_type='user', destination_id__in=[str(uid) for uid in user_totals], type='avatar')
+            .select_related('asset')
+        )
+        avatar_map = {row.destination_id: row.asset.url for row in avatar_rows}
+        for uid in user_totals:
+            user_totals[uid]['avatar_url'] = avatar_map.get(str(uid), '')
+
+    top_lifter_map = {}
+    for gid, user_ids in gym_users.items():
+        candidates = [(uid, user_totals[uid]) for uid in user_ids if uid in user_totals]
+        if candidates:
+            top_uid, d = max(candidates, key=lambda x: x[1]['bench'] + x[1]['squat'] + x[1]['deadlift'])
+            total = d['bench'] + d['squat'] + d['deadlift']
+            if total > 0:
+                top_lifter_map[gid] = {
+                    'rank': 1,
+                    'username': d['username'],
+                    'display_name': d['display_name'],
+                    'avatar_url': d['avatar_url'],
+                    'value': round(total, 1),
+                    'unit': 'lbs',
+                }
+
+    # Batch enrolled gym IDs (1 query, replaces N queries in serializer)
+    enrolled_ids = set(str(i) for i in request.user.enrolled_gyms.values_list('id', flat=True))
+
+    serializer = GymListSerializer(gyms, many=True, context={
+        'request': request,
+        'enrolled_ids': enrolled_ids,
+        'busy_map': busy_map,
+        'top_lifter_map': top_lifter_map,
+    })
     return Response(serializer.data)
 
 
@@ -359,6 +461,11 @@ def gym_leaderboard(request, gym_id):
     if not Gym.objects.filter(id=gym_id).exists():
         return Response({"error": "Gym not found."}, status=status.HTTP_404_NOT_FOUND)
     lift = request.query_params.get('lift', 'total')
+    cache_key = f'gym:leaderboard:{gym_id}:{lift}'
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return Response(cached)
     entries = services.get_top_lifters(gym_id, lift=lift)
-    serializer = TopLifterSerializer(entries, many=True)
-    return Response(serializer.data)
+    data = TopLifterSerializer(entries, many=True).data
+    cache.set(cache_key, data, LEADERBOARD_TTL)
+    return Response(data)

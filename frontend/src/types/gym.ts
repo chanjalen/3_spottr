@@ -7,6 +7,8 @@ export interface GymListItem {
   rating: string | null;
   rating_count: number | null;
   is_enrolled: boolean;
+  busy_level: BusyLevel | null;
+  top_lifter: TopLifter | null;
 }
 
 export interface Gym extends GymListItem {

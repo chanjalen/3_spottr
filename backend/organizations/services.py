@@ -1,4 +1,4 @@
-from django.db.models import F, Q, Count
+from django.db.models import F, Q, Count, Prefetch
 
 from .models import (
     Organization, OrgMember, OrgInviteCode, OrgJoinRequest,
@@ -505,7 +505,19 @@ def list_announcements(org_id, requesting_user, limit=20, before_id=None):
         Announcement.objects
         .filter(org=org)
         .select_related('author', 'poll')
-        .prefetch_related('poll__options')
+        .prefetch_related(
+            'poll__options',
+            Prefetch(
+                'poll__user_votes',
+                queryset=AnnouncementPollVote.objects.filter(user=requesting_user),
+                to_attr='requesting_user_votes',
+            ),
+            Prefetch(
+                'reactions',
+                queryset=AnnouncementReaction.objects.select_related('user'),
+                to_attr='prefetched_reactions',
+            ),
+        )
     )
 
     if before_id:
