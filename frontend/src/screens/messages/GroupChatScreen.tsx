@@ -32,6 +32,7 @@ import { useAuth } from '../../store/AuthContext';
 import { useUnreadCount } from '../../store/UnreadCountContext';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
+import { staleCache } from '../../utils/staleCache';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -132,9 +133,33 @@ export default function GroupChatScreen({ navigation, route }: Props) {
 
   const load = useCallback(async () => {
     const t0 = Date.now();
+    const cacheKey = `chat:group:${groupId}`;
+    type CachedPage = { results: Message[]; has_more: boolean; oldest_id: string | null; newest_id: string | null };
+
+    // ── Serve cached page immediately ────────────────────────────────────────
+    const cached = await staleCache.get<CachedPage>(cacheKey);
+    if (cached && cached.results.length > 0) {
+      const firstUnreadIdx = cached.results.findIndex(m => !m.is_read);
+      const cachedItems: ListItem[] = firstUnreadIdx > 0
+        ? [
+            ...cached.results.slice(0, firstUnreadIdx),
+            { id: '__new_divider__', isDivider: true as const },
+            ...cached.results.slice(firstUnreadIdx),
+          ]
+        : [...cached.results];
+      dataLoadedRef.current = true;
+      setMessages(cachedItems);
+      setHasMore(cached.has_more);
+      setOldestId(cached.oldest_id ?? null);
+      newestIdRef.current = cached.newest_id ?? null;
+      if (cachedItems.length === 0) { listRevealedRef.current = true; setListVisible(true); }
+    }
+
+    // ── Always fetch fresh in background ─────────────────────────────────────
     try {
       const page = await fetchGroupMessages(groupId);
       const fetchMs = Date.now() - t0;
+      staleCache.set(cacheKey, page, 5 * 60 * 1000);
       // Backend sends oldest-first — keep that order.
       const firstUnreadIdx = page.results.findIndex(m => !m.is_read);
       const listItems: ListItem[] = firstUnreadIdx > 0
@@ -149,6 +174,10 @@ export default function GroupChatScreen({ navigation, route }: Props) {
       setHasMore(page.has_more);
       setOldestId(page.oldest_id ?? null);
       newestIdRef.current = page.newest_id ?? null;
+      // If already revealed (cache was shown), stay anchored at bottom for any new messages.
+      if (listRevealedRef.current && isNearBottom()) {
+        requestAnimationFrame(() => flatRef.current?.scrollToEnd({ animated: false }));
+      }
       const unread = page.results
         .filter(m => !m.is_read && String(m.sender) !== myId)
         .map(m => String(m.id));
@@ -165,8 +194,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
       }
     } catch {
       // On error, reveal the (empty) list so the screen isn't stuck on the spinner.
-      listRevealedRef.current = true;
-      setListVisible(true);
+      if (!cached) { listRevealedRef.current = true; setListVisible(true); }
     }
   }, [groupId, myId]);
 
