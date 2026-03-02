@@ -7,7 +7,7 @@ from datetime import date, timedelta
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives
 from django.core.validators import validate_email
 from django.db import IntegrityError
 from django.utils import timezone
@@ -56,18 +56,56 @@ def _user_brief(user):
     }
 
 
-def _send_verification_email(user, code):
-    send_mail(
-        subject='Verify your Spottr account',
-        message=(
-            f'Your Spottr verification code is: {code}\n\n'
-            'This code expires in 15 minutes.\n\n'
-            'If you did not create a Spottr account, you can ignore this email.'
-        ),
-        from_email='noreply@spottr.app',
-        recipient_list=[user.email],
-        fail_silently=True,
+def _send_email(subject: str, to: str, text_body: str, html_body: str) -> None:
+    """Send a transactional email with plain-text and HTML alternatives."""
+    msg = EmailMultiAlternatives(
+        subject=subject,
+        body=text_body,
+        to=[to],
     )
+    msg.attach_alternative(html_body, 'text/html')
+    try:
+        msg.send()
+    except Exception:
+        logger.exception('Failed to send email to %s (subject: %s)', to, subject)
+
+
+def _send_password_reset_email(user, code: str) -> None:
+    text = (
+        f'Your Spottr password reset code is: {code}\n\n'
+        'This code expires in 15 minutes.\n\n'
+        'If you did not request a password reset, you can ignore this email.'
+    )
+    html = f"""
+    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#111;color:#f0f0f0;border-radius:12px;">
+      <h1 style="font-size:28px;font-weight:700;color:#4FC3E0;margin:0 0 4px;">Spottr</h1>
+      <p style="color:#888;font-size:13px;margin:0 0 32px;">Track. Share. Compete.</p>
+      <h2 style="font-size:20px;font-weight:600;margin:0 0 8px;">Reset your password</h2>
+      <p style="color:#aaa;font-size:15px;margin:0 0 24px;">Enter this code in the app to set a new password. It expires in 15 minutes.</p>
+      <div style="background:#1e1e1e;border:1px solid #333;border-radius:10px;padding:24px;text-align:center;letter-spacing:12px;font-size:36px;font-weight:700;color:#4FC3E0;">{code}</div>
+      <p style="color:#555;font-size:12px;margin:32px 0 0;text-align:center;">If you didn't request this, your password has not been changed.</p>
+    </div>
+    """
+    _send_email('Reset your Spottr password', user.email, text, html)
+
+
+def _send_verification_email(user, code: str) -> None:
+    text = (
+        f'Your Spottr verification code is: {code}\n\n'
+        'This code expires in 15 minutes.\n\n'
+        'If you did not create a Spottr account, you can ignore this email.'
+    )
+    html = f"""
+    <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:32px 24px;background:#111;color:#f0f0f0;border-radius:12px;">
+      <h1 style="font-size:28px;font-weight:700;color:#4FC3E0;margin:0 0 4px;">Spottr</h1>
+      <p style="color:#888;font-size:13px;margin:0 0 32px;">Track. Share. Compete.</p>
+      <h2 style="font-size:20px;font-weight:600;margin:0 0 8px;">Verify your email</h2>
+      <p style="color:#aaa;font-size:15px;margin:0 0 24px;">Enter this code in the app to confirm your address. It expires in 15 minutes.</p>
+      <div style="background:#1e1e1e;border:1px solid #333;border-radius:10px;padding:24px;text-align:center;letter-spacing:12px;font-size:36px;font-weight:700;color:#4FC3E0;">{code}</div>
+      <p style="color:#555;font-size:12px;margin:32px 0 0;text-align:center;">If you didn't create a Spottr account, you can safely ignore this email.</p>
+    </div>
+    """
+    _send_email('Verify your Spottr account', user.email, text, html)
 
 
 def _issue_verification_code(user):
@@ -679,3 +717,171 @@ def api_user_checkins_view(request, username):
 
     next_cursor = str(offset + limit) if (offset + limit) < total else ''
     return Response({'items': results, 'next_cursor': next_cursor})
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([AuthRateThrottle])
+def api_password_reset_request_view(request):
+    """
+    Request a password reset code. Accepts email.
+    Always returns success to avoid leaking whether an account exists.
+    """
+    email = request.data.get('email', '').strip().lower()
+    if not email:
+        return Response({'error': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        # Don't reveal whether the email is registered
+        return Response({'detail': 'If that email is registered, a reset code has been sent.'})
+
+    code = str(secrets.randbelow(900000) + 100000)
+    code_hash = hashlib.sha256(code.encode()).hexdigest()
+    user.password_reset_token = code_hash
+    user.password_reset_token_expires = timezone.now() + timedelta(minutes=15)
+    user.save(update_fields=['password_reset_token', 'password_reset_token_expires'])
+    _send_password_reset_email(user, code)
+
+    return Response({'detail': 'If that email is registered, a reset code has been sent.'})
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([AuthRateThrottle])
+def api_password_reset_confirm_view(request):
+    """
+    Confirm a password reset. Accepts email, code, and new_password.
+    Verifies the code, validates the new password, and updates the user.
+    """
+    email = request.data.get('email', '').strip().lower()
+    code = str(request.data.get('code', '')).strip()
+    new_password = request.data.get('new_password', '')
+
+    if not email or not code or not new_password:
+        return Response(
+            {'error': 'Email, code, and new_password are required.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        user = User.objects.get(email=email)
+    except User.DoesNotExist:
+        return Response({'error': 'Invalid or expired reset code.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if not user.password_reset_token or not user.password_reset_token_expires:
+        return Response(
+            {'error': 'No reset code found. Please request a new one.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if timezone.now() > user.password_reset_token_expires:
+        return Response(
+            {'error': 'Reset code has expired. Please request a new one.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if hashlib.sha256(code.encode()).hexdigest() != user.password_reset_token:
+        return Response({'error': 'Invalid reset code.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        validate_password(new_password, user)
+    except DjangoValidationError as e:
+        return Response({'error': e.messages[0]}, status=status.HTTP_400_BAD_REQUEST)
+
+    user.set_password(new_password)
+    user.password_reset_token = None
+    user.password_reset_token_expires = None
+    user.save(update_fields=['password', 'password_reset_token', 'password_reset_token_expires'])
+
+    return Response({'detail': 'Password reset successfully. You can now log in.'})
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+@throttle_classes([AuthRateThrottle])
+def api_google_auth_view(request):
+    """
+    Authenticate via Google Sign-In.
+    Accepts a Google ID token from the mobile client, verifies it, then
+    finds or creates a Spottr account linked to that Google identity.
+
+    Required env var: GOOGLE_CLIENT_ID (your Web OAuth client ID from Google Cloud Console).
+    """
+    from django.conf import settings
+    from google.oauth2 import id_token as google_id_token
+    from google.auth.transport import requests as google_requests
+
+    id_token_str = request.data.get('id_token', '').strip()
+    if not id_token_str:
+        return Response({'error': 'id_token is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    client_id = getattr(settings, 'GOOGLE_CLIENT_ID', '')
+    if not client_id:
+        return Response(
+            {'error': 'Google authentication is not configured on this server.'},
+            status=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    try:
+        idinfo = google_id_token.verify_oauth2_token(
+            id_token_str,
+            google_requests.Request(),
+            client_id,
+        )
+    except ValueError as e:
+        logger.warning('Google ID token verification failed: %s', e)
+        return Response({'error': 'Invalid Google token.'}, status=status.HTTP_401_UNAUTHORIZED)
+
+    google_id = idinfo['sub']
+    email = idinfo.get('email', '').lower()
+    email_verified = idinfo.get('email_verified', False)
+    name = idinfo.get('name', '')
+
+    if not email or not email_verified:
+        return Response(
+            {'error': 'Google account must have a verified email address.'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # 1. Try to find existing account linked to this Google ID
+    user = User.objects.filter(google_id=google_id).first()
+
+    # 2. Fall back to matching by email (link existing account on first Google sign-in)
+    if user is None:
+        user = User.objects.filter(email=email).first()
+        if user is not None:
+            user.google_id = google_id
+            user.save(update_fields=['google_id'])
+
+    # 3. Create a new account
+    if user is None:
+        import re as _re
+        # Derive a username from the Google display name or email local part
+        base = _re.sub(r'[^a-z0-9_.]', '', name.lower().replace(' ', '_')) or email.split('@')[0]
+        base = base[:28] or 'user'
+        username = base
+        suffix = 1
+        while User.objects.filter(username=username).exists() or username in RESERVED_USERNAMES:
+            username = f'{base}{suffix}'
+            suffix += 1
+
+        user = User.objects.create(
+            email=email,
+            username=username,
+            display_name=name,
+            google_id=google_id,
+            is_email_verified=True,
+            onboarding_step=1,      # Skip email verification; still needs display_name etc.
+            birthday=date(2000, 1, 1),  # Placeholder — user can update in onboarding
+        )
+        user.set_unusable_password()
+        user.save(update_fields=['password'])
+
+    if not user.is_active:
+        return Response({'error': 'Account is deactivated.'}, status=status.HTTP_403_FORBIDDEN)
+
+    from rest_framework.authtoken.models import Token
+    token, _ = Token.objects.get_or_create(user=user)
+    return Response({'token': token.key, 'user': _user_brief(user)})

@@ -82,10 +82,24 @@ LOGGING['loggers'].update({
     'media': {'handlers': ['console'], 'level': 'WARNING', 'propagate': False},
 })
 
-# Email configuration (configure via environment variables)
+# Email configuration — uses SMTP relay (Resend recommended).
+#
+# Resend (https://resend.com) — sign up, verify your domain, then set:
+#   EMAIL_HOST=smtp.resend.com
+#   EMAIL_PORT=465
+#   EMAIL_USE_SSL=True       (leave EMAIL_USE_TLS unset / False)
+#   EMAIL_HOST_USER=resend
+#   EMAIL_HOST_PASSWORD=re_xxxxxxxxxxxx   ← your Resend API key
+#
+# SendGrid alternative:
+#   EMAIL_HOST=smtp.sendgrid.net
+#   EMAIL_PORT=587
+#   EMAIL_HOST_USER=apikey
+#   EMAIL_HOST_PASSWORD=SG.xxxxxxxxxxxx
 EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = os.getenv('EMAIL_HOST', '')
 EMAIL_PORT = int(os.getenv('EMAIL_PORT', 587))
-EMAIL_USE_TLS = True
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'True') == 'True'
+EMAIL_USE_SSL = os.getenv('EMAIL_USE_SSL', 'False') == 'True'
 EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
