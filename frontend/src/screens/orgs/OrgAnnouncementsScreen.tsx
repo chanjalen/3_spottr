@@ -13,11 +13,15 @@ import {
   Modal,
   Image,
   ScrollView,
-  Clipboard,
+  Dimensions,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { pickMedia } from '../../utils/pickMedia';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -301,7 +305,7 @@ function AnnouncementBubble({
   item: OptimisticAnnouncement;
   orgId: string;
   isAdmin: boolean;
-  onLongPress: (item: OptimisticAnnouncement) => void;
+  onLongPress: (item: OptimisticAnnouncement, pageY: number) => void;
   onReact: (announcementId: string, emoji: string) => void;
   onVoted: (announcementId: string, poll: AnnouncementPoll) => void;
   onRetry: (item: OptimisticAnnouncement) => void;
@@ -309,11 +313,19 @@ function AnnouncementBubble({
 }) {
   const isPending = item._status === 'pending';
   const isFailed = item._status === 'failed';
+  const bubbleRef = useRef<View>(null);
 
   return (
+    <View ref={bubbleRef}>
     <Pressable
       style={[styles.bubble, isPending && styles.bubblePending, isFailed && styles.bubbleFailed]}
-      onLongPress={() => !isPending && !isFailed && onLongPress(item)}
+      onLongPress={() => {
+        if (!isPending && !isFailed) {
+          bubbleRef.current?.measureInWindow((_x, y) => {
+            onLongPress(item, y);
+          });
+        }
+      }}
       delayLongPress={400}
     >
       <View style={styles.bubbleHeader}>
@@ -379,6 +391,7 @@ function AnnouncementBubble({
         </Pressable>
       )}
     </Pressable>
+    </View>
   );
 }
 
@@ -412,6 +425,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
   // ── Long-press context menu ──────────────────────────────────────────────
   const [contextItem, setContextItem] = useState<OptimisticAnnouncement | null>(null);
   const [contextVisible, setContextVisible] = useState(false);
+  const [contextPageY, setContextPageY] = useState(0);
 
   // ── Create announcement sheet ────────────────────────────────────────────
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -555,10 +569,11 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
 
   // ── Long-press context ───────────────────────────────────────────────────
 
-  const handleLongPress = (item: OptimisticAnnouncement) => {
+  const handleLongPress = (item: OptimisticAnnouncement, pageY: number) => {
     // Only allow context menu on fully-delivered items
     if (item._status) return;
     setContextItem(item);
+    setContextPageY(pageY);
     setContextVisible(true);
   };
 
@@ -571,7 +586,32 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
   const handleContextCopy = () => {
     if (!contextItem) return;
     setContextVisible(false);
-    Clipboard.setString(contextItem.content ?? '');
+    Clipboard.setStringAsync(contextItem.content ?? '');
+  };
+
+  const handleContextSave = async () => {
+    if (!contextItem?.media?.length) return;
+    setContextVisible(false);
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Allow camera roll access to save media.');
+        return;
+      }
+      for (const m of contextItem.media) {
+        let filename = m.url.split('/').pop()?.split('?')[0] ?? '';
+        if (!filename.includes('.')) {
+          filename = `spottr_${Date.now()}.${m.kind === 'video' ? 'mp4' : 'jpg'}`;
+        }
+        const dest = `${FileSystem.cacheDirectory}${filename}`;
+        const result = await FileSystem.downloadAsync(m.url, dest);
+        if (result.status !== 200) throw new Error(`Download failed (${result.status})`);
+        await MediaLibrary.createAssetAsync(result.uri);
+      }
+      Alert.alert('Saved', 'Media saved to your camera roll.');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'Failed to save media.');
+    }
   };
 
   const handleContextDelete = async () => {
@@ -816,40 +856,122 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
         </Pressable>
       )}
 
-      {/* Long-press context menu */}
+      {/* Long-press context menu — focused view */}
       <Modal
         visible={contextVisible}
         transparent
         animationType="fade"
         onRequestClose={() => setContextVisible(false)}
       >
+        <BlurView intensity={55} tint="dark" style={StyleSheet.absoluteFill}>
         <Pressable style={styles.contextOverlay} onPress={() => setContextVisible(false)}>
-          <View style={styles.contextCard}>
-            {/* Emoji row */}
-            <View style={styles.emojiRow}>
-              {EMOJI_QUICK.map((e) => (
-                <Pressable key={e} style={styles.emojiBtn} onPress={() => handleContextReact(e)}>
-                  <Text style={styles.emojiText}>{e}</Text>
+          {(() => {
+            const SCREEN_H = Dimensions.get('window').height;
+            const EMOJI_H = 64;
+            const GAP = 12;
+            const hasMedia = !!(contextItem?.media?.length);
+            const hasPoll = !!contextItem?.poll;
+            const PREVIEW_EST_H = (hasMedia ? 300 : 160) + (hasPoll ? 150 : 0);
+            const ACTIONS_EST_H = 150;
+            const rawTop = contextPageY - EMOJI_H - GAP;
+            const maxTop = SCREEN_H - EMOJI_H - GAP - PREVIEW_EST_H - GAP - ACTIONS_EST_H - 16;
+            const clampedTop = Math.max(insets.top + 8, Math.min(rawTop, maxTop));
+            return (
+              <View style={[styles.contextContent, { top: clampedTop }]}>
+                {/* 1. Emoji reactions bar */}
+                <View style={styles.contextEmojiBar}>
+                  {EMOJI_QUICK.map((e) => (
+                    <Pressable key={e} style={styles.emojiBtn} onPress={() => handleContextReact(e)}>
+                      <Text style={styles.emojiText}>{e}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                {/* 2. Announcement preview — mirrors the full AnnouncementBubble card */}
+                {contextItem && (
+                  <Pressable style={styles.contextPreviewCard} onPress={() => {}}>
+                    {/* Author header */}
+                    <View style={styles.contextAnnHeader}>
+                      <Avatar uri={contextItem.author_avatar_url} name={contextItem.author_display_name} size={28} />
+                      <View style={{ marginLeft: 8, flex: 1 }}>
+                        <Text style={styles.contextAnnAuthor}>{contextItem.author_display_name}</Text>
+                        <Text style={styles.contextAnnTime}>{timeAgo(contextItem.created_at)}</Text>
+                      </View>
+                    </View>
+
+                    {/* Text content */}
+                    {!!contextItem.content && (
+                      <Text style={styles.contextAnnContent} numberOfLines={5}>
+                        {contextItem.content}
+                      </Text>
+                    )}
+
+                    {/* Media */}
+                    {!!contextItem.media?.length && (
+                      <View style={styles.contextMediaRow}>
+                        {contextItem.media.map((m, idx) =>
+                          m.kind === 'video' ? (
+                            <VideoThumbnail
+                              key={idx}
+                              videoUrl={m.url}
+                              thumbnailUrl={m.thumbnail_url}
+                              style={styles.contextMediaThumb}
+                              iconSize={28}
+                            />
+                          ) : (
+                            <Image key={idx} source={{ uri: m.thumbnail_url ?? m.url }} style={styles.contextMediaThumb} resizeMode="cover" />
+                          )
+                        )}
+                      </View>
+                    )}
+
+                    {/* Poll */}
+                    {!!contextItem.poll && (
+                      <PollCard
+                        poll={contextItem.poll}
+                        orgId={orgId}
+                        announcementId={contextItem.id}
+                        onVoted={(p) => {
+                          handlePollVoted(contextItem.id, p);
+                          setContextVisible(false);
+                        }}
+                      />
+                    )}
+                  </Pressable>
+                )}
+
+                {/* 3. Action buttons */}
+                <Pressable style={styles.contextActionsCard} onPress={() => {}}>
+                  {!!contextItem?.content && (
+                    <Pressable style={styles.contextAction} onPress={handleContextCopy}>
+                      <Feather name="copy" size={16} color={colors.textPrimary} />
+                      <Text style={styles.contextActionText}>Copy Text</Text>
+                    </Pressable>
+                  )}
+                  {!!contextItem?.content && !!(contextItem?.media?.length) && (
+                    <View style={styles.contextDivider} />
+                  )}
+                  {!!(contextItem?.media?.length) && (
+                    <Pressable style={styles.contextAction} onPress={handleContextSave}>
+                      <Feather name="download" size={16} color={colors.textPrimary} />
+                      <Text style={styles.contextActionText}>Save to Camera Roll</Text>
+                    </Pressable>
+                  )}
+                  {isAdmin && (!!contextItem?.content || !!(contextItem?.media?.length)) && (
+                    <View style={styles.contextDivider} />
+                  )}
+                  {isAdmin && (
+                    <Pressable style={styles.contextAction} onPress={handleContextDelete}>
+                      <Feather name="trash-2" size={16} color="#ef4444" />
+                      <Text style={[styles.contextActionText, { color: '#ef4444' }]}>Delete</Text>
+                    </Pressable>
+                  )}
                 </Pressable>
-              ))}
-            </View>
-            <View style={styles.contextDivider} />
-            {/* Copy */}
-            {!!contextItem?.content && (
-              <Pressable style={styles.contextAction} onPress={handleContextCopy}>
-                <Feather name="copy" size={16} color={colors.textPrimary} />
-                <Text style={styles.contextActionText}>Copy Text</Text>
-              </Pressable>
-            )}
-            {/* Delete (admin only) */}
-            {isAdmin && (
-              <Pressable style={styles.contextAction} onPress={handleContextDelete}>
-                <Feather name="trash-2" size={16} color="#ef4444" />
-                <Text style={[styles.contextActionText, { color: '#ef4444' }]}>Delete</Text>
-              </Pressable>
-            )}
-          </View>
+              </View>
+            );
+          })()}
         </Pressable>
+        </BlurView>
       </Modal>
 
       {videoPlayerUrl != null && (
@@ -1137,33 +1259,89 @@ const styles = StyleSheet.create({
   // Context menu
   contextOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  contextCard: {
+  contextContent: {
+    position: 'absolute',
+    left: spacing.xl,
+    right: spacing.xl,
+    gap: 12,
+  },
+  contextEmojiBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
     backgroundColor: colors.background.card,
-    borderRadius: 16,
-    padding: spacing.md,
-    width: '80%',
+    borderRadius: 32,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
     shadowColor: '#000',
-    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
     shadowRadius: 12,
     elevation: 8,
   },
-  emojiRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: spacing.sm,
-  },
   emojiBtn: { padding: 8 },
-  emojiText: { fontSize: 26 },
-  contextDivider: { height: 1, backgroundColor: colors.borderColor, marginVertical: spacing.sm },
+  emojiText: { fontSize: 28 },
+  contextPreviewCard: {
+    width: '100%',
+    backgroundColor: colors.background.card,
+    borderRadius: 16,
+    padding: spacing.md,
+    gap: spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  contextAnnHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  contextAnnAuthor: {
+    fontSize: typography.size.sm,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  contextAnnTime: {
+    fontSize: typography.size.xs,
+    color: colors.textMuted,
+    marginTop: 1,
+  },
+  contextAnnContent: {
+    fontSize: typography.size.sm,
+    lineHeight: 20,
+    color: colors.textPrimary,
+  },
+  contextMediaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  contextMediaThumb: {
+    width: 160,
+    height: 160,
+    borderRadius: 12,
+    backgroundColor: '#111',
+    overflow: 'hidden',
+  },
+  contextActionsCard: {
+    width: '100%',
+    backgroundColor: colors.background.card,
+    borderRadius: 16,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  contextDivider: { height: 1, backgroundColor: colors.borderColor },
   contextAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    gap: 10,
+    paddingVertical: 14,
+    gap: 12,
   },
   contextActionText: { fontSize: typography.size.sm, color: colors.textPrimary, fontWeight: '500' },
 
