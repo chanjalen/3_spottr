@@ -11,6 +11,7 @@ import {
   ScrollView,
   Platform,
   Animated,
+  useWindowDimensions,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -65,8 +66,9 @@ export default function FeedScreen() {
   const dropdownAnim = useRef(new Animated.Value(0)).current;
 
   const insets = useSafeAreaInsets();
-  // Solid white nav bar: paddingTop(10) + FAB height(64) + bottom safe area
-  const bottomNavHeight = 74 + Math.max(insets.bottom, 16);
+  const { height: windowHeight } = useWindowDimensions();
+  // Solid white nav bar: paddingTop(2) + FAB height(50) + bottom safe area
+  const bottomNavHeight = 52 + Math.max(insets.bottom, 16);
   const isImmersive = activeTab !== 'main';
 
   // Reset measured heights when switching between immersive ↔ main layouts
@@ -135,14 +137,14 @@ export default function FeedScreen() {
             if (h > 0) setContainerHeight(h);
           }}
         >
-          {(containerHeight === 0 || (isLoading && items.length === 0)) ? (
+          {(isLoading && items.length === 0) ? (
             <View style={styles.loader}>
               <ActivityIndicator size="large" color={colors.primary} />
             </View>
           ) : (
             <ImmersiveFeedList
               items={items}
-              itemHeight={containerHeight}
+              itemHeight={containerHeight > 0 ? containerHeight : windowHeight}
               topInset={headerHeight}
               bottomInset={bottomNavHeight}
               activeTab={activeTab}
@@ -172,11 +174,11 @@ export default function FeedScreen() {
         >
           <AppHeader />
           <View style={styles.searchRow}>
-            <View style={styles.searchInputWrap}>
+            <View style={[styles.searchInputWrap, styles.searchInputWrapDark]}>
               <Feather name="search" size={16} color="rgba(255,255,255,0.8)" />
               <TextInput
                 ref={searchInputRef}
-                style={styles.searchInput}
+                style={[styles.searchInput, styles.searchInputDark]}
                 value={searchQuery}
                 onChangeText={handleSearchChange}
                 placeholder="Search users or #hashtags..."
@@ -202,6 +204,7 @@ export default function FeedScreen() {
             activeTab={activeTab}
             onTabChange={(tab) => { setFilterDropdownOpen(false); changeTab(tab); }}
             onDropdownPress={() => setFilterDropdownOpen((o) => !o)}
+            dark
           />
         </LinearGradient>
 
@@ -333,14 +336,14 @@ export default function FeedScreen() {
         {/* Search bar */}
         <View style={styles.searchRow}>
           <View style={styles.searchInputWrap}>
-            <Feather name="search" size={16} color="rgba(255,255,255,0.8)" />
+            <Feather name="search" size={16} color={colors.textSecondary} />
             <TextInput
               ref={searchInputRef}
               style={styles.searchInput}
               value={searchQuery}
               onChangeText={handleSearchChange}
               placeholder="Search users or #hashtags..."
-              placeholderTextColor="rgba(255,255,255,0.6)"
+              placeholderTextColor={colors.textSecondary}
               returnKeyType="search"
               autoCorrect={false}
               autoCapitalize="none"
@@ -353,7 +356,7 @@ export default function FeedScreen() {
                 }}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                <Feather name="x" size={16} color="rgba(255,255,255,0.9)" />
+                <Feather name="x" size={16} color={colors.textSecondary} />
               </Pressable>
             )}
           </View>
@@ -590,23 +593,30 @@ const styles = StyleSheet.create({
   // Search bar
   searchRow: {
     paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.sm,
+    paddingBottom: 5,
   },
   searchInputWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.22)',
+    borderWidth: 2,
+    borderColor: colors.primary,
     borderRadius: 24,
     paddingHorizontal: spacing.md,
-    paddingVertical: Platform.OS === 'ios' ? 9 : 6,
+    paddingVertical: Platform.OS === 'ios' ? 6 : 4,
     gap: spacing.sm,
   },
   searchInput: {
     flex: 1,
     fontSize: typography.size.sm,
     fontFamily: typography.family.regular,
-    color: colors.textOnPrimary,
+    color: colors.textSecondary,
     paddingVertical: 0,
+  },
+  searchInputDark: {
+    color: '#FFFFFF',
+  },
+  searchInputWrapDark: {
+    borderColor: 'rgba(255,255,255,0.3)',
   },
 
   // Dropdown overlay — absolute inside feedContainer, fills it completely

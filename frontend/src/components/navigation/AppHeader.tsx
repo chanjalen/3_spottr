@@ -43,7 +43,7 @@ export default function AppHeader() {
             accessibilityLabel={`Notifications${notificationCount > 0 ? `, ${notificationCount} unread` : ''}`}
             accessibilityRole="button"
           >
-            <Feather name="bell" size={20} color={colors.iconActive} />
+            <Feather name="bell" size={17} color={colors.iconActive} />
             {notificationCount > 0 && (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>
@@ -58,7 +58,7 @@ export default function AppHeader() {
             accessibilityLabel="Add friend"
             accessibilityRole="button"
           >
-            <Feather name="user-plus" size={20} color={colors.iconActive} />
+            <Feather name="user-plus" size={17} color={colors.iconActive} />
           </Pressable>
         </View>
 
@@ -94,7 +94,7 @@ function StoryRingAvatar({ uri, name }: { uri: string | null; name: string }) {
       style={styles.storyRing}
     >
       <View style={styles.storyRingInner}>
-        <Avatar uri={uri} name={name} size={36} />
+        <Avatar uri={uri} name={name} size={30} />
       </View>
     </LinearGradient>
   );
@@ -106,8 +106,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
   },
   leftIcons: {
     flexDirection: 'row',
@@ -115,9 +115,9 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
@@ -150,7 +150,7 @@ const styles = StyleSheet.create({
     lineHeight: 12,
   },
   logoText: {
-    fontSize: 22,
+    fontSize: 19,
     fontWeight: '700',
     color: colors.textOnPrimary,
     letterSpacing: 0.5,
@@ -167,26 +167,26 @@ const styles = StyleSheet.create({
     backgroundColor: colors.surface,
     borderRadius: 20,
     paddingHorizontal: spacing.sm,
-    paddingVertical: 5,
+    paddingVertical: 3,
     ...Platform.select({
       ios: shadow('sm'),
       android: { elevation: 1 },
     }),
   },
-  streakEmoji: { fontSize: 14 },
+  streakEmoji: { fontSize: 12 },
   streakNum: { fontSize: typography.size.sm, fontWeight: '700', color: colors.textPrimary },
   storyRing: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
     padding: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   storyRingInner: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 34,
+    height: 34,
+    borderRadius: 17,
     borderWidth: 2,
     borderColor: colors.surface,
     overflow: 'hidden',
