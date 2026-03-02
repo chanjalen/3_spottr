@@ -96,9 +96,10 @@ export default function FeedScreen() {
         onLike={() => handleLike(item)}
         onComment={() => setCommentItem(item)}
         onPollVote={(optionId: number | string) => handlePollVote(item, optionId)}
+        onPressUser={() => navigation.navigate('Profile', { username: item.user.username })}
       />
     ),
-    [handleLike, handlePollVote],
+    [handleLike, handlePollVote, navigation],
   );
 
   const handleEndReached = useCallback(() => {
@@ -255,6 +256,7 @@ export default function FeedScreen() {
                           setCommentItem(item);
                         }}
                         onPollVote={(optionId: number | string) => handlePollVote(item, optionId)}
+                        onPressUser={() => navigation.navigate('Profile', { username: item.user.username })}
                       />
                     ))}
                   </View>
@@ -502,6 +504,7 @@ export default function FeedScreen() {
                         setCommentItem(item);
                       }}
                       onPollVote={(optionId: number | string) => handlePollVote(item, optionId)}
+                      onPressUser={() => navigation.navigate('Profile', { username: item.user.username })}
                     />
                   ))}
                 </View>

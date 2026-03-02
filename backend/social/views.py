@@ -1027,8 +1027,8 @@ def checkin_likers_view(request, checkin_id):
     return JsonResponse({'success': True, 'likers': likers})
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def toggle_like_comment_view(request, comment_id):
     """
     Toggle like on a comment. One like per user per comment.
@@ -1053,15 +1053,15 @@ def toggle_like_comment_view(request, comment_id):
 
     like_count = Reaction.objects.filter(comment=comment).count()
 
-    return JsonResponse({
+    return DRFResponse({
         'success': True,
         'liked': liked,
         'like_count': like_count,
     })
 
 
-@login_required
-@require_GET
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_comments_view(request, post_id):
     """
     Get all top-level comments for a post (excluding replies).
@@ -1084,24 +1084,23 @@ def get_comments_view(request, post_id):
                 'username': comment.user.username,
                 'avatar_url': comment.user.avatar_url or None,
             },
-            'text': comment.description,
+            'description': comment.description,
             'created_at': comment.created_at.isoformat(),
-            'time_ago': get_time_ago(comment.created_at),
             'like_count': like_count,
             'user_liked': user_liked,
             'is_owner': comment.user == request.user,
             'reply_count': comment.reply_count,
         })
 
-    return JsonResponse({
+    return DRFResponse({
         'success': True,
         'comments': comments_data,
         'count': len(comments_data),
     })
 
 
-@login_required
-@require_GET
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_checkin_comments_view(request, checkin_id):
     """
     Get all top-level comments for a check-in (quick workout).
@@ -1124,16 +1123,15 @@ def get_checkin_comments_view(request, checkin_id):
                 'username': comment.user.username,
                 'avatar_url': comment.user.avatar_url or None,
             },
-            'text': comment.description,
+            'description': comment.description,
             'created_at': comment.created_at.isoformat(),
-            'time_ago': get_time_ago(comment.created_at),
             'like_count': like_count,
             'user_liked': user_liked,
             'is_owner': comment.user == request.user,
             'reply_count': comment.reply_count,
         })
 
-    return JsonResponse({
+    return DRFResponse({
         'success': True,
         'comments': comments_data,
         'count': len(comments_data),
@@ -1160,25 +1158,24 @@ def get_time_ago(dt):
         return f'{days}d ago'
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def add_comment_view(request, post_id):
     """
     Add a comment to a post. Max 15 comments per user per post.
     """
     post = get_object_or_404(Post, id=post_id)
 
-    data = json.loads(request.body)
-    text = data.get('text', '').strip()
+    text = (request.data.get('text', '') or '').strip()
 
     if not text:
-        return JsonResponse({
+        return DRFResponse({
             'success': False,
             'error': 'Comment text is required'
         }, status=400)
 
     if len(text) > 500:
-        return JsonResponse({
+        return DRFResponse({
             'success': False,
             'error': 'Comment is too long (max 500 characters)'
         }, status=400)
@@ -1186,7 +1183,7 @@ def add_comment_view(request, post_id):
     # Check user's comment count on this post
     user_comment_count = Comment.objects.filter(post=post, user=request.user).count()
     if user_comment_count >= 15:
-        return JsonResponse({
+        return DRFResponse({
             'success': False,
             'error': 'You have reached the maximum number of comments (15) on this post'
         }, status=400)
@@ -1201,7 +1198,7 @@ def add_comment_view(request, post_id):
     from notifications.dispatcher import notify_comment
     notify_comment(request.user, post, comment)
 
-    return JsonResponse({
+    return DRFResponse({
         'success': True,
         'comment': {
             'id': str(comment.id),
@@ -1211,9 +1208,8 @@ def add_comment_view(request, post_id):
                 'username': request.user.username,
                 'avatar_url': request.user.avatar_url or None,
             },
-            'text': comment.description,
+            'description': comment.description,
             'created_at': comment.created_at.isoformat(),
-            'time_ago': 'just now',
             'like_count': 0,
             'user_liked': False,
             'is_owner': True,
@@ -1222,32 +1218,31 @@ def add_comment_view(request, post_id):
     })
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def add_checkin_comment_view(request, checkin_id):
     """
     Add a comment to a check-in. Max 15 comments per user per check-in.
     """
     checkin = get_object_or_404(QuickWorkout, id=checkin_id)
 
-    data = json.loads(request.body)
-    text = data.get('text', '').strip()
+    text = (request.data.get('text', '') or '').strip()
 
     if not text:
-        return JsonResponse({
+        return DRFResponse({
             'success': False,
             'error': 'Comment text is required'
         }, status=400)
 
     if len(text) > 500:
-        return JsonResponse({
+        return DRFResponse({
             'success': False,
             'error': 'Comment is too long (max 500 characters)'
         }, status=400)
 
     user_comment_count = Comment.objects.filter(quick_workout=checkin, user=request.user).count()
     if user_comment_count >= 15:
-        return JsonResponse({
+        return DRFResponse({
             'success': False,
             'error': 'You have reached the maximum number of comments (15) on this post'
         }, status=400)
@@ -1261,7 +1256,7 @@ def add_checkin_comment_view(request, checkin_id):
     from notifications.dispatcher import notify_comment_on_checkin
     notify_comment_on_checkin(request.user, checkin, comment)
 
-    return JsonResponse({
+    return DRFResponse({
         'success': True,
         'comment': {
             'id': str(comment.id),
@@ -1271,9 +1266,8 @@ def add_checkin_comment_view(request, checkin_id):
                 'username': request.user.username,
                 'avatar_url': request.user.avatar_url or None,
             },
-            'text': comment.description,
+            'description': comment.description,
             'created_at': comment.created_at.isoformat(),
-            'time_ago': 'just now',
             'like_count': 0,
             'user_liked': False,
             'is_owner': True,
@@ -1323,8 +1317,8 @@ def delete_checkin_view(request, checkin_id):
     return JsonResponse({'success': True, 'total_workouts': request.user.total_workouts})
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def delete_comment_view(request, comment_id):
     """
     Delete a comment. Only the comment owner can delete it.
@@ -1332,18 +1326,18 @@ def delete_comment_view(request, comment_id):
     comment = get_object_or_404(Comment, id=comment_id)
 
     if comment.user != request.user:
-        return JsonResponse({
+        return DRFResponse({
             'success': False,
             'error': 'You can only delete your own comments'
         }, status=403)
 
     comment.delete()
 
-    return JsonResponse({'success': True})
+    return DRFResponse({'success': True})
 
 
-@login_required
-@require_GET
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def get_comment_replies_view(request, comment_id):
     """
     Get all replies to a comment.
@@ -1365,41 +1359,39 @@ def get_comment_replies_view(request, comment_id):
                 'username': reply.user.username,
                 'avatar_url': reply.user.avatar_url or None,
             },
-            'text': reply.description,
+            'description': reply.description,
             'created_at': reply.created_at.isoformat(),
-            'time_ago': get_time_ago(reply.created_at),
             'like_count': like_count,
             'user_liked': user_liked,
             'is_owner': reply.user == request.user,
             'reply_count': reply.reply_count,
         })
 
-    return JsonResponse({
+    return DRFResponse({
         'success': True,
         'replies': replies_data,
         'count': len(replies_data),
     })
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def add_comment_reply_view(request, comment_id):
     """
     Add a reply to a comment. Max 15 replies per user per parent comment.
     """
     parent_comment = get_object_or_404(Comment, id=comment_id)
 
-    data = json.loads(request.body)
-    text = data.get('text', '').strip()
+    text = (request.data.get('text', '') or '').strip()
 
     if not text:
-        return JsonResponse({
+        return DRFResponse({
             'success': False,
             'error': 'Reply text is required'
         }, status=400)
 
     if len(text) > 500:
-        return JsonResponse({
+        return DRFResponse({
             'success': False,
             'error': 'Reply is too long (max 500 characters)'
         }, status=400)
@@ -1407,7 +1399,7 @@ def add_comment_reply_view(request, comment_id):
     # Check user's reply count on this comment
     user_reply_count = Comment.objects.filter(parent_comment=parent_comment, user=request.user).count()
     if user_reply_count >= 15:
-        return JsonResponse({
+        return DRFResponse({
             'success': False,
             'error': 'You have reached the maximum number of replies (15) on this comment'
         }, status=400)
@@ -1422,7 +1414,7 @@ def add_comment_reply_view(request, comment_id):
     from notifications.dispatcher import notify_comment_reply
     notify_comment_reply(request.user, parent_comment, reply)
 
-    return JsonResponse({
+    return DRFResponse({
         'success': True,
         'reply': {
             'id': str(reply.id),
@@ -1432,9 +1424,8 @@ def add_comment_reply_view(request, comment_id):
                 'username': request.user.username,
                 'avatar_url': request.user.avatar_url or None,
             },
-            'text': reply.description,
+            'description': reply.description,
             'created_at': reply.created_at.isoformat(),
-            'time_ago': 'just now',
             'like_count': 0,
             'user_liked': False,
             'is_owner': True,
