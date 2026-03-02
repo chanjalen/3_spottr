@@ -100,7 +100,7 @@ function TabNavigator() {
         fetchGroupConversations().then(data => staleCache.set('social:messages:groups', data, 2 * 60 * 1000)),
         listMyOrgs().then(data => staleCache.set('social:orgs', data, 2 * 60 * 1000)),
       ]);
-    }, 3000);
+    }, 1000);
     return () => clearTimeout(timer);
   }, []);
 

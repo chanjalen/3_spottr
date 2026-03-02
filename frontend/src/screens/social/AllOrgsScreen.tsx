@@ -13,11 +13,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Avatar from '../../components/common/Avatar';
+import ConversationSkeleton from '../../components/common/ConversationSkeleton';
 import { listMyOrgs, OrgListItem, LatestAnnouncement } from '../../api/organizations';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 import { useUnreadCount } from '../../store/UnreadCountContext';
 import { timeAgo } from '../../utils/timeAgo';
+import { staleCache } from '../../utils/staleCache';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'AllOrgs'>;
@@ -33,17 +35,24 @@ const annPreviewText = (ann: LatestAnnouncement): string => {
 export default function AllOrgsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { optimisticDecrement } = useUnreadCount();
-  const [orgs, setOrgs] = useState<OrgListItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [orgs, setOrgs] = useState<OrgListItem[]>(() => staleCache.getSync<OrgListItem[]>('social:orgs') ?? []);
+  const [loading, setLoading] = useState(() => staleCache.getSync<OrgListItem[]>('social:orgs') === null);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
+    const cached = await staleCache.get<OrgListItem[]>('social:orgs');
+    if (cached) {
+      setOrgs(cached);
+      setLoading(false);
+    }
+
     try {
       const data = await listMyOrgs();
+      staleCache.set('social:orgs', data, 2 * 60 * 1000);
       setOrgs(data);
     } catch {
-      setOrgs([]);
+      if (!cached) setOrgs([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -85,8 +94,8 @@ export default function AllOrgsScreen({ navigation }: Props) {
         )}
       </View>
 
-      {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+      {loading && orgs.length === 0 ? (
+        <ConversationSkeleton />
       ) : (
         <FlatList
           data={filtered}
