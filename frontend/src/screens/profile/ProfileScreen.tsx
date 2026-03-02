@@ -1359,8 +1359,10 @@ function CalendarTab({
               }}
               renderItem={({ item: day }) => {
                 const dayPosts = posts.filter((p) => {
-                  const d = new Date(p.created_at);
-                  return d.getFullYear() === year && d.getMonth() === month && d.getDate() === day;
+                  const parts = p.created_at.split('T')[0].split('-');
+                  return parseInt(parts[0], 10) === year &&
+                    parseInt(parts[1], 10) - 1 === month &&
+                    parseInt(parts[2], 10) === day;
                 });
                 return (
                   <ScrollView

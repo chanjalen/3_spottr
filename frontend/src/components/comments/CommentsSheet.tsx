@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef } from 'react';
-import { View, Text, FlatList, StyleSheet, ActivityIndicator } from 'react-native';
-import BottomSheet, { BottomSheetBackdrop } from '@gorhom/bottom-sheet';
+import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
+import BottomSheet, { BottomSheetBackdrop, BottomSheetView, BottomSheetFlatList } from '@gorhom/bottom-sheet';
 import { FeedItem, Comment } from '../../types/feed';
 import CommentItem from './CommentItem';
 import CommentInput from './CommentInput';
@@ -87,18 +87,18 @@ export default function CommentsSheet({ item, onClose }: CommentsSheetProps) {
       backgroundStyle={styles.background}
       handleIndicatorStyle={styles.handle}
     >
-      <View style={styles.header}>
+      <BottomSheetView style={styles.header}>
         <Text style={styles.title}>
           Comments{item ? ` (${item.comment_count})` : ''}
         </Text>
-      </View>
+      </BottomSheetView>
 
       {isLoading ? (
-        <View style={styles.loader}>
+        <BottomSheetView style={styles.loader}>
           <ActivityIndicator color={colors.primary} />
-        </View>
+        </BottomSheetView>
       ) : (
-        <FlatList
+        <BottomSheetFlatList
           data={comments}
           keyExtractor={(c) => String(c.id)}
           renderItem={renderComment}

@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { Alert } from 'react-native';
 import { Comment, FeedItem } from '../types/feed';
 import {
   fetchComments,
@@ -26,7 +27,8 @@ export function useComments() {
     try {
       const data = await fetchComments(item.id, item.type);
       setComments(data);
-    } catch {
+    } catch (err: any) {
+      console.error('[useComments] loadComments failed:', err?.response?.status, err?.response?.data ?? err?.message);
       setComments([]);
     } finally {
       setIsLoading(false);
@@ -54,8 +56,13 @@ export function useComments() {
         return;
       }
 
-      const comment = await addComment(item.id, item.type, text);
-      setComments((prev) => [comment, ...prev]);
+      try {
+        const comment = await addComment(item.id, item.type, text);
+        setComments((prev) => [...prev, comment]);
+      } catch (err: any) {
+        console.error('[useComments] postComment failed:', err?.response?.status, err?.response?.data ?? err?.message);
+        Alert.alert('Error', err?.response?.data?.error ?? 'Failed to post comment. Please try again.');
+      }
     },
     [],
   );

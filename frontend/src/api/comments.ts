@@ -11,7 +11,7 @@ export async function fetchComments(
       ? ENDPOINTS.postComments(itemId)
       : ENDPOINTS.checkinComments(itemId);
   const response = await apiClient.get(endpoint);
-  return response.data;
+  return response.data.comments;
 }
 
 export async function addComment(
@@ -24,7 +24,7 @@ export async function addComment(
       ? ENDPOINTS.addPostComment(itemId)
       : ENDPOINTS.addCheckinComment(itemId);
   const response = await apiClient.post(endpoint, { text });
-  return response.data;
+  return response.data.comment;
 }
 
 export async function deleteComment(commentId: number): Promise<void> {
@@ -33,7 +33,7 @@ export async function deleteComment(commentId: number): Promise<void> {
 
 export async function fetchReplies(commentId: number): Promise<Comment[]> {
   const response = await apiClient.get(ENDPOINTS.commentReplies(commentId));
-  return response.data;
+  return response.data.replies;
 }
 
 export async function addReply(
@@ -43,7 +43,7 @@ export async function addReply(
   const response = await apiClient.post(ENDPOINTS.addCommentReply(commentId), {
     text,
   });
-  return response.data;
+  return response.data.reply;
 }
 
 export async function toggleCommentLike(
