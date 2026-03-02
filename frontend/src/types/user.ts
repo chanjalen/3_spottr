@@ -18,6 +18,7 @@ export interface UserProfile extends UserBrief {
   longest_streak: number;
   total_workouts: number;
   is_following: boolean;
+  is_followed_by: boolean;
   follower_count: number;
   following_count: number;
   friend_count?: number;

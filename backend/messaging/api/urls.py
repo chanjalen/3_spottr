@@ -24,4 +24,5 @@ urlpatterns = [
 
     # Reactions
     path('messages/<str:message_id>/react/', views.react_to_message, name='react-to-message'),
+    path('messages/<str:message_id>/reactions/', views.message_reaction_details, name='message-reaction-details'),
 ]

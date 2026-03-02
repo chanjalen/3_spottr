@@ -230,7 +230,11 @@ def delete_account_view(request):
 @login_required
 def search_users_view(request):
     """AJAX endpoint: search users by username or display name."""
-    q = request.GET.get('q', '').strip()
+    from common.utils import check_rate_limit
+    if not check_rate_limit(f'rl:search:{request.user.id}', limit=30, period=60):
+        return JsonResponse({'error': 'Too many requests.'}, status=429)
+
+    q = request.GET.get('q', '').strip()[:100]
     if len(q) < 1:
         return JsonResponse({'results': []})
 
@@ -266,6 +270,9 @@ def search_users_view(request):
 @require_POST
 def follow_toggle_view(request):
     """AJAX endpoint: follow/unfollow a user, or remove a follower."""
+    from common.utils import check_rate_limit
+    if not check_rate_limit(f'rl:follow:{request.user.id}', limit=60, period=60):
+        return JsonResponse({'error': 'Too many requests.'}, status=429)
     user_id = request.POST.get('user_id')
     username = request.POST.get('username')
     action_type = request.POST.get('action', '')

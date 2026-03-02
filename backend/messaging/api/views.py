@@ -2,17 +2,8 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.throttling import UserRateThrottle
 
-
-class MessageRateThrottle(UserRateThrottle):
-    """Prevent message spam: max 30 messages per minute per user."""
-    scope = 'message'
-
-
-class ZapRateThrottle(UserRateThrottle):
-    """Prevent zap spam: max 5 zaps per minute per user."""
-    scope = 'zap'
+from common.throttles import MessageRateThrottle, ZapRateThrottle, ReactionRateThrottle  # noqa: re-exported
 
 from messaging import services
 from messaging.serializers import (
@@ -433,8 +424,54 @@ def unread_count(request):
 # Message Reactions
 # ---------------------------------------------------------------------------
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def message_reaction_details(request, message_id):
+    """
+    Return the full list of who reacted to a message.
+    Response: [{ emoji, username, display_name, avatar_url }]
+    Only accessible to participants of the conversation (DM partner or group member).
+    """
+    from messaging.models import Message, MessageReaction
+    try:
+        message = Message.objects.select_related('sender', 'recipient', 'group').get(id=message_id)
+    except Message.DoesNotExist:
+        return Response({"error": "Message not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    user = request.user
+    # Access check: must be DM participant or group member
+    if message.group_id:
+        from groups.models import GroupMember
+        if not GroupMember.objects.filter(group_id=message.group_id, user=user).exists():
+            return Response({"error": "Not a group member."}, status=status.HTTP_403_FORBIDDEN)
+    else:
+        if message.sender_id != user.id and message.recipient_id != user.id:
+            return Response({"error": "Not a conversation participant."}, status=status.HTTP_403_FORBIDDEN)
+
+    reactions = (
+        MessageReaction.objects
+        .filter(message=message)
+        .select_related('user')
+        .order_by('emoji', 'created_at')
+    )
+    user_ids = [r.user_id for r in reactions]
+    avatar_map = _build_avatar_map(user_ids)
+
+    data = [
+        {
+            'emoji': r.emoji,
+            'username': r.user.username,
+            'display_name': r.user.display_name or r.user.username,
+            'avatar_url': avatar_map.get(str(r.user_id)),
+        }
+        for r in reactions
+    ]
+    return Response(data)
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([ReactionRateThrottle])
 def react_to_message(request, message_id):
     """
     Toggle an emoji reaction on a message.

@@ -27,12 +27,14 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
+import ReactionDetailModal from '../../components/messages/ReactionDetailModal';
 import VideoThumbnail from '../../components/common/VideoThumbnail';
 import {
   fetchAnnouncements,
   createAnnouncement,
   deleteAnnouncement,
   reactToAnnouncement,
+  fetchAnnouncementReactionDetails,
   voteOnPoll,
   markAnnouncementsRead,
   uploadMedia,
@@ -89,6 +91,23 @@ const EMOJI_QUICK = ['👍', '👎', '😂', '😡', '❤️'];
 // ---------------------------------------------------------------------------
 // Poll card
 // ---------------------------------------------------------------------------
+
+function formatTimeRemaining(endsAt: string | null): string {
+  if (!endsAt) return '';
+  const diff = new Date(endsAt).getTime() - Date.now();
+  if (diff <= 0) return '';
+  const totalMinutes = Math.floor(diff / 60_000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    return `${days}d ${hours % 24}h remaining`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m remaining`;
+  }
+  return `${minutes}m remaining`;
+}
 
 function PollCard({
   poll,
@@ -150,7 +169,10 @@ function PollCard({
         );
       })}
       <Text style={pollStyles.meta}>
-        {totalVotes} {totalVotes !== 1 ? 'votes' : 'vote'} {'\u2022'} {poll.is_active ? 'Active' : 'Ended'}
+        {totalVotes} {totalVotes !== 1 ? 'votes' : 'vote'}
+        {poll.is_active
+          ? ` \u2022 Active \u2022 ${formatTimeRemaining(poll.ends_at)}`
+          : ' \u2022 Ended'}
       </Text>
     </View>
   );
@@ -223,9 +245,11 @@ const pollStyles = StyleSheet.create({
 function ReactionRow({
   reactions,
   onReact,
+  onLongPressReaction,
 }: {
   reactions: Announcement['reactions'];
   onReact: (emoji: string) => void;
+  onLongPressReaction: () => void;
 }) {
   if (reactions.length === 0) return null;
   return (
@@ -235,6 +259,8 @@ function ReactionRow({
           key={r.emoji}
           style={[rxStyles.chip, r.user_reacted && rxStyles.chipActive]}
           onPress={() => onReact(r.emoji)}
+          onLongPress={onLongPressReaction}
+          delayLongPress={350}
         >
           <Text style={rxStyles.emoji}>{r.emoji}</Text>
           <Text style={[rxStyles.count, r.user_reacted && rxStyles.countActive]}>
@@ -298,6 +324,7 @@ function AnnouncementBubble({
   isAdmin,
   onLongPress,
   onReact,
+  onLongPressReaction,
   onVoted,
   onRetry,
   onVideoPress,
@@ -307,6 +334,7 @@ function AnnouncementBubble({
   isAdmin: boolean;
   onLongPress: (item: OptimisticAnnouncement, pageY: number) => void;
   onReact: (announcementId: string, emoji: string) => void;
+  onLongPressReaction: (announcementId: string) => void;
   onVoted: (announcementId: string, poll: AnnouncementPoll) => void;
   onRetry: (item: OptimisticAnnouncement) => void;
   onVideoPress: (url: string) => void;
@@ -381,6 +409,7 @@ function AnnouncementBubble({
         <ReactionRow
           reactions={item.reactions}
           onReact={(emoji) => onReact(item.id, emoji)}
+          onLongPressReaction={() => onLongPressReaction(item.id)}
         />
       )}
 
@@ -426,6 +455,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
   const [contextItem, setContextItem] = useState<OptimisticAnnouncement | null>(null);
   const [contextVisible, setContextVisible] = useState(false);
   const [contextPageY, setContextPageY] = useState(0);
+  const [reactionDetailAnnId, setReactionDetailAnnId] = useState<string | null>(null);
 
   // ── Create announcement sheet ────────────────────────────────────────────
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -471,18 +501,21 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
         fetchOrgDetail(orgId),
       ]);
       const fetchMs = Date.now() - t0;
-      // Insert "NEW" divider between unread (front/bottom) and read (back/top) announcements.
-      // API returns newest-first; FlatList is inverted so index 0 appears at the bottom.
-      const firstReadIdx = page.results.findIndex(a => a.is_read);
-      const listItems: AnnouncementListItem[] = firstReadIdx > 0
+      // Store oldest-first so the non-inverted FlatList shows oldest at top, newest at bottom.
+      // API returns newest-first, so we reverse before storing.
+      const reversed = [...page.results].reverse();
+      const firstUnreadIdx = reversed.findIndex(a => !a.is_read);
+      const listItems: AnnouncementListItem[] = firstUnreadIdx > 0
         ? [
-            ...page.results.slice(0, firstReadIdx),
+            ...reversed.slice(0, firstUnreadIdx),
             { id: '__new_divider__', isDivider: true as const },
-            ...page.results.slice(firstReadIdx),
+            ...reversed.slice(firstUnreadIdx),
           ]
-        : page.results;
+        : reversed;
       staleCache.set(cacheKey, { announcements: listItems, has_more: page.has_more, oldest_id: page.oldest_id, userRole: detail.user_role }, 5 * 60 * 1000);
       setAnnouncements(listItems);
+      // Scroll to bottom to show the latest announcement (like the messages screen).
+      setTimeout(() => flatRef.current?.scrollToEnd({ animated: false }), 50);
       setHasMore(page.has_more);
       setOldestId(page.oldest_id);
       setUserRole(detail.user_role);
@@ -515,7 +548,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
       setAnnouncements(prev => {
         // Dedup: skip if we already have an item with this real ID
         if (prev.some(a => isAnn(a) && a.id === announcement.id)) return prev;
-        return [announcement, ...prev];
+        return [...prev, announcement];
       });
     };
 
@@ -536,7 +569,8 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
     setLoadingMore(true);
     try {
       const page = await fetchAnnouncements(orgId, { before_id: oldestId, limit: 30 });
-      setAnnouncements(prev => [...prev, ...page.results]);
+      // Prepend older items (reversed to oldest-first) at the front of the list.
+      setAnnouncements(prev => [...page.results.reverse(), ...prev]);
       setHasMore(page.has_more);
       setOldestId(page.oldest_id);
     } catch {
@@ -736,9 +770,9 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
     };
 
     setSubmitting(true);
-    setAnnouncements(prev => [optimistic, ...prev]);
+    setAnnouncements(prev => [...prev, optimistic]);
     resetSheet(); // close sheet and clear draft immediately
-    flatRef.current?.scrollToOffset({ offset: 0, animated: true });
+    setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 50);
 
     await submitPayload(payload, clientId);
     setSubmitting(false);
@@ -777,6 +811,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
         isAdmin={isAdmin}
         onLongPress={handleLongPress}
         onReact={handleReact}
+        onLongPressReaction={setReactionDetailAnnId}
         onVoted={handlePollVoted}
         onRetry={handleRetry}
         onVideoPress={setVideoPlayerUrl}
@@ -821,15 +856,19 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
           data={announcements}
           keyExtractor={(item) => isAnn(item) ? (item._clientId ?? item.id) : item.id}
           renderItem={renderItem}
-          inverted
           contentContainerStyle={{
-            paddingTop: insets.bottom + (isAdmin ? 90 : 24),
-            paddingBottom: spacing.md,
+            paddingTop: spacing.md,
+            paddingBottom: insets.bottom + (isAdmin ? 90 : 24),
             paddingHorizontal: spacing.base,
           }}
-          onEndReached={loadMore}
-          onEndReachedThreshold={0.3}
-          ListFooterComponent={
+          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+          onScroll={(e) => {
+            if (e.nativeEvent.contentOffset.y < 80 && hasMore && !loadingMore) {
+              loadMore();
+            }
+          }}
+          scrollEventThrottle={200}
+          ListHeaderComponent={
             loadingMore
               ? <ActivityIndicator color={colors.primary} style={{ padding: spacing.md }} />
               : null
@@ -977,6 +1016,12 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
       {videoPlayerUrl != null && (
         <VideoPlayerModal url={videoPlayerUrl} onClose={() => setVideoPlayerUrl(null)} />
       )}
+
+      <ReactionDetailModal
+        visible={reactionDetailAnnId != null}
+        onClose={() => setReactionDetailAnnId(null)}
+        fetchDetails={() => fetchAnnouncementReactionDetails(orgId, reactionDetailAnnId!)}
+      />
 
       {/* Create announcement bottom sheet */}
       <Modal

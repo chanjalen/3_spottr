@@ -31,7 +31,8 @@ import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
 import VideoThumbnail from '../../components/common/VideoThumbnail';
 import MessageRow, { type ListItem } from '../../components/messages/MessageRow';
-import { fetchGroupMessages, markMessagesRead, reactToMessage, sendGroupMessage } from '../../api/messaging';
+import { fetchGroupMessages, fetchMessageReactionDetails, markMessagesRead, reactToMessage, sendGroupMessage } from '../../api/messaging';
+import ReactionDetailModal from '../../components/messages/ReactionDetailModal';
 import { uploadMedia } from '../../api/organizations';
 import { Message } from '../../types/messaging';
 import { useAuth } from '../../store/AuthContext';
@@ -131,6 +132,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
   const [contextVisible, setContextVisible] = useState(false);
   const [contextPageY, setContextPageY] = useState<number>(0);
   const [contextMsgHeight, setContextMsgHeight] = useState<number>(56);
+  const [reactionDetailMsg, setReactionDetailMsg] = useState<Message | null>(null);
   const [videoPlayerUrl, setVideoPlayerUrl] = useState<string | null>(null);
   const [imageViewerUrl, setImageViewerUrl] = useState<string | null>(null);
   const [kbVisible, setKbVisible] = useState(false);
@@ -653,6 +655,10 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     } catch {}
   }, [contextMsg]);
 
+  const handleLongPressReaction = useCallback((msg: Message) => {
+    setReactionDetailMsg(msg);
+  }, []);
+
   const handleTapReaction = useCallback(async (msg: Message, emoji: string) => {
     try {
       const res = await reactToMessage(msg.id, emoji);
@@ -734,10 +740,11 @@ export default function GroupChatScreen({ navigation, route }: Props) {
       onRetry={handleRetry}
       onLongPress={handleLongPress}
       onTapReaction={handleTapReaction}
+      onLongPressReaction={handleLongPressReaction}
       onVideoPress={setVideoPlayerUrl}
       onImagePress={setImageViewerUrl}
     />
-  ), [myId, handleNavigateToProfile, handleRetry, handleLongPress, handleTapReaction]);
+  ), [myId, handleNavigateToProfile, handleRetry, handleLongPress, handleTapReaction, handleLongPressReaction]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -1027,6 +1034,11 @@ export default function GroupChatScreen({ navigation, route }: Props) {
       {imageViewerUrl != null && (
         <ImageViewerModal url={imageViewerUrl} onClose={() => setImageViewerUrl(null)} />
       )}
+      <ReactionDetailModal
+        visible={reactionDetailMsg != null}
+        onClose={() => setReactionDetailMsg(null)}
+        fetchDetails={() => fetchMessageReactionDetails(reactionDetailMsg!.id)}
+      />
     </KeyboardAvoidingView>
   );
 }

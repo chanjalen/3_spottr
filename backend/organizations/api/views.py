@@ -1,7 +1,8 @@
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from common.throttles import CreateRateThrottle, ReactionRateThrottle
 
 from django.utils import timezone
 from django.core.cache import cache
@@ -157,7 +158,11 @@ def org_list_create(request):
         cache.set(cache_key, data, ORG_LIST_TTL)
         return Response(data)
 
-    # POST — create
+    # POST — create (rate-limited: 5/hour per user)
+    from common.utils import check_rate_limit
+    if not check_rate_limit(f'rl:org_create:{request.user.id}', limit=30, period=3600):
+        return Response({'error': 'Too many organizations created. Try again later.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
     serializer = CreateOrgSerializer(data=request.data)
     serializer.is_valid(raise_exception=True)
     d = serializer.validated_data
@@ -175,7 +180,7 @@ def org_list_create(request):
 @permission_classes([IsAuthenticated])
 def org_discover(request):
     """Search/browse public organizations."""
-    query = request.query_params.get('q', '').strip()
+    query = request.query_params.get('q', '').strip()[:100]
     limit = min(int(request.query_params.get('limit', 50)), 100)
     offset = int(request.query_params.get('offset', 0))
     orgs = services.search_orgs(user=request.user, query=query or None, limit=limit, offset=offset)
@@ -515,6 +520,7 @@ def announcement_delete(request, org_id, announcement_id):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([ReactionRateThrottle])
 def announcement_react(request, org_id, announcement_id):
     """Toggle an emoji reaction on an announcement."""
     serializer = ReactSerializer(data=request.data)
@@ -535,6 +541,45 @@ def announcement_react(request, org_id, announcement_id):
     except AnnouncementNotFoundError as e:
         return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
     return Response({'reactions': reactions})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def announcement_reaction_details(request, org_id, announcement_id):
+    """
+    Return the full list of who reacted to an announcement.
+    Response: [{ emoji, username, display_name, avatar_url }]
+    Only accessible to org members.
+    """
+    from organizations.models import AnnouncementReaction
+    if not OrgMember.objects.filter(org_id=org_id, user=request.user).exists():
+        return Response({'error': 'Not an org member.'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        from organizations.models import Announcement
+        Announcement.objects.get(id=announcement_id, org_id=org_id)
+    except Announcement.DoesNotExist:
+        return Response({'error': 'Announcement not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    reactions = (
+        AnnouncementReaction.objects
+        .filter(announcement_id=announcement_id)
+        .select_related('user')
+        .order_by('emoji', 'created_at')
+    )
+    user_ids = [r.user_id for r in reactions]
+    avatar_map = _build_avatar_map(user_ids)
+
+    data = [
+        {
+            'emoji': r.emoji,
+            'username': r.user.username,
+            'display_name': r.user.display_name or r.user.username,
+            'avatar_url': avatar_map.get(str(r.user_id)),
+        }
+        for r in reactions
+    ]
+    return Response(data)
 
 
 @api_view(['POST'])

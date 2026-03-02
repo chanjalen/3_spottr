@@ -1,6 +1,13 @@
 import { apiClient } from './client';
 import { Conversation, GroupConversation, Message, MessagePage, MessageReaction, UnreadCount } from '../types/messaging';
 
+export interface ReactionDetail {
+  emoji: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+}
+
 export async function fetchDMConversations(): Promise<Conversation[]> {
   const res = await apiClient.get('/api/messaging/dm/conversations/');
   return res.data;
@@ -64,5 +71,10 @@ export async function reactToMessage(
   emoji: string,
 ): Promise<{ reactions: MessageReaction[] }> {
   const res = await apiClient.post(`/api/messaging/messages/${messageId}/react/`, { emoji });
+  return res.data;
+}
+
+export async function fetchMessageReactionDetails(messageId: string): Promise<ReactionDetail[]> {
+  const res = await apiClient.get(`/api/messaging/messages/${messageId}/reactions/`);
   return res.data;
 }

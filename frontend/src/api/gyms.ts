@@ -71,8 +71,9 @@ export async function fetchMyGyms(): Promise<Gym[]> {
 }
 
 export async function fetchHourlyBusyLevel(gymId: string, date?: string): Promise<HourlyBusyEntry[]> {
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const res = await apiClient.get(`/api/gyms/gyms/${gymId}/busy-level/hourly/`, {
-    params: date ? { date } : undefined,
+    params: { ...(date ? { date } : {}), tz },
   });
   return res.data;
 }

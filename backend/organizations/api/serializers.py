@@ -329,7 +329,15 @@ class JoinRequestSerializer(serializers.Serializer):
 
 
 class ReactSerializer(serializers.Serializer):
-    emoji = serializers.CharField(max_length=16)
+    emoji = serializers.CharField(max_length=8)
+
+    def validate_emoji(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Emoji cannot be empty.")
+        if value.isascii() and value.replace(' ', '').isalnum():
+            raise serializers.ValidationError("Invalid emoji.")
+        return value
 
 
 class VoteSerializer(serializers.Serializer):
