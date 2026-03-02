@@ -2,6 +2,7 @@
   "expo": {
     "name": "Spottr",
     "slug": "spottr",
+    "owner": "spottr",
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
@@ -11,9 +12,19 @@
     "assetBundlePatterns": [
       "**/*"
     ],
+    "scheme": "com.spottr.app",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.spottr.app"
+      "bundleIdentifier": "com.spottr.app",
+      "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.265741649084-vabnoi82qr737r6fk6d1b462mb7qo9vv"
+            ]
+          }
+        ]
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,7 +36,8 @@
       "expo-font",
       "expo-secure-store",
       "@react-native-community/datetimepicker",
-      "expo-video"
+      "expo-video",
+      "expo-web-browser"
     ],
     "extra": {
       "eas": {
