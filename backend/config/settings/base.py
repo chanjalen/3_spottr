@@ -228,7 +228,7 @@ CELERY_TASK_TRACK_STARTED = True
 # Email — from address used for all outgoing mail
 # Using Resend's shared sender until spottr.app domain is verified.
 # Switch back to 'Spottr <noreply@spottr.app>' after DNS verification.
-DEFAULT_FROM_EMAIL = 'Spottr <onboarding@resend.dev>'
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'Spottr <onboarding@resend.dev>')
 
 # Google OAuth — set GOOGLE_CLIENT_ID in your environment (Web client ID from Google Cloud Console)
 GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
