@@ -1,9 +1,5 @@
-import * as WebBrowser from 'expo-web-browser';
 import * as Google from 'expo-auth-session/providers/google';
 import { makeRedirectUri } from 'expo-auth-session';
-
-// Required so the browser session closes properly on iOS after redirect
-WebBrowser.maybeCompleteAuthSession();
 
 // The reversed iOS client ID is the redirect URI that Google's iOS credential
 // type expects. Google auto-accepts this without needing it registered manually.

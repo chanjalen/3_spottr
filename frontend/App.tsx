@@ -1,5 +1,9 @@
 import React from 'react';
+import * as WebBrowser from 'expo-web-browser';
 import { StatusBar } from 'expo-status-bar';
+
+// Required for expo-auth-session (Google OAuth) to close the browser on redirect
+WebBrowser.maybeCompleteAuthSession();
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
