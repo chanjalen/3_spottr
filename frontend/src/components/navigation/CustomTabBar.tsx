@@ -169,7 +169,7 @@ function FabButton({ onPress }: FabButtonProps) {
           end={{ x: 1, y: 1 }}
           style={styles.fab}
         >
-          <Feather name="plus" size={28} color={colors.iconOnPrimary} />
+          <Feather name="plus" size={22} color={colors.iconOnPrimary} />
         </LinearGradient>
       </Pressable>
     </Animated.View>
@@ -186,9 +186,9 @@ const styles = StyleSheet.create({
     bottom: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
     paddingHorizontal: 16,
-    paddingTop: 10,
+    paddingTop: 2,
     backgroundColor: colors.surface,
     ...Platform.select({
       ios: {
@@ -205,13 +205,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    paddingVertical: 6,
+    paddingVertical: 0,
   },
   navItem: {
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 48,
-    minHeight: 48,
+    minHeight: 36,
   },
   navItemInner: {
     alignItems: 'center',
@@ -253,8 +253,8 @@ const styles = StyleSheet.create({
     }),
   },
   fab: {
-    width: 64,
-    height: 64,
+    width: 50,
+    height: 50,
     borderRadius: 9999,
     alignItems: 'center',
     justifyContent: 'center',

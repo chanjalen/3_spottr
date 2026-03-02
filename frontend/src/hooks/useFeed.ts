@@ -83,6 +83,8 @@ export function useFeed() {
   const changeTab = useCallback(
     (tab: FeedTab) => {
       setActiveTab(tab);
+      setItems([]);
+      setNextCursor('');
       setSearchQuery('');
       setSearchResults(null);
       loadFeed(tab);

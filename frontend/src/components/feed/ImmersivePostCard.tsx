@@ -112,7 +112,7 @@ export default function ImmersivePostCard({
           />
 
           {/* Right-side vertical action bar — sits above the nav bar */}
-          <View style={[styles.actionBar, { bottom: bottomInset + 100 }]}>
+          <View style={[styles.actionBar, { bottom: bottomInset + spacing.base }]}>
             <AnimatedPressable
               style={[styles.actionBtn, likeAnimatedStyle]}
               onPress={handleLike}
@@ -162,7 +162,7 @@ export default function ImmersivePostCard({
           </View>
 
           {/* Bottom-left: user info + caption + meta — sits above the nav bar */}
-          <View style={[styles.bottomInfo, { bottom: bottomInset + spacing.xl }]}>
+          <View style={[styles.bottomInfo, { bottom: bottomInset + spacing.base }]}>
             <View style={styles.userRow}>
               <Avatar uri={item.user.avatar_url} name={item.user.display_name} size={36} />
               <View style={styles.userText}>
@@ -239,7 +239,7 @@ export default function ImmersivePostCard({
         />
 
         {/* Right-side vertical action bar — sits above the nav bar */}
-        <View style={[styles.actionBar, { bottom: bottomInset + 80 }]}>
+        <View style={[styles.actionBar, { bottom: bottomInset + spacing.base }]}>
           <AnimatedPressable
             style={[styles.actionBtn, likeAnimatedStyle]}
             onPress={handleLike}
