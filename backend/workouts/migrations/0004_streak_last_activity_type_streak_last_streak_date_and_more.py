@@ -52,31 +52,37 @@ def forwards(apps, schema_editor):
             "ALTER TABLE workouts_streak ADD COLUMN last_streak_date date NULL"
         )
 
-    # Rename restday 'date' column to 'streak_date' if needed
+    # Only patch restday if the table already exists (legacy dev DB migration)
     cursor.execute(
-        "SELECT column_name FROM information_schema.columns "
-        "WHERE table_name='workouts_restday' AND column_name='date'"
+        "SELECT table_name FROM information_schema.tables "
+        "WHERE table_schema='public' AND table_name='workouts_restday'"
     )
-    has_date = cursor.fetchone()
-    cursor.execute(
-        "SELECT column_name FROM information_schema.columns "
-        "WHERE table_name='workouts_restday' AND column_name='streak_date'"
-    )
-    has_streak_date = cursor.fetchone()
-
-    if has_date and not has_streak_date:
-        cursor.execute("ALTER TABLE workouts_restday RENAME COLUMN date TO streak_date")
-
-    # Add unique constraint on restday if not exists
-    cursor.execute(
-        "SELECT constraint_name FROM information_schema.table_constraints "
-        "WHERE table_name='workouts_restday' AND constraint_name='unique_user_rest_day'"
-    )
-    if not cursor.fetchone():
+    if cursor.fetchone():
+        # Rename restday 'date' column to 'streak_date' if needed
         cursor.execute(
-            "ALTER TABLE workouts_restday ADD CONSTRAINT unique_user_rest_day "
-            "UNIQUE (user_id, streak_date)"
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='workouts_restday' AND column_name='date'"
         )
+        has_date = cursor.fetchone()
+        cursor.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name='workouts_restday' AND column_name='streak_date'"
+        )
+        has_streak_date = cursor.fetchone()
+
+        if has_date and not has_streak_date:
+            cursor.execute("ALTER TABLE workouts_restday RENAME COLUMN date TO streak_date")
+
+        # Add unique constraint on restday if not exists
+        cursor.execute(
+            "SELECT constraint_name FROM information_schema.table_constraints "
+            "WHERE table_name='workouts_restday' AND constraint_name='unique_user_rest_day'"
+        )
+        if not cursor.fetchone():
+            cursor.execute(
+                "ALTER TABLE workouts_restday ADD CONSTRAINT unique_user_rest_day "
+                "UNIQUE (user_id, streak_date)"
+            )
 
 
 class Migration(migrations.Migration):
@@ -117,6 +123,21 @@ class Migration(migrations.Migration):
                     },
                 ),
             ],
-            database_operations=[],
+            database_operations=[
+                migrations.RunSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS workouts_restday (
+                        id varchar(36) PRIMARY KEY,
+                        created_at timestamptz NOT NULL,
+                        updated_at timestamptz NOT NULL,
+                        streak_date date NOT NULL,
+                        user_id varchar(36) NOT NULL
+                            REFERENCES accounts_user(id) ON DELETE CASCADE,
+                        CONSTRAINT unique_user_rest_day UNIQUE (user_id, streak_date)
+                    )
+                    """,
+                    reverse_sql="DROP TABLE IF EXISTS workouts_restday",
+                ),
+            ],
         ),
     ]
