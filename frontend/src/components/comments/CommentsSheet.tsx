@@ -1,6 +1,12 @@
-import React, { useCallback, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, ActivityIndicator } from 'react-native';
-import BottomSheet, { BottomSheetBackdrop, BottomSheetView, BottomSheetFlatList } from '@gorhom/bottom-sheet';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, Pressable, StyleSheet, ActivityIndicator } from 'react-native';
+import {
+  BottomSheetModal,
+  BottomSheetBackdrop,
+  BottomSheetView,
+  BottomSheetFlatList,
+  BottomSheetFooter,
+} from '@gorhom/bottom-sheet';
 import { FeedItem, Comment } from '../../types/feed';
 import CommentItem from './CommentItem';
 import CommentInput from './CommentInput';
@@ -14,8 +20,9 @@ interface CommentsSheetProps {
 }
 
 export default function CommentsSheet({ item, onClose }: CommentsSheetProps) {
-  const sheetRef = useRef<BottomSheet>(null);
+  const sheetRef = useRef<BottomSheetModal>(null);
   const { user } = useAuth();
+  const [replyingTo, setReplyingTo] = useState<{ commentId: number; username: string } | null>(null);
   const {
     comments,
     isLoading,
@@ -30,18 +37,16 @@ export default function CommentsSheet({ item, onClose }: CommentsSheetProps) {
   useEffect(() => {
     if (item) {
       loadComments(item);
-      sheetRef.current?.snapToIndex(0);
+      sheetRef.current?.present();
     } else {
-      sheetRef.current?.close();
+      sheetRef.current?.dismiss();
     }
   }, [item, loadComments]);
 
-  const handleSheetChange = useCallback(
-    (index: number) => {
-      if (index === -1) onClose();
-    },
-    [onClose],
-  );
+  const handleDismiss = useCallback(() => {
+    setReplyingTo(null);
+    onClose();
+  }, [onClose]);
 
   const renderBackdrop = useCallback(
     (props: any) => (
@@ -55,6 +60,45 @@ export default function CommentsSheet({ item, onClose }: CommentsSheetProps) {
     [],
   );
 
+  const handlePostOrReply = useCallback(
+    (text: string) => {
+      if (!item) return;
+      if (replyingTo) {
+        postReply(replyingTo.commentId, text);
+        setReplyingTo(null);
+      } else {
+        postComment(item, text);
+      }
+    },
+    [item, replyingTo, postComment, postReply],
+  );
+
+  const handleStartReply = useCallback((commentId: number, username: string) => {
+    setReplyingTo({ commentId, username });
+  }, []);
+
+  const renderFooter = useCallback(
+    (props: any) => (
+      <BottomSheetFooter {...props}>
+        {replyingTo && (
+          <View style={styles.replyBanner}>
+            <Text style={styles.replyBannerText}>
+              Replying to @{replyingTo.username}
+            </Text>
+            <Pressable onPress={() => setReplyingTo(null)} hitSlop={8}>
+              <Text style={styles.cancelReply}>Cancel</Text>
+            </Pressable>
+          </View>
+        )}
+        <CommentInput
+          placeholder={replyingTo ? `Reply to @${replyingTo.username}...` : 'Add a comment...'}
+          onSubmit={handlePostOrReply}
+        />
+      </BottomSheetFooter>
+    ),
+    [handlePostOrReply, replyingTo],
+  );
+
   const renderComment = useCallback(
     ({ item: comment }: { item: Comment }) => (
       <CommentItem
@@ -63,27 +107,22 @@ export default function CommentsSheet({ item, onClose }: CommentsSheetProps) {
         onLike={likeComment}
         onDelete={removeComment}
         onLoadReplies={loadReplies}
-        onReply={postReply}
+        onStartReply={handleStartReply}
       />
     ),
-    [user?.id, likeComment, removeComment, loadReplies, postReply],
-  );
-
-  const handlePostComment = useCallback(
-    (text: string) => {
-      if (item) postComment(item, text);
-    },
-    [item, postComment],
+    [user?.id, likeComment, removeComment, loadReplies, handleStartReply],
   );
 
   return (
-    <BottomSheet
+    <BottomSheetModal
       ref={sheetRef}
-      index={-1}
       snapPoints={['50%', '85%']}
-      onChange={handleSheetChange}
+      onDismiss={handleDismiss}
       backdropComponent={renderBackdrop}
+      footerComponent={renderFooter}
       enablePanDownToClose
+      keyboardBehavior="interactive"
+      keyboardBlurBehavior="restore"
       backgroundStyle={styles.background}
       handleIndicatorStyle={styles.handle}
     >
@@ -112,9 +151,7 @@ export default function CommentsSheet({ item, onClose }: CommentsSheetProps) {
           }
         />
       )}
-
-      <CommentInput onSubmit={handlePostComment} />
-    </BottomSheet>
+    </BottomSheetModal>
   );
 }
 
@@ -141,6 +178,7 @@ const styles = StyleSheet.create({
   },
   list: {
     padding: spacing.base,
+    paddingBottom: spacing['3xl'],
   },
   loader: {
     flex: 1,
@@ -156,5 +194,24 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     fontFamily: typography.family.regular,
     color: colors.textMuted,
+  },
+  replyBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.sm,
+    paddingBottom: 2,
+    backgroundColor: colors.surface,
+  },
+  replyBannerText: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.medium,
+    color: colors.textMuted,
+  },
+  cancelReply: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.semibold,
+    color: colors.primary,
   },
 });
