@@ -4,6 +4,7 @@ import { AppState, Platform } from 'react-native';
 import { UserBrief } from '../types/user';
 import { wsManager } from '../services/websocket';
 import { setTokenCache } from '../api/client';
+import { apiUpdateProfile } from '../api/accounts';
 
 const getItem = async (key: string) => {
   if (Platform.OS === 'web') return localStorage.getItem(key);
@@ -85,6 +86,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(newToken);
     setUser(newUser);
     setCurrentStreak(newUser.streak ?? 0);
+
+    // Sync device timezone to backend so streak resets fire at the right local time
+    try {
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      if (tz) await apiUpdateProfile({ timezone: tz });
+    } catch {
+      // Non-critical — don't block sign-in if this fails
+    }
   };
 
   const signOut = async () => {
