@@ -1,5 +1,9 @@
 import React from 'react';
+import * as WebBrowser from 'expo-web-browser';
 import { StatusBar } from 'expo-status-bar';
+
+// Required for expo-auth-session (Google OAuth) to close the browser on redirect
+WebBrowser.maybeCompleteAuthSession();
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -19,6 +23,8 @@ import MainTabs from './src/navigation/MainTabs';
 import LoginScreen from './src/screens/auth/LoginScreen';
 import SignupScreen from './src/screens/auth/SignupScreen';
 import EmailVerificationScreen from './src/screens/auth/EmailVerificationScreen';
+import ForgotPasswordScreen from './src/screens/auth/ForgotPasswordScreen';
+import ResetPasswordScreen from './src/screens/auth/ResetPasswordScreen';
 import OnboardingStep1Screen from './src/screens/onboarding/OnboardingStep1Screen';
 import OnboardingStep2Screen from './src/screens/onboarding/OnboardingStep2Screen';
 import OnboardingStep3Screen from './src/screens/onboarding/OnboardingStep3Screen';
@@ -106,6 +112,8 @@ function RootNavigator() {
         <AuthStack.Screen name="Login" component={LoginScreen} />
         <AuthStack.Screen name="Signup" component={SignupScreen} />
         <AuthStack.Screen name="EmailVerification" component={EmailVerificationScreen} />
+        <AuthStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+        <AuthStack.Screen name="ResetPassword" component={ResetPasswordScreen} />
       </AuthStack.Navigator>
     );
   }
