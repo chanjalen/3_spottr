@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Avatar from '../../components/common/Avatar';
+import ConversationSkeleton from '../../components/common/ConversationSkeleton';
 import { fetchDMConversations, sendZap } from '../../api/messaging';
 import { Conversation } from '../../types/messaging';
 import { colors, spacing, typography } from '../../theme';
@@ -20,6 +21,7 @@ import { RootStackParamList } from '../../navigation/types';
 import { useUnreadCount } from '../../store/UnreadCountContext';
 import { timeAgo } from '../../utils/timeAgo';
 import { Message } from '../../types/messaging';
+import { staleCache } from '../../utils/staleCache';
 
 function msgPreview(msg: Message | null | undefined): string {
   if (!msg) return 'No messages yet';
@@ -36,18 +38,25 @@ type Props = {
 export default function AllDMsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { optimisticDecrement } = useUnreadCount();
-  const [dms, setDms] = useState<Conversation[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [dms, setDms] = useState<Conversation[]>(() => staleCache.getSync<Conversation[]>('social:messages:dm') ?? []);
+  const [loading, setLoading] = useState(() => staleCache.getSync<Conversation[]>('social:messages:dm') === null);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
   const [zapping, setZapping] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    const cached = await staleCache.get<Conversation[]>('social:messages:dm');
+    if (cached) {
+      setDms(cached);
+      setLoading(false);
+    }
+
     try {
       const data = await fetchDMConversations();
+      staleCache.set('social:messages:dm', data, 2 * 60 * 1000);
       setDms(data);
     } catch {
-      setDms([]);
+      if (!cached) setDms([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -98,8 +107,8 @@ export default function AllDMsScreen({ navigation }: Props) {
         )}
       </View>
 
-      {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+      {loading && dms.length === 0 ? (
+        <ConversationSkeleton />
       ) : (
         <FlatList
           data={filtered}

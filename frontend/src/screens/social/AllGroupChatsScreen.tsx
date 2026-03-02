@@ -13,6 +13,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Avatar from '../../components/common/Avatar';
+import ConversationSkeleton from '../../components/common/ConversationSkeleton';
 import { fetchGroupConversations } from '../../api/messaging';
 import { GroupConversation } from '../../types/messaging';
 import { colors, spacing, typography } from '../../theme';
@@ -20,6 +21,7 @@ import { RootStackParamList } from '../../navigation/types';
 import { useUnreadCount } from '../../store/UnreadCountContext';
 import { timeAgo } from '../../utils/timeAgo';
 import { Message } from '../../types/messaging';
+import { staleCache } from '../../utils/staleCache';
 
 function groupMsgPreview(msg: Message | null | undefined): string {
   if (!msg) return 'No messages yet';
@@ -37,17 +39,24 @@ type Props = {
 export default function AllGroupChatsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { optimisticDecrement } = useUnreadCount();
-  const [groups, setGroups] = useState<GroupConversation[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [groups, setGroups] = useState<GroupConversation[]>(() => staleCache.getSync<GroupConversation[]>('social:messages:groups') ?? []);
+  const [loading, setLoading] = useState(() => staleCache.getSync<GroupConversation[]>('social:messages:groups') === null);
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
 
   const load = useCallback(async () => {
+    const cached = await staleCache.get<GroupConversation[]>('social:messages:groups');
+    if (cached) {
+      setGroups(cached);
+      setLoading(false);
+    }
+
     try {
       const data = await fetchGroupConversations();
+      staleCache.set('social:messages:groups', data, 2 * 60 * 1000);
       setGroups(data);
     } catch {
-      setGroups([]);
+      if (!cached) setGroups([]);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -91,8 +100,8 @@ export default function AllGroupChatsScreen({ navigation }: Props) {
         )}
       </View>
 
-      {loading ? (
-        <ActivityIndicator color={colors.primary} style={{ marginTop: 40 }} />
+      {loading && groups.length === 0 ? (
+        <ConversationSkeleton />
       ) : (
         <FlatList
           data={filtered}

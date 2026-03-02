@@ -9,6 +9,7 @@ import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import {
   useFonts,
   Inter_400Regular,
@@ -149,16 +150,18 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <AuthProvider>
-          <UnreadCountProvider>
-            <NavigationContainer theme={navTheme}>
-              <RootNavigator />
-              <StatusBar style="dark" />
-            </NavigationContainer>
-          </UnreadCountProvider>
-        </AuthProvider>
-      </SafeAreaProvider>
+      <BottomSheetModalProvider>
+        <SafeAreaProvider>
+          <AuthProvider>
+            <UnreadCountProvider>
+              <NavigationContainer theme={navTheme}>
+                <RootNavigator />
+                <StatusBar style="dark" />
+              </NavigationContainer>
+            </UnreadCountProvider>
+          </AuthProvider>
+        </SafeAreaProvider>
+      </BottomSheetModalProvider>
     </GestureHandlerRootView>
   );
 }

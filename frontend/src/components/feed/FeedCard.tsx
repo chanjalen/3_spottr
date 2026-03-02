@@ -14,6 +14,7 @@ interface FeedCardProps {
   onLike: () => void;
   onComment: () => void;
   onPollVote: (optionId: number | string) => void;
+  onPressUser?: () => void;
 }
 
 export default function FeedCard({
@@ -22,6 +23,7 @@ export default function FeedCard({
   onLike,
   onComment,
   onPollVote,
+  onPressUser,
 }: FeedCardProps) {
   const shareUrl = `https://spottr.app/${item.type}/${item.id}`;
   const [workoutDetailId, setWorkoutDetailId] = useState<string | null>(null);
@@ -38,6 +40,7 @@ export default function FeedCard({
           locationName={item.location_name}
           workoutType={item.workout_type}
           sharedContext={item.shared_context}
+          onPressUser={onPressUser}
         />
         <FeedCardBody
           item={item}

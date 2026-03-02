@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { View, TextInput, Pressable, Text, StyleSheet } from 'react-native';
+import { View, Pressable, Text, StyleSheet } from 'react-native';
+import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
 import { colors, spacing, typography } from '../../theme';
 
 interface CommentInputProps {
@@ -22,7 +23,7 @@ export default function CommentInput({
 
   return (
     <View style={styles.container}>
-      <TextInput
+      <BottomSheetTextInput
         style={styles.input}
         value={text}
         onChangeText={setText}

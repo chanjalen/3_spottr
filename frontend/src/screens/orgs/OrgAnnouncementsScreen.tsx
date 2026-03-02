@@ -41,6 +41,7 @@ import {
 import { useAuth } from '../../store/AuthContext';
 import { useUnreadCount } from '../../store/UnreadCountContext';
 import { colors, spacing, typography } from '../../theme';
+import { staleCache } from '../../utils/staleCache';
 import { RootStackParamList } from '../../navigation/types';
 import { timeAgo } from '../../utils/timeAgo';
 import { wsManager } from '../../services/websocket';
@@ -62,6 +63,13 @@ type OptimisticAnnouncement = Announcement & {
 
 type AnnouncementDivider = { id: '__new_divider__'; isDivider: true };
 type AnnouncementListItem = OptimisticAnnouncement | AnnouncementDivider;
+
+type CachedOrgAnn = {
+  announcements: AnnouncementListItem[];
+  has_more: boolean;
+  oldest_id: string | null;
+  userRole: 'creator' | 'admin' | 'member' | null;
+};
 
 function isAnn(item: AnnouncementListItem): item is OptimisticAnnouncement {
   return !('isDivider' in item);
@@ -384,12 +392,22 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
   const { refresh: refreshUnread } = useUnreadCount();
   const { orgId, orgName, orgAvatar } = route.params;
 
-  const [announcements, setAnnouncements] = useState<AnnouncementListItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [hasMore, setHasMore] = useState(false);
-  const [oldestId, setOldestId] = useState<string | null>(null);
+  const [announcements, setAnnouncements] = useState<AnnouncementListItem[]>(
+    () => staleCache.getSync<CachedOrgAnn>(`org:ann:${orgId}`)?.announcements ?? [],
+  );
+  const [loading, setLoading] = useState(
+    () => staleCache.getSync<CachedOrgAnn>(`org:ann:${orgId}`) === null,
+  );
+  const [hasMore, setHasMore] = useState(
+    () => staleCache.getSync<CachedOrgAnn>(`org:ann:${orgId}`)?.has_more ?? false,
+  );
+  const [oldestId, setOldestId] = useState<string | null>(
+    () => staleCache.getSync<CachedOrgAnn>(`org:ann:${orgId}`)?.oldest_id ?? null,
+  );
   const [loadingMore, setLoadingMore] = useState(false);
-  const [userRole, setUserRole] = useState<'creator' | 'admin' | 'member' | null>(null);
+  const [userRole, setUserRole] = useState<'creator' | 'admin' | 'member' | null>(
+    () => staleCache.getSync<CachedOrgAnn>(`org:ann:${orgId}`)?.userRole ?? null,
+  );
 
   // ── Long-press context menu ──────────────────────────────────────────────
   const [contextItem, setContextItem] = useState<OptimisticAnnouncement | null>(null);
@@ -418,7 +436,20 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
   // ── Load announcements ───────────────────────────────────────────────────
 
   const loadInitial = useCallback(async () => {
-    setLoading(true);
+    const cacheKey = `org:ann:${orgId}`;
+
+    // ── Serve cached data immediately (skip spinner) ──────────────────────────
+    const cached = await staleCache.get<CachedOrgAnn>(cacheKey);
+    if (cached) {
+      setAnnouncements(cached.announcements);
+      setHasMore(cached.has_more);
+      setOldestId(cached.oldest_id);
+      setUserRole(cached.userRole);
+    } else {
+      setLoading(true);
+    }
+
+    // ── Always fetch fresh in background ─────────────────────────────────────
     const t0 = Date.now();
     try {
       const [page, detail] = await Promise.all([
@@ -436,6 +467,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
             ...page.results.slice(firstReadIdx),
           ]
         : page.results;
+      staleCache.set(cacheKey, { announcements: listItems, has_more: page.has_more, oldest_id: page.oldest_id, userRole: detail.user_role }, 5 * 60 * 1000);
       setAnnouncements(listItems);
       setHasMore(page.has_more);
       setOldestId(page.oldest_id);

@@ -26,11 +26,11 @@ SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 
-# SSL/HTTPS — disabled for initial HTTP-only beta deployment.
-# Re-enable these once a domain + Let's Encrypt cert is in place.
-SECURE_SSL_REDIRECT = False
-SESSION_COOKIE_SECURE = False
-CSRF_COOKIE_SECURE = False
+# SSL/HTTPS
+SECURE_SSL_REDIRECT = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
 
 # Static files — WhiteNoise serves them directly from Daphne (no separate nginx rule needed)
 STATIC_ROOT = BASE_DIR / 'staticfiles'

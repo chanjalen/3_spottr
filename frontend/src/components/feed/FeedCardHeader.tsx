@@ -12,6 +12,7 @@ interface FeedCardHeaderProps {
   locationName: string | null;
   workoutType?: string;
   sharedContext?: string[];
+  onPressUser?: () => void;
 }
 
 export default function FeedCardHeader({
@@ -20,6 +21,7 @@ export default function FeedCardHeader({
   locationName,
   workoutType,
   sharedContext,
+  onPressUser,
 }: FeedCardHeaderProps) {
   const postedIn = workoutType ?? locationName;
 
@@ -27,9 +29,11 @@ export default function FeedCardHeader({
 
   return (
     <View style={styles.container}>
-      <Avatar uri={user.avatar_url} name={user.display_name} size={40} />
+      <Pressable onPress={onPressUser} disabled={!onPressUser} style={styles.userPressable}>
+        <Avatar uri={user.avatar_url} name={user.display_name} size={40} />
+      </Pressable>
 
-      <View style={styles.info}>
+      <Pressable onPress={onPressUser} disabled={!onPressUser} style={styles.info}>
         <View style={styles.nameRow}>
           <Text style={styles.name} numberOfLines={1}>
             {user.display_name}
@@ -52,7 +56,7 @@ export default function FeedCardHeader({
         <Text style={styles.meta} numberOfLines={1}>
           {postedIn ? `Posted in ${postedIn} · ` : ''}{timeAgo(createdAt)}
         </Text>
-      </View>
+      </Pressable>
 
       {/* Three-dot overflow button */}
       <Pressable
@@ -73,6 +77,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.md,
     marginBottom: spacing.md,
+  },
+  userPressable: {
+    // no extra styles — just wraps the avatar for hit target
   },
   info: {
     flex: 1,
