@@ -26,6 +26,8 @@ interface FeedTabsProps {
   /** Called when the left tab is tapped while already active — caller should open the dropdown */
   onDropdownPress: () => void;
   streakCount?: number;
+  /** Use light (white) text — for immersive dark-background layouts */
+  dark?: boolean;
 }
 
 export default function FeedTabs({
@@ -33,6 +35,7 @@ export default function FeedTabs({
   onTabChange,
   onDropdownPress,
   streakCount,
+  dark = false,
 }: FeedTabsProps) {
   // Two visual positions: 0 = left (friends/gym/org), 1 = right (main)
   const tabWidths = React.useRef<number[]>([0, 0]);
@@ -95,15 +98,20 @@ export default function FeedTabs({
               <Text
                 style={[
                   styles.tabLabel,
-                  isDropdownTab ? styles.tabLabelActive : styles.tabLabelInactive,
+                  isDropdownTab
+                    ? dark ? styles.tabLabelActiveDark : styles.tabLabelActive
+                    : dark ? styles.tabLabelInactiveDark : styles.tabLabelInactive,
                 ]}
               >
                 {leftLabel}
               </Text>
               <Feather
                 name={isDropdownTab ? 'chevron-down' : 'chevron-down'}
-                size={14}
-                color={isDropdownTab ? colors.textOnPrimary : 'rgba(255,255,255,0.65)'}
+                size={11}
+                color={dark
+                  ? (isDropdownTab ? '#FFFFFF' : 'rgba(255,255,255,0.6)')
+                  : (isDropdownTab ? colors.textSecondary : colors.textMuted)
+                }
                 style={styles.chevron}
               />
             </View>
@@ -121,7 +129,9 @@ export default function FeedTabs({
             <Text
               style={[
                 styles.tabLabel,
-                activeTab === 'main' ? styles.tabLabelActive : styles.tabLabelInactive,
+                activeTab === 'main'
+                  ? dark ? styles.tabLabelActiveDark : styles.tabLabelActive
+                  : dark ? styles.tabLabelInactiveDark : styles.tabLabelInactive,
               ]}
             >
               Main
@@ -148,19 +158,19 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
+    justifyContent: 'center',
     paddingHorizontal: spacing.xl,
-    paddingBottom: spacing.md,
+    paddingBottom: 4,
   },
   tabRow: {
     flexDirection: 'row',
-    gap: spacing['2xl'],
+    gap: spacing.base,
     position: 'relative',
   },
   tab: {
-    paddingBottom: spacing.sm,
-    paddingTop: spacing.xs,
-    minHeight: 44,
+    paddingBottom: 4,
+    paddingTop: 2,
+    minHeight: 32,
     justifyContent: 'flex-end',
   },
   leftTabInner: {
@@ -172,19 +182,26 @@ const styles = StyleSheet.create({
     marginBottom: 1,
   },
   tabLabel: {
-    fontSize: typography.size.base,
+    fontSize: typography.size.sm,
     fontFamily: typography.family.medium,
   },
   tabLabelActive: {
-    color: colors.textOnPrimary,
+    color: colors.textSecondary,
     fontFamily: typography.family.semibold,
   },
   tabLabelInactive: {
-    color: 'rgba(255,255,255,0.65)',
+    color: colors.textMuted,
+  },
+  tabLabelActiveDark: {
+    color: '#FFFFFF',
+    fontFamily: typography.family.semibold,
+  },
+  tabLabelInactiveDark: {
+    color: 'rgba(255,255,255,0.6)',
   },
   indicator: {
     height: 2,
-    backgroundColor: colors.textOnPrimary,
+    backgroundColor: colors.primary,
     borderTopLeftRadius: 1,
     borderTopRightRadius: 1,
     position: 'absolute',

@@ -9,6 +9,7 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
+  Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -48,6 +49,17 @@ export default function LoginScreen({ navigation }: Props) {
     }
   };
 
+  const handleGoogleSignIn = () => {
+    Alert.alert('Coming Soon', 'Google sign-in is coming soon!');
+  };
+
+  const handleForgotPassword = () => {
+    Alert.alert(
+      'Forgot Password?',
+      'Password reset is coming soon. For now, email support@spottr.app for help.',
+    );
+  };
+
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: colors.background.base }}
@@ -71,21 +83,27 @@ export default function LoginScreen({ navigation }: Props) {
           )}
 
           <View style={styles.field}>
-            <Text style={styles.label}>Username</Text>
+            <Text style={styles.label}>Email or username</Text>
             <TextInput
               style={styles.input}
               value={username}
               onChangeText={setUsername}
               autoCapitalize="none"
               autoCorrect={false}
-              placeholder="your_username"
+              keyboardType="email-address"
+              placeholder="you@example.com or your_username"
               placeholderTextColor={colors.textMuted}
               returnKeyType="next"
             />
           </View>
 
           <View style={styles.field}>
-            <Text style={styles.label}>Password</Text>
+            <View style={styles.passwordHeader}>
+              <Text style={styles.label}>Password</Text>
+              <Pressable onPress={handleForgotPassword}>
+                <Text style={styles.forgotText}>Forgot password?</Text>
+              </Pressable>
+            </View>
             <TextInput
               style={styles.input}
               value={password}
@@ -108,6 +126,19 @@ export default function LoginScreen({ navigation }: Props) {
             ) : (
               <Text style={styles.btnText}>Log In</Text>
             )}
+          </Pressable>
+
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
+          <Pressable
+            style={({ pressed }) => [styles.googleBtn, pressed && styles.btnPressed]}
+            onPress={handleGoogleSignIn}
+          >
+            <Text style={styles.googleBtnText}>Continue with Google</Text>
           </Pressable>
 
           <Pressable onPress={() => navigation.navigate('Signup')} style={styles.link}>
@@ -157,10 +188,20 @@ const styles = StyleSheet.create({
   field: {
     gap: spacing.xs,
   },
+  passwordHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   label: {
     fontSize: typography.size.sm,
     fontWeight: '600',
     color: colors.textPrimary,
+  },
+  forgotText: {
+    fontSize: typography.size.sm,
+    color: colors.primary,
+    fontWeight: '500',
   },
   input: {
     borderWidth: 1.5,
@@ -186,6 +227,33 @@ const styles = StyleSheet.create({
     color: colors.textOnPrimary,
     fontSize: typography.size.base,
     fontWeight: '700',
+  },
+  dividerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.borderColor,
+  },
+  dividerText: {
+    fontSize: typography.size.sm,
+    color: colors.textMuted,
+  },
+  googleBtn: {
+    borderWidth: 1.5,
+    borderColor: colors.borderColor,
+    borderRadius: 12,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+    backgroundColor: colors.background.base,
+  },
+  googleBtnText: {
+    color: colors.textPrimary,
+    fontSize: typography.size.base,
+    fontWeight: '600',
   },
   link: {
     alignItems: 'center',

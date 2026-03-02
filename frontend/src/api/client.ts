@@ -15,6 +15,11 @@ export const getToken = async (): Promise<string | null> => {
   return token ?? null;
 };
 
+/** Called by AuthContext.signIn/signOut to keep the in-memory cache in sync. */
+export const setTokenCache = (token: string | undefined) => {
+  _tokenCache = token;
+};
+
 const deleteToken = async () => {
   _tokenCache = undefined; // invalidate cache so next login re-reads from store
   if (Platform.OS === 'web') { localStorage.removeItem('auth_token'); return; }
@@ -22,8 +27,8 @@ const deleteToken = async () => {
 };
 
 export const API_BASE_URL = __DEV__
-  ? Platform.OS === 'web' ? 'http://localhost:8000' : 'http://10.192.3.193'
-  : 'http://3.146.255.162';
+  ? Platform.OS === 'web' ? 'http://localhost:8000' : 'http://100.70.65.95'
+  : 'https://api.spottr.app';
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,

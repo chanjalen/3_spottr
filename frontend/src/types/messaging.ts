@@ -85,7 +85,7 @@ export interface GroupConversation {
   group_streak: number;
   avatar_url: string | null;
   member_count: number;
-  latest_message: Message;
+  latest_message: Message | null;
   unread_count: number;
 }
 

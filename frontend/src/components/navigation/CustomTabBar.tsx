@@ -40,8 +40,7 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
   return (
     <>
       <View
-        style={[styles.wrapper, { bottom: bottomPad }]}
-        pointerEvents="box-none"
+        style={[styles.wrapper, { paddingBottom: bottomPad }]}
       >
         {/* Pill nav bar */}
         <View style={styles.navBar}>
@@ -170,7 +169,7 @@ function FabButton({ onPress }: FabButtonProps) {
           end={{ x: 1, y: 1 }}
           style={styles.fab}
         >
-          <Feather name="plus" size={28} color={colors.iconOnPrimary} />
+          <Feather name="plus" size={22} color={colors.iconOnPrimary} />
         </LinearGradient>
       </Pressable>
     </Animated.View>
@@ -182,36 +181,37 @@ function FabButton({ onPress }: FabButtonProps) {
 const styles = StyleSheet.create({
   wrapper: {
     position: 'absolute',
-    left: 16,
-    right: 16,
+    left: 0,
+    right: 0,
+    bottom: 0,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 2,
+    backgroundColor: colors.surface,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: -4 },
+        shadowOpacity: 0.07,
+        shadowRadius: 12,
+      },
+      android: { elevation: 12 },
+    }),
   },
   navBar: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-around',
-    backgroundColor: colors.surface,
-    borderRadius: 9999,
-    paddingHorizontal: 24,
-    paddingVertical: 18,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 20 },
-        shadowOpacity: 0.2,
-        shadowRadius: 60,
-      },
-      android: { elevation: 8 },
-    }),
+    paddingVertical: 0,
   },
   navItem: {
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 48,
-    minHeight: 48,
+    minHeight: 36,
   },
   navItemInner: {
     alignItems: 'center',
@@ -253,8 +253,8 @@ const styles = StyleSheet.create({
     }),
   },
   fab: {
-    width: 64,
-    height: 64,
+    width: 50,
+    height: 50,
     borderRadius: 9999,
     alignItems: 'center',
     justifyContent: 'center',

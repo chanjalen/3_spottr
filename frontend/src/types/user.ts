@@ -5,6 +5,12 @@ export interface UserBrief {
   avatar_url: string | null;
   streak?: number;
   is_following?: boolean;
+  email?: string;
+  phone_number?: string | null;
+  birthday?: string | null;
+  workout_frequency?: number;
+  is_email_verified?: boolean;
+  onboarding_step?: number;
 }
 
 export interface UserProfile extends UserBrief {

@@ -35,6 +35,7 @@ import AppHeader from '../../components/navigation/AppHeader';
 import { useUnreadCount } from '../../store/UnreadCountContext';
 import { useAuth } from '../../store/AuthContext';
 import { timeAgo } from '../../utils/timeAgo';
+import { staleCache } from '../../utils/staleCache';
 
 type Props = {
   navigation: CompositeNavigationProp<
@@ -80,6 +81,8 @@ export default function SocialScreen({ navigation }: Props) {
   const [orgsRefreshing, setOrgsRefreshing] = useState(false);
   const orgSearchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const orgSearchGenRef = useRef(0);
+  const orgsViewRef = useRef<'Mine' | 'Discover'>('Mine');
+  const orgSearchQueryRef = useRef('');
   // ── Create org modal ──────────────────────────────────────────────────────
   const [createOrgVisible, setCreateOrgVisible] = useState(false);
   const [newOrgName, setNewOrgName] = useState('');
@@ -111,13 +114,24 @@ export default function SocialScreen({ navigation }: Props) {
 
   // ── Data loaders ──────────────────────────────────────────────────────────
   const loadMessages = useCallback(async () => {
+    const t0 = Date.now();
+    const [cachedDms, cachedGroups] = await Promise.all([
+      staleCache.get<Conversation[]>('social:messages:dm'),
+      staleCache.get<GroupConversation[]>('social:messages:groups'),
+    ]);
+    if (cachedDms) { setDms(cachedDms); setLoadingMessages(false); }
+    if (cachedGroups) { setGroupConvos(cachedGroups); setLoadingMessages(false); }
+
     try {
       const [dmData, groupData] = await Promise.all([
-        fetchDMConversations().catch(() => []),
-        fetchGroupConversations().catch(() => []),
+        fetchDMConversations().catch(() => [] as Conversation[]),
+        fetchGroupConversations().catch(() => [] as GroupConversation[]),
       ]);
+      staleCache.set('social:messages:dm', dmData, 2 * 60 * 1000);
+      staleCache.set('social:messages:groups', groupData, 2 * 60 * 1000);
       setDms(dmData);
       setGroupConvos(groupData);
+      console.log(`[PERF] Social/Messages: loaded ${dmData.length} DMs + ${groupData.length} groups in ${Date.now() - t0}ms`);
     } finally {
       setLoadingMessages(false);
       setRefreshing(false);
@@ -126,12 +140,17 @@ export default function SocialScreen({ navigation }: Props) {
 
 
   const loadMyOrgs = useCallback(async () => {
-    setLoadingOrgs(true);
+    const t0 = Date.now();
+    const cached = await staleCache.get<OrgListItem[]>('social:orgs');
+    if (cached) { setMyOrgs(cached); } else { setLoadingOrgs(true); }
+
     try {
       const data = await listMyOrgs();
+      staleCache.set('social:orgs', data, 2 * 60 * 1000);
       setMyOrgs(data);
+      console.log(`[PERF] Social/Orgs: loaded ${data.length} orgs in ${Date.now() - t0}ms`);
     } catch {
-      setMyOrgs([]);
+      if (!cached) setMyOrgs([]);
     } finally {
       setLoadingOrgs(false);
     }
@@ -144,6 +163,13 @@ export default function SocialScreen({ navigation }: Props) {
       const data = await discoverOrgs(query);
       if (gen !== orgSearchGenRef.current) return;
       setDiscoverOrgsList(data);
+      // Sync requestedOrgIds with server-side pending_request flags so that
+      // requests made from OrgProfileScreen are reflected here on re-fetch.
+      setRequestedOrgIds(prev => {
+        const updated = new Set(prev);
+        data.forEach(o => { if (o.pending_request) updated.add(o.id); });
+        return updated;
+      });
     } catch {
       if (gen !== orgSearchGenRef.current) return;
       setDiscoverOrgsList([]);
@@ -237,11 +263,25 @@ export default function SocialScreen({ navigation }: Props) {
     return () => wsManager.off('new_announcement', handler);
   }, [me?.id]);
 
+  // Keep refs in sync with state so focus effects can read the latest values.
+  orgsViewRef.current = orgsView;
+  orgSearchQueryRef.current = orgSearchQuery;
+
   // Reload messages every time this screen gains focus (returning from Chat, GroupChat, or other screens)
   useFocusEffect(
     useCallback(() => {
       loadMessages();
     }, [loadMessages]),
+  );
+
+  // Re-fetch discover orgs on focus so requests made inside OrgProfileScreen
+  // (pending_request flag) are reflected back in the list without manual refresh.
+  useFocusEffect(
+    useCallback(() => {
+      if (orgsViewRef.current === 'Discover') {
+        loadDiscoverOrgs(orgSearchQueryRef.current || undefined);
+      }
+    }, [loadDiscoverOrgs]),
   );
 
   // Reload when switching tabs internally
@@ -498,8 +538,8 @@ export default function SocialScreen({ navigation }: Props) {
 
   const annPreviewText = (ann: LatestAnnouncement): string => {
     if (ann.content) return ann.content;
-    if (ann.has_poll) return '📊 Poll';
-    if (ann.has_media) return '🖼 Photo';
+    if (ann.has_poll) return 'Poll';
+    if (ann.has_media) return 'Photo';
     return '';
   };
 
@@ -561,7 +601,7 @@ export default function SocialScreen({ navigation }: Props) {
               <Text style={styles.joinedBadgeText}>{item.user_role}</Text>
             </View>
           )
-        ) : requestedOrgIds.has(item.id) ? (
+        ) : (item.pending_request || requestedOrgIds.has(item.id)) ? (
           <View style={styles.pendingBadge}>
             <Text style={styles.pendingBadgeText}>Requested</Text>
           </View>
@@ -610,7 +650,15 @@ export default function SocialScreen({ navigation }: Props) {
           )}
         </View>
         <Text style={styles.convoLast} numberOfLines={1}>
-          {item.latest_message?.content ?? 'No messages yet'}
+          {!item.latest_message
+            ? 'No messages yet'
+            : item.latest_message.content
+            ? item.latest_message.content
+            : item.latest_message.media?.length
+            ? (item.latest_message.media.some((m: any) => m.kind === 'video') ? 'Video' : 'Photo')
+            : item.latest_message.shared_post
+            ? 'Shared a post'
+            : ''}
         </Text>
       </View>
       {item.unread_count > 0 && (
@@ -665,9 +713,16 @@ export default function SocialScreen({ navigation }: Props) {
           )}
         </View>
         <Text style={styles.convoLast} numberOfLines={1}>
-          {item.latest_message
-            ? `${item.latest_message.sender_username ?? ''}: ${item.latest_message.content}`
-            : 'No messages yet'}
+          {!item.latest_message
+            ? 'No messages yet'
+            : (() => {
+                const sender = item.latest_message.sender_username ? `${item.latest_message.sender_username}: ` : '';
+                if (item.latest_message.content) return `${sender}${item.latest_message.content}`;
+                if (item.latest_message.media?.length)
+                  return `${sender}${item.latest_message.media.some((m: any) => m.kind === 'video') ? 'Video' : 'Photo'}`;
+                if (item.latest_message.shared_post) return `${sender}Shared a post`;
+                return '';
+              })()}
         </Text>
       </View>
       {item.unread_count > 0 && (

@@ -183,6 +183,9 @@ class MessageListSerializer(serializers.ModelSerializer):
         return obj.sender.username if obj.sender else None
 
     def get_sender_avatar_url(self, obj):
+        avatar_map = self.context.get('sender_avatar_map')
+        if avatar_map is not None:
+            return avatar_map.get(str(obj.sender_id)) or None
         return obj.sender.avatar_url if obj.sender else None
 
     def get_is_read(self, obj):
@@ -213,6 +216,10 @@ class MessageListSerializer(serializers.ModelSerializer):
         return None
 
     def get_media(self, obj):
+        media_map = self.context.get('media_map')
+        if media_map is not None:
+            return media_map.get(str(obj.id), [])
+        # Fallback: per-message query (e.g. WS send path, no bulk prefetch)
         from media.models import MediaLink
         from django.conf import settings
         links = (
@@ -237,27 +244,42 @@ class MessageListSerializer(serializers.ModelSerializer):
         return result
 
     def get_reactions(self, obj):
-        from django.db.models import Count
-        from messaging.models import MessageReaction
-        rows = (
-            MessageReaction.objects
-            .filter(message=obj)
-            .values('emoji')
-            .annotate(count=Count('id'))
-            .order_by('-count', 'emoji')
-        )
-        request = self.context.get('request')
-        user_emojis = set()
-        if request and request.user.is_authenticated:
-            user_emojis = set(
+        reactions = getattr(obj, 'prefetched_reactions', None)
+        if reactions is None:
+            # Fallback: original per-message queries (e.g. WS send path, no prefetch)
+            from django.db.models import Count
+            from messaging.models import MessageReaction
+            rows = (
                 MessageReaction.objects
-                .filter(message=obj, user=request.user)
-                .values_list('emoji', flat=True)
+                .filter(message=obj)
+                .values('emoji')
+                .annotate(count=Count('id'))
+                .order_by('-count', 'emoji')
             )
-        return [
-            {'emoji': r['emoji'], 'count': r['count'], 'user_reacted': r['emoji'] in user_emojis}
-            for r in rows
-        ]
+            request = self.context.get('request')
+            user_emojis = set()
+            if request and request.user.is_authenticated:
+                user_emojis = set(
+                    MessageReaction.objects
+                    .filter(message=obj, user=request.user)
+                    .values_list('emoji', flat=True)
+                )
+            return [
+                {'emoji': r['emoji'], 'count': r['count'], 'user_reacted': r['emoji'] in user_emojis}
+                for r in rows
+            ]
+        request = self.context.get('request')
+        user_id = str(request.user.id) if (request and request.user.is_authenticated) else None
+        counts = {}
+        user_emojis = set()
+        for r in reactions:
+            counts[r.emoji] = counts.get(r.emoji, 0) + 1
+            if user_id and str(r.user_id) == user_id:
+                user_emojis.add(r.emoji)
+        return sorted(
+            [{'emoji': e, 'count': c, 'user_reacted': e in user_emojis} for e, c in counts.items()],
+            key=lambda x: -x['count'],
+        )
 
 
 class MessageSerializer(serializers.ModelSerializer):
@@ -323,7 +345,7 @@ class GroupConversationSerializer(serializers.Serializer):
     group_streak = serializers.IntegerField()
     avatar_url = serializers.CharField(allow_null=True)
     member_count = serializers.IntegerField()
-    latest_message = MessageListSerializer()
+    latest_message = MessageListSerializer(allow_null=True)
     unread_count = serializers.IntegerField()
 
 

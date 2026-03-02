@@ -13,10 +13,14 @@ export interface FeedSearchResults {
   posts: FeedItem[];
 }
 
+// Items loaded per page: 5 for immersive snap-scroll tabs, 10 for main card feed
+const PAGE_SIZE: Record<FeedTab, number> = { friends: 5, gym: 5, org: 5, main: 10 };
+
 export function useFeed() {
   const [items, setItems] = useState<FeedItem[]>(USE_SAMPLE_DATA ? SAMPLE_FEED : []);
   const [activeTab, setActiveTab] = useState<FeedTab>('friends');
-  const [isLoading, setIsLoading] = useState(false);
+  // Start true so the spinner is visible immediately on the first render
+  const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [nextCursor, setNextCursor] = useState<string>('');
@@ -40,7 +44,7 @@ export function useFeed() {
 
     setIsLoading(true);
     try {
-      const { items: data, nextCursor: cursor } = await fetchFeed(tab);
+      const { items: data, nextCursor: cursor } = await fetchFeed(tab, undefined, PAGE_SIZE[tab]);
       setItems(data);
       setNextCursor(cursor);
     } catch {
@@ -60,7 +64,7 @@ export function useFeed() {
 
     setIsLoadingMore(true);
     try {
-      const { items: data, nextCursor: cursor } = await fetchFeed(activeTab, nextCursor);
+      const { items: data, nextCursor: cursor } = await fetchFeed(activeTab, nextCursor, PAGE_SIZE[activeTab]);
       setItems((prev) => [...prev, ...data]);
       setNextCursor(cursor);
     } catch {
@@ -79,6 +83,8 @@ export function useFeed() {
   const changeTab = useCallback(
     (tab: FeedTab) => {
       setActiveTab(tab);
+      setItems([]);
+      setNextCursor('');
       setSearchQuery('');
       setSearchResults(null);
       loadFeed(tab);

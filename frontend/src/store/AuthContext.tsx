@@ -3,6 +3,7 @@ import * as SecureStore from 'expo-secure-store';
 import { AppState, Platform } from 'react-native';
 import { UserBrief } from '../types/user';
 import { wsManager } from '../services/websocket';
+import { setTokenCache } from '../api/client';
 
 const getItem = async (key: string) => {
   if (Platform.OS === 'web') return localStorage.getItem(key);
@@ -27,6 +28,7 @@ interface AuthState {
   setCurrentStreak: (n: number) => void;
   signIn: (token: string, user: UserBrief) => Promise<void>;
   signOut: () => Promise<void>;
+  updateUser: (user: UserBrief) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthState>({
@@ -37,6 +39,7 @@ const AuthContext = createContext<AuthState>({
   setCurrentStreak: () => {},
   signIn: async () => {},
   signOut: async () => {},
+  updateUser: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -78,6 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signIn = async (newToken: string, newUser: UserBrief) => {
     await setItem('auth_token', newToken);
     await setItem('auth_user', JSON.stringify(newUser));
+    setTokenCache(newToken); // keep apiClient interceptor in sync immediately
     setToken(newToken);
     setUser(newUser);
     setCurrentStreak(newUser.streak ?? 0);
@@ -86,13 +90,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     await deleteItem('auth_token');
     await deleteItem('auth_user');
+    setTokenCache(undefined); // clear interceptor cache
     setToken(null);
     setUser(null);
     setCurrentStreak(0);
   };
 
+  const updateUser = async (newUser: UserBrief) => {
+    await setItem('auth_user', JSON.stringify(newUser));
+    setUser(newUser);
+    setCurrentStreak(newUser.streak ?? 0);
+  };
+
   return (
-    <AuthContext.Provider value={{ token, user, isLoading, currentStreak, setCurrentStreak, signIn, signOut }}>
+    <AuthContext.Provider value={{ token, user, isLoading, currentStreak, setCurrentStreak, signIn, signOut, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

@@ -5,16 +5,35 @@ from gyms import services
 
 class GymListSerializer(serializers.ModelSerializer):
     is_enrolled = serializers.SerializerMethodField()
+    busy_level = serializers.SerializerMethodField()
+    top_lifter = serializers.SerializerMethodField()
 
     class Meta:
         model = Gym
-        fields = ['id', 'name', 'address', 'latitude', 'longitude', 'rating', 'rating_count', 'is_enrolled']
+        fields = ['id', 'name', 'address', 'latitude', 'longitude', 'rating', 'rating_count',
+                  'is_enrolled', 'busy_level', 'top_lifter']
 
     def get_is_enrolled(self, obj):
+        enrolled_ids = self.context.get('enrolled_ids')
+        if enrolled_ids is not None:
+            return str(obj.id) in enrolled_ids
+        # Fallback for callers that don't pass enrolled_ids
         request = self.context.get('request')
         if request and request.user.is_authenticated:
             return request.user.enrolled_gyms.filter(id=obj.id).exists()
         return False
+
+    def get_busy_level(self, obj):
+        busy_map = self.context.get('busy_map')
+        if busy_map is None:
+            return None
+        return busy_map.get(str(obj.id))
+
+    def get_top_lifter(self, obj):
+        top_lifter_map = self.context.get('top_lifter_map')
+        if top_lifter_map is None:
+            return None
+        return top_lifter_map.get(str(obj.id))
 
 
 class GymDetailSerializer(serializers.ModelSerializer):

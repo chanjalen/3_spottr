@@ -37,6 +37,7 @@ import {
 import { Gym, BusyLevel, TopLifter, WorkoutInvite } from '../../types/gym';
 import { colors, spacing, typography } from '../../theme';
 import { GymsStackParamList, RootStackParamList } from '../../navigation/types';
+import { staleCache } from '../../utils/staleCache';
 
 type RootNav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -109,16 +110,31 @@ export default function GymDetailScreen({ navigation, route }: Props) {
   const [inviteError, setInviteError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
+    const cacheKey = `gym:detail:${gymId}`;
+    type CachedDetail = { gym: Gym; busyLevel: BusyLevel | null; topLifters: TopLifter[]; invites: WorkoutInvite[] };
+
+    // ── Serve cached data immediately ────────────────────────────────────────
+    const cached = await staleCache.get<CachedDetail>(cacheKey);
+    if (cached) {
+      setGym(cached.gym);
+      setBusyLevel(cached.busyLevel);
+      setTopLifters(cached.topLifters);
+      setInvites(cached.invites);
+      setLoading(false);
+    }
+
+    // ── Always fetch fresh in background ─────────────────────────────────────
     try {
       const [gymData, busy, lifters] = await Promise.all([
         fetchGymDetail(gymId),
         fetchBusyLevel(gymId).catch(() => null),
         fetchGymLeaderboard(gymId, 'total').catch(() => []),
       ]);
+      const inviteData = await fetchWorkoutInvites(gymId).catch(() => []);
+      staleCache.set(cacheKey, { gym: gymData, busyLevel: busy, topLifters: lifters, invites: inviteData }, 2 * 60 * 1000);
       setGym(gymData);
       setBusyLevel(busy);
       setTopLifters(lifters);
-      const inviteData = await fetchWorkoutInvites(gymId).catch(() => []);
       setInvites(inviteData);
     } catch {
       // ignore

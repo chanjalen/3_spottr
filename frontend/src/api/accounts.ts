@@ -1,4 +1,5 @@
-import { apiClient } from './client';
+import axios from 'axios';
+import { apiClient, API_BASE_URL } from './client';
 import { UserBrief, UserProfile, UserSearchResult, PersonalRecord } from '../types/user';
 
 export async function apiLogin(username: string, password: string): Promise<{ token: string; user: UserBrief }> {
@@ -7,15 +8,51 @@ export async function apiLogin(username: string, password: string): Promise<{ to
 }
 
 export async function apiSignup(data: {
-  username: string;
   email: string;
-  display_name: string;
-  phone_number: string;
-  birthday: string;
   password: string;
-  password_confirm: string;
+  birthday: string;
 }): Promise<{ token: string; user: UserBrief }> {
   const res = await apiClient.post('/accounts/api/signup/', data);
+  return res.data;
+}
+
+/** Verify email with the provisional token (not yet in SecureStore). */
+export async function apiVerifyEmail(
+  code: string,
+  provisionalToken: string,
+): Promise<{ user: UserBrief }> {
+  const res = await axios.post(
+    `${API_BASE_URL}/accounts/api/verify-email/`,
+    { code },
+    { headers: { Authorization: `Token ${provisionalToken}`, 'Content-Type': 'application/json' } },
+  );
+  return res.data;
+}
+
+/** Resend verification email using the provisional token. */
+export async function apiResendVerification(provisionalToken: string): Promise<void> {
+  await axios.post(
+    `${API_BASE_URL}/accounts/api/resend-verification/`,
+    {},
+    { headers: { Authorization: `Token ${provisionalToken}`, 'Content-Type': 'application/json' } },
+  );
+}
+
+export async function apiCheckUsernameAvailable(
+  username: string,
+): Promise<{ available: boolean; username: string; error?: string }> {
+  const res = await apiClient.get('/accounts/api/username-available/', { params: { username } });
+  return res.data;
+}
+
+export async function apiUpdateOnboarding(data: {
+  display_name?: string;
+  username?: string;
+  phone_number?: string;
+  skip_phone?: boolean;
+  workout_frequency?: number;
+}): Promise<{ user: UserBrief }> {
+  const res = await apiClient.patch('/accounts/api/onboarding/', data);
   return res.data;
 }
 
@@ -115,6 +152,10 @@ export async function updateUserProfile(data: {
   display_name?: string;
   bio?: string;
 }): Promise<UserBrief> {
-  const res = await apiClient.patch('/accounts/api/me/', data);
+  const res = await apiClient.patch('/accounts/api/me/profile/', data);
   return res.data;
+}
+
+export async function apiDeleteAccount(): Promise<void> {
+  await apiClient.delete('/accounts/api/me/delete/');
 }

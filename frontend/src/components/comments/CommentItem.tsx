@@ -3,7 +3,6 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Avatar from '../common/Avatar';
 import ReplyItem from './ReplyItem';
-import CommentInput from './CommentInput';
 import { Comment } from '../../types/feed';
 import { timeAgo } from '../../utils/timeAgo';
 import { colors, spacing, typography } from '../../theme';
@@ -14,7 +13,7 @@ interface CommentItemProps {
   onLike: (id: number) => void;
   onDelete: (id: number) => void;
   onLoadReplies: (id: number) => void;
-  onReply: (commentId: number, text: string) => void;
+  onStartReply: (commentId: number, username: string) => void;
 }
 
 export default function CommentItem({
@@ -23,10 +22,9 @@ export default function CommentItem({
   onLike,
   onDelete,
   onLoadReplies,
-  onReply,
+  onStartReply,
 }: CommentItemProps) {
   const [showReplies, setShowReplies] = useState(false);
-  const [showReplyInput, setShowReplyInput] = useState(false);
 
   if (!comment?.user) return null;
 
@@ -37,12 +35,6 @@ export default function CommentItem({
       onLoadReplies(comment.id);
     }
     setShowReplies(!showReplies);
-  };
-
-  const handleReply = (text: string) => {
-    onReply(comment.id, text);
-    setShowReplyInput(false);
-    setShowReplies(true);
   };
 
   return (
@@ -83,7 +75,7 @@ export default function CommentItem({
             </Pressable>
             <Pressable
               style={styles.actionBtn}
-              onPress={() => setShowReplyInput(!showReplyInput)}
+              onPress={() => onStartReply(comment.id, comment.user.username)}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
               <Feather name="corner-down-right" size={14} color={colors.textMuted} />
@@ -123,12 +115,6 @@ export default function CommentItem({
             onDelete={onDelete}
           />
         ))}
-
-      {showReplyInput && (
-        <View style={styles.replyInputWrap}>
-          <CommentInput placeholder="Reply..." onSubmit={handleReply} />
-        </View>
-      )}
     </View>
   );
 }
@@ -199,9 +185,5 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xs,
     fontFamily: typography.family.medium,
     color: colors.primary,
-  },
-  replyInputWrap: {
-    paddingLeft: spacing['2xl'],
-    marginTop: spacing.sm,
   },
 });
