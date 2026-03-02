@@ -1068,15 +1068,21 @@ def get_comments_view(request, post_id):
     """
     post = get_object_or_404(Post, id=post_id)
 
-    # Only get top-level comments (not replies)
-    comments = Comment.objects.filter(post=post, parent_comment__isnull=True).select_related('user').order_by('created_at')
+    # Only get top-level comments (not replies), sorted by likes desc then newest first
+    user_liked_sq = Reaction.objects.filter(comment=OuterRef('pk'), user=request.user)
+    comments = (
+        Comment.objects
+        .filter(post=post, parent_comment__isnull=True)
+        .select_related('user')
+        .annotate(
+            reaction_count=Count('reactions'),
+            user_liked_ann=Exists(user_liked_sq),
+        )
+        .order_by('-reaction_count', '-created_at')
+    )
 
-    comments_data = []
-    for comment in comments:
-        like_count = Reaction.objects.filter(comment=comment).count()
-        user_liked = Reaction.objects.filter(comment=comment, user=request.user).exists()
-
-        comments_data.append({
+    comments_data = [
+        {
             'id': str(comment.id),
             'user': {
                 'id': str(comment.user.id),
@@ -1086,11 +1092,13 @@ def get_comments_view(request, post_id):
             },
             'description': comment.description,
             'created_at': comment.created_at.isoformat(),
-            'like_count': like_count,
-            'user_liked': user_liked,
+            'like_count': comment.reaction_count,
+            'user_liked': comment.user_liked_ann,
             'is_owner': comment.user == request.user,
             'reply_count': comment.reply_count,
-        })
+        }
+        for comment in comments
+    ]
 
     return DRFResponse({
         'success': True,
@@ -1107,15 +1115,21 @@ def get_checkin_comments_view(request, checkin_id):
     """
     checkin = get_object_or_404(QuickWorkout, id=checkin_id)
 
-    # Only get top-level comments (not replies)
-    comments = Comment.objects.filter(quick_workout=checkin, parent_comment__isnull=True).select_related('user').order_by('created_at')
+    # Only get top-level comments (not replies), sorted by likes desc then newest first
+    user_liked_sq = Reaction.objects.filter(comment=OuterRef('pk'), user=request.user)
+    comments = (
+        Comment.objects
+        .filter(quick_workout=checkin, parent_comment__isnull=True)
+        .select_related('user')
+        .annotate(
+            reaction_count=Count('reactions'),
+            user_liked_ann=Exists(user_liked_sq),
+        )
+        .order_by('-reaction_count', '-created_at')
+    )
 
-    comments_data = []
-    for comment in comments:
-        like_count = Reaction.objects.filter(comment=comment).count()
-        user_liked = Reaction.objects.filter(comment=comment, user=request.user).exists()
-
-        comments_data.append({
+    comments_data = [
+        {
             'id': str(comment.id),
             'user': {
                 'id': str(comment.user.id),
@@ -1125,11 +1139,13 @@ def get_checkin_comments_view(request, checkin_id):
             },
             'description': comment.description,
             'created_at': comment.created_at.isoformat(),
-            'like_count': like_count,
-            'user_liked': user_liked,
+            'like_count': comment.reaction_count,
+            'user_liked': comment.user_liked_ann,
             'is_owner': comment.user == request.user,
             'reply_count': comment.reply_count,
-        })
+        }
+        for comment in comments
+    ]
 
     return DRFResponse({
         'success': True,
