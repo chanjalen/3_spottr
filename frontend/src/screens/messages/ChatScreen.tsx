@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { wsManager } from '../../services/websocket';
 import {
   Alert,
+  Dimensions,
+  Keyboard,
   ScrollView,
   View,
   Text,
@@ -20,6 +22,10 @@ import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { pickMedia } from '../../utils/pickMedia';
 import { VideoView, useVideoPlayer } from 'expo-video';
+import * as Clipboard from 'expo-clipboard';
+import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system/legacy';
+import { BlurView } from 'expo-blur';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
@@ -80,6 +86,24 @@ function VideoPlayerModal({ url, onClose }: { url: string; onClose: () => void }
   );
 }
 
+// ── Image viewer modal ────────────────────────────────────────────────────────
+
+function ImageViewerModal({ url, onClose }: { url: string; onClose: () => void }) {
+  return (
+    <Modal visible animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+      <View style={{ flex: 1, backgroundColor: '#000' }}>
+        <Image source={{ uri: url }} style={{ flex: 1 }} contentFit="contain" />
+        <Pressable
+          onPress={onClose}
+          style={{ position: 'absolute', top: 52, right: 20, padding: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 }}
+        >
+          <Feather name="x" size={24} color="#fff" />
+        </Pressable>
+      </View>
+    </Modal>
+  );
+}
+
 // ── Screen ───────────────────────────────────────────────────────────────────
 
 export default function ChatScreen({ navigation, route }: Props) {
@@ -105,7 +129,11 @@ export default function ChatScreen({ navigation, route }: Props) {
   const hasReadyAttachment = pendingAttachments.some(a => !!a.assetId && !a.failed);
   const [contextMsg, setContextMsg] = useState<Message | null>(null);
   const [contextVisible, setContextVisible] = useState(false);
+  const [contextPageY, setContextPageY] = useState<number>(0);
+  const [contextMsgHeight, setContextMsgHeight] = useState<number>(56);
   const [videoPlayerUrl, setVideoPlayerUrl] = useState<string | null>(null);
+  const [imageViewerUrl, setImageViewerUrl] = useState<string | null>(null);
+  const [kbVisible, setKbVisible] = useState(false);
   const flatRef = useRef<FlashList<ListItem>>(null);
   const newestIdRef = useRef<string | null>(null);
   const pendingTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -363,6 +391,24 @@ export default function ChatScreen({ navigation, route }: Props) {
     return () => wsManager.off('queue_item_flushed', handler);
   }, []);
 
+  // ── Keyboard visibility + scroll-to-bottom ───────────────────────────────
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, () => {
+      setKbVisible(true);
+      const isNearBottom =
+        contentHeightRef.current - scrollOffsetRef.current - listHeightRef.current < 150;
+      if (isNearBottom) {
+        requestAnimationFrame(() => {
+          flatRef.current?.scrollToEnd({ animated: Platform.OS === 'ios' });
+        });
+      }
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => setKbVisible(false));
+    return () => { showSub.remove(); hideSub.remove(); };
+  }, []);
+
   // ── Send helpers ──────────────────────────────────────────────────────────
 
   const _startSendTimer = (clientMsgId: string) => {
@@ -561,7 +607,7 @@ export default function ChatScreen({ navigation, route }: Props) {
     }
   }, [partnerId]);
 
-  const handleLongPress = useCallback((msg: Message) => {
+  const handleLongPress = useCallback((msg: Message, pageY: number, height: number) => {
     if (msg.status === 'failed') {
       const hasMedia = msg.media && msg.media.length > 0;
       Alert.alert(
@@ -583,6 +629,8 @@ export default function ChatScreen({ navigation, route }: Props) {
       return;
     }
     setContextMsg(msg);
+    setContextPageY(pageY);
+    setContextMsgHeight(height);
     setContextVisible(true);
   }, [handleRetry]);
 
@@ -615,6 +663,40 @@ export default function ChatScreen({ navigation, route }: Props) {
       );
     } catch {}
   }, []);
+
+  const handleContextCopy = useCallback(() => {
+    if (!contextMsg?.content) return;
+    setContextVisible(false);
+    setContextMsg(null);
+    Clipboard.setStringAsync(contextMsg.content);
+  }, [contextMsg]);
+
+  const handleContextSave = useCallback(async () => {
+    const msg = contextMsg;
+    if (!msg?.media?.length) return;
+    setContextVisible(false);
+    setContextMsg(null);
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Allow camera roll access to save media.');
+        return;
+      }
+      for (const m of msg.media) {
+        let filename = m.url.split('/').pop()?.split('?')[0] ?? '';
+        if (!filename.includes('.')) {
+          filename = `spottr_${Date.now()}.${m.kind === 'video' ? 'mp4' : 'jpg'}`;
+        }
+        const dest = `${FileSystem.cacheDirectory}${filename}`;
+        const result = await FileSystem.downloadAsync(m.url, dest);
+        if (result.status !== 200) throw new Error(`Download failed (${result.status})`);
+        await MediaLibrary.createAssetAsync(result.uri);
+      }
+      Alert.alert('Saved', 'Media saved to your camera roll.');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'Failed to save media.');
+    }
+  }, [contextMsg]);
 
   // ── List helpers ──────────────────────────────────────────────────────────
 
@@ -652,6 +734,7 @@ export default function ChatScreen({ navigation, route }: Props) {
       onLongPress={handleLongPress}
       onTapReaction={handleTapReaction}
       onVideoPress={setVideoPlayerUrl}
+      onImagePress={setImageViewerUrl}
     />
   ), [myId, handleNavigateToProfile, handleRetry, handleLongPress, handleTapReaction]);
 
@@ -743,7 +826,7 @@ export default function ChatScreen({ navigation, route }: Props) {
       </View>
 
       {/* Input bar */}
-      <View style={[styles.inputArea, { paddingBottom: insets.bottom + spacing.sm }]}>
+      <View style={[styles.inputArea, { paddingBottom: kbVisible ? spacing.sm : insets.bottom + spacing.sm }]}>
         {pendingAttachments.length > 0 && (
           <ScrollView
             horizontal
@@ -814,28 +897,131 @@ export default function ChatScreen({ navigation, route }: Props) {
         </View>
       </View>
 
-      {/* Reaction emoji picker */}
-      <Modal
-        visible={contextVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setContextVisible(false)}
-      >
-        <Pressable style={styles.contextOverlay} onPress={() => setContextVisible(false)}>
-          <View style={styles.contextCard}>
-            <View style={styles.emojiRow}>
-              {EMOJI_QUICK.map((e) => (
-                <Pressable key={e} style={styles.emojiBtn} onPress={() => handleReact(e)}>
-                  <Text style={styles.emojiText}>{e}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        </Pressable>
-      </Modal>
+      {/* Long-press context menu — focused view */}
+      {(() => {
+        const SCREEN_H = Dimensions.get('window').height;
+        const EMOJI_SECTION_H = 76; // emoji bar height + gap below it
+        const ACTIONS_EST_H = 96;   // actions card + gap above it
+        const rawTop = contextPageY - EMOJI_SECTION_H;
+        const maxTop = SCREEN_H - EMOJI_SECTION_H - contextMsgHeight - ACTIONS_EST_H - 24;
+        const clampedTop = Math.max(insets.top + 8, Math.min(rawTop, maxTop));
+        const isOwn = contextMsg ? String(contextMsg.sender) === myId : false;
+        return (
+          <Modal
+            visible={contextVisible}
+            transparent
+            animationType="fade"
+            onRequestClose={() => setContextVisible(false)}
+          >
+            <BlurView intensity={55} tint="dark" style={StyleSheet.absoluteFill}>
+              <Pressable style={styles.contextOverlay} onPress={() => setContextVisible(false)}>
+                <View style={[styles.contextContent, {
+                  top: clampedTop,
+                  alignItems: isOwn ? 'flex-end' : 'flex-start',
+                }]}>
+
+                  {/* 1. Emoji reactions bar */}
+                  <View style={styles.contextEmojiBar}>
+                    {EMOJI_QUICK.map((e) => (
+                      <Pressable key={e} style={styles.emojiBtn} onPress={() => handleReact(e)}>
+                        <Text style={styles.emojiText}>{e}</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+
+                  {/* 2. Message preview (lifted into focus) */}
+                  {contextMsg && (
+                    <View style={styles.contextMsgRow}>
+                      {!isOwn && (
+                        <Avatar
+                          uri={contextMsg.sender_avatar_url}
+                          name={contextMsg.sender_username ?? '?'}
+                          size={28}
+                        />
+                      )}
+                      <Pressable
+                        style={[styles.contextPreviewWrap, { alignItems: isOwn ? 'flex-end' : 'flex-start' }]}
+                        onPress={() => {}}
+                      >
+                        {!!contextMsg.media?.length && (
+                          <View style={styles.contextMediaRow}>
+                            {contextMsg.media.map((m, idx) =>
+                              m.kind === 'video' ? (
+                                <VideoThumbnail
+                                  key={idx}
+                                  videoUrl={m.url}
+                                  thumbnailUrl={m.thumbnail_url}
+                                  style={styles.contextMediaThumb}
+                                  iconSize={32}
+                                />
+                              ) : (
+                                <Image key={idx} source={{ uri: m.thumbnail_url ?? m.url }} style={styles.contextMediaThumb} contentFit="cover" />
+                              )
+                            )}
+                          </View>
+                        )}
+                        {contextMsg.shared_post && (
+                          <View style={styles.contextPostChip}>
+                            <Feather name="file-text" size={16} color={colors.textMuted} />
+                            <Text style={styles.contextPostChipText}>
+                              {contextMsg.shared_post.author_username
+                                ? `@${contextMsg.shared_post.author_username}'s post`
+                                : 'Shared post'}
+                            </Text>
+                          </View>
+                        )}
+                        {!!contextMsg.content && (
+                          <View style={[
+                            styles.contextBubble,
+                            isOwn ? styles.contextBubbleOwn : styles.contextBubbleOther,
+                          ]}>
+                            <Text
+                              style={[styles.contextBubbleText,
+                                isOwn ? styles.contextBubbleTextOwn : styles.contextBubbleTextOther,
+                              ]}
+                              numberOfLines={6}
+                            >
+                              {contextMsg.content}
+                            </Text>
+                          </View>
+                        )}
+                      </Pressable>
+                    </View>
+                  )}
+
+                  {/* 3. Action buttons */}
+                  {(!!contextMsg?.content && !contextMsg?.shared_post || !!(contextMsg?.media?.length)) && (
+                    <Pressable style={[styles.contextActionsCard, { alignSelf: 'stretch' }]} onPress={() => {}}>
+                      {!!contextMsg?.content && !contextMsg?.shared_post && (
+                        <Pressable style={styles.contextAction} onPress={handleContextCopy}>
+                          <Feather name="copy" size={16} color={colors.textPrimary} />
+                          <Text style={styles.contextActionText}>Copy Text</Text>
+                        </Pressable>
+                      )}
+                      {!!contextMsg?.content && !contextMsg?.shared_post && !!(contextMsg?.media?.length) && (
+                        <View style={styles.contextDivider} />
+                      )}
+                      {!!(contextMsg?.media?.length) && (
+                        <Pressable style={styles.contextAction} onPress={handleContextSave}>
+                          <Feather name="download" size={16} color={colors.textPrimary} />
+                          <Text style={styles.contextActionText}>Save to Camera Roll</Text>
+                        </Pressable>
+                      )}
+                    </Pressable>
+                  )}
+
+                </View>
+              </Pressable>
+            </BlurView>
+          </Modal>
+        );
+      })()}
 
       {videoPlayerUrl != null && (
         <VideoPlayerModal url={videoPlayerUrl} onClose={() => setVideoPlayerUrl(null)} />
+      )}
+      {imageViewerUrl != null && (
+        <ImageViewerModal url={imageViewerUrl} onClose={() => setImageViewerUrl(null)} />
       )}
     </KeyboardAvoidingView>
   );
@@ -928,21 +1114,96 @@ const styles = StyleSheet.create({
   sendBtnDisabled: { backgroundColor: colors.iconInactive },
   contextOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
+  },
+  contextContent: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    paddingHorizontal: spacing.xl,
+    gap: 12,
+  },
+  contextEmojiBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
+    backgroundColor: colors.background.card,
+    borderRadius: 32,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  emojiBtn: { padding: spacing.sm },
+  emojiText: { fontSize: 28 },
+  contextMsgRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: spacing.xs,
+    width: '100%',
+  },
+  contextPreviewWrap: {
+    flex: 1,
+    alignItems: 'flex-start',
+    gap: 4,
+  },
+  contextMediaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  contextMediaThumb: {
+    width: 180,
+    height: 180,
+    borderRadius: 14,
+    backgroundColor: '#111',
+    overflow: 'hidden',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  contextCard: {
+  contextPostChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background.elevated,
+    borderRadius: 12,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    gap: spacing.sm,
+  },
+  contextPostChipText: {
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
+  },
+  contextBubble: {
+    borderRadius: 16,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    maxWidth: '100%',
+  },
+  contextBubbleOwn: { backgroundColor: colors.primary, borderBottomRightRadius: 4 },
+  contextBubbleOther: { backgroundColor: colors.background.elevated, borderBottomLeftRadius: 4 },
+  contextBubbleText: { fontSize: typography.size.sm, lineHeight: 20 },
+  contextBubbleTextOwn: { color: '#fff' },
+  contextBubbleTextOther: { color: colors.textPrimary },
+  contextActionsCard: {
+    width: '100%',
     backgroundColor: colors.background.card,
     borderRadius: 16,
-    padding: spacing.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.2,
     shadowRadius: 12,
     elevation: 6,
   },
-  emojiRow: { flexDirection: 'row', gap: spacing.sm },
-  emojiBtn: { padding: spacing.sm },
-  emojiText: { fontSize: 28 },
+  contextDivider: { height: 1, backgroundColor: colors.border.subtle },
+  contextAction: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    gap: 12,
+  },
+  contextActionText: { fontSize: typography.size.sm, color: colors.textPrimary, fontWeight: '500' },
 });
