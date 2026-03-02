@@ -224,6 +224,12 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 CELERY_TASK_TRACK_STARTED = True
 # Set CELERY_TASK_ALWAYS_EAGER = True in test settings to run tasks inline
+CELERY_BEAT_SCHEDULE = {
+    'reset-broken-streaks-hourly': {
+        'task': 'workouts.tasks.reset_broken_streaks',
+        'schedule': 3600,  # every hour (UTC) — catches each user's 3 AM window
+    },
+}
 
 # Email — from address used for all outgoing mail
 # Using Resend's shared sender until spottr.app domain is verified.

@@ -436,7 +436,7 @@ def api_update_avatar_view(request):
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated])
 def api_update_profile_view(request):
-    """Update display_name and/or bio for the authenticated user."""
+    """Update display_name, bio, and/or timezone for the authenticated user."""
     user = request.user
     changed = []
     if 'display_name' in request.data:
@@ -445,6 +445,15 @@ def api_update_profile_view(request):
     if 'bio' in request.data:
         user.bio = str(request.data['bio']).strip()
         changed.append('bio')
+    if 'timezone' in request.data:
+        import zoneinfo
+        tz_str = str(request.data['timezone']).strip()
+        try:
+            zoneinfo.ZoneInfo(tz_str)  # validate it's a real IANA timezone
+            user.timezone = tz_str
+            changed.append('timezone')
+        except (zoneinfo.ZoneInfoNotFoundError, KeyError):
+            pass  # ignore invalid timezone strings silently
     if changed:
         user.save(update_fields=changed)
     return Response(_user_brief(user))
