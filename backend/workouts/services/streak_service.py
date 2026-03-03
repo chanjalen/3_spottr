@@ -272,6 +272,9 @@ def get_streak_details(user):
 
     rest_info = get_weekly_rest_day_info(user)
 
+    from workouts.services.achievements_service import get_user_achievements
+    achievements = get_user_achievements(user, weekly_active_days, user.weekly_workout_goal)
+
     return {
         'current_streak': user.current_streak,
         'longest_streak': user.longest_streak,
@@ -281,6 +284,7 @@ def get_streak_details(user):
         'weekly_workout_count': weekly_active_days,
         'weekly_workout_goal': user.weekly_workout_goal,
         'week_days': week_days,
+        'achievements': achievements,
     }
 
 
