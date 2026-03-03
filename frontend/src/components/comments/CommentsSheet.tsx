@@ -24,8 +24,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FeedItem } from '../../types/feed';
 import CommentItem from './CommentItem';
 import CommentInput from './CommentInput';
+import { MentionableUser } from '../messages/MentionAutocomplete';
 import { useComments } from '../../hooks/useComments';
 import { useAuth } from '../../store/AuthContext';
+import { fetchFriends, searchUsers } from '../../api/accounts';
 import { colors, spacing, typography } from '../../theme';
 
 const { height: SCREEN_H } = Dimensions.get('window');
@@ -47,9 +49,73 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange }: C
   const bottomNavHeight = 52 + Math.max(insets.bottom, 16);
   const [visible, setVisible] = useState(false);
   const [replyingTo, setReplyingTo] = useState<{ commentId: string; username: string } | null>(null);
+  const [baseMentionUsers, setBaseMentionUsers] = useState<MentionableUser[]>([]);
+  const [searchedMentionUsers, setSearchedMentionUsers] = useState<MentionableUser[]>([]);
+  const mentionSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const itemRef = useRef<FeedItem | null>(null);
   useEffect(() => { itemRef.current = item; }, [item]);
+
+  // ── Load mentionable users when a post's comments open ────────────────────
+  useEffect(() => {
+    if (!item) return;
+    const postAuthor = item.user;
+    const myId = String(user?.id ?? '');
+    fetchFriends().then((friends) => {
+      const seen = new Set<string>();
+      const list: MentionableUser[] = [];
+      // Post author first (if not self)
+      if (postAuthor && String(postAuthor.id) !== myId) {
+        seen.add(String(postAuthor.id));
+        list.push({
+          id: String(postAuthor.id),
+          username: postAuthor.username,
+          display_name: postAuthor.display_name,
+          avatar_url: postAuthor.avatar_url,
+        });
+      }
+      // Then mutual friends
+      for (const f of friends) {
+        if (String(f.id) !== myId && !seen.has(String(f.id))) {
+          seen.add(String(f.id));
+          list.push({
+            id: String(f.id),
+            username: f.username,
+            display_name: f.display_name,
+            avatar_url: f.avatar_url,
+          });
+        }
+      }
+      setBaseMentionUsers(list);
+    }).catch(() => {});
+  }, [item]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleMentionQueryChange = useCallback((query: string | null) => {
+    if (mentionSearchTimer.current) clearTimeout(mentionSearchTimer.current);
+    if (!query) {
+      setSearchedMentionUsers([]);
+      return;
+    }
+    mentionSearchTimer.current = setTimeout(async () => {
+      try {
+        const results = await searchUsers(query);
+        const myId = String(user?.id ?? '');
+        const baseIds = new Set(baseMentionUsers.map((u) => u.id));
+        setSearchedMentionUsers(
+          results
+            .filter((u) => String(u.id) !== myId && !baseIds.has(String(u.id)))
+            .map((u) => ({
+              id: String(u.id),
+              username: u.username,
+              display_name: u.display_name,
+              avatar_url: u.avatar_url,
+            })),
+        );
+      } catch {
+        // ignore
+      }
+    }, 300);
+  }, [baseMentionUsers, user]);
 
   const sheetY        = useSharedValue(SCREEN_H);
   const dragStartY    = useSharedValue(SNAP_OPEN);
@@ -220,6 +286,8 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange }: C
                 postComment(currentItem, text, photo);
               }
             }}
+            mentionableUsers={[...baseMentionUsers, ...searchedMentionUsers]}
+            onMentionQueryChange={handleMentionQueryChange}
           />
           <Animated.View style={keyboardSpacerStyle} />
         </View>

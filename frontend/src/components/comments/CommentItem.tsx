@@ -3,6 +3,7 @@ import { View, Text, Pressable, Image, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Avatar from '../common/Avatar';
 import ReplyItem from './ReplyItem';
+import MentionText from '../common/MentionText';
 import { Comment } from '../../types/feed';
 import { timeAgo } from '../../utils/timeAgo';
 import { colors, spacing, typography } from '../../theme';
@@ -54,7 +55,10 @@ export default function CommentItem({
             <Text style={styles.inlineText}>
               <Text style={styles.username}>{comment.user.display_name}</Text>
               {!!comment.description && (
-                <Text style={styles.commentText}> {comment.description}</Text>
+                <MentionText
+                  content={` ${comment.description}`}
+                  textStyle={styles.commentText}
+                />
               )}
             </Text>
 

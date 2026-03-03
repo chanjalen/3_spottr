@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Pressable, Image, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Avatar from '../common/Avatar';
+import MentionText from '../common/MentionText';
 import { Comment } from '../../types/feed';
 import { timeAgo } from '../../utils/timeAgo';
 import { colors, spacing, typography } from '../../theme';
@@ -32,7 +33,7 @@ export default function ReplyItem({
           <Text style={styles.time}>{timeAgo(reply.created_at)}</Text>
         </View>
         {!!reply.description && (
-          <Text style={styles.text}>{reply.description}</Text>
+          <MentionText content={reply.description} textStyle={styles.text} />
         )}
         {!!reply.photo_url && (
           <Image

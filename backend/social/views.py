@@ -1180,6 +1180,20 @@ def get_time_ago(dt):
         return f'{days}d ago'
 
 
+def _notify_mentions(actor, text, target_type, target_id, context_type=None, context_id=None):
+    """Parse @username mentions from comment text and send mention notifications."""
+    import re
+    from accounts.models import User as UserModel
+    from notifications.dispatcher import notify_mention
+    if not text:
+        return
+    usernames = set(re.findall(r'@(\w+)', text))
+    if not usernames:
+        return
+    for u in UserModel.objects.filter(username__in=usernames):
+        notify_mention(actor, u, target_type, target_id, context_type=context_type, context_id=context_id)
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def add_comment_view(request, post_id):
@@ -1223,7 +1237,13 @@ def add_comment_view(request, post_id):
         comment.save(update_fields=['photo'])
 
     from notifications.dispatcher import notify_comment
+    from notifications.models import Notification
     notify_comment(request.user, post, comment)
+    _notify_mentions(
+        request.user, text,
+        Notification.TargetType.COMMENT, comment.id,
+        context_type=Notification.TargetType.POST, context_id=post.id,
+    )
 
     return DRFResponse({
         'success': True,
@@ -1287,7 +1307,13 @@ def add_checkin_comment_view(request, checkin_id):
         comment.save(update_fields=['photo'])
 
     from notifications.dispatcher import notify_comment_on_checkin
+    from notifications.models import Notification
     notify_comment_on_checkin(request.user, checkin, comment)
+    _notify_mentions(
+        request.user, text,
+        Notification.TargetType.COMMENT, comment.id,
+        context_type=Notification.TargetType.QUICK_WORKOUT, context_id=checkin.id,
+    )
 
     return DRFResponse({
         'success': True,
@@ -1452,7 +1478,13 @@ def add_comment_reply_view(request, comment_id):
         reply.save(update_fields=['photo'])
 
     from notifications.dispatcher import notify_comment_reply
+    from notifications.models import Notification
     notify_comment_reply(request.user, parent_comment, reply)
+    _notify_mentions(
+        request.user, text,
+        Notification.TargetType.COMMENT, reply.id,
+        context_type=Notification.TargetType.COMMENT, context_id=parent_comment.id,
+    )
 
     return DRFResponse({
         'success': True,
