@@ -983,6 +983,8 @@ def toggle_like_checkin_view(request, checkin_id):
             type='like'
         )
         liked = True
+        from notifications.dispatcher import notify_like_checkin
+        notify_like_checkin(request.user, checkin)
 
     like_count = Reaction.objects.filter(quick_workout=checkin).count()
 
@@ -1050,6 +1052,8 @@ def toggle_like_comment_view(request, comment_id):
             type='like'
         )
         liked = True
+        from notifications.dispatcher import notify_like_comment
+        notify_like_comment(request.user, comment)
 
     like_count = Reaction.objects.filter(comment=comment).count()
 

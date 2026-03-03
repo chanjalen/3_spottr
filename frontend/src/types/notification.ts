@@ -1,8 +1,11 @@
 export type NotificationType =
   | 'like_post'
+  | 'like_checkin'
+  | 'like_comment'
   | 'comment'
   | 'follow'
   | 'pr'
+  | 'mention'
   | 'workout_invite'
   | 'join_request';
 

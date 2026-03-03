@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { wsManager } from '../../services/websocket';
 import {
   Alert,
@@ -31,6 +31,7 @@ import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
 import VideoThumbnail from '../../components/common/VideoThumbnail';
 import MessageRow, { type ListItem } from '../../components/messages/MessageRow';
+import MentionAutocomplete, { type MentionableUser } from '../../components/messages/MentionAutocomplete';
 import { fetchDMMessages, fetchMessageReactionDetails, markMessagesRead, reactToMessage, sendDM } from '../../api/messaging';
 import ReactionDetailModal from '../../components/messages/ReactionDetailModal';
 import { uploadMedia } from '../../api/organizations';
@@ -123,6 +124,15 @@ export default function ChatScreen({ navigation, route }: Props) {
   const [oldestId, setOldestId] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [text, setText] = useState('');
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+
+  const mentionableUsers = useMemo<MentionableUser[]>(() => [{
+    id: partnerId,
+    username: partnerUsername,
+    display_name: partnerName,
+    avatar_url: partnerAvatar,
+  }], [partnerId, partnerUsername, partnerName, partnerAvatar]);
+
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [picking, setPicking] = useState(false);
   const [sendingMedia, setSendingMedia] = useState(false);
@@ -152,6 +162,19 @@ export default function ChatScreen({ navigation, route }: Props) {
 
   const myId = String(me?.id ?? '');
   const _mountTime = useRef(Date.now());
+
+  // ── Mention helpers ────────────────────────────────────────────────────────
+
+  const detectMention = useCallback((value: string) => {
+    const match = value.match(/@(\w*)$/);
+    setMentionQuery(match ? match[1] : null);
+  }, []);
+
+  const handleMentionSelect = useCallback((user: MentionableUser) => {
+    const newText = text.replace(/@(\w*)$/, `@${user.username} `);
+    setText(newText);
+    setMentionQuery(null);
+  }, [text]);
 
   // ── Cleanup timers on unmount ──────────────────────────────────────────────
   useEffect(() => {
@@ -730,6 +753,10 @@ export default function ChatScreen({ navigation, route }: Props) {
     }
   }, []);
 
+  const handleMentionPress = useCallback((username: string) => {
+    navigation.navigate('Profile', { username });
+  }, [navigation]);
+
   const renderItem = useCallback(({ item }: { item: ListItem }) => (
     <MessageRow
       item={item}
@@ -742,8 +769,9 @@ export default function ChatScreen({ navigation, route }: Props) {
       onLongPressReaction={handleLongPressReaction}
       onVideoPress={setVideoPlayerUrl}
       onImagePress={setImageViewerUrl}
+      onMentionPress={handleMentionPress}
     />
-  ), [myId, handleNavigateToProfile, handleRetry, handleLongPress, handleTapReaction, handleLongPressReaction]);
+  ), [myId, handleNavigateToProfile, handleRetry, handleLongPress, handleTapReaction, handleLongPressReaction, handleMentionPress]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -873,6 +901,13 @@ export default function ChatScreen({ navigation, route }: Props) {
             ))}
           </ScrollView>
         )}
+        {mentionQuery !== null && (
+          <MentionAutocomplete
+            query={mentionQuery}
+            users={mentionableUsers}
+            onSelect={handleMentionSelect}
+          />
+        )}
         <View style={styles.inputBar}>
           <Pressable style={styles.mediaPickBtn} onPress={handlePickMedia} disabled={sendingMedia || uploadingMedia || picking}>
             {picking
@@ -883,7 +918,7 @@ export default function ChatScreen({ navigation, route }: Props) {
           <TextInput
             style={styles.input}
             value={text}
-            onChangeText={setText}
+            onChangeText={(v) => { detectMention(v); setText(v); }}
             placeholder="Message…"
             placeholderTextColor={colors.textMuted}
             multiline

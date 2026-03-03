@@ -31,7 +31,9 @@ import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
 import VideoThumbnail from '../../components/common/VideoThumbnail';
 import MessageRow, { type ListItem } from '../../components/messages/MessageRow';
+import MentionAutocomplete, { type MentionableUser } from '../../components/messages/MentionAutocomplete';
 import { fetchGroupMessages, fetchMessageReactionDetails, markMessagesRead, reactToMessage, sendGroupMessage } from '../../api/messaging';
+import { fetchGroupDetail } from '../../api/groups';
 import ReactionDetailModal from '../../components/messages/ReactionDetailModal';
 import { uploadMedia } from '../../api/organizations';
 import { Message } from '../../types/messaging';
@@ -123,6 +125,8 @@ export default function GroupChatScreen({ navigation, route }: Props) {
   const [oldestId, setOldestId] = useState<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [text, setText] = useState('');
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionableUsers, setMentionableUsers] = useState<MentionableUser[]>([]);
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([]);
   const [picking, setPicking] = useState(false);
   const [sendingMedia, setSendingMedia] = useState(false);
@@ -151,6 +155,35 @@ export default function GroupChatScreen({ navigation, route }: Props) {
 
   const myId = String(me?.id ?? '');
   const _mountTime = useRef(Date.now());
+
+  // ── Mention helpers ────────────────────────────────────────────────────────
+
+  const detectMention = useCallback((value: string) => {
+    const match = value.match(/@(\w*)$/);
+    setMentionQuery(match ? match[1] : null);
+  }, []);
+
+  const handleMentionSelect = useCallback((user: MentionableUser) => {
+    const newText = text.replace(/@(\w*)$/, `@${user.username} `);
+    setText(newText);
+    setMentionQuery(null);
+  }, [text]);
+
+  // ── Fetch group members for mentions ──────────────────────────────────────
+  useEffect(() => {
+    fetchGroupDetail(groupId).then(detail => {
+      setMentionableUsers(
+        detail.members
+          .filter(m => String(m.user) !== myId)
+          .map(m => ({
+            id: String(m.user),
+            username: m.username,
+            display_name: m.display_name,
+            avatar_url: m.avatar_url,
+          })),
+      );
+    }).catch(() => {});
+  }, [groupId, myId]);
 
   // ── Cleanup timers on unmount ──────────────────────────────────────────────
   useEffect(() => {
@@ -712,6 +745,10 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     if (username) navigation.navigate('Profile', { username });
   }, [navigation]);
 
+  const handleMentionPress = useCallback((username: string) => {
+    navigation.navigate('Profile', { username });
+  }, [navigation]);
+
   const keyExtractor = useCallback((item: ListItem) => String(item.id), []);
 
   const ItemSeparator = useCallback(() => <View style={{ height: spacing.sm }} />, []);
@@ -743,8 +780,9 @@ export default function GroupChatScreen({ navigation, route }: Props) {
       onLongPressReaction={handleLongPressReaction}
       onVideoPress={setVideoPlayerUrl}
       onImagePress={setImageViewerUrl}
+      onMentionPress={handleMentionPress}
     />
-  ), [myId, handleNavigateToProfile, handleRetry, handleLongPress, handleTapReaction, handleLongPressReaction]);
+  ), [myId, handleNavigateToProfile, handleRetry, handleLongPress, handleTapReaction, handleLongPressReaction, handleMentionPress]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -878,6 +916,13 @@ export default function GroupChatScreen({ navigation, route }: Props) {
             ))}
           </ScrollView>
         )}
+        {mentionQuery !== null && (
+          <MentionAutocomplete
+            query={mentionQuery}
+            users={mentionableUsers}
+            onSelect={handleMentionSelect}
+          />
+        )}
         <View style={styles.inputBar}>
           <Pressable style={styles.mediaPickBtn} onPress={handlePickMedia} disabled={sendingMedia || uploadingMedia || picking}>
             {picking
@@ -888,7 +933,7 @@ export default function GroupChatScreen({ navigation, route }: Props) {
           <TextInput
             style={styles.input}
             value={text}
-            onChangeText={setText}
+            onChangeText={(v) => { detectMention(v); setText(v); }}
             placeholder="Message group…"
             placeholderTextColor={colors.textMuted}
             multiline
