@@ -19,7 +19,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import { CompositeNavigationProp, useFocusEffect } from '@react-navigation/native';
+import { CompositeNavigationProp, RouteProp, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Avatar from '../../components/common/Avatar';
 import { fetchDMConversations, fetchGroupConversations, sendZap } from '../../api/messaging';
@@ -42,15 +42,20 @@ type Props = {
     NativeStackNavigationProp<SocialStackParamList, 'SocialHome'>,
     NativeStackNavigationProp<RootStackParamList>
   >;
+  route: RouteProp<SocialStackParamList, 'SocialHome'>;
 };
 
 type SocialTab = 'Messages' | 'Orgs';
 
-export default function SocialScreen({ navigation }: Props) {
+export default function SocialScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { dm, group, org, optimisticDecrement, optimisticIncrement } = useUnreadCount();
   const { user: me } = useAuth();
-  const [activeTab, setActiveTab] = useState<SocialTab>('Messages');
+  const [activeTab, setActiveTab] = useState<SocialTab>(route.params?.tab ?? 'Messages');
+
+  useEffect(() => {
+    if (route.params?.tab) setActiveTab(route.params.tab);
+  }, [route.params?.tab]);
 
   // ── Messages state ────────────────────────────────────────────────────────
   const [dms, setDms] = useState<Conversation[]>([]);

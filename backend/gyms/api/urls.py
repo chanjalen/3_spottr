@@ -12,6 +12,7 @@ urlpatterns = [
     path('gyms/<str:gym_id>/leaderboard/', views.gym_leaderboard, name='gym-leaderboard'),
     path('gyms/<str:gym_id>/unenroll/', views.gym_unenroll, name='gym-unenroll'),
     path('me/gym/', views.gym_current, name='gym-current'),
+    path('user/<str:username>/gyms/', views.user_gyms, name='user-gyms'),
 
     # Workout Invites
     path('invites/', views.invite_list_create, name='invite-list-create'),

@@ -74,6 +74,7 @@ export interface FeedItem {
   description: string;
   location_name: string | null;
   photo_url: string | null;
+  video_url?: string | null;
   link_url: string | null;
   like_count: number;
   comment_count: number;
@@ -88,9 +89,10 @@ export interface FeedItem {
 }
 
 export interface Comment {
-  id: number;
+  id: string;
   user: UserBrief;
   description: string;
+  photo_url?: string | null;
   created_at: string;
   like_count: number;
   user_liked: boolean;

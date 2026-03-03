@@ -6,8 +6,9 @@ export const ENDPOINTS = {
   feed: `${BASE}/feed/`,
   searchFeed: `${BASE}/search/`,
 
-  likePost: (id: ID) => `${BASE}/post/${id}/like/`,
-  likeCheckin: (id: ID) => `${BASE}/checkin/${id}/like/`,
+  // Likes — use DRF token-auth endpoints under /api/social/
+  likePost: (id: ID) => `/api/social/post/${id}/like/`,
+  likeCheckin: (id: ID) => `/api/social/checkin/${id}/like/`,
   likeComment: (id: ID) => `${BASE}/comment/${id}/like/`,
 
   postComments: (id: ID) => `${BASE}/post/${id}/comments/`,
@@ -25,8 +26,8 @@ export const ENDPOINTS = {
   createPost: '/api/social/post/create/',
   createCheckin: '/api/social/checkin/create/',
 
-  votePoll: (id: ID) => `${BASE}/poll/${id}/vote/`,
-  pollVoters: (id: ID) => `${BASE}/poll/${id}/voters/`,
+  votePoll: (id: ID) => `/api/social/poll/${id}/vote/`,
+  pollVoters: (id: ID) => `/api/social/poll/${id}/voters/`,
 
   userPostThumbnails: (username: string) => `/accounts/api/user/${username}/post-thumbnails/`,
   userPosts: (username: string) => `/accounts/api/user/${username}/posts/`,

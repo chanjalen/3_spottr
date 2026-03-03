@@ -1,18 +1,63 @@
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
 
 from social.models import Follow
+from common.throttles import SocialWriteRateThrottle
+
+
+# ── Likes ─────────────────────────────────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def like_post(request, post_id):
+    """Toggle like on a post (token-auth friendly)."""
+    from social.models import Post, Reaction
+    post = get_object_or_404(Post, id=post_id)
+    existing = Reaction.objects.filter(post=post, user=request.user).first()
+    if existing:
+        existing.delete()
+        liked = False
+    else:
+        Reaction.objects.create(post=post, user=request.user, type='like')
+        liked = True
+        try:
+            from notifications.dispatcher import notify_like_post
+            notify_like_post(request.user, post)
+        except Exception:
+            pass
+    like_count = Reaction.objects.filter(post=post).count()
+    return Response({'liked': liked, 'like_count': like_count})
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+def like_checkin(request, checkin_id):
+    """Toggle like on a check-in (token-auth friendly)."""
+    from social.models import QuickWorkout, Reaction
+    checkin = get_object_or_404(QuickWorkout, id=checkin_id)
+    existing = Reaction.objects.filter(quick_workout=checkin, user=request.user).first()
+    if existing:
+        existing.delete()
+        liked = False
+    else:
+        Reaction.objects.create(quick_workout=checkin, user=request.user, type='like')
+        liked = True
+    like_count = Reaction.objects.filter(quick_workout=checkin).count()
+    return Response({'liked': liked, 'like_count': like_count})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+@throttle_classes([SocialWriteRateThrottle])
 def create_post(request):
     """
     Create a post. Accepts multipart/form-data for photo/video uploads.
     Fields: text, workout_id (optional), pr_exercise_name, pr_value, pr_unit,
-            photo (file), video (file).
+            photo (file), video (file),
+            poll_question, poll_options[] (repeat), poll_duration (hours).
     """
     from social.models import Post
 
@@ -24,9 +69,21 @@ def create_post(request):
     photo = request.FILES.get('photo')
     video = request.FILES.get('video')
 
+    # Poll fields
+    poll_question = (request.data.get('poll_question') or '').strip()
+    poll_options = request.data.getlist('poll_options[]') if hasattr(request.data, 'getlist') else request.data.get('poll_options[]', [])
+    if isinstance(poll_options, str):
+        poll_options = [poll_options]
+    poll_options = [o.strip() for o in poll_options if o.strip()]
+    try:
+        poll_duration = max(1, int(float(request.data.get('poll_duration') or 24)))
+    except (ValueError, TypeError):
+        poll_duration = 24
+    has_poll = bool(poll_question and len(poll_options) >= 2)
+
     has_pr = bool(pr_exercise_name and pr_value)
 
-    if not text and not photo and not video and not has_pr and not workout_id:
+    if not text and not photo and not video and not has_pr and not workout_id and not has_poll:
         return Response({'success': False, 'error': 'Post must have content'}, status=400)
 
     if len(text) > 500:
@@ -45,24 +102,30 @@ def create_post(request):
     )
 
     if photo:
-        post.photo = photo
-        post.save(update_fields=['photo'])
         try:
-            from media.utils import create_media_asset
-            from media.models import MediaLink
-            asset = create_media_asset(request.user, photo, post.photo.name, 'image', already_saved=True)
-            MediaLink.objects.create(asset=asset, destination_type='post', destination_id=str(post.id), type='inline')
+            post.photo = photo
+            post.save(update_fields=['photo'])
+            try:
+                from media.utils import create_media_asset
+                from media.models import MediaLink
+                asset = create_media_asset(request.user, photo, post.photo.name, 'image', already_saved=True)
+                MediaLink.objects.create(asset=asset, destination_type='post', destination_id=str(post.id), type='inline')
+            except Exception:
+                pass
         except Exception:
             pass
 
     if video:
-        post.video = video
-        post.save(update_fields=['video'])
         try:
-            from media.utils import create_media_asset
-            from media.models import MediaLink
-            asset = create_media_asset(request.user, video, post.video.name, 'video', already_saved=True)
-            MediaLink.objects.create(asset=asset, destination_type='post', destination_id=str(post.id), type='inline')
+            post.video = video
+            post.save(update_fields=['video'])
+            try:
+                from media.utils import create_media_asset
+                from media.models import MediaLink
+                asset = create_media_asset(request.user, video, post.video.name, 'video', already_saved=True)
+                MediaLink.objects.create(asset=asset, destination_type='post', destination_id=str(post.id), type='inline')
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -82,11 +145,29 @@ def create_post(request):
             achieved_date=date.today(),
         )
 
+    if has_poll:
+        from social.models import Poll, PollOption
+        from django.utils import timezone
+        from datetime import timedelta
+        poll = Poll.objects.create(
+            post=post,
+            question=poll_question,
+            duration_hours=poll_duration,
+            ends_at=timezone.now() + timedelta(hours=poll_duration),
+        )
+        for idx, option_text in enumerate(poll_options):
+            PollOption.objects.create(
+                poll=poll,
+                text=option_text,
+                order=idx,
+            )
+
     return Response({'success': True, 'post_id': str(post.id)})
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([SocialWriteRateThrottle])
 def create_checkin(request):
     """
     Create a quick check-in (QuickWorkout). Updates streak.
@@ -95,8 +176,8 @@ def create_checkin(request):
     from social.models import QuickWorkout
     from django.db.models import F as DjF
 
-    activity = (request.data.get('activity') or '').strip()
-    description = (request.data.get('description') or '').strip()
+    activity = (request.data.get('activity') or '').strip()[:50]
+    description = (request.data.get('description') or '').strip()[:300]
     gym_id = (request.data.get('gym_id') or '').strip()
     location_name = (request.data.get('location_name') or '').strip()
     workout_id = (request.data.get('workout_id') or '').strip()
@@ -182,6 +263,105 @@ def create_checkin(request):
         pass
 
     return Response({'success': True, 'checkin_id': str(checkin.id)})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def vote_poll(request, poll_id):
+    """
+    Vote on a poll option. Allows changing vote.
+    Body: { "option_id": <id> }
+    """
+    from social.models import Poll, PollOption, PollVote
+
+    try:
+        poll = Poll.objects.get(id=poll_id)
+    except Poll.DoesNotExist:
+        return Response({'error': 'Poll not found'}, status=404)
+
+    if not poll.is_active:
+        return Response({'error': 'This poll has ended'}, status=400)
+
+    option_id = request.data.get('option_id')
+    if not option_id:
+        return Response({'error': 'option_id is required'}, status=400)
+
+    try:
+        option = PollOption.objects.get(id=option_id, poll=poll)
+    except PollOption.DoesNotExist:
+        return Response({'error': 'Option not found'}, status=404)
+
+    existing_vote = PollVote.objects.filter(poll=poll, user=request.user).first()
+
+    if existing_vote:
+        if str(existing_vote.option.id) != str(option_id):
+            old_option = existing_vote.option
+            old_option.votes = max(0, old_option.votes - 1)
+            old_option.save()
+            existing_vote.option = option
+            existing_vote.save()
+            option.votes += 1
+            option.save()
+    else:
+        PollVote.objects.create(poll=poll, user=request.user, option=option)
+        option.votes += 1
+        option.save()
+
+    total_votes = poll.get_total_votes()
+    options_data = []
+    for opt in poll.options.all().order_by('order'):
+        options_data.append({
+            'id': opt.id,
+            'text': opt.text,
+            'votes': opt.votes,
+            'order': opt.order,
+        })
+
+    return Response({
+        'id': poll.id,
+        'question': poll.question,
+        'options': options_data,
+        'total_votes': total_votes,
+        'user_voted': option.id,
+        'user_vote_id': option.id,
+        'is_active': poll.is_active,
+        'ends_at': poll.ends_at.isoformat() if poll.ends_at else None,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def poll_voters(request, poll_id):
+    """
+    Return per-option voter lists. Only accessible by the post owner.
+    """
+    from social.models import Poll, PollVote
+
+    try:
+        poll = Poll.objects.get(id=poll_id)
+    except Poll.DoesNotExist:
+        return Response({'error': 'Poll not found'}, status=404)
+
+    if poll.post.user != request.user:
+        return Response({'error': 'Permission denied'}, status=403)
+
+    options_data = []
+    for opt in poll.options.all().order_by('order'):
+        votes = PollVote.objects.filter(option=opt).select_related('user')
+        voters = []
+        for v in votes:
+            voters.append({
+                'username': v.user.username,
+                'display_name': getattr(v.user, 'display_name', '') or v.user.username,
+                'avatar_url': getattr(v.user, 'avatar_url', None),
+            })
+        options_data.append({
+            'id': str(opt.id),
+            'text': opt.text,
+            'voters': voters,
+        })
+
+    return Response({'options': options_data})
 
 
 def _lb_user(u):
@@ -319,7 +499,7 @@ def mutual_follows(request):
     from accounts.models import User
     qs = User.objects.filter(id__in=mutual_ids)
 
-    query = request.query_params.get('q', '').strip()
+    query = request.query_params.get('q', '').strip()[:100]
     if query:
         qs = qs.filter(username__icontains=query)
 
@@ -335,3 +515,83 @@ def mutual_follows(request):
     ]
 
     return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def vote_poll(request, poll_id):
+    from social.models import Poll, PollOption, PollVote
+    try:
+        poll = Poll.objects.get(id=poll_id)
+    except Poll.DoesNotExist:
+        return Response({'error': 'Poll not found'}, status=404)
+
+    if not poll.is_active:
+        return Response({'error': 'This poll has ended'}, status=400)
+
+    option_id = request.data.get('option_id')
+    if not option_id:
+        return Response({'error': 'option_id is required'}, status=400)
+
+    try:
+        option = PollOption.objects.get(id=option_id, poll=poll)
+    except PollOption.DoesNotExist:
+        return Response({'error': 'Option not found'}, status=404)
+
+    existing_vote = PollVote.objects.filter(poll=poll, user=request.user).first()
+    if existing_vote:
+        if str(existing_vote.option.id) != str(option_id):
+            old_option = existing_vote.option
+            old_option.votes = max(0, old_option.votes - 1)
+            old_option.save()
+            existing_vote.option = option
+            existing_vote.save()
+            option.votes += 1
+            option.save()
+    else:
+        PollVote.objects.create(poll=poll, user=request.user, option=option)
+        option.votes += 1
+        option.save()
+
+    total_votes = poll.get_total_votes()
+    options_data = [
+        {'id': opt.id, 'text': opt.text, 'votes': opt.votes, 'order': opt.order}
+        for opt in poll.options.all().order_by('order')
+    ]
+    return Response({
+        'id': poll.id,
+        'question': poll.question,
+        'options': options_data,
+        'total_votes': total_votes,
+        'user_vote_id': option.id,
+        'is_active': poll.is_active,
+        'ends_at': poll.ends_at.isoformat() if poll.ends_at else None,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def poll_voters(request, poll_id):
+    from social.models import Poll, PollVote
+    try:
+        poll = Poll.objects.get(id=poll_id)
+    except Poll.DoesNotExist:
+        return Response({'error': 'Poll not found'}, status=404)
+
+    if poll.post.user != request.user:
+        return Response({'error': 'Permission denied'}, status=403)
+
+    options_data = []
+    for opt in poll.options.all().order_by('order'):
+        votes = PollVote.objects.filter(option=opt).select_related('user')
+        voters = [
+            {
+                'username': v.user.username,
+                'display_name': getattr(v.user, 'display_name', '') or v.user.username,
+                'avatar_url': getattr(v.user, 'avatar_url', None),
+            }
+            for v in votes
+        ]
+        options_data.append({'id': str(opt.id), 'text': opt.text, 'voters': voters})
+
+    return Response({'options': options_data})

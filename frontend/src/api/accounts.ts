@@ -1,9 +1,14 @@
 import axios from 'axios';
 import { apiClient, API_BASE_URL } from './client';
-import { UserBrief, UserProfile, UserSearchResult, PersonalRecord } from '../types/user';
+import { UserBrief, UserProfile, UserSearchResult, SuggestedUser, PersonalRecord } from '../types/user';
 
 export async function apiLogin(username: string, password: string): Promise<{ token: string; user: UserBrief }> {
   const res = await apiClient.post('/accounts/api/login/', { username, password });
+  return res.data;
+}
+
+export async function apiUpdateProfile(data: { display_name?: string; bio?: string; timezone?: string }): Promise<UserBrief> {
+  const res = await apiClient.patch('/accounts/api/me/profile/', data);
   return res.data;
 }
 
@@ -71,6 +76,11 @@ export async function searchUsers(q: string): Promise<UserSearchResult[]> {
   return res.data?.results ?? [];
 }
 
+export async function fetchSuggestedUsers(limit = 20): Promise<SuggestedUser[]> {
+  const res = await apiClient.get('/accounts/api/suggested-users/', { params: { limit } });
+  return res.data?.results ?? [];
+}
+
 export async function toggleFollow(targetUsername: string): Promise<{ following: boolean }> {
   const res = await apiClient.post('/accounts/api/follow-toggle/', { username: targetUsername });
   return res.data;
@@ -96,6 +106,11 @@ export async function fetchUserPRs(username: string): Promise<PersonalRecord[]> 
   return Array.isArray(res.data) ? res.data : [];
 }
 
+export async function fetchMutualFollowers(username: string): Promise<UserBrief[]> {
+  const res = await apiClient.get(`/accounts/api/user/${username}/mutual-followers/`);
+  return Array.isArray(res.data) ? res.data : [];
+}
+
 export async function fetchFriends(username?: string): Promise<UserBrief[]> {
   const [followers, following] = await Promise.all([
     fetchFollowers(username),
@@ -110,12 +125,14 @@ export async function savePR(data: {
   value: number;
   unit: string;
   videoUri?: string;
+  prId?: string;
 }): Promise<PersonalRecord> {
   if (data.videoUri) {
     const formData = new FormData();
     formData.append('exercise_name', data.exercise_name);
     formData.append('value', String(data.value));
     formData.append('unit', data.unit);
+    if (data.prId) formData.append('pr_id', data.prId);
     const filename = data.videoUri.split('/').pop() ?? 'video.mp4';
     const fileType = filename.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4';
     formData.append('video', { uri: data.videoUri, name: filename, type: fileType } as any);
@@ -128,6 +145,7 @@ export async function savePR(data: {
     exercise_name: data.exercise_name,
     value: data.value,
     unit: data.unit,
+    ...(data.prId ? { pr_id: data.prId } : {}),
   });
   return res.data;
 }

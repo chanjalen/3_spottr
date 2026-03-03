@@ -43,7 +43,7 @@ export type GymsStackParamList = {
 
 // ─── Social Stack ─────────────────────────────────────────────────────────────
 export type SocialStackParamList = {
-  SocialHome: undefined;
+  SocialHome: { tab?: 'Messages' | 'Orgs' } | undefined;
   Profile: ProfileParams;
   UserList: UserListParams;
 };
@@ -71,7 +71,7 @@ export type RootStackParamList = {
   WorkoutLog: { fromCheckin?: boolean } | undefined;
   ActiveWorkout: { workoutId: string; fromCheckin?: boolean };
   StreakDetails: undefined;
-  EditProfile: undefined;
+  EditProfile: { bio?: string; display_name?: string } | undefined;
   GroupProfile: { groupId: string };
   Chat: { partnerId: string; partnerName: string; partnerUsername: string; partnerAvatar: string | null };
   GroupChat: { groupId: string; groupName: string; groupAvatar: string | null };
@@ -86,4 +86,5 @@ export type RootStackParamList = {
   CheckInSelection: undefined;
   CameraCapture: undefined;
   CheckInReview: { mediaUri: string; mediaType: 'photo' | 'video' };
+  FindFriends: undefined;
 };

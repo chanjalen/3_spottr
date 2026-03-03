@@ -71,6 +71,16 @@ export interface StreakWeekDay {
   is_future: boolean;
 }
 
+export interface Achievement {
+  id: string;
+  name: string;
+  emoji: string;
+  desc: string;
+  rarity: 'common' | 'rare' | 'epic' | 'legendary';
+  earned: boolean;
+  user_pct: number; // % of all users who have earned this (0–100)
+}
+
 export interface StreakDetails {
   current_streak: number;
   longest_streak: number;
@@ -84,6 +94,7 @@ export interface StreakDetails {
   weekly_workout_count: number;
   weekly_workout_goal: number;
   week_days: StreakWeekDay[];
+  achievements?: Achievement[];
 }
 
 export interface CalendarPost {

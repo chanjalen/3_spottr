@@ -72,6 +72,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     )
 
     # ── Preferences ──
+    timezone = models.CharField(max_length=50, default='UTC')
     weekly_workout_goal = models.IntegerField(default=4)
     weight_unit = models.CharField(
         max_length=5,

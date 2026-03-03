@@ -14,7 +14,6 @@ import {
   Platform,
   Alert,
   TextInput,
-  TouchableWithoutFeedback,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -27,15 +26,15 @@ import Avatar from '../../components/common/Avatar';
 import FeedCard from '../../components/feed/FeedCard';
 import CommentsSheet from '../../components/comments/CommentsSheet';
 import { useAuth } from '../../store/AuthContext';
-import { fetchProfile, toggleFollow, fetchUserPRs, savePR, deletePR } from '../../api/accounts';
+import { fetchProfile, toggleFollow, fetchUserPRs, savePR, deletePR, fetchMutualFollowers } from '../../api/accounts';
 import { fetchExerciseCatalog, fetchCalendarPosts } from '../../api/workouts';
-import { fetchUserPostThumbnails, fetchUserPosts, fetchUserCheckins, CheckinItem } from '../../api/feed';
+import { fetchUserPostThumbnails, fetchUserPosts, fetchUserCheckins, CheckinItem, deletePost } from '../../api/feed';
 import CheckinViewer from '../../components/profile/CheckinViewer';
-import { fetchMyGyms } from '../../api/gyms';
-import { listMyOrgs, OrgListItem } from '../../api/organizations';
+import { fetchMyGyms, fetchUserGyms } from '../../api/gyms';
+import { listMyOrgs, fetchUserOrgs, OrgListItem } from '../../api/organizations';
 import { useToggleLike } from '../../hooks/useToggleLike';
 import { usePollVote } from '../../hooks/usePollVote';
-import { UserProfile, PersonalRecord } from '../../types/user';
+import { UserProfile, PersonalRecord, UserBrief } from '../../types/user';
 import { ExerciseCatalogItem, CalendarPost } from '../../types/workout';
 import { FeedItem } from '../../types/feed';
 import { Gym } from '../../types/gym';
@@ -50,7 +49,6 @@ type ProfileTab = 'Posts' | 'Calendar' | 'Records';
 
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
-const POPUP_WIDTH = SCREEN_WIDTH - 48; // calModalCenter padding: 24 on each side
 const GRID_PADDING = spacing.xl * 2;
 const THUMB_GAP = 1;
 const THUMB_SIZE = (SCREEN_WIDTH - GRID_PADDING - THUMB_GAP * 2) / 3;
@@ -88,16 +86,25 @@ export default function ProfileScreen({ navigation, route }: Props) {
   const checkinsLoadingRef = useRef(false);
   const [checkinViewerVisible, setCheckinViewerVisible] = useState(false);
 
-  // Gyms + Orgs (own profile only)
+  // Gyms + Orgs (profile user's data)
   const [gyms, setGyms] = useState<Gym[]>([]);
   const [orgs, setOrgs] = useState<OrgListItem[]>([]);
+
+  // Mutual connections (non-own profile only)
+  const [mutualFollowers, setMutualFollowers] = useState<UserBrief[]>([]);
+  const [myGyms, setMyGyms] = useState<Gym[]>([]);
+  const [myOrgs, setMyOrgs] = useState<OrgListItem[]>([]);
+  const [mutualModalVisible, setMutualModalVisible] = useState(false);
+  const [mutualSearch, setMutualSearch] = useState('');
 
   // View toggles
   const [showAllPRs, setShowAllPRs] = useState(false);
   const [allPostsModalVisible, setAllPostsModalVisible] = useState(false);
+  const [allPostsViewerItem, setAllPostsViewerItem] = useState<FeedItem | null>(null);
 
   // Add PR modal
   const [prModalVisible, setPrModalVisible] = useState(false);
+  const [editingPr, setEditingPr] = useState<PersonalRecord | null>(null);
   const [prExercise, setPrExercise] = useState('');
   const [prValue, setPrValue] = useState('');
   const [prUnit, setPrUnit] = useState('lbs');
@@ -158,12 +165,39 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
   useEffect(() => { load(); }, [load]);
 
-  // Load gyms + orgs for own profile
+  // Load gyms + orgs; for non-own profiles also load mutual connection data
   useEffect(() => {
-    if (!isOwn) return;
-    fetchMyGyms().then(setGyms).catch(() => {});
-    listMyOrgs().then(setOrgs).catch(() => {});
-  }, [isOwn]);
+    if (isOwn) {
+      fetchMyGyms().then(setGyms).catch(() => {});
+      listMyOrgs().then(setOrgs).catch(() => {});
+    } else {
+      fetchUserGyms(username).then(setGyms).catch(() => {});
+      fetchUserOrgs(username).then(setOrgs).catch(() => {});
+      fetchMutualFollowers(username).then(setMutualFollowers).catch(() => {});
+      fetchMyGyms().then(setMyGyms).catch(() => {});
+      listMyOrgs().then(setMyOrgs).catch(() => {});
+    }
+  }, [isOwn, username]);
+
+  const mutualGyms = useMemo(() => {
+    if (isOwn) return [];
+    const myGymIds = new Set(myGyms.map(g => g.id));
+    return gyms.filter(g => myGymIds.has(g.id));
+  }, [isOwn, gyms, myGyms]);
+
+  const mutualOrgs = useMemo(() => {
+    if (isOwn) return [];
+    const myOrgIds = new Set(myOrgs.map(o => o.id));
+    return orgs.filter(o => myOrgIds.has(o.id));
+  }, [isOwn, orgs, myOrgs]);
+
+  const filteredMutualFollowers = useMemo(() => {
+    if (!mutualSearch.trim()) return mutualFollowers;
+    const q = mutualSearch.toLowerCase();
+    return mutualFollowers.filter(u =>
+      u.username.toLowerCase().includes(q) || u.display_name.toLowerCase().includes(q)
+    );
+  }, [mutualFollowers, mutualSearch]);
 
   // ── Load posts ────────────────────────────────────────────────────────────────
 
@@ -343,9 +377,12 @@ export default function ProfileScreen({ navigation, route }: Props) {
         value: parseFloat(prValue),
         unit: prUnit,
         videoUri: prVideoUri ?? undefined,
+        prId: editingPr?.id,
       });
       setPrs((prev) => {
-        const idx = prev.findIndex((p) => p.exercise_name.toLowerCase() === saved.exercise_name.toLowerCase());
+        const idx = editingPr
+          ? prev.findIndex((p) => p.id === editingPr.id)
+          : prev.findIndex((p) => p.exercise_name.toLowerCase() === saved.exercise_name.toLowerCase());
         if (idx >= 0) {
           const next = [...prev];
           next[idx] = saved;
@@ -353,17 +390,41 @@ export default function ProfileScreen({ navigation, route }: Props) {
         }
         return [saved, ...prev];
       });
-      setPrModalVisible(false);
-      setPrExercise('');
-      setPrValue('');
-      setPrUnit('lbs');
-      setPrVideoUri(null);
+      closePrModal();
     } catch {
       Alert.alert('Error', 'Could not save PR. Please try again.');
     } finally {
       setPrSaving(false);
     }
   };
+
+  const closePrModal = () => {
+    setPrModalVisible(false);
+    setEditingPr(null);
+    setPrExercise('');
+    setPrValue('');
+    setPrUnit('lbs');
+    setPrVideoUri(null);
+  };
+
+  const handleEditPR = (pr: PersonalRecord) => {
+    setEditingPr(pr);
+    setPrExercise(pr.exercise_name);
+    setPrValue(String(pr.value));
+    setPrUnit(pr.unit);
+    setPrVideoUri(null); // new video upload; existing video shown via pr.video_url
+    setPrModalVisible(true);
+  };
+
+  const handleDeletePost = useCallback(async (item: FeedItem) => {
+    try {
+      await deletePost(item.id);
+      setPosts((prev) => prev.filter((p) => p.id !== item.id));
+      setAllPostsViewerItem((cur) => (cur?.id === item.id ? null : cur));
+    } catch {
+      Alert.alert('Error', 'Could not delete post.');
+    }
+  }, []);
 
   const handleDeletePR = (pr: PersonalRecord) => {
     Alert.alert('Delete PR', `Remove PR for ${pr.exercise_name}?`, [
@@ -433,7 +494,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
         </Pressable>
         <Text style={styles.headerTitle}>@{profile.username}</Text>
         {isOwn ? (
-          <Pressable onPress={() => navigation.navigate('EditProfile')} style={styles.iconBtn}>
+          <Pressable onPress={() => navigation.navigate('EditProfile', { bio: profile.bio, display_name: profile.display_name })} style={styles.iconBtn}>
             <Feather name="settings" size={20} color={colors.textPrimary} />
           </Pressable>
         ) : (
@@ -514,6 +575,14 @@ export default function ProfileScreen({ navigation, route }: Props) {
           {profile.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
         </View>
 
+        {/* ── Mutual connections (other profiles only) ─────────────────────────── */}
+        {!isOwn && mutualFollowers.length > 0 && (
+          <MutualConnectionsSection
+            mutualFollowers={mutualFollowers}
+            onShowFollowers={() => setMutualModalVisible(true)}
+          />
+        )}
+
         {/* ── Stats chips ──────────────────────────────────────────────────────── */}
         <View style={styles.chipRow}>
           <Pressable style={styles.statChip} onPress={() => navigation.navigate('StreakDetails')}>
@@ -542,6 +611,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
                     {profile.is_following ? 'Following' : 'Follow'}
                   </Text>}
             </Pressable>
+            {profile.is_following && profile.is_followed_by && (
             <Pressable
               style={[styles.actionBtn, styles.actionBtnFlex, styles.actionBtnOutline]}
               onPress={() => navigation.navigate('Chat', {
@@ -553,6 +623,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
             >
               <Text style={styles.actionBtnTextOutline}>Message</Text>
             </Pressable>
+            )}
           </View>
         )}
 
@@ -583,12 +654,13 @@ export default function ProfileScreen({ navigation, route }: Props) {
             <CalendarTab
               posts={posts}
               postsLoading={postsLoading}
-              onOpenPost={openPost}
               profileUsername={username}
               profile={profile}
               onLike={handleLike}
               onComment={(item) => setCommentItem(item)}
               onPollVote={handlePollVote}
+              onDelete={isOwn ? handleDeletePost : undefined}
+              isOwn={isOwn}
             />
           )}
 
@@ -598,6 +670,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
               loading={prsLoading}
               isOwn={isOwn}
               onAdd={() => setPrModalVisible(true)}
+              onEdit={handleEditPR}
               onDelete={handleDeletePR}
               onViewVideo={(url) => setVideoViewerUrl(url)}
               showAll={showAllPRs}
@@ -606,12 +679,78 @@ export default function ProfileScreen({ navigation, route }: Props) {
           )}
         </View>
 
-        {/* ── Gyms section (own profile only) ─────────────────────────────────── */}
-        {isOwn && gyms.length > 0 && <GymsSection gyms={gyms} />}
+        {/* ── Gyms section ─────────────────────────────────────────────────────── */}
+        <GymsSection gyms={gyms} isOwn={isOwn} navigation={navigation} />
 
-        {/* ── Orgs section (own profile only) ─────────────────────────────────── */}
-        {isOwn && orgs.length > 0 && <OrgsSection orgs={orgs} navigation={navigation} />}
+        {/* ── Orgs section ──────────────────────────────────────────────────────── */}
+        <OrgsSection orgs={orgs} isOwn={isOwn} navigation={navigation} />
+
+        {/* ── In common (non-own profiles only) ────────────────────────────────── */}
+        {!isOwn && (mutualGyms.length > 0 || mutualOrgs.length > 0) && (
+          <InCommonSection mutualGyms={mutualGyms} mutualOrgs={mutualOrgs} navigation={navigation} />
+        )}
       </ScrollView>
+
+      {/* ── Mutual followers modal ───────────────────────────────────────────── */}
+      <Modal
+        visible={mutualModalVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => { setMutualModalVisible(false); setMutualSearch(''); }}
+      >
+        <View style={{ flex: 1, backgroundColor: colors.background.base }}>
+          <View style={[styles.mutualModalHeader, { paddingTop: insets.top > 0 ? insets.top : 16 }]}>
+            <Text style={styles.mutualModalTitle}>Mutual Followers</Text>
+            <Pressable onPress={() => { setMutualModalVisible(false); setMutualSearch(''); }} style={styles.mutualModalClose}>
+              <Feather name="x" size={22} color={colors.textPrimary} />
+            </Pressable>
+          </View>
+          <View style={styles.mutualSearchWrap}>
+            <Feather name="search" size={15} color={colors.textMuted} />
+            <TextInput
+              style={styles.mutualSearchInput}
+              placeholder="Search"
+              placeholderTextColor={colors.textMuted}
+              value={mutualSearch}
+              onChangeText={setMutualSearch}
+              autoCapitalize="none"
+              returnKeyType="search"
+            />
+            {mutualSearch.length > 0 && (
+              <Pressable onPress={() => setMutualSearch('')}>
+                <Feather name="x-circle" size={15} color={colors.textMuted} />
+              </Pressable>
+            )}
+          </View>
+          <FlatList
+            data={filteredMutualFollowers}
+            keyExtractor={u => u.id}
+            contentContainerStyle={{ paddingBottom: insets.bottom + 16 }}
+            ListEmptyComponent={
+              <View style={styles.mutualEmpty}>
+                <Text style={styles.mutualEmptyText}>No mutual followers found</Text>
+              </View>
+            }
+            renderItem={({ item }) => (
+              <Pressable
+                style={({ pressed }) => [styles.mutualUserRow, pressed && { opacity: 0.7 }]}
+                onPress={() => {
+                  setMutualModalVisible(false);
+                  setMutualSearch('');
+                  navigation.navigate('Profile', { username: item.username });
+                }}
+              >
+                <Avatar uri={item.avatar_url ?? null} name={item.display_name} size={42} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.mutualUserName}>{item.display_name}</Text>
+                  <Text style={styles.mutualUserHandle}>@{item.username}</Text>
+                </View>
+                <Feather name="chevron-right" size={16} color={colors.textMuted} />
+              </Pressable>
+            )}
+          />
+        </View>
+      </Modal>
 
       {/* ── Post viewer modal (vertical feed) ───────────────────────────────── */}
       <Modal
@@ -635,7 +774,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
             data={viewerStartIndex !== null ? posts.slice(viewerStartIndex) : posts}
             keyExtractor={(item) => item.id}
             showsVerticalScrollIndicator={false}
-            contentContainerStyle={styles.viewerScroll}
+            contentContainerStyle={{ paddingBottom: 80 }}
             onEndReached={() => { if (postsHasMore && !postsLoadingRef.current) loadPosts(postsCursor); }}
             onEndReachedThreshold={0.4}
             ListFooterComponent={postsHasMore ? (
@@ -650,6 +789,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
                 onLike={() => handleLike(item)}
                 onComment={() => setCommentItem(item)}
                 onPollVote={(optionId) => handlePollVote(item, optionId)}
+                onDelete={isOwn ? () => handleDeletePost(item) : undefined}
               />
             )}
           />
@@ -672,48 +812,79 @@ export default function ProfileScreen({ navigation, route }: Props) {
         visible={allPostsModalVisible}
         animationType="slide"
         presentationStyle="pageSheet"
-        onRequestClose={() => setAllPostsModalVisible(false)}
+        onRequestClose={() => {
+          if (allPostsViewerItem) { setAllPostsViewerItem(null); }
+          else { setAllPostsModalVisible(false); }
+        }}
       >
         <View style={{ flex: 1, backgroundColor: colors.background.base }}>
+          {/* Header: back arrow when viewing a post, X to close the modal */}
           <View style={[styles.viewerHeader, { paddingTop: insets.top > 0 ? insets.top : 16 }]}>
+            {allPostsViewerItem ? (
+              <Pressable style={styles.viewerClose} onPress={() => setAllPostsViewerItem(null)}>
+                <Feather name="arrow-left" size={22} color={colors.textPrimary} />
+              </Pressable>
+            ) : (
+              <View style={{ width: 36 }} />
+            )}
             <View style={styles.viewerUserRow}>
               <Avatar uri={profile.avatar_url} name={profile.display_name} size={32} />
               <Text style={styles.viewerName}>{profile.display_name}</Text>
             </View>
-            <Pressable style={styles.viewerClose} onPress={() => setAllPostsModalVisible(false)}>
+            <Pressable style={styles.viewerClose} onPress={() => { setAllPostsModalVisible(false); setAllPostsViewerItem(null); }}>
               <Feather name="x" size={22} color={colors.textPrimary} />
             </Pressable>
           </View>
-          <FlatList
-            data={posts}
-            keyExtractor={(item) => item.id}
-            numColumns={3}
-            contentContainerStyle={styles.allPostsGrid}
-            columnWrapperStyle={styles.allPostsRow}
-            onEndReached={() => { if (postsHasMore && !postsLoadingRef.current) loadPosts(postsCursor); }}
-            onEndReachedThreshold={0.4}
-            ListFooterComponent={postsHasMore ? (
-              <View style={styles.feedFooter}>
-                <ActivityIndicator size="small" color={colors.primary} />
-              </View>
-            ) : null}
-            renderItem={({ item }) => (
-              <PostThumbnail
-                key={item.id}
-                item={item}
-                onPress={() => {
-                  setAllPostsModalVisible(false);
-                  openPost(item);
-                }}
-              />
-            )}
-            ListEmptyComponent={
-              <View style={styles.emptyTab}>
-                <Feather name="image" size={36} color={colors.textMuted} />
-                <Text style={styles.emptyText}>No posts yet</Text>
-              </View>
-            }
-          />
+
+          {allPostsViewerItem ? (
+            /* ── Single post view ── */
+            <FlatList
+              key="post-detail"
+              data={[allPostsViewerItem]}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={{ paddingBottom: 80 }}
+              renderItem={({ item }) => (
+                <FeedCard
+                  item={item}
+                  index={0}
+                  onLike={() => handleLike(item)}
+                  onComment={() => setCommentItem(item)}
+                  onPollVote={(optionId) => handlePollVote(item, optionId)}
+                  onDelete={isOwn ? () => handleDeletePost(item) : undefined}
+                />
+              )}
+            />
+          ) : (
+            /* ── Grid view ── */
+            <FlatList
+              key="grid"
+              data={posts}
+              keyExtractor={(item) => item.id}
+              numColumns={3}
+              contentContainerStyle={styles.allPostsGrid}
+              columnWrapperStyle={styles.allPostsRow}
+              onEndReached={() => { if (postsHasMore && !postsLoadingRef.current) loadPosts(postsCursor); }}
+              onEndReachedThreshold={0.4}
+              ListFooterComponent={postsHasMore ? (
+                <View style={styles.feedFooter}>
+                  <ActivityIndicator size="small" color={colors.primary} />
+                </View>
+              ) : null}
+              renderItem={({ item }) => (
+                <PostThumbnail
+                  key={item.id}
+                  item={item}
+                  onPress={() => setAllPostsViewerItem(item)}
+                />
+              )}
+              ListEmptyComponent={
+                <View style={styles.emptyTab}>
+                  <Feather name="image" size={36} color={colors.textMuted} />
+                  <Text style={styles.emptyText}>No posts yet</Text>
+                </View>
+              }
+            />
+          )}
         </View>
       </Modal>
 
@@ -724,7 +895,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
         presentationStyle="pageSheet"
         onRequestClose={() => {
           if (catalogVisible) { setCatalogVisible(false); setCatalogQuery(''); }
-          else setPrModalVisible(false);
+          else closePrModal();
         }}
       >
         <View style={[styles.prModal, { paddingTop: insets.top > 0 ? insets.top : 20 }]}>
@@ -810,8 +981,8 @@ export default function ProfileScreen({ navigation, route }: Props) {
             /* ── PR form view ── */
             <>
               <View style={styles.prModalHeader}>
-                <Text style={styles.prModalTitle}>Add Personal Record</Text>
-                <Pressable onPress={() => setPrModalVisible(false)}>
+                <Text style={styles.prModalTitle}>{editingPr ? 'Edit PR' : 'Add Personal Record'}</Text>
+                <Pressable onPress={closePrModal}>
                   <Feather name="x" size={22} color={colors.textPrimary} />
                 </Pressable>
               </View>
@@ -819,12 +990,19 @@ export default function ProfileScreen({ navigation, route }: Props) {
               <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
                 <View style={styles.prForm}>
                   <Text style={styles.prFormLabel}>Exercise</Text>
-                  <Pressable style={styles.prCatalogBtn} onPress={() => setCatalogVisible(true)}>
-                    <Text style={[styles.prCatalogBtnText, !prExercise && styles.prCatalogPlaceholder]}>
-                      {prExercise || 'Select from exercise catalog…'}
-                    </Text>
-                    <Feather name="search" size={16} color={colors.textMuted} />
-                  </Pressable>
+                  {editingPr ? (
+                    <View style={[styles.prCatalogBtn, { opacity: 0.7 }]}>
+                      <Text style={styles.prCatalogBtnText}>{prExercise}</Text>
+                      <Feather name="lock" size={14} color={colors.textMuted} />
+                    </View>
+                  ) : (
+                    <Pressable style={styles.prCatalogBtn} onPress={() => setCatalogVisible(true)}>
+                      <Text style={[styles.prCatalogBtnText, !prExercise && styles.prCatalogPlaceholder]}>
+                        {prExercise || 'Select from exercise catalog…'}
+                      </Text>
+                      <Feather name="search" size={16} color={colors.textMuted} />
+                    </Pressable>
+                  )}
 
                   <Text style={styles.prFormLabel}>Weight / Value</Text>
                   <TextInput
@@ -853,7 +1031,11 @@ export default function ProfileScreen({ navigation, route }: Props) {
                   <Pressable style={styles.videoPickerBtn} onPress={pickVideo}>
                     <Feather name="video" size={18} color={colors.textSecondary} />
                     <Text style={styles.videoPickerText}>
-                      {prVideoUri ? '✓ Video selected' : 'Attach video to verify PR'}
+                      {prVideoUri
+                        ? '✓ New video selected'
+                        : editingPr?.video_url
+                        ? '✓ Video already attached — tap to replace'
+                        : 'Attach video to verify PR'}
                     </Text>
                     {prVideoUri && (
                       <Pressable onPress={() => setPrVideoUri(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -912,79 +1094,216 @@ function VideoPlayerModal({ url, onClose, topInset }: { url: string | null; onCl
   );
 }
 
+// ─── Mutual Connections Section ───────────────────────────────────────────────
+
+function MutualConnectionsSection({
+  mutualFollowers, onShowFollowers,
+}: {
+  mutualFollowers: UserBrief[];
+  onShowFollowers: () => void;
+}) {
+  const [first, second] = mutualFollowers;
+  const followerLabel =
+    mutualFollowers.length === 1 ? first.display_name :
+    mutualFollowers.length === 2 ? `${first.display_name} and ${second.display_name}` :
+    `${first.display_name}, ${second.display_name} and ${mutualFollowers.length - 2} more`;
+
+  return (
+    <View style={styles.mutualSection}>
+      <Pressable
+        style={({ pressed }) => [styles.mutualFollowedRow, pressed && { opacity: 0.7 }]}
+        onPress={onShowFollowers}
+      >
+        <View style={styles.mutualAvatarStack}>
+          {mutualFollowers.slice(0, 3).map((u, i) => (
+            <View key={u.id} style={[styles.mutualAvatarWrap, { marginLeft: i === 0 ? 0 : -8, zIndex: 3 - i }]}>
+              <Avatar uri={u.avatar_url ?? null} name={u.display_name} size={22} />
+            </View>
+          ))}
+        </View>
+        <Text style={styles.mutualFollowedText} numberOfLines={1}>
+          <Text style={styles.mutualFollowedLabel}>Followed by </Text>
+          {followerLabel}
+        </Text>
+        <Feather name="chevron-right" size={13} color={colors.textMuted} />
+      </Pressable>
+    </View>
+  );
+}
+
+function InCommonSection({ mutualGyms, mutualOrgs, navigation }: { mutualGyms: Gym[]; mutualOrgs: OrgListItem[]; navigation: any }) {
+  return (
+    <View style={styles.experienceSection}>
+      <View style={styles.experienceSectionHeader}>
+        <Feather name="link" size={15} color={colors.textSecondary} />
+        <Text style={styles.experienceSectionTitle}>In Common</Text>
+      </View>
+      <View style={styles.mutualInCommonRow}>
+        <View style={styles.mutualChips}>
+          {mutualGyms.map(g => (
+            <Pressable
+              key={g.id}
+              style={({ pressed }) => [styles.mutualChip, pressed && { opacity: 0.7 }]}
+              onPress={() => navigation.navigate('MainTabs', { screen: 'Gyms', params: { screen: 'GymDetail', params: { gymId: g.id, gymName: g.name } } })}
+            >
+              <Text style={styles.mutualChipIcon}>🏋️</Text>
+              <Text style={styles.mutualChipText} numberOfLines={1}>{g.name}</Text>
+            </Pressable>
+          ))}
+          {mutualOrgs.map(o => (
+            <Pressable
+              key={o.id}
+              style={({ pressed }) => [styles.mutualChip, pressed && { opacity: 0.7 }]}
+              onPress={() => navigation.navigate('OrgProfile', { orgId: o.id })}
+            >
+              <Text style={styles.mutualChipIcon}>🏢</Text>
+              <Text style={styles.mutualChipText} numberOfLines={1}>{o.name}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+    </View>
+  );
+}
+
 // ─── Gyms Section (LinkedIn-style) ───────────────────────────────────────────
 
-function GymsSection({ gyms }: { gyms: Gym[] }) {
+function GymsSection({ gyms, isOwn, navigation }: { gyms: Gym[]; isOwn: boolean; navigation: any }) {
+  const [showAll, setShowAll] = React.useState(false);
+  const visible = showAll ? gyms : gyms.slice(0, 3);
   return (
     <View style={styles.experienceSection}>
       <View style={styles.experienceSectionHeader}>
         <Feather name="map-pin" size={15} color={colors.textSecondary} />
         <Text style={styles.experienceSectionTitle}>Gyms</Text>
       </View>
-      {gyms.map((gym, index) => (
-        <View
-          key={gym.id}
-          style={[styles.experienceItem, index < gyms.length - 1 && styles.experienceItemBorder]}
-        >
-          <View style={styles.experienceIconWrap}>
-            <Feather name="home" size={18} color="white" />
-          </View>
-          <View style={styles.experienceInfo}>
-            <Text style={styles.experienceName} numberOfLines={1}>{gym.name}</Text>
-            {gym.address ? (
-              <Text style={styles.experienceSub} numberOfLines={1}>{gym.address}</Text>
-            ) : null}
-            {gym.rating ? (
-              <Text style={styles.experienceRating}>⭐ {parseFloat(gym.rating).toFixed(1)}</Text>
-            ) : null}
-          </View>
-          {gym.is_enrolled && (
-            <View style={styles.enrolledBadge}>
-              <Text style={styles.enrolledBadgeText}>Member</Text>
-            </View>
+      {gyms.length === 0 ? (
+        isOwn ? (
+          <Pressable
+            style={({ pressed }) => [styles.experienceEmptyCTA, pressed && { opacity: 0.7 }]}
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Gyms', params: { screen: 'GymList' } })}
+          >
+            <Feather name="plus-circle" size={15} color={colors.primary} />
+            <Text style={styles.experienceEmptyCTAText}>Enroll in a gym</Text>
+            <Feather name="chevron-right" size={14} color={colors.primary} />
+          </Pressable>
+        ) : (
+          <Text style={styles.experienceEmptyText}>Not enrolled in any gyms</Text>
+        )
+      ) : (
+        <>
+          {visible.map((gym, index) => (
+            <Pressable
+              key={gym.id}
+              style={({ pressed }) => [
+                styles.experienceItem,
+                index < visible.length - 1 && styles.experienceItemBorder,
+                pressed && { opacity: 0.7 },
+              ]}
+              onPress={() => navigation.navigate('MainTabs', { screen: 'Gyms', params: { screen: 'GymDetail', params: { gymId: gym.id, gymName: gym.name } } })}
+            >
+              <View style={styles.experienceIconWrap}>
+                <Feather name="home" size={18} color="white" />
+              </View>
+              <View style={styles.experienceInfo}>
+                <Text style={styles.experienceName} numberOfLines={1}>{gym.name}</Text>
+                {gym.address ? (
+                  <Text style={styles.experienceSub} numberOfLines={1}>{gym.address}</Text>
+                ) : null}
+                {gym.rating ? (
+                  <Text style={styles.experienceRating}>⭐ {parseFloat(gym.rating).toFixed(1)}</Text>
+                ) : null}
+              </View>
+              {gym.is_enrolled && (
+                <View style={styles.enrolledBadge}>
+                  <Text style={styles.enrolledBadgeText}>Member</Text>
+                </View>
+              )}
+            </Pressable>
+          ))}
+          {gyms.length > 3 && (
+            <Pressable
+              style={({ pressed }) => [styles.experienceViewAll, pressed && { opacity: 0.7 }]}
+              onPress={() => setShowAll(v => !v)}
+            >
+              <Text style={styles.experienceViewAllText}>
+                {showAll ? 'Show less' : `View all ${gyms.length} gyms`}
+              </Text>
+              <Feather name={showAll ? 'chevron-up' : 'chevron-down'} size={14} color={colors.primary} />
+            </Pressable>
           )}
-        </View>
-      ))}
+        </>
+      )}
     </View>
   );
 }
 
 // ─── Orgs Section (LinkedIn-style) ───────────────────────────────────────────
 
-function OrgsSection({ orgs, navigation }: { orgs: OrgListItem[]; navigation: any }) {
+function OrgsSection({ orgs, isOwn, navigation }: { orgs: OrgListItem[]; isOwn: boolean; navigation: any }) {
+  const [showAll, setShowAll] = React.useState(false);
+  const visible = showAll ? orgs : orgs.slice(0, 3);
   return (
     <View style={styles.experienceSection}>
       <View style={styles.experienceSectionHeader}>
         <Feather name="users" size={15} color={colors.textSecondary} />
         <Text style={styles.experienceSectionTitle}>Organizations</Text>
       </View>
-      {orgs.map((org, index) => (
-        <Pressable
-          key={org.id}
-          style={({ pressed }) => [
-            styles.experienceItem,
-            index < orgs.length - 1 && styles.experienceItemBorder,
-            pressed && { opacity: 0.7 },
-          ]}
-          onPress={() => navigation.navigate('OrgProfile', { orgId: org.id })}
-        >
-          <View style={styles.experienceIconWrap}>
-            {org.avatar_url ? (
-              <Image source={{ uri: org.avatar_url }} style={styles.orgAvatar} contentFit="cover" />
-            ) : (
-              <Feather name="users" size={18} color="white" />
-            )}
-          </View>
-          <View style={styles.experienceInfo}>
-            <Text style={styles.experienceName} numberOfLines={1}>{org.name}</Text>
-            <Text style={styles.experienceSub}>
-              {org.member_count} member{org.member_count !== 1 ? 's' : ''}
-              {org.user_role ? ` · ${org.user_role}` : ''}
-            </Text>
-          </View>
-          <Feather name="chevron-right" size={15} color={colors.textMuted} />
-        </Pressable>
-      ))}
+      {orgs.length === 0 ? (
+        isOwn ? (
+          <Pressable
+            style={({ pressed }) => [styles.experienceEmptyCTA, pressed && { opacity: 0.7 }]}
+            onPress={() => navigation.navigate('MainTabs', { screen: 'Social', params: { screen: 'SocialHome', params: { tab: 'Orgs' } } })}
+          >
+            <Feather name="plus-circle" size={15} color={colors.primary} />
+            <Text style={styles.experienceEmptyCTAText}>Join an organization</Text>
+            <Feather name="chevron-right" size={14} color={colors.primary} />
+          </Pressable>
+        ) : (
+          <Text style={styles.experienceEmptyText}>Not in any organizations</Text>
+        )
+      ) : (
+        <>
+          {visible.map((org, index) => (
+            <Pressable
+              key={org.id}
+              style={({ pressed }) => [
+                styles.experienceItem,
+                index < visible.length - 1 && styles.experienceItemBorder,
+                pressed && { opacity: 0.7 },
+              ]}
+              onPress={() => navigation.navigate('OrgProfile', { orgId: org.id })}
+            >
+              <View style={styles.experienceIconWrap}>
+                {org.avatar_url ? (
+                  <Image source={{ uri: org.avatar_url }} style={styles.orgAvatar} contentFit="cover" />
+                ) : (
+                  <Feather name="users" size={18} color="white" />
+                )}
+              </View>
+              <View style={styles.experienceInfo}>
+                <Text style={styles.experienceName} numberOfLines={1}>{org.name}</Text>
+                <Text style={styles.experienceSub}>
+                  {org.member_count} member{org.member_count !== 1 ? 's' : ''}
+                  {org.user_role ? ` · ${org.user_role}` : ''}
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={15} color={colors.textMuted} />
+            </Pressable>
+          ))}
+          {orgs.length > 3 && (
+            <Pressable
+              style={({ pressed }) => [styles.experienceViewAll, pressed && { opacity: 0.7 }]}
+              onPress={() => setShowAll(v => !v)}
+            >
+              <Text style={styles.experienceViewAllText}>
+                {showAll ? 'Show less' : `View all ${orgs.length} organizations`}
+              </Text>
+              <Feather name={showAll ? 'chevron-up' : 'chevron-down'} size={14} color={colors.primary} />
+            </Pressable>
+          )}
+        </>
+      )}
     </View>
   );
 }
@@ -1012,7 +1331,7 @@ function PostsTab({
   }
 
   const preview = posts.slice(0, 9);
-  const rows = [preview.slice(0, 3), preview.slice(3, 6), preview.slice(6, 9)];
+  const rows = [preview.slice(0, 3), preview.slice(3, 6), preview.slice(6, 9)].filter(row => row.length > 0);
   return (
     <View style={styles.postsGrid}>
       {rows.map((row, rowIndex) => (
@@ -1025,7 +1344,7 @@ function PostsTab({
           ))}
         </View>
       ))}
-      {posts.length > 0 && (
+      {posts.length > 9 && (
         <Pressable style={styles.toggleBtn} onPress={onViewAllPosts}>
           <Feather name="grid" size={14} color={colors.primary} />
           <Text style={styles.toggleBtnText}>View All Posts</Text>
@@ -1138,21 +1457,23 @@ function calPostToFeedItem(cp: CalendarPost, profile: UserProfile): FeedItem {
 function CalendarTab({
   posts,
   postsLoading,
-  onOpenPost,
   profileUsername,
   profile,
   onLike,
   onComment,
   onPollVote,
+  onDelete,
+  isOwn,
 }: {
   posts: FeedItem[];
   postsLoading: boolean;
-  onOpenPost: (item: FeedItem) => void;
   profileUsername: string;
   profile: UserProfile | null;
   onLike: (item: FeedItem) => void;
   onComment: (item: FeedItem) => void;
   onPollVote: (item: FeedItem, optionId: number) => void;
+  onDelete?: (item: FeedItem) => void;
+  isOwn: boolean;
 }) {
   const insets = useSafeAreaInsets();
   const now = new Date();
@@ -1160,15 +1481,28 @@ function CalendarTab({
   const [month, setMonth] = useState(now.getMonth());
   const [restDayNums, setRestDayNums] = useState<Set<number>>(new Set());
   const [workoutDayNums, setWorkoutDayNums] = useState<Set<number>>(new Set());
+  const [calendarPostsData, setCalendarPostsData] = useState<CalendarPost[]>([]);
   const [dayModalVisible, setDayModalVisible] = useState(false);
   const [currentModalDay, setCurrentModalDay] = useState(1);
-  const dayListRef = useRef<FlatList>(null);
 
-  // Fetch calendar data from the dedicated API — this returns ALL posts for
-  // the month so highlights are always complete and consistent on refresh.
+  // Posts for the currently selected day — built from the calendar API data
+  // so they're always available regardless of paginated posts loading state.
+  const currentDayPosts = useMemo((): FeedItem[] => {
+    if (!profile) return [];
+    return calendarPostsData
+      .filter((cp) => {
+        const day = parseInt(cp.date.split('-')[2], 10);
+        return day === currentModalDay && cp.type !== 'rest';
+      })
+      .map((cp) => calPostToFeedItem(cp, profile));
+  }, [calendarPostsData, currentModalDay, profile]);
+
+  // Fetch calendar data from the dedicated API — stores full post list so
+  // the day modal can display posts without depending on paginated posts state.
   useEffect(() => {
     setRestDayNums(new Set());
     setWorkoutDayNums(new Set());
+    setCalendarPostsData([]);
     fetchCalendarPosts(year, month + 1, profileUsername)
       .then((res) => {
         const restNums = new Set<number>();
@@ -1183,6 +1517,7 @@ function CalendarTab({
         }
         setRestDayNums(restNums);
         setWorkoutDayNums(workoutNums);
+        setCalendarPostsData(res.posts);
       })
       .catch(() => {});
   }, [year, month, profileUsername]);
@@ -1273,138 +1608,78 @@ function CalendarTab({
         </View>
       </View>
 
-      {/* Floating day popup */}
+      {/* Day posts sheet — pageSheet showing full FeedCards for the selected day */}
       <Modal
         visible={dayModalVisible}
-        transparent
-        animationType="fade"
+        animationType="slide"
+        presentationStyle="pageSheet"
         onRequestClose={() => setDayModalVisible(false)}
       >
-        {/* Dark backdrop — tapping it closes the modal */}
-        <TouchableWithoutFeedback onPress={() => setDayModalVisible(false)}>
-          <View style={styles.calModalOverlay} />
-        </TouchableWithoutFeedback>
-        {/* Popup sits above the backdrop, pointer-events pass through the centering wrapper */}
-        <View style={styles.calModalCenter} pointerEvents="box-none">
-          <View style={styles.calModalPopup}>
-            {/* Header: prev arrow, date, next arrow, close */}
-            <View style={styles.calModalHeader}>
-              <Pressable
-                style={styles.calModalNavBtn}
-                onPress={() => {
-                  const idx = sortedWorkoutDays.indexOf(currentModalDay);
-                  if (idx > 0) {
-                    dayListRef.current?.scrollToIndex({ index: idx - 1, animated: true });
-                    setCurrentModalDay(sortedWorkoutDays[idx - 1]);
-                  }
-                }}
-                disabled={sortedWorkoutDays.indexOf(currentModalDay) === 0}
-              >
-                <Feather
-                  name="chevron-left"
-                  size={20}
-                  color={sortedWorkoutDays.indexOf(currentModalDay) === 0 ? colors.textMuted : colors.textPrimary}
-                />
-              </Pressable>
-              <View style={{ alignItems: 'center', flex: 1 }}>
-                <Text style={styles.calModalDate}>{MONTHS[month]} {currentModalDay}</Text>
-                <Text style={styles.calModalYear}>{year}</Text>
-              </View>
-              <Pressable
-                style={styles.calModalNavBtn}
-                onPress={() => {
-                  const idx = sortedWorkoutDays.indexOf(currentModalDay);
-                  if (idx < sortedWorkoutDays.length - 1) {
-                    dayListRef.current?.scrollToIndex({ index: idx + 1, animated: true });
-                    setCurrentModalDay(sortedWorkoutDays[idx + 1]);
-                  }
-                }}
-                disabled={sortedWorkoutDays.indexOf(currentModalDay) === sortedWorkoutDays.length - 1}
-              >
-                <Feather
-                  name="chevron-right"
-                  size={20}
-                  color={sortedWorkoutDays.indexOf(currentModalDay) === sortedWorkoutDays.length - 1 ? colors.textMuted : colors.textPrimary}
-                />
-              </Pressable>
-              <Pressable style={styles.calModalNavBtn} onPress={() => setDayModalVisible(false)}>
-                <Feather name="x" size={18} color={colors.textMuted} />
-              </Pressable>
+        <View style={{ flex: 1, backgroundColor: colors.background.base }}>
+          {/* Header: prev arrow, date, next arrow, close */}
+          <View style={[styles.calDaySheetHeader, { paddingTop: insets.top > 0 ? insets.top : 16 }]}>
+            <Pressable
+              style={styles.calModalNavBtn}
+              onPress={() => {
+                const idx = sortedWorkoutDays.indexOf(currentModalDay);
+                if (idx > 0) setCurrentModalDay(sortedWorkoutDays[idx - 1]);
+              }}
+              disabled={sortedWorkoutDays.indexOf(currentModalDay) === 0}
+            >
+              <Feather
+                name="chevron-left"
+                size={20}
+                color={sortedWorkoutDays.indexOf(currentModalDay) === 0 ? colors.textMuted : colors.textPrimary}
+              />
+            </Pressable>
+            <View style={{ alignItems: 'center', flex: 1 }}>
+              <Text style={styles.calModalDate}>{MONTHS[month]} {currentModalDay}</Text>
+              <Text style={styles.calModalYear}>{year}</Text>
             </View>
-
-            {/* Swipeable pages — one per workout day */}
-            <FlatList
-              ref={dayListRef}
-              style={styles.calModalScroll}
-              data={sortedWorkoutDays}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              keyExtractor={(day) => String(day)}
-              initialScrollIndex={
-                sortedWorkoutDays.indexOf(currentModalDay) >= 0
-                  ? sortedWorkoutDays.indexOf(currentModalDay)
-                  : 0
-              }
-              getItemLayout={(_, index) => ({
-                length: POPUP_WIDTH,
-                offset: POPUP_WIDTH * index,
-                index,
-              })}
-              onMomentumScrollEnd={(e) => {
-                const idx = Math.round(e.nativeEvent.contentOffset.x / POPUP_WIDTH);
-                if (idx >= 0 && idx < sortedWorkoutDays.length) {
-                  setCurrentModalDay(sortedWorkoutDays[idx]);
-                }
+            <Pressable
+              style={styles.calModalNavBtn}
+              onPress={() => {
+                const idx = sortedWorkoutDays.indexOf(currentModalDay);
+                if (idx < sortedWorkoutDays.length - 1) setCurrentModalDay(sortedWorkoutDays[idx + 1]);
               }}
-              renderItem={({ item: day }) => {
-                const dayPosts = posts.filter((p) => {
-                  const parts = p.created_at.split('T')[0].split('-');
-                  return parseInt(parts[0], 10) === year &&
-                    parseInt(parts[1], 10) - 1 === month &&
-                    parseInt(parts[2], 10) === day;
-                });
-                return (
-                  <ScrollView
-                    style={{ width: POPUP_WIDTH }}
-                    contentContainerStyle={{ padding: spacing.md, paddingBottom: 20 }}
-                    showsVerticalScrollIndicator={false}
-                    nestedScrollEnabled
-                  >
-                    {dayPosts.map((item) => (
-                      <View key={item.id} style={styles.calDayCard}>
-                        {item.photo_url && (
-                          <Image source={{ uri: item.photo_url }} style={styles.calDayCardImage} contentFit="cover" />
-                        )}
-                        <View style={styles.calDayCardBody}>
-                          <Text style={styles.calPostType}>
-                            {item.workout ? 'Workout' : item.personal_record ? 'Personal Record' : item.poll ? 'Poll' : 'Post'}
-                          </Text>
-                          {!!item.description && (
-                            <Text style={styles.calDayCardDesc}>{item.description}</Text>
-                          )}
-                          {item.workout && (
-                            <Text style={styles.calDayCardMeta}>
-                              {item.workout.exercise_count} exercises · {item.workout.total_sets} sets
-                              {item.workout.duration ? ` · ${item.workout.duration}` : ''}
-                            </Text>
-                          )}
-                          {item.personal_record && (
-                            <Text style={styles.calDayCardMeta}>
-                              {item.personal_record.exercise_name}: {item.personal_record.value} {item.personal_record.unit}
-                            </Text>
-                          )}
-                          {item.poll && (
-                            <Text style={styles.calDayCardMeta}>{item.poll.question}</Text>
-                          )}
-                        </View>
-                      </View>
-                    ))}
-                  </ScrollView>
-                );
-              }}
-            />
+              disabled={sortedWorkoutDays.indexOf(currentModalDay) === sortedWorkoutDays.length - 1}
+            >
+              <Feather
+                name="chevron-right"
+                size={20}
+                color={sortedWorkoutDays.indexOf(currentModalDay) === sortedWorkoutDays.length - 1 ? colors.textMuted : colors.textPrimary}
+              />
+            </Pressable>
+            <Pressable style={styles.calModalNavBtn} onPress={() => setDayModalVisible(false)}>
+              <Feather name="x" size={18} color={colors.textMuted} />
+            </Pressable>
           </View>
+
+          <FlatList
+            data={currentDayPosts}
+            keyExtractor={(item) => item.id}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={{ paddingBottom: 80 }}
+            ListEmptyComponent={
+              <View style={styles.emptyTab}>
+                <Feather name="calendar" size={36} color={colors.textMuted} />
+                <Text style={styles.emptyText}>No posts for this day</Text>
+              </View>
+            }
+            renderItem={({ item }) => (
+              <FeedCard
+                item={item}
+                index={0}
+                onLike={() => onLike(item)}
+                onComment={() => onComment(item)}
+                onPollVote={(optionId) => onPollVote(item, optionId)}
+                onDelete={isOwn ? () => {
+                  setCalendarPostsData(prev => prev.filter(cp => cp.id !== item.id));
+                  onDelete?.(item);
+                } : undefined}
+              />
+            )}
+          />
         </View>
       </Modal>
     </View>
@@ -1414,12 +1689,13 @@ function CalendarTab({
 // ─── Records Tab ──────────────────────────────────────────────────────────────
 
 function RecordsTab({
-  prs, loading, isOwn, onAdd, onDelete, onViewVideo, showAll, onToggleShowAll,
+  prs, loading, isOwn, onAdd, onEdit, onDelete, onViewVideo, showAll, onToggleShowAll,
 }: {
   prs: PersonalRecord[];
   loading: boolean;
   isOwn: boolean;
   onAdd: () => void;
+  onEdit: (pr: PersonalRecord) => void;
   onDelete: (pr: PersonalRecord) => void;
   onViewVideo: (url: string) => void;
   showAll: boolean;
@@ -1462,9 +1738,14 @@ function RecordsTab({
                 <View style={styles.prCardHeader}>
                   <Text style={styles.prCardName} numberOfLines={1}>{pr.exercise_name}</Text>
                   {isOwn && (
-                    <Pressable onPress={() => onDelete(pr)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Feather name="trash-2" size={14} color={colors.textMuted} />
-                    </Pressable>
+                    <View style={{ flexDirection: 'row', gap: 10 }}>
+                      <Pressable onPress={() => onEdit(pr)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Feather name="edit-2" size={14} color={colors.textMuted} />
+                      </Pressable>
+                      <Pressable onPress={() => onDelete(pr)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Feather name="trash-2" size={14} color={colors.textMuted} />
+                      </Pressable>
+                    </View>
                   )}
                 </View>
                 <Text style={styles.prCardValue}>
@@ -1559,6 +1840,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     paddingHorizontal: spacing.xl,
+    paddingTop: spacing.md,
     paddingBottom: spacing.sm,
   },
   statChip: {
@@ -1653,6 +1935,120 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(79,195,224,0.3)',
   },
   enrolledBadgeText: { fontSize: 11, fontWeight: '600', color: colors.primary },
+  experienceEmptyCTA: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+  },
+  experienceEmptyCTAText: { flex: 1, fontSize: typography.size.sm, fontWeight: '600', color: colors.primary },
+  experienceEmptyText: {
+    fontSize: typography.size.sm,
+    color: colors.textMuted,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+  },
+  experienceViewAll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    paddingVertical: spacing.sm + 2,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.subtle,
+  },
+  experienceViewAllText: { fontSize: typography.size.sm, fontWeight: '600', color: colors.primary },
+
+  // ── Mutual connections ──
+  mutualSection: {
+    marginHorizontal: spacing.xl,
+    marginTop: spacing.sm,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    backgroundColor: colors.background.elevated,
+    overflow: 'hidden',
+  },
+  mutualFollowedRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.base,
+    paddingVertical: 10,
+  },
+  mutualAvatarStack: { flexDirection: 'row', alignItems: 'center' },
+  mutualAvatarWrap: { borderRadius: 11, borderWidth: 1.5, borderColor: colors.background.elevated },
+  mutualFollowedText: { flex: 1, fontSize: typography.size.sm, color: colors.textSecondary },
+  mutualFollowedLabel: { color: colors.textMuted },
+  mutualInCommonRow: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  mutualInCommonBorder: { borderTopWidth: 1, borderTopColor: colors.border.subtle },
+  mutualInCommonLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 4,
+  },
+  mutualChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  mutualChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.background.card,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    maxWidth: 160,
+  },
+  mutualChipIcon: { fontSize: 12 },
+  mutualChipText: { fontSize: 12, color: colors.textPrimary, fontWeight: '500', flexShrink: 1 },
+
+  // ── Mutual followers modal ──
+  mutualModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.subtle,
+  },
+  mutualModalTitle: { fontSize: typography.size.base, fontWeight: '700', color: colors.textPrimary },
+  mutualModalClose: { position: 'absolute', right: spacing.base, bottom: spacing.md },
+  mutualSearchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    margin: spacing.base,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.background.elevated,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+  },
+  mutualSearchInput: { flex: 1, fontSize: typography.size.sm, color: colors.textPrimary },
+  mutualUserRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.subtle,
+  },
+  mutualUserName: { fontSize: typography.size.sm, fontWeight: '600', color: colors.textPrimary },
+  mutualUserHandle: { fontSize: 12, color: colors.textMuted, marginTop: 1 },
+  mutualEmpty: { alignItems: 'center', paddingTop: 48 },
+  mutualEmptyText: { fontSize: typography.size.sm, color: colors.textMuted },
 
   // ── Tab bar ──
   tabBar: {
@@ -1674,8 +2070,8 @@ const styles = StyleSheet.create({
   tabText: { fontSize: 13, fontWeight: '500', color: colors.textMuted },
   tabTextActive: { fontWeight: '600', color: '#000' },
 
-  // ── Tab content wrapper (fixed height so tabs don't resize) ──
-  tabContent: { minHeight: 340 },
+  // ── Tab content wrapper ──
+  tabContent: { paddingBottom: spacing.xl },
 
   // ── All posts modal grid ──
   allPostsGrid: { paddingHorizontal: spacing.xl, paddingTop: spacing.sm, paddingBottom: 60 },
@@ -1710,7 +2106,7 @@ const styles = StyleSheet.create({
   thumbTextBg: { backgroundColor: colors.background.elevated },
   thumbTextContent: { fontSize: 9, color: colors.textPrimary, lineHeight: 12 },
 
-  emptyTab: { alignItems: 'center', gap: spacing.md, paddingTop: 48, paddingHorizontal: spacing.xl },
+  emptyTab: { alignItems: 'center', gap: spacing.md, paddingTop: 48, paddingBottom: spacing.xl, paddingHorizontal: spacing.xl },
   emptyText: { fontSize: typography.size.base, color: colors.textMuted, textAlign: 'center' },
 
   // ── Calendar ──
@@ -1766,6 +2162,11 @@ const styles = StyleSheet.create({
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 20 },
       android: { elevation: 12 },
     }),
+  },
+  calDaySheetHeader: {
+    flexDirection: 'row', alignItems: 'center',
+    paddingHorizontal: spacing.sm, paddingBottom: spacing.md,
+    borderBottomWidth: 1, borderBottomColor: colors.border.subtle,
   },
   calModalHeader: {
     flexDirection: 'row', alignItems: 'center',

@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { StyleSheet, Platform } from 'react-native';
-import Animated, { FadeInDown } from 'react-native-reanimated';
+import { View, StyleSheet, Pressable, Alert } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 import { FeedItem } from '../../types/feed';
 import FeedCardHeader from './FeedCardHeader';
 import FeedCardBody from './FeedCardBody';
 import FeedCardActions from './FeedCardActions';
 import WorkoutDetailModal from './WorkoutDetailModal';
+import Avatar from '../common/Avatar';
 import { colors, spacing } from '../../theme';
 
 interface FeedCardProps {
@@ -15,6 +16,7 @@ interface FeedCardProps {
   onComment: () => void;
   onPollVote: (optionId: number | string) => void;
   onPressUser?: () => void;
+  onDelete?: () => void;
 }
 
 export default function FeedCard({
@@ -24,14 +26,24 @@ export default function FeedCard({
   onComment,
   onPollVote,
   onPressUser,
+  onDelete,
 }: FeedCardProps) {
   const shareUrl = `https://spottr.app/${item.type}/${item.id}`;
   const [workoutDetailId, setWorkoutDetailId] = useState<string | null>(null);
 
+  const handleMore = onDelete
+    ? () => {
+        Alert.alert('Post Options', undefined, [
+          { text: 'Delete Post', style: 'destructive', onPress: onDelete },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+      }
+    : undefined;
+
   return (
     <>
       <Animated.View
-        entering={FadeInDown.delay(index * 80).duration(400)}
+        entering={FadeIn.delay(index * 40).duration(300)}
         style={styles.card}
       >
         <FeedCardHeader
@@ -41,6 +53,7 @@ export default function FeedCard({
           workoutType={item.workout_type}
           sharedContext={item.shared_context}
           onPressUser={onPressUser}
+          onMore={handleMore}
         />
         <FeedCardBody
           item={item}
@@ -54,6 +67,7 @@ export default function FeedCard({
           onLike={onLike}
           onComment={onComment}
           shareUrl={shareUrl}
+          shareTitle={item.description ? `${item.user.display_name}: ${item.description.slice(0, 60)}` : `${item.user.display_name}'s post`}
         />
       </Animated.View>
 
@@ -68,17 +82,23 @@ export default function FeedCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
-    borderRadius: 24,
-    padding: spacing.base,
-    marginBottom: spacing.base,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
-      },
-      android: { elevation: 4 },
-    }),
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderColor,
+    paddingTop: spacing.base,
+    paddingBottom: spacing.sm,
+    paddingHorizontal: spacing.base,
+  },
+  row: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  avatarCol: {
+    // Fixed width for the avatar column
+    width: 44,
+    alignItems: 'center',
+  },
+  contentCol: {
+    flex: 1,
+    minWidth: 0,
   },
 });

@@ -174,6 +174,11 @@ export async function deleteTemplate(templateId: string): Promise<void> {
   await apiClient.post(`/workouts/templates/${templateId}/delete/`);
 }
 
+export async function saveWorkoutAsTemplate(workoutId: string): Promise<{ template_id: string; template_name: string }> {
+  const res = await apiClient.post(`/workouts/${workoutId}/add-to-templates/`);
+  return res.data;
+}
+
 // ─── Streak ───────────────────────────────────────────────────────────────────
 
 export async function fetchStreakInfo(): Promise<StreakInfo> {

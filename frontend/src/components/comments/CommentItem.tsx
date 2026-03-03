@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, Image, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Avatar from '../common/Avatar';
 import ReplyItem from './ReplyItem';
+import MentionText from '../common/MentionText';
 import { Comment } from '../../types/feed';
 import { timeAgo } from '../../utils/timeAgo';
 import { colors, spacing, typography } from '../../theme';
@@ -10,10 +11,10 @@ import { colors, spacing, typography } from '../../theme';
 interface CommentItemProps {
   comment: Comment;
   currentUserId?: string;
-  onLike: (id: number) => void;
-  onDelete: (id: number) => void;
-  onLoadReplies: (id: number) => void;
-  onStartReply: (commentId: number, username: string) => void;
+  onLike: (id: string) => void;
+  onDelete: (id: string) => void;
+  onLoadReplies: (id: string) => void;
+  onStartReply: (commentId: string, username: string) => void;
 }
 
 export default function CommentItem({
@@ -39,61 +40,80 @@ export default function CommentItem({
 
   return (
     <View style={styles.container}>
-      <View style={styles.main}>
+      {/* ── Main comment row ────────────────────────────────────────── */}
+      <View style={styles.row}>
         <Avatar
           uri={comment.user.avatar_url}
           name={comment.user.display_name}
           size={34}
         />
-        <View style={styles.content}>
-          <View style={styles.header}>
-            <Text style={styles.name}>{comment.user.display_name}</Text>
-            <Text style={styles.time}>{timeAgo(comment.created_at)}</Text>
-          </View>
-          <Text style={styles.text}>{comment.description}</Text>
-          <View style={styles.actions}>
-            <Pressable
-              style={styles.actionBtn}
-              onPress={() => onLike(comment.id)}
-              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-            >
-              <Feather
-                name="heart"
-                size={14}
-                color={comment.user_liked ? colors.semantic.like : colors.textMuted}
-              />
-              {comment.like_count > 0 && (
-                <Text
-                  style={[
-                    styles.actionText,
-                    comment.user_liked && { color: colors.semantic.like },
-                  ]}
-                >
-                  {comment.like_count}
-                </Text>
+
+        {/* Content + like button */}
+        <View style={styles.bodyWrap}>
+          <View style={styles.textWrap}>
+            {/* Inline: bold username then comment text */}
+            <Text style={styles.inlineText}>
+              <Text style={styles.username}>{comment.user.display_name}</Text>
+              {!!comment.description && (
+                <MentionText
+                  content={` ${comment.description}`}
+                  textStyle={styles.commentText}
+                />
               )}
-            </Pressable>
-            <Pressable
-              style={styles.actionBtn}
-              onPress={() => onStartReply(comment.id, comment.user.username)}
-              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-            >
-              <Feather name="corner-down-right" size={14} color={colors.textMuted} />
-              <Text style={styles.actionText}>Reply</Text>
-            </Pressable>
-            {isOwn && (
-              <Pressable
-                style={styles.actionBtn}
-                onPress={() => onDelete(comment.id)}
-                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-              >
-                <Feather name="trash-2" size={14} color={colors.textMuted} />
-              </Pressable>
+            </Text>
+
+            {/* Photo (if any) */}
+            {!!comment.photo_url && (
+              <Image
+                source={{ uri: comment.photo_url }}
+                style={styles.photo}
+                resizeMode="cover"
+              />
             )}
+
+            {/* Sub-row: time · Reply · Delete */}
+            <View style={styles.metaRow}>
+              <Text style={styles.timeText}>{timeAgo(comment.created_at)}</Text>
+              <Pressable
+                onPress={() => onStartReply(comment.id, comment.user.username)}
+                hitSlop={8}
+              >
+                <Text style={styles.replyText}>Reply</Text>
+              </Pressable>
+              {isOwn && (
+                <Pressable onPress={() => onDelete(comment.id)} hitSlop={8}>
+                  <Feather name="trash-2" size={12} color={colors.textMuted} />
+                </Pressable>
+              )}
+            </View>
           </View>
+
+          {/* Heart — right side */}
+          <Pressable
+            style={styles.likeBtn}
+            onPress={() => onLike(comment.id)}
+            hitSlop={8}
+          >
+            <Feather
+              name="heart"
+              size={14}
+              color={comment.user_liked ? colors.semantic.like : colors.textMuted}
+            />
+            {comment.like_count > 0 && (
+              <Text
+                style={[
+                  styles.likeCount,
+                  comment.user_liked && { color: colors.semantic.like },
+                ]}
+              >
+                {comment.like_count}
+              </Text>
+            )}
+          </Pressable>
         </View>
       </View>
 
+      {/* ── View / hide replies ─────────────────────────────────────── */}
       {comment.reply_count > 0 && (
         <Pressable style={styles.toggleReplies} onPress={handleToggleReplies}>
           <View style={styles.replyLine} />
@@ -121,60 +141,75 @@ export default function CommentItem({
 
 const styles = StyleSheet.create({
   container: {
-    marginBottom: spacing.base,
+    marginBottom: spacing.md,
   },
-  main: {
+  row: {
     flexDirection: 'row',
     gap: spacing.sm,
+    alignItems: 'flex-start',
   },
-  content: {
+  bodyWrap: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  textWrap: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    marginBottom: 2,
+  inlineText: {
+    lineHeight: 20,
   },
-  name: {
+  username: {
     fontSize: typography.size.sm,
     fontFamily: typography.family.semibold,
     color: colors.textPrimary,
   },
-  time: {
-    fontSize: typography.size.xs,
-    fontFamily: typography.family.regular,
-    color: colors.textMuted,
-  },
-  text: {
+  commentText: {
     fontSize: typography.size.sm,
     fontFamily: typography.family.regular,
     color: colors.textPrimary,
-    lineHeight: 20,
   },
-  actions: {
+  photo: {
+    width: '100%',
+    height: 160,
+    borderRadius: 10,
+    marginTop: spacing.xs,
+  },
+  metaRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.base,
-    marginTop: spacing.xs,
+    marginTop: 4,
   },
-  actionBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 2,
-  },
-  actionText: {
+  timeText: {
     fontSize: typography.size.xs,
-    fontFamily: typography.family.medium,
+    fontFamily: typography.family.regular,
     color: colors.textMuted,
+  },
+  replyText: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.semibold,
+    color: colors.textMuted,
+  },
+  likeBtn: {
+    alignItems: 'center',
+    paddingTop: 2,
+    minWidth: 24,
+  },
+  likeCount: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+    marginTop: 2,
+    textAlign: 'center',
   },
   toggleReplies: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingLeft: spacing['2xl'] + spacing.sm,
-    marginTop: spacing.sm,
+    paddingLeft: 34 + spacing.sm, // align with comment text (avatar width + gap)
+    marginTop: spacing.xs,
   },
   replyLine: {
     width: 20,
@@ -183,7 +218,7 @@ const styles = StyleSheet.create({
   },
   toggleText: {
     fontSize: typography.size.xs,
-    fontFamily: typography.family.medium,
-    color: colors.primary,
+    fontFamily: typography.family.semibold,
+    color: colors.textMuted,
   },
 });

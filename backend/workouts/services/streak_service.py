@@ -1,8 +1,19 @@
+import zoneinfo
 from datetime import date, timedelta
 from django.utils import timezone
 from django.db import transaction
 
 from workouts.models import Streak, RestDay
+
+
+def _get_local_now(user):
+    """Return the current datetime converted to the user's stored timezone."""
+    tz_str = getattr(user, 'timezone', None) or 'UTC'
+    try:
+        tz = zoneinfo.ZoneInfo(tz_str)
+    except (zoneinfo.ZoneInfoNotFoundError, KeyError):
+        tz = zoneinfo.ZoneInfo('UTC')
+    return timezone.now().astimezone(tz)
 
 
 def get_streak_date(dt=None):
@@ -26,7 +37,7 @@ def update_streak(user, activity_type='workout'):
     Uses select_for_update for race safety.
     Returns dict with streak info.
     """
-    today_streak = get_streak_date()
+    today_streak = get_streak_date(_get_local_now(user))
 
     with transaction.atomic():
         streak_obj, created = Streak.objects.select_for_update().get_or_create(
@@ -126,7 +137,7 @@ def record_rest_day(user):
     Record a rest day for the user.
     Returns dict with success status and info.
     """
-    today_streak = get_streak_date()
+    today_streak = get_streak_date(_get_local_now(user))
 
     # Check if already rested today
     if RestDay.objects.filter(user=user, streak_date=today_streak).exists():
@@ -170,7 +181,7 @@ def get_weekly_rest_day_info(user):
     """
     Get rest day usage info for the current ISO week.
     """
-    today = get_streak_date()
+    today = get_streak_date(_get_local_now(user))
     iso_year, iso_week, _ = today.isocalendar()
     week_start = date.fromisocalendar(iso_year, iso_week, 1)
     week_end = week_start + timedelta(days=6)
@@ -196,7 +207,7 @@ def get_streak_details(user):
     Get all data needed for the streak details page.
     Performs lazy evaluation to ensure displayed streak is accurate.
     """
-    today_streak = get_streak_date()
+    today_streak = get_streak_date(_get_local_now(user))
 
     streak_obj, _ = Streak.objects.get_or_create(user=user)
 
@@ -261,6 +272,9 @@ def get_streak_details(user):
 
     rest_info = get_weekly_rest_day_info(user)
 
+    from workouts.services.achievements_service import get_user_achievements
+    achievements = get_user_achievements(user, weekly_active_days, user.weekly_workout_goal)
+
     return {
         'current_streak': user.current_streak,
         'longest_streak': user.longest_streak,
@@ -270,6 +284,7 @@ def get_streak_details(user):
         'weekly_workout_count': weekly_active_days,
         'weekly_workout_goal': user.weekly_workout_goal,
         'week_days': week_days,
+        'achievements': achievements,
     }
 
 

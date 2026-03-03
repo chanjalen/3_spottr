@@ -12,6 +12,8 @@ class ExerciseCatalog(BaseModel):
         CHEST = 'chest', 'Chest'
         BACK = 'back', 'Back'
         SHOULDERS = 'shoulders', 'Shoulders'
+        BICEPS = 'biceps', 'Biceps'
+        TRICEPS = 'triceps', 'Triceps'
         ARMS = 'arms', 'Arms'
         LEGS = 'legs', 'Legs'
         CORE = 'core', 'Core'
@@ -25,6 +27,7 @@ class ExerciseCatalog(BaseModel):
         default=Category.OTHER,
     )
     description = models.TextField(blank=True)
+    muscle_group = models.CharField(max_length=200, blank=True)  # primary muscles, comma-separated
 
     # Default values for this exercise
     default_sets = models.PositiveIntegerField(default=3)

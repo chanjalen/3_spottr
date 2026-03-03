@@ -46,7 +46,7 @@ LEADERBOARD_TTL = 15 * 60  # 15 minutes
 @permission_classes([IsAuthenticated])
 def gym_list(request):
     """Search/browse gyms. Optional query param: ?q=<search term>"""
-    query = request.query_params.get('q', '').strip()
+    query = request.query_params.get('q', '').strip()[:100]
     limit = int(request.query_params.get('limit', 50))
     offset = int(request.query_params.get('offset', 0))
 
@@ -187,6 +187,17 @@ def gym_unenroll(request, gym_id):
 def gym_current(request):
     """Get all gyms the current user is enrolled at."""
     gyms = request.user.enrolled_gyms.all()
+    serializer = GymDetailSerializer(gyms, many=True, context={'request': request})
+    return Response(serializer.data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def user_gyms(request, username):
+    """Get all gyms a specific user is enrolled at."""
+    from accounts.models import User
+    user = get_object_or_404(User, username=username)
+    gyms = user.enrolled_gyms.all()
     serializer = GymDetailSerializer(gyms, many=True, context={'request': request})
     return Response(serializer.data)
 
@@ -391,16 +402,26 @@ def join_request_cancel(request, request_id):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def gym_busy_level_hourly(request, gym_id):
-    """GET: 24-hour busy level breakdown for a given date (defaults to today UTC).
+    """GET: 24-hour busy level breakdown for a given date in the caller's timezone.
 
     Query params:
-      ?date=YYYY-MM-DD  — specific date (defaults to today)
+      ?date=YYYY-MM-DD  — specific local date (defaults to today in tz)
+      ?tz=America/New_York — IANA timezone (defaults to UTC)
 
-    Returns a list of 24 objects, one per hour (0–23):
+    Returns a list of 24 objects, one per local hour (0–23):
       { hour, avg_level, rounded_level, label, total_responses, breakdown{1-5} }
     """
-    from datetime import date as date_cls
+    import zoneinfo
+    from datetime import date as date_cls, datetime as datetime_cls
 
+    # Resolve timezone
+    tz_str = request.query_params.get('tz', 'UTC')
+    try:
+        tz = zoneinfo.ZoneInfo(tz_str)
+    except (zoneinfo.ZoneInfoNotFoundError, KeyError):
+        tz = zoneinfo.ZoneInfo('UTC')
+
+    # Resolve target local date
     date_str = request.query_params.get('date')
     if date_str:
         try:
@@ -408,12 +429,27 @@ def gym_busy_level_hourly(request, gym_id):
         except ValueError:
             return Response({"error": "Invalid date. Use YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
     else:
-        target_date = timezone.now().date()
+        target_date = timezone.now().astimezone(tz).date()
 
     if not Gym.objects.filter(id=gym_id).exists():
         return Response({"error": "Gym not found."}, status=status.HTTP_404_NOT_FOUND)
 
-    qs = BusyLevel.objects.filter(gym_id=gym_id, timestamp__date=target_date)
+    # Convert local date boundaries to UTC for the DB query
+    local_start = datetime_cls(target_date.year, target_date.month, target_date.day, tzinfo=tz)
+    local_end = local_start + timedelta(days=1)
+
+    records = list(
+        BusyLevel.objects
+        .filter(gym_id=gym_id, timestamp__gte=local_start, timestamp__lt=local_end)
+        .values_list('timestamp', 'survey_response')
+    )
+
+    # Group by local hour in Python
+    from collections import defaultdict
+    hour_groups: dict[int, list[int]] = defaultdict(list)
+    for ts, response in records:
+        local_hour = ts.astimezone(tz).hour
+        hour_groups[local_hour].append(response)
 
     LABELS = {
         1: 'Not crowded',
@@ -425,7 +461,7 @@ def gym_busy_level_hourly(request, gym_id):
 
     hours_data = []
     for h in range(24):
-        responses = list(qs.filter(timestamp__hour=h).values_list('survey_response', flat=True))
+        responses = hour_groups[h]
         total = len(responses)
         breakdown = {'1': 0, '2': 0, '3': 0, '4': 0, '5': 0}
         for r in responses:

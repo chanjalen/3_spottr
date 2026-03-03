@@ -18,6 +18,7 @@ export interface UserProfile extends UserBrief {
   longest_streak: number;
   total_workouts: number;
   is_following: boolean;
+  is_followed_by: boolean;
   follower_count: number;
   following_count: number;
   friend_count?: number;
@@ -27,6 +28,16 @@ export interface UserProfile extends UserBrief {
 
 export interface UserSearchResult extends UserBrief {
   is_following: boolean;
+}
+
+export interface SuggestedUser {
+  id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  is_following: boolean;
+  mutual_count: number;
+  mutual_previews: Array<{ id: string; username: string; avatar_url: string | null }>;
 }
 
 export interface PersonalRecord {

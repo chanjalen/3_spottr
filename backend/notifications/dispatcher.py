@@ -85,6 +85,52 @@ def notify_workout_invite(actor, recipient, workout_invite):
     )
 
 
+def notify_like_checkin(actor, checkin):
+    """Create a notification when someone likes a check-in."""
+    if actor.id == checkin.user_id:
+        return
+    Notification.objects.create(
+        recipient=checkin.user,
+        triggered_by=actor,
+        type=Notification.Type.LIKE_CHECKIN,
+        target_type=Notification.TargetType.QUICK_WORKOUT,
+        target_id=str(checkin.id),
+    )
+
+
+def notify_like_comment(actor, comment):
+    """Create a notification when someone likes a comment."""
+    if actor.id == comment.user_id:
+        return
+    Notification.objects.create(
+        recipient=comment.user,
+        triggered_by=actor,
+        type=Notification.Type.LIKE_COMMENT,
+        target_type=Notification.TargetType.COMMENT,
+        target_id=str(comment.id),
+    )
+
+
+def notify_mention(actor, recipient, target_type, target_id, context_type=None, context_id=None):
+    """
+    Generic mention notifier. Called when @username is found in a comment or reply.
+    target_type: Notification.TargetType value (POST, QUICK_WORKOUT, COMMENT)
+    target_id:   str UUID of the containing content (comment id for comment mentions)
+    context_type/context_id: optional parent content (e.g. the post or checkin)
+    """
+    if actor.id == recipient.id:
+        return
+    Notification.objects.create(
+        recipient=recipient,
+        triggered_by=actor,
+        type=Notification.Type.MENTION,
+        target_type=target_type,
+        target_id=str(target_id),
+        context_type=context_type or '',
+        context_id=str(context_id) if context_id else '',
+    )
+
+
 def notify_group_join_request(actor, group, join_request):
     """Notify all group admins when someone requests to join a private group."""
     from groups.models import GroupMember

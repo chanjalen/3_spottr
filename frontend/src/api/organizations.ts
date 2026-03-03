@@ -183,6 +183,11 @@ export async function listMyOrgs(): Promise<OrgListItem[]> {
   return data;
 }
 
+export async function fetchUserOrgs(username: string): Promise<OrgListItem[]> {
+  const { data } = await apiClient.get(`/api/organizations/user/${username}/orgs/`);
+  return data;
+}
+
 export async function discoverOrgs(query?: string): Promise<OrgListItem[]> {
   const params: Record<string, string> = {};
   if (query) params.q = query;
@@ -336,6 +341,23 @@ export async function reactToAnnouncement(
   const { data } = await apiClient.post(
     `/api/organizations/${orgId}/announcements/${announcementId}/react/`,
     { emoji },
+  );
+  return data;
+}
+
+export interface ReactionDetail {
+  emoji: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+}
+
+export async function fetchAnnouncementReactionDetails(
+  orgId: string,
+  announcementId: string,
+): Promise<ReactionDetail[]> {
+  const { data } = await apiClient.get(
+    `/api/organizations/${orgId}/announcements/${announcementId}/reactions/`,
   );
   return data;
 }

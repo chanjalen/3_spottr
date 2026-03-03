@@ -14,10 +14,10 @@ from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework import status
 
 from accounts.models import User
+from common.throttles import AuthRateThrottle, ResendVerificationThrottle, SearchRateThrottle  # noqa: re-exported
 
 logger = logging.getLogger(__name__)
 
@@ -28,16 +28,6 @@ RESERVED_USERNAMES = frozenset({
 })
 
 USERNAME_RE = re.compile(r'^[a-z0-9_.]{3,30}$')
-
-
-class AuthRateThrottle(AnonRateThrottle):
-    """Strict per-IP throttle for auth endpoints to limit brute-force attempts."""
-    scope = 'auth'
-
-
-class ResendVerificationThrottle(UserRateThrottle):
-    """3 resend requests per hour per user."""
-    scope = 'resend_verification'
 
 
 def _user_brief(user):
@@ -378,6 +368,7 @@ def api_onboarding_view(request):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
+@throttle_classes([SearchRateThrottle])
 def api_username_available_view(request):
     """Check whether a username is available. GET ?username=xxx"""
     raw = request.GET.get('username', '').strip().lower()
@@ -436,15 +427,30 @@ def api_update_avatar_view(request):
 @api_view(['PATCH'])
 @permission_classes([IsAuthenticated])
 def api_update_profile_view(request):
-    """Update display_name and/or bio for the authenticated user."""
+    """Update display_name, bio, and/or timezone for the authenticated user."""
     user = request.user
     changed = []
     if 'display_name' in request.data:
-        user.display_name = str(request.data['display_name']).strip()
+        val = str(request.data['display_name']).strip()
+        if len(val) > 50:
+            return Response({'error': 'Display name cannot exceed 50 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+        user.display_name = val
         changed.append('display_name')
     if 'bio' in request.data:
-        user.bio = str(request.data['bio']).strip()
+        val = str(request.data['bio']).strip()
+        if len(val) > 300:
+            return Response({'error': 'Bio cannot exceed 300 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+        user.bio = val
         changed.append('bio')
+    if 'timezone' in request.data:
+        import zoneinfo
+        tz_str = str(request.data['timezone']).strip()
+        try:
+            zoneinfo.ZoneInfo(tz_str)  # validate it's a real IANA timezone
+            user.timezone = tz_str
+            changed.append('timezone')
+        except (zoneinfo.ZoneInfoNotFoundError, KeyError):
+            pass  # ignore invalid timezone strings silently
     if changed:
         user.save(update_fields=changed)
     return Response(_user_brief(user))
@@ -462,6 +468,7 @@ def api_profile_view(request, username):
     from social.models import Follow, QuickWorkout
     from django.utils import timezone as tz
     is_following = Follow.objects.filter(follower=request.user, following=target).exists()
+    is_followed_by = Follow.objects.filter(follower=target, following=request.user).exists()
     follower_count = Follow.objects.filter(following=target).count()
     following_count = Follow.objects.filter(follower=target).count()
     # Friends = mutual follows
@@ -482,12 +489,58 @@ def api_profile_view(request, username):
         'longest_streak': target.longest_streak,
         'total_workouts': target.total_workouts,
         'is_following': is_following,
+        'is_followed_by': is_followed_by,
         'follower_count': follower_count,
         'following_count': following_count,
         'friend_count': friend_count,
         'member_since': target.member_since,
         'has_checkin_today': has_checkin_today,
     })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_mutual_followers_view(request, username):
+    """
+    Return users that the requester follows who also follow <username>.
+    Optional ?q= for search.
+    """
+    from django.db import models as db_models
+    from social.models import Follow
+    from django.shortcuts import get_object_or_404
+
+    target = get_object_or_404(User, username=username)
+    if target == request.user:
+        return Response([])
+
+    # IDs of people I follow
+    my_following_ids = set(
+        Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
+    )
+    # IDs of people who follow target
+    target_follower_ids = set(
+        Follow.objects.filter(following=target).values_list('follower_id', flat=True)
+    )
+
+    mutual_ids = my_following_ids & target_follower_ids
+
+    q = request.query_params.get('q', '').strip()[:50]
+    qs = User.objects.filter(id__in=mutual_ids)
+    if q:
+        qs = qs.filter(
+            db_models.Q(username__icontains=q) | db_models.Q(display_name__icontains=q)
+        )
+    qs = qs.order_by('display_name')[:50]
+
+    return Response([
+        {
+            'id': str(u.id),
+            'username': u.username,
+            'display_name': u.display_name,
+            'avatar_url': u.avatar_url or None,
+        }
+        for u in qs
+    ])
 
 
 @api_view(['GET'])
@@ -595,17 +648,27 @@ def api_save_pr_view(request):
 
     exercise_name = request.data.get('exercise_name', '').strip()
     value = request.data.get('value', '')
-    unit = request.data.get('unit', '').strip()
+    unit = request.data.get('unit', '').strip().lower()
     video = request.FILES.get('video')
     pr_id = request.data.get('pr_id', '').strip()
 
     if not exercise_name or not value or not unit:
         return Response({'error': 'Exercise name, value, and unit are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
+    if len(exercise_name) > 100:
+        return Response({'error': 'Exercise name cannot exceed 100 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if unit not in ('lbs', 'kg', 'reps', 'sec', 'min'):
+        return Response({'error': "Unit must be one of: lbs, kg, reps, sec, min."}, status=status.HTTP_400_BAD_REQUEST)
+
     try:
         value = float(value)
     except (ValueError, TypeError):
         return Response({'error': 'Invalid value.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    max_value = 2000 if unit in ('lbs', 'kg') else 100000
+    if value <= 0 or value > max_value:
+        return Response({'error': f'Value must be between 0 and {max_value}.'}, status=status.HTTP_400_BAD_REQUEST)
 
     if pr_id:
         try:
@@ -796,6 +859,145 @@ def api_password_reset_confirm_view(request):
     user.save(update_fields=['password', 'password_reset_token', 'password_reset_token_expires'])
 
     return Response({'detail': 'Password reset successfully. You can now log in.'})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_suggested_users_view(request):
+    """
+    Return a ranked list of suggested users to follow.
+    Scoring: mutual_count × 1.0 + same_gym × 2.0 + freq_diff_bonus × 0.5
+    Fallback for new users: top users by follower count.
+    ~6–7 DB queries, no N+1.
+    """
+    from social.models import Follow
+    from django.db.models import Count
+    from media.models import MediaLink
+    from collections import defaultdict
+
+    me = request.user
+    try:
+        limit = max(1, min(int(request.GET.get('limit', 20)), 50))
+    except (ValueError, TypeError):
+        limit = 20
+
+    # Q1: ids of everyone current user already follows
+    following_ids = list(Follow.objects.filter(follower=me).values_list('following_id', flat=True))
+    excluded = set(following_ids) | {me.id}
+
+    # Q2: second-degree follows with mutual count
+    second_degree = (
+        Follow.objects.filter(follower_id__in=following_ids)
+        .exclude(following_id__in=excluded)
+        .values('following_id')
+        .annotate(mutual_count=Count('follower_id'))
+    )
+    mutual_map = {row['following_id']: row['mutual_count'] for row in second_degree}
+
+    # Q3: my gym ids
+    my_gym_ids = list(me.enrolled_gyms.values_list('id', flat=True))
+
+    # Q4: gym candidates
+    gym_candidate_ids = set()
+    if my_gym_ids:
+        gym_candidate_ids = set(
+            User.objects.filter(enrolled_gyms__in=my_gym_ids)
+            .exclude(id__in=excluded)
+            .values_list('id', flat=True)
+        )
+
+    candidate_ids = set(mutual_map.keys()) | gym_candidate_ids
+
+    # Fallback: new user with no follows and no gym
+    if not candidate_ids:
+        fallback_ids = list(
+            User.objects.exclude(id__in=excluded)
+            .annotate(follower_count=Count('followers'))
+            .order_by('-follower_count')
+            .values_list('id', flat=True)[:limit * 2]
+        )
+        candidate_ids = set(fallback_ids)
+
+    if not candidate_ids:
+        return Response({'results': []})
+
+    # Q5: fetch candidate details
+    candidates = {
+        u.id: u for u in
+        User.objects.filter(id__in=candidate_ids)
+        .only('id', 'username', 'display_name', 'avatar', 'workout_frequency')
+    }
+
+    # Score and rank
+    scored = []
+    for cid, candidate in candidates.items():
+        mutual_count = mutual_map.get(cid, 0)
+        same_gym = 1.0 if cid in gym_candidate_ids else 0.0
+        freq_bonus = 0.5 if abs(candidate.workout_frequency - me.workout_frequency) <= 1 else 0.0
+        score = mutual_count * 3.0 + same_gym * 1.0 + freq_bonus
+        scored.append((score, cid))
+
+    scored.sort(key=lambda x: -x[0])
+    top_ids = [cid for _, cid in scored[:limit]]
+
+    # Q6: bulk fetch connectors (people I follow who also follow a candidate)
+    connectors_by_candidate: dict = defaultdict(list)
+    if following_ids and top_ids:
+        connector_follows = list(
+            Follow.objects.filter(follower_id__in=following_ids, following_id__in=top_ids)
+            .select_related('follower')[:3 * limit]
+        )
+        for f in connector_follows:
+            bucket = connectors_by_candidate[f.following_id]
+            if len(bucket) < 3:
+                bucket.append(f.follower)
+
+    # Q7: bulk fetch avatar URLs (avoids N+1 via user.avatar_url)
+    all_avatar_ids = set(top_ids)
+    for connectors in connectors_by_candidate.values():
+        for c in connectors:
+            all_avatar_ids.add(c.id)
+
+    avatar_url_map = {
+        link.destination_id: link.asset.url
+        for link in MediaLink.objects.filter(
+            destination_type='user',
+            destination_id__in=[str(uid) for uid in all_avatar_ids],
+            type='avatar',
+        ).select_related('asset')
+    }
+
+    def _avatar(user_obj):
+        url = avatar_url_map.get(str(user_obj.id))
+        if url:
+            return url
+        if user_obj.avatar:
+            from media.utils import build_media_url
+            return build_media_url(user_obj.avatar.name)
+        return None
+
+    # Build response
+    results = []
+    for cid in top_ids:
+        if cid not in candidates:
+            continue
+        candidate = candidates[cid]
+        connectors = connectors_by_candidate.get(cid, [])
+        mutual_previews = [
+            {'id': str(c.id), 'username': c.username, 'avatar_url': _avatar(c)}
+            for c in connectors
+        ]
+        results.append({
+            'id': str(candidate.id),
+            'username': candidate.username,
+            'display_name': candidate.display_name,
+            'avatar_url': _avatar(candidate),
+            'is_following': False,
+            'mutual_count': mutual_map.get(cid, 0),
+            'mutual_previews': mutual_previews,
+        })
+
+    return Response({'results': results})
 
 
 @api_view(['POST'])
