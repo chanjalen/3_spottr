@@ -29,6 +29,8 @@ import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
 import ReactionDetailModal from '../../components/messages/ReactionDetailModal';
 import VideoThumbnail from '../../components/common/VideoThumbnail';
+import MentionText from '../../components/common/MentionText';
+import MentionAutocomplete, { type MentionableUser } from '../../components/messages/MentionAutocomplete';
 import {
   fetchAnnouncements,
   createAnnouncement,
@@ -39,6 +41,7 @@ import {
   markAnnouncementsRead,
   uploadMedia,
   fetchOrgDetail,
+  listOrgMembers,
   Announcement,
   AnnouncementPoll,
   OrgDetail,
@@ -328,6 +331,7 @@ function AnnouncementBubble({
   onVoted,
   onRetry,
   onVideoPress,
+  onMentionPress,
 }: {
   item: OptimisticAnnouncement;
   orgId: string;
@@ -338,6 +342,7 @@ function AnnouncementBubble({
   onVoted: (announcementId: string, poll: AnnouncementPoll) => void;
   onRetry: (item: OptimisticAnnouncement) => void;
   onVideoPress: (url: string) => void;
+  onMentionPress?: (username: string) => void;
 }) {
   const isPending = item._status === 'pending';
   const isFailed = item._status === 'failed';
@@ -370,7 +375,11 @@ function AnnouncementBubble({
       </View>
 
       {!!item.content && (
-        <Text style={styles.bubbleContent}>{item.content}</Text>
+        <MentionText
+          content={item.content}
+          textStyle={styles.bubbleContent}
+          onMentionPress={onMentionPress}
+        />
       )}
 
       {item.media.length > 0 && (
@@ -473,6 +482,36 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
   const [submitting, setSubmitting] = useState(false);
 
   const isAdmin = userRole === 'creator' || userRole === 'admin';
+  const myUserId = String(me?.id ?? '');
+  const [mentionableUsers, setMentionableUsers] = useState<MentionableUser[]>([]);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+
+  const detectMention = useCallback((value: string) => {
+    const match = value.match(/@(\w*)$/);
+    setMentionQuery(match ? match[1] : null);
+  }, []);
+
+  const handleMentionSelect = useCallback((user: MentionableUser) => {
+    setDraftText(prev => prev.replace(/@(\w*)$/, `@${user.username} `));
+    setMentionQuery(null);
+  }, []);
+
+  useEffect(() => {
+    if (!isAdmin) return;
+    listOrgMembers(orgId).then(members =>
+      setMentionableUsers(
+        members
+          .filter(m => String(m.user_id) !== myUserId)
+          .map(m => ({
+            id: String(m.user_id),
+            username: m.username,
+            display_name: m.display_name,
+            avatar_url: m.avatar_url,
+          })),
+      ),
+    ).catch(() => {});
+  }, [orgId, isAdmin, myUserId]);
+
   const flatRef = useRef<FlatList>(null);
   const [videoPlayerUrl, setVideoPlayerUrl] = useState<string | null>(null);
   const _mountTime = useRef(Date.now());
@@ -815,6 +854,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
         onVoted={handlePollVoted}
         onRetry={handleRetry}
         onVideoPress={setVideoPlayerUrl}
+        onMentionPress={(u) => navigation.navigate('Profile', { username: u })}
       />
     );
   };
@@ -1044,6 +1084,13 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
               </Pressable>
             </View>
 
+            {mentionQuery !== null && (
+              <MentionAutocomplete
+                query={mentionQuery}
+                users={mentionableUsers}
+                onSelect={handleMentionSelect}
+              />
+            )}
             <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
               {/* Text input */}
               <TextInput
@@ -1051,7 +1098,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
                 placeholder="Write an announcement…"
                 placeholderTextColor={colors.textMuted}
                 value={draftText}
-                onChangeText={setDraftText}
+                onChangeText={(v) => { detectMention(v); setDraftText(v); }}
                 multiline
                 maxLength={5000}
               />

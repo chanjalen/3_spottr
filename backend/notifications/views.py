@@ -50,6 +50,11 @@ def _post_thumbnail(post):
     return None
 
 
+def _checkin_thumbnail(checkin):
+    """Return a thumbnail URL for a check-in, or None."""
+    return get_media_url('checkin', str(checkin.id)) or None
+
+
 def _build_notification_item(notif, actor):
     """Build a single notification dict for the API response."""
     return {
@@ -84,10 +89,11 @@ def notification_list(request):
         .order_by('-created_at')[:100]
     )
 
-    # Group like_post notifications by target_id (post)
+    # Group like_post / like_checkin notifications by target_id
     # Keep insertion order so we can merge them chronologically
     grouped = []
-    like_groups = OrderedDict()  # target_id -> list of notifs
+    like_groups = OrderedDict()         # post target_id -> list of notifs
+    like_checkin_groups = OrderedDict() # checkin target_id -> list of notifs
 
     for notif in notifications:
         if notif.type == Notification.Type.LIKE_POST:
@@ -99,17 +105,32 @@ def notification_list(request):
                 }
                 grouped.append(('like_group_placeholder', key))
             like_groups[key]['notifs'].append(notif)
+        elif notif.type == Notification.Type.LIKE_CHECKIN:
+            key = notif.target_id
+            if key not in like_checkin_groups:
+                like_checkin_groups[key] = {
+                    'notifs': [],
+                    'insert_index': len(grouped),
+                }
+                grouped.append(('like_checkin_group_placeholder', key))
+            like_checkin_groups[key]['notifs'].append(notif)
         else:
             grouped.append(('single', notif))
 
     # Now resolve the grouped items into the final list
     # Fetch post thumbnails for like groups
-    from social.models import Post
+    from social.models import Post, QuickWorkout
     post_ids = list(like_groups.keys())
     posts_by_id = {}
     if post_ids:
         for post in Post.objects.filter(id__in=post_ids):
             posts_by_id[str(post.id)] = post
+
+    checkin_ids = list(like_checkin_groups.keys())
+    checkins_by_id = {}
+    if checkin_ids:
+        for c in QuickWorkout.objects.filter(id__in=checkin_ids):
+            checkins_by_id[str(c.id)] = c
 
     # Pre-fetch workout join request descriptions (avoid N+1 in the loop below)
     from gyms.models import JoinRequest as GymJoinRequest
@@ -178,6 +199,54 @@ def notification_list(request):
                 'total_actors': total_likers,
                 'thumbnail': _post_thumbnail(post) if post else None,
             })
+        elif entry_type == 'like_checkin_group_placeholder':
+            group = like_checkin_groups[entry_data]
+            notifs = group['notifs']
+            checkin = checkins_by_id.get(entry_data)
+
+            actors = []
+            seen_actors = set()
+            for n in notifs:
+                if n.triggered_by and n.triggered_by_id not in seen_actors:
+                    seen_actors.add(n.triggered_by_id)
+                    actors.append({
+                        'id': str(n.triggered_by.id),
+                        'username': n.triggered_by.username,
+                        'display_name': n.triggered_by.display_name or n.triggered_by.username,
+                        'avatar_url': _user_avatar(n.triggered_by),
+                    })
+
+            total_likers = len(actors)
+            if total_likers == 1:
+                msg = f"{actors[0]['display_name']} liked your check-in"
+            elif total_likers == 2:
+                msg = f"{actors[0]['display_name']} and {actors[1]['display_name']} liked your check-in"
+            elif total_likers == 3:
+                msg = f"{actors[0]['display_name']}, {actors[1]['display_name']} and {actors[2]['display_name']} liked your check-in"
+            elif total_likers >= 10:
+                msg = f"{actors[0]['display_name']}, {actors[1]['display_name']} and {total_likers - 2}+ others liked your check-in"
+            else:
+                msg = f"{actors[0]['display_name']}, {actors[1]['display_name']} and {total_likers - 2} others liked your check-in"
+
+            notif_ids = [str(n.id) for n in notifs]
+            is_read = all(n.read_at is not None for n in notifs)
+            latest = notifs[0]
+
+            result.append({
+                'id': notif_ids[0],
+                'ids': notif_ids,
+                'type': 'like_checkin',
+                'grouped': True,
+                'target_type': 'quick_workout',
+                'target_id': entry_data,
+                'is_read': is_read,
+                'time_ago': _time_ago(latest.created_at),
+                'created_at': latest.created_at.isoformat(),
+                'message': msg,
+                'actors': actors[:3],
+                'total_actors': total_likers,
+                'thumbnail': _checkin_thumbnail(checkin) if checkin else None,
+            })
         else:
             notif = entry_data
             actor = notif.triggered_by
@@ -231,6 +300,24 @@ def notification_list(request):
                 else:
                     item['message'] = f"{actor_name} requested to join your workout"
                     item['description'] = workout_jr_descriptions.get(notif.context_id, '')
+
+            elif notif.type == Notification.Type.LIKE_COMMENT:
+                item['message'] = f"{actor_name} liked your comment"
+
+            elif notif.type == Notification.Type.MENTION:
+                if notif.target_type == Notification.TargetType.POST:
+                    item['message'] = f"{actor_name} mentioned you in a post"
+                    post = posts_by_id.get(notif.target_id)
+                    if not post:
+                        try:
+                            post = Post.objects.get(id=notif.target_id)
+                        except Post.DoesNotExist:
+                            post = None
+                    item['thumbnail'] = _post_thumbnail(post) if post else None
+                elif notif.target_type == Notification.TargetType.COMMENT:
+                    item['message'] = f"{actor_name} mentioned you in a comment"
+                else:
+                    item['message'] = f"{actor_name} mentioned you in a check-in"
 
             else:
                 item['message'] = f"{actor_name} sent you a notification"
