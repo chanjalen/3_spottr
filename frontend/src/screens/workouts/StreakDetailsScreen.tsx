@@ -1,4 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import Animated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withRepeat,
+  withSequence,
+  withTiming,
+  withDelay,
+  cancelAnimation,
+} from 'react-native-reanimated';
 import {
   View,
   Text,
@@ -19,7 +29,7 @@ import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { fetchStreakInfo, updateWorkoutGoal, fetchCalendarPosts } from '../../api/workouts';
-import { StreakDetails, CalendarPost } from '../../types/workout';
+import { StreakDetails, CalendarPost, Achievement } from '../../types/workout';
 import { useAuth } from '../../store/AuthContext';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
@@ -45,6 +55,7 @@ export default function StreakDetailsScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
   const [showGoalPicker, setShowGoalPicker] = useState(false);
+  const [selectedAchievement, setSelectedAchievement] = useState<Achievement | null>(null);
 
   // Calendar state
   const now = new Date();
@@ -311,6 +322,31 @@ export default function StreakDetailsScreen({ navigation }: Props) {
             })}
           </View>
         </View>
+
+        {/* Achievements */}
+        {streak.achievements && streak.achievements.length > 0 && (() => {
+          const earnedCount = streak.achievements.filter(a => a.earned).length;
+          return (
+            <View style={styles.card}>
+              <View style={styles.rowBetween}>
+                <Text style={styles.cardTitle}>Achievements</Text>
+                <Text style={badgeStyles.countLabel}>
+                  {earnedCount} / {streak.achievements.length}
+                </Text>
+              </View>
+              <FlatList
+                data={streak.achievements}
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={{ gap: 10, paddingVertical: 4 }}
+                renderItem={({ item }) => (
+                <AchievementBadge item={item} onPress={() => setSelectedAchievement(item)} />
+              )}
+              />
+            </View>
+          );
+        })()}
       </ScrollView>
 
       {/* Goal picker modal */}
@@ -480,6 +516,12 @@ export default function StreakDetailsScreen({ navigation }: Props) {
           </View>
         </Pressable>
       </Modal>
+
+      {/* Achievement detail modal */}
+      <AchievementModal
+        achievement={selectedAchievement}
+        onClose={() => setSelectedAchievement(null)}
+      />
     </View>
   );
 }
@@ -504,6 +546,297 @@ function InfoRule({ icon, text }: { icon: React.ComponentProps<typeof Feather>['
     </View>
   );
 }
+
+const RARITY_COLORS: Record<Achievement['rarity'], string> = {
+  common: '#6B7280',
+  rare: '#3B82F6',
+  epic: '#8B5CF6',
+  legendary: '#F59E0B',
+};
+
+const RARITY_LABELS: Record<Achievement['rarity'], string> = {
+  common: 'COMMON',
+  rare: 'RARE',
+  epic: 'EPIC',
+  legendary: 'LEGENDARY',
+};
+
+function AchievementBadge({ item, onPress }: { item: Achievement; onPress: () => void }) {
+  const color = item.earned ? RARITY_COLORS[item.rarity] : colors.border.subtle;
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => pressed && { opacity: 0.75 }}
+    >
+      <View style={[
+        badgeStyles.badge,
+        { borderColor: color },
+        item.earned
+          ? Platform.select({ ios: { shadowColor: color }, android: {} })
+          : badgeStyles.badgeLocked,
+      ]}>
+        {!item.earned && (
+          <View style={badgeStyles.lockCorner}>
+            <Feather name="lock" size={9} color={colors.textMuted} />
+          </View>
+        )}
+        <Text style={[badgeStyles.badgeEmoji, !item.earned && { opacity: 0.35 }]}>
+          {item.emoji}
+        </Text>
+        <Text style={[badgeStyles.badgeName, !item.earned && badgeStyles.textMuted]} numberOfLines={2}>
+          {item.name}
+        </Text>
+        <Text style={[badgeStyles.badgeDesc, !item.earned && badgeStyles.textMuted]} numberOfLines={2}>
+          {item.desc}
+        </Text>
+        <View style={[badgeStyles.rarityPill, { backgroundColor: item.earned ? color : colors.background.elevated }]}>
+          <Text style={[badgeStyles.rarityText, !item.earned && { color: colors.textMuted }]}>
+            {item.earned ? RARITY_LABELS[item.rarity] : 'LOCKED'}
+          </Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+// ─── Achievement modal ─────────────────────────────────────────────────────────
+
+const MODAL_CARD_WIDTH = SCREEN_WIDTH * 0.88;
+const PROGRESS_BAR_WIDTH = MODAL_CARD_WIDTH - 56; // 28px padding × 2
+
+const RARITY_GRADIENTS: Record<Achievement['rarity'], [string, string]> = {
+  common:    ['#4B5563', '#1F2937'],
+  rare:      ['#2563EB', '#1E3A8A'],
+  epic:      ['#7C3AED', '#3B0764'],
+  legendary: ['#D97706', '#78350F'],
+};
+
+function AchievementModal({
+  achievement,
+  onClose,
+}: {
+  achievement: Achievement | null;
+  onClose: () => void;
+}) {
+  const emojiY     = useSharedValue(0);
+  const emojiScale = useSharedValue(0);
+  const cardScale  = useSharedValue(0.82);
+  const cardOpacity = useSharedValue(0);
+  const progressW  = useSharedValue(0);
+
+  useEffect(() => {
+    if (achievement) {
+      // Card entrance
+      cardScale.value   = withSpring(1, { damping: 16, stiffness: 200 });
+      cardOpacity.value = withTiming(1, { duration: 200 });
+      // Emoji pop-in then bounce
+      emojiScale.value = withDelay(120, withSpring(1, { damping: 5, stiffness: 100 }));
+      emojiY.value = withDelay(450, withRepeat(
+        withSequence(
+          withTiming(-22, { duration: 520 }),
+          withTiming(0,   { duration: 520 }),
+        ),
+        -1,
+        true,
+      ));
+      // Progress bar fill
+      const targetW = Math.min(achievement.user_pct, 100) * PROGRESS_BAR_WIDTH / 100;
+      progressW.value = withDelay(650, withTiming(targetW, { duration: 900 }));
+    } else {
+      cancelAnimation(emojiY);
+      cancelAnimation(emojiScale);
+      cancelAnimation(progressW);
+      emojiY.value     = 0;
+      emojiScale.value = 0;
+      cardScale.value  = 0.82;
+      cardOpacity.value = 0;
+      progressW.value  = 0;
+    }
+  }, [achievement?.id]);
+
+  const cardStyle     = useAnimatedStyle(() => ({
+    transform: [{ scale: cardScale.value }],
+    opacity: cardOpacity.value,
+  }));
+  const emojiStyle    = useAnimatedStyle(() => ({
+    transform: [{ translateY: emojiY.value }, { scale: emojiScale.value }],
+  }));
+  const progressStyle = useAnimatedStyle(() => ({ width: progressW.value }));
+
+  if (!achievement) return null;
+
+  const gradColors  = achievement.earned ? RARITY_GRADIENTS[achievement.rarity] : ['#374151', '#111827'] as [string, string];
+  const rarityColor = achievement.earned ? RARITY_COLORS[achievement.rarity] : '#6B7280';
+  const pctText     = achievement.user_pct < 1
+    ? '< 1% of Spotters have this'
+    : `${achievement.user_pct.toFixed(1)}% of Spotters have this`;
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={achievModalStyles.overlay} onPress={onClose}>
+        {/* Inner Pressable stops tap-through closing when tapping on the card */}
+        <Pressable onPress={() => {}} style={achievModalStyles.cardWrapper}>
+          <Animated.View style={[achievModalStyles.cardShadow, cardStyle]}>
+            <LinearGradient
+              colors={gradColors}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={achievModalStyles.gradient}
+            >
+              {/* Close */}
+              <Pressable style={achievModalStyles.closeBtn} onPress={onClose} hitSlop={14}>
+                <Feather name="x" size={22} color="rgba(255,255,255,0.65)" />
+              </Pressable>
+
+              {/* Bouncing emoji */}
+              <Animated.View style={emojiStyle}>
+                <Text style={achievModalStyles.bigEmoji}>{achievement.emoji}</Text>
+              </Animated.View>
+
+              {/* Name */}
+              <Text style={achievModalStyles.achievName}>{achievement.name}</Text>
+
+              {/* Rarity pill */}
+              <View style={achievModalStyles.rarityPill}>
+                <Text style={achievModalStyles.rarityPillText}>
+                  {achievement.earned
+                    ? `★  ${RARITY_LABELS[achievement.rarity]}`
+                    : '🔒  LOCKED'}
+                </Text>
+              </View>
+
+              {/* Description */}
+              <Text style={achievModalStyles.achievDesc}>{achievement.desc}</Text>
+
+              {/* Divider */}
+              <View style={achievModalStyles.divider} />
+
+              {/* Rarity meter */}
+              <Text style={achievModalStyles.pctLabel}>{pctText}</Text>
+              <View style={achievModalStyles.progressTrack}>
+                <Animated.View
+                  style={[
+                    achievModalStyles.progressFill,
+                    { backgroundColor: rarityColor },
+                    progressStyle,
+                  ]}
+                />
+              </View>
+
+              {/* Earned / locked status */}
+              <View style={achievModalStyles.statusRow}>
+                {achievement.earned ? (
+                  <>
+                    <Feather name="check-circle" size={16} color="rgba(255,255,255,0.95)" />
+                    <Text style={achievModalStyles.statusText}>You earned this!</Text>
+                  </>
+                ) : (
+                  <>
+                    <Feather name="lock" size={15} color="rgba(255,255,255,0.45)" />
+                    <Text style={[achievModalStyles.statusText, { opacity: 0.5 }]}>Not yet earned</Text>
+                  </>
+                )}
+              </View>
+            </LinearGradient>
+          </Animated.View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const achievModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  cardWrapper: {
+    width: MODAL_CARD_WIDTH,
+    alignItems: 'center',
+  },
+  cardShadow: {
+    width: MODAL_CARD_WIDTH,
+    borderRadius: 28,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.45, shadowRadius: 28 },
+      android: { elevation: 20 },
+    }),
+  },
+  gradient: {
+    padding: 28,
+    alignItems: 'center',
+    gap: 12,
+  },
+  closeBtn: {
+    alignSelf: 'flex-end',
+    marginBottom: 4,
+  },
+  bigEmoji: {
+    fontSize: 76,
+    lineHeight: 90,
+  },
+  achievName: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: '#fff',
+    textAlign: 'center',
+  },
+  rarityPill: {
+    paddingHorizontal: 18,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  rarityPillText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#fff',
+    letterSpacing: 0.8,
+  },
+  achievDesc: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.82)',
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  divider: {
+    height: 1,
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    marginVertical: 2,
+  },
+  pctLabel: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.7)',
+    fontWeight: '600',
+  },
+  progressTrack: {
+    width: PROGRESS_BAR_WIDTH,
+    height: 7,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: 7,
+    borderRadius: 4,
+  },
+  statusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    marginTop: 4,
+  },
+  statusText: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.9)',
+    fontWeight: '600',
+  },
+});
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
@@ -723,5 +1056,65 @@ const calStyles = StyleSheet.create({
   calPostType: {
     fontSize: 11, fontWeight: '600', color: colors.primary,
     marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.5,
+  },
+});
+
+const badgeStyles = StyleSheet.create({
+  badge: {
+    width: 112,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    backgroundColor: colors.surface,
+    padding: 10,
+    alignItems: 'center',
+    gap: 5,
+    ...Platform.select({
+      ios: { shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 8 },
+      android: { elevation: 4 },
+    }),
+  },
+  badgeLocked: {
+    backgroundColor: colors.background.elevated,
+    ...Platform.select({ ios: { shadowOpacity: 0 }, android: { elevation: 0 } }),
+  },
+  lockCorner: {
+    position: 'absolute',
+    top: 7,
+    right: 7,
+    backgroundColor: colors.background.base,
+    borderRadius: 6,
+    padding: 2,
+  },
+  badgeEmoji: { fontSize: 30 },
+  badgeName: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    textAlign: 'center',
+    lineHeight: 15,
+  },
+  badgeDesc: {
+    fontSize: 10,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 13,
+  },
+  textMuted: { color: colors.textMuted, fontWeight: '500' },
+  rarityPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 2,
+  },
+  rarityText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 0.6,
+  },
+  countLabel: {
+    fontSize: typography.size.sm,
+    color: colors.textMuted,
+    fontWeight: '500',
   },
 });
