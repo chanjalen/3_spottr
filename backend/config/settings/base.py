@@ -182,15 +182,31 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
     'DEFAULT_THROTTLE_RATES': {
-        # Applied to login/signup via AuthRateThrottle — limits brute-force attempts
+        # Global fallback — catches any endpoint not explicitly throttled
+        'anon': '60/minute',
+        'user': '300/minute',
+        # Auth endpoints — brute-force / email-abuse guards
         'auth': '10/minute',
-        # Applied to send_dm / send_group_message — prevents message spam
-        'message': '30/minute',
-        # Applied to send_zap — zaps are a special action, tighter limit
-        'zap': '5/minute',
-        # Applied to resend-verification — prevent abuse of email sending
         'resend_verification': '3/hour',
+        # Messaging
+        'message': '30/minute',
+        'zap': '5/minute',
+        'reaction': '60/minute',
+        # Social writes (posts, check-ins)
+        'social_write': '20/minute',
+        # Follow / unfollow
+        'follow': '60/minute',
+        # User search / username enumeration
+        'search': '30/minute',
+        # Entity creation (groups, orgs)
+        'create': '30/hour',
+        # File uploads
+        'upload': '20/hour',
     },
 }
 

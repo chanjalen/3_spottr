@@ -14,10 +14,10 @@ from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.throttling import AnonRateThrottle, UserRateThrottle
 from rest_framework import status
 
 from accounts.models import User
+from common.throttles import AuthRateThrottle, ResendVerificationThrottle, SearchRateThrottle  # noqa: re-exported
 
 logger = logging.getLogger(__name__)
 
@@ -28,16 +28,6 @@ RESERVED_USERNAMES = frozenset({
 })
 
 USERNAME_RE = re.compile(r'^[a-z0-9_.]{3,30}$')
-
-
-class AuthRateThrottle(AnonRateThrottle):
-    """Strict per-IP throttle for auth endpoints to limit brute-force attempts."""
-    scope = 'auth'
-
-
-class ResendVerificationThrottle(UserRateThrottle):
-    """3 resend requests per hour per user."""
-    scope = 'resend_verification'
 
 
 def _user_brief(user):
@@ -378,6 +368,7 @@ def api_onboarding_view(request):
 
 @api_view(['GET'])
 @permission_classes([AllowAny])
+@throttle_classes([SearchRateThrottle])
 def api_username_available_view(request):
     """Check whether a username is available. GET ?username=xxx"""
     raw = request.GET.get('username', '').strip().lower()
@@ -440,10 +431,16 @@ def api_update_profile_view(request):
     user = request.user
     changed = []
     if 'display_name' in request.data:
-        user.display_name = str(request.data['display_name']).strip()
+        val = str(request.data['display_name']).strip()
+        if len(val) > 50:
+            return Response({'error': 'Display name cannot exceed 50 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+        user.display_name = val
         changed.append('display_name')
     if 'bio' in request.data:
-        user.bio = str(request.data['bio']).strip()
+        val = str(request.data['bio']).strip()
+        if len(val) > 300:
+            return Response({'error': 'Bio cannot exceed 300 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+        user.bio = val
         changed.append('bio')
     if 'timezone' in request.data:
         import zoneinfo
@@ -471,6 +468,7 @@ def api_profile_view(request, username):
     from social.models import Follow, QuickWorkout
     from django.utils import timezone as tz
     is_following = Follow.objects.filter(follower=request.user, following=target).exists()
+    is_followed_by = Follow.objects.filter(follower=target, following=request.user).exists()
     follower_count = Follow.objects.filter(following=target).count()
     following_count = Follow.objects.filter(follower=target).count()
     # Friends = mutual follows
@@ -491,6 +489,7 @@ def api_profile_view(request, username):
         'longest_streak': target.longest_streak,
         'total_workouts': target.total_workouts,
         'is_following': is_following,
+        'is_followed_by': is_followed_by,
         'follower_count': follower_count,
         'following_count': following_count,
         'friend_count': friend_count,
@@ -604,17 +603,26 @@ def api_save_pr_view(request):
 
     exercise_name = request.data.get('exercise_name', '').strip()
     value = request.data.get('value', '')
-    unit = request.data.get('unit', '').strip()
+    unit = request.data.get('unit', '').strip().lower()
     video = request.FILES.get('video')
     pr_id = request.data.get('pr_id', '').strip()
 
     if not exercise_name or not value or not unit:
         return Response({'error': 'Exercise name, value, and unit are required.'}, status=status.HTTP_400_BAD_REQUEST)
 
+    if len(exercise_name) > 100:
+        return Response({'error': 'Exercise name cannot exceed 100 characters.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if unit not in ('lbs', 'kg'):
+        return Response({'error': "Unit must be 'lbs' or 'kg'."}, status=status.HTTP_400_BAD_REQUEST)
+
     try:
         value = float(value)
     except (ValueError, TypeError):
         return Response({'error': 'Invalid value.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if value <= 0 or value > 2000:
+        return Response({'error': 'Value must be between 0 and 2000.'}, status=status.HTTP_400_BAD_REQUEST)
 
     if pr_id:
         try:

@@ -25,6 +25,7 @@ export interface MessageRowProps {
   onRetry: (msg: Message) => void;
   onLongPress: (msg: Message, pageY: number, height: number) => void;
   onTapReaction: (msg: Message, emoji: string) => void;
+  onLongPressReaction: (msg: Message) => void;
   onVideoPress: (url: string) => void;
   onImagePress: (url: string) => void;
 }
@@ -54,6 +55,7 @@ function MessageRowInner({
   onRetry,
   onLongPress,
   onTapReaction,
+  onLongPressReaction,
   onVideoPress,
   onImagePress,
 }: MessageRowProps) {
@@ -195,6 +197,8 @@ function MessageRowInner({
                 key={r.emoji}
                 style={[styles.reactionChip, r.user_reacted && styles.reactionChipActive]}
                 onPress={() => onTapReaction(item, r.emoji)}
+                onLongPress={() => onLongPressReaction(item)}
+                delayLongPress={350}
               >
                 <Text style={styles.reactionEmoji}>{r.emoji}</Text>
                 <Text style={[styles.reactionCount, r.user_reacted && styles.reactionCountActive]}>

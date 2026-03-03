@@ -53,7 +53,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       const stored = await getItem('auth_token');
       const storedUser = await getItem('auth_user');
-      if (stored) setToken(stored);
+      if (stored) {
+        setToken(stored);
+        // Re-sync timezone on every app launch so it stays current
+        try {
+          const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          if (tz) apiUpdateProfile({ timezone: tz }).catch(() => {});
+        } catch {}
+      }
       if (storedUser) {
         const parsed: UserBrief = JSON.parse(storedUser);
         setUser(parsed);

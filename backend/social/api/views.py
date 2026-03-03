@@ -1,13 +1,15 @@
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from social.models import Follow
+from common.throttles import SocialWriteRateThrottle
 
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([SocialWriteRateThrottle])
 def create_post(request):
     """
     Create a post. Accepts multipart/form-data for photo/video uploads.
@@ -87,6 +89,7 @@ def create_post(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([SocialWriteRateThrottle])
 def create_checkin(request):
     """
     Create a quick check-in (QuickWorkout). Updates streak.
@@ -95,8 +98,8 @@ def create_checkin(request):
     from social.models import QuickWorkout
     from django.db.models import F as DjF
 
-    activity = (request.data.get('activity') or '').strip()
-    description = (request.data.get('description') or '').strip()
+    activity = (request.data.get('activity') or '').strip()[:50]
+    description = (request.data.get('description') or '').strip()[:300]
     gym_id = (request.data.get('gym_id') or '').strip()
     location_name = (request.data.get('location_name') or '').strip()
     workout_id = (request.data.get('workout_id') or '').strip()
@@ -319,7 +322,7 @@ def mutual_follows(request):
     from accounts.models import User
     qs = User.objects.filter(id__in=mutual_ids)
 
-    query = request.query_params.get('q', '').strip()
+    query = request.query_params.get('q', '').strip()[:100]
     if query:
         qs = qs.filter(username__icontains=query)
 

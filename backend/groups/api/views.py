@@ -1,7 +1,8 @@
 from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from common.throttles import CreateRateThrottle
 from django.db.models import Count, Exists, OuterRef
 
 from groups import services
@@ -44,7 +45,7 @@ def group_list(request):
     When ?q= is provided, results include both public and private groups.
     Without a query, only public groups are returned.
     """
-    query = request.query_params.get('q', '').strip()
+    query = request.query_params.get('q', '').strip()[:100]
     limit = int(request.query_params.get('limit', 50))
     offset = int(request.query_params.get('offset', 0))
 
@@ -90,6 +91,7 @@ def my_groups(request):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+@throttle_classes([CreateRateThrottle])
 def group_create(request):
     """Create a new group."""
     serializer = CreateGroupSerializer(data=request.data)

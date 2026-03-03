@@ -340,6 +340,23 @@ export async function reactToAnnouncement(
   return data;
 }
 
+export interface ReactionDetail {
+  emoji: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+}
+
+export async function fetchAnnouncementReactionDetails(
+  orgId: string,
+  announcementId: string,
+): Promise<ReactionDetail[]> {
+  const { data } = await apiClient.get(
+    `/api/organizations/${orgId}/announcements/${announcementId}/reactions/`,
+  );
+  return data;
+}
+
 export async function voteOnPoll(
   orgId: string,
   announcementId: string,
