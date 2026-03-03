@@ -9,4 +9,6 @@ urlpatterns = [
     path('leaderboard/', views.leaderboard, name='leaderboard'),
     path('post/create/', views.create_post, name='create-post'),
     path('checkin/create/', views.create_checkin, name='create-checkin'),
+    path('poll/<str:poll_id>/vote/', views.vote_poll, name='vote-poll'),
+    path('poll/<str:poll_id>/voters/', views.poll_voters, name='poll-voters'),
 ]

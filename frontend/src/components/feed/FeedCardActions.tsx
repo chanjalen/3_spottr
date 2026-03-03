@@ -39,8 +39,8 @@ export default function FeedCardActions({
 
   const handleLike = () => {
     likeScale.value = withSequence(
-      withTiming(0.8, { duration: 80 }),
-      withSpring(1, { stiffness: 400, damping: 10 }),
+      withTiming(0.75, { duration: 70 }),
+      withSpring(1, { stiffness: 500, damping: 10 }),
     );
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onLike();
@@ -53,51 +53,43 @@ export default function FeedCardActions({
 
   return (
     <View style={styles.container}>
-      <AnimatedPressable
-        style={[styles.action, likeAnimatedStyle]}
-        onPress={handleLike}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        accessibilityLabel={`Like, ${likeCount} likes`}
-        accessibilityRole="button"
-      >
-        <Feather
-          name="heart"
-          size={18}
-          color={userLiked ? colors.semantic.like : colors.textMuted}
-        />
-        {likeCount > 0 && (
-          <Text
-            style={[
-              styles.count,
-              userLiked && { color: colors.semantic.like },
-            ]}
-          >
-            {likeCount}
-          </Text>
-        )}
-      </AnimatedPressable>
-
+      {/* Comment */}
       <Pressable
         style={styles.action}
         onPress={onComment}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        accessibilityLabel={`Comment, ${commentCount} comments`}
-        accessibilityRole="button"
       >
-        <Feather name="message-circle" size={18} color={colors.textMuted} />
+        <Feather name="message-circle" size={17} color={colors.textMuted} />
         {commentCount > 0 && (
           <Text style={styles.count}>{commentCount}</Text>
         )}
       </Pressable>
 
+      {/* Like */}
+      <AnimatedPressable
+        style={[styles.action, likeAnimatedStyle]}
+        onPress={handleLike}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Feather
+          name={userLiked ? 'heart' : 'heart'}
+          size={17}
+          color={userLiked ? colors.semantic.like : colors.textMuted}
+        />
+        {likeCount > 0 && (
+          <Text style={[styles.count, userLiked && { color: colors.semantic.like }]}>
+            {likeCount}
+          </Text>
+        )}
+      </AnimatedPressable>
+
+      {/* Share */}
       <Pressable
         style={styles.action}
         onPress={handleShare}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        accessibilityLabel="Share"
-        accessibilityRole="button"
       >
-        <Feather name="share" size={18} color={colors.textMuted} />
+        <Feather name="share" size={17} color={colors.textMuted} />
       </Pressable>
     </View>
   );
@@ -108,20 +100,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.xl,
-    paddingTop: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border.subtle,
+    paddingTop: spacing.sm,
     marginTop: spacing.xs,
   },
   action: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: spacing.xs,
-    minHeight: 44,
+    gap: 5,
   },
   count: {
-    fontSize: typography.size.sm,
+    fontSize: typography.size.xs,
     fontFamily: typography.family.medium,
     color: colors.textMuted,
   },

@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { FeedItem } from '../../types/feed';
 import FeedCardImage from './FeedCardImage';
+import FeedCardVideo from './FeedCardVideo';
 import WorkoutSummaryCard from './WorkoutSummaryCard';
 import PersonalRecordCard from './PersonalRecordCard';
 import LinkPreview from './LinkPreview';
@@ -25,7 +26,11 @@ export default function FeedCardBody({ item, onPollVote, onWorkoutPress }: FeedC
         <Text style={styles.description}>{item.description}</Text>
       )}
 
-      {item.photo_url && <FeedCardImage uri={item.photo_url} />}
+      {item.video_url
+        ? <FeedCardVideo uri={item.video_url} />
+        : item.photo_url
+          ? <FeedCardImage uri={item.photo_url} />
+          : null}
 
       {item.workout && (
         <WorkoutSummaryCard workout={item.workout} onPress={onWorkoutPress} />
@@ -37,7 +42,13 @@ export default function FeedCardBody({ item, onPollVote, onWorkoutPress }: FeedC
 
       {item.link_url && <LinkPreview url={item.link_url} />}
 
-      {item.poll && <PollCard poll={item.poll} onVote={onPollVote} isOwner={isOwner} />}
+      {item.poll && (
+        <PollCard
+          poll={item.poll}
+          onVote={onPollVote}
+          isOwner={isOwner}
+        />
+      )}
     </View>
   );
 }
@@ -48,6 +59,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.family.regular,
     color: colors.textPrimary,
     lineHeight: 22,
-    marginBottom: spacing.md,
+    marginBottom: spacing.sm,
   },
 });

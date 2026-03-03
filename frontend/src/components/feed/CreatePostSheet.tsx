@@ -18,10 +18,12 @@ import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, typography } from '../../theme';
 import { createPost } from '../../api/feed';
+import { useAuth } from '../../store/AuthContext';
+import Avatar from '../common/Avatar';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-type AttachmentTab = 'photo' | 'video' | 'link' | 'poll' | 'pr' | null;
+type AttachmentMode = 'media' | 'poll' | 'link' | 'pr' | null;
 
 const POLL_DURATIONS: Array<{ label: string; hours: number }> = [
   { label: '1h',  hours: 1 },
@@ -43,8 +45,10 @@ interface Props {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function CreatePostSheet({ sheetRef, onSuccess }: Props) {
+  const { user } = useAuth();
+
   const [text, setText] = useState('');
-  const [activeTab, setActiveTab] = useState<AttachmentTab>(null);
+  const [mode, setMode] = useState<AttachmentMode>(null);
   const [photo, setPhoto] = useState<Media | null>(null);
   const [video, setVideo] = useState<Media | null>(null);
   const [linkUrl, setLinkUrl] = useState('');
@@ -60,7 +64,7 @@ export default function CreatePostSheet({ sheetRef, onSuccess }: Props) {
 
   const reset = useCallback(() => {
     setText('');
-    setActiveTab(null);
+    setMode(null);
     setPhoto(null);
     setVideo(null);
     setLinkUrl('');
@@ -78,46 +82,44 @@ export default function CreatePostSheet({ sheetRef, onSuccess }: Props) {
     if (index === 0) reset();
   }, [reset]);
 
-  // ── Camera helpers ──────────────────────────────────────────────────────────
+  // ── Media picker ─────────────────────────────────────────────────────────────
+  // Opens gallery for both photos and videos in one picker.
+  // Video fix: on iOS, UIImagePickerPreferredAssetRepresentationMode.Compatible
+  // exports H.264 MP4 regardless of original format, so we always use video/mp4.
 
-  const pickPhoto = async () => {
+  const pickMedia = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') {
       Alert.alert('Permission required', 'Please allow access to your photo library.');
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'images',
+      mediaTypes: ImagePicker.MediaTypeOptions.All,
       allowsEditing: false,
       quality: 0.9,
-    });
-    if (!result.canceled && result.assets[0]) {
-      setPhoto({ uri: result.assets[0].uri, name: 'photo.jpg', type: 'image/jpeg' });
-      setVideo(null);
-    }
-  };
-
-  const pickVideo = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Please allow access to your photo library.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'videos',
-      allowsEditing: false,
+      videoMaxDuration: 120,
       preferredAssetRepresentationMode:
         ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
     });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
-      const ext = asset.uri.split('.').pop() ?? 'mp4';
-      setVideo({ uri: asset.uri, name: `video.${ext}`, type: asset.mimeType ?? 'video/mp4' });
-      setPhoto(null);
+      if (asset.type === 'video') {
+        // iOS exports Compatible as H.264 MP4 — force mp4 mime type
+        const mimeType = Platform.OS === 'ios' ? 'video/mp4' : (asset.mimeType ?? 'video/mp4');
+        const extension = Platform.OS === 'ios' ? 'mp4' : (asset.uri.split('.').pop()?.toLowerCase() ?? 'mp4');
+        setVideo({ uri: asset.uri, name: `video.${extension}`, type: mimeType });
+        setPhoto(null);
+      } else {
+        const mimeType = asset.mimeType ?? 'image/jpeg';
+        const extension = mimeType === 'image/png' ? 'png' : 'jpg';
+        setPhoto({ uri: asset.uri, name: `photo.${extension}`, type: mimeType });
+        setVideo(null);
+      }
+      setMode('media');
     }
   };
 
-  // ── Submit ──────────────────────────────────────────────────────────────────
+  // ── Submit ───────────────────────────────────────────────────────────────────
 
   const handleSubmit = async () => {
     if (!canSubmit || submitting) return;
@@ -168,7 +170,7 @@ export default function CreatePostSheet({ sheetRef, onSuccess }: Props) {
     [],
   );
 
-  // ── Poll helpers ─────────────────────────────────────────────────────────────
+  // ── Poll helpers ──────────────────────────────────────────────────────────────
 
   const updatePollOption = (index: number, value: string) => {
     const next = [...pollOptions];
@@ -180,7 +182,11 @@ export default function CreatePostSheet({ sheetRef, onSuccess }: Props) {
     setPollOptions(pollOptions.filter((_, i) => i !== index));
   };
 
-  // ── Render ──────────────────────────────────────────────────────────────────
+  const toggleMode = (next: AttachmentMode) => {
+    setMode(prev => (prev === next ? null : next));
+  };
+
+  // ── Render ───────────────────────────────────────────────────────────────────
 
   return (
     <BottomSheet
@@ -199,9 +205,250 @@ export default function CreatePostSheet({ sheetRef, onSuccess }: Props) {
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
-        {/* ── Header ──────────────────────────────────── */}
-        <View style={styles.header}>
-          <Text style={styles.title}>New Post</Text>
+        {/* ── Top bar: Cancel + Audience ────────────────── */}
+        <View style={styles.topBar}>
+          <Pressable
+            onPress={() => sheetRef.current?.close()}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Text style={styles.cancelText}>Cancel</Text>
+          </Pressable>
+
+          {/* Audience toggle — compact pill */}
+          <View style={styles.audienceRow}>
+            <Pressable
+              style={[styles.audienceChip, visibility === 'main' && styles.audienceChipActive]}
+              onPress={() => setVisibility('main')}
+            >
+              <Feather name="globe" size={11} color={visibility === 'main' ? colors.primary : colors.textMuted} />
+              <Text style={[styles.audienceChipText, visibility === 'main' && styles.audienceChipTextActive]}>
+                Everyone
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.audienceChip, visibility === 'friends' && styles.audienceChipActive]}
+              onPress={() => setVisibility('friends')}
+            >
+              <Feather name="users" size={11} color={visibility === 'friends' ? colors.primary : colors.textMuted} />
+              <Text style={[styles.audienceChipText, visibility === 'friends' && styles.audienceChipTextActive]}>
+                Friends
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
+        {/* ── Compose area ─────────────────────────────────── */}
+        <View style={styles.composeRow}>
+          <Avatar
+            uri={user?.avatar_url ?? null}
+            name={user?.display_name ?? user?.username ?? ''}
+            size={40}
+          />
+
+          <View style={styles.inputArea}>
+            <TextInput
+              style={styles.textInput}
+              value={text}
+              onChangeText={setText}
+              placeholder="What's happening?"
+              placeholderTextColor={colors.textMuted}
+              multiline
+              maxLength={500}
+              textAlignVertical="top"
+            />
+
+            {/* ── Photo preview ─────────────────────────── */}
+            {photo && (
+              <View style={styles.mediaPreview}>
+                <Image source={{ uri: photo.uri }} style={styles.mediaImage} resizeMode="cover" />
+                <Pressable style={styles.mediaRemoveBtn} onPress={() => { setPhoto(null); setMode(null); }}>
+                  <Feather name="x" size={14} color="#fff" />
+                </Pressable>
+                <Pressable style={styles.mediaChangeBtn} onPress={pickMedia}>
+                  <Feather name="image" size={13} color="#fff" />
+                  <Text style={styles.mediaChangeBtnText}>Change</Text>
+                </Pressable>
+              </View>
+            )}
+
+            {/* ── Video preview ─────────────────────────── */}
+            {video && (
+              <View style={styles.videoPreview}>
+                <View style={styles.videoIconWrap}>
+                  <Feather name="film" size={20} color={colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.videoTitle}>Video ready</Text>
+                  <Text style={styles.videoSub} numberOfLines={1}>{video.name}</Text>
+                </View>
+                <Pressable
+                  onPress={() => { setVideo(null); setMode(null); }}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Feather name="x" size={17} color={colors.textMuted} />
+                </Pressable>
+              </View>
+            )}
+
+            {/* ── Mode: no media picked yet, show prompt ── */}
+            {mode === 'media' && !photo && !video && (
+              <Pressable style={styles.mediaPlaceholder} onPress={pickMedia}>
+                <Feather name="image" size={26} color={colors.primary} />
+                <Text style={styles.mediaPlaceholderText}>Tap to choose a photo or video</Text>
+              </Pressable>
+            )}
+
+            {/* ── Poll builder ─────────────────────────── */}
+            {mode === 'poll' && (
+              <View style={styles.pollSection}>
+                <TextInput
+                  style={styles.pollQuestionInput}
+                  value={pollQuestion}
+                  onChangeText={setPollQuestion}
+                  placeholder="Ask a question..."
+                  placeholderTextColor={colors.textMuted}
+                  maxLength={100}
+                />
+                {pollOptions.map((opt, i) => (
+                  <View key={i} style={styles.pollOptionRow}>
+                    <TextInput
+                      style={styles.pollOptionInput}
+                      value={opt}
+                      onChangeText={v => updatePollOption(i, v)}
+                      placeholder={`Choice ${i + 1}`}
+                      placeholderTextColor={colors.textMuted}
+                      maxLength={50}
+                    />
+                    {pollOptions.length > 2 && (
+                      <Pressable
+                        onPress={() => removePollOption(i)}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        style={{ marginLeft: spacing.sm }}
+                      >
+                        <Feather name="x" size={16} color={colors.textMuted} />
+                      </Pressable>
+                    )}
+                  </View>
+                ))}
+                {pollOptions.length < 4 && (
+                  <Pressable
+                    style={styles.addOptionBtn}
+                    onPress={() => setPollOptions([...pollOptions, ''])}
+                  >
+                    <Feather name="plus-circle" size={14} color={colors.primary} />
+                    <Text style={styles.addOptionText}>Add choice</Text>
+                  </Pressable>
+                )}
+                <Text style={styles.sectionLabel}>Poll duration</Text>
+                <View style={styles.chipRow}>
+                  {POLL_DURATIONS.map(d => (
+                    <Pressable
+                      key={d.hours}
+                      style={[styles.chip, pollDuration === d.hours && styles.chipActive]}
+                      onPress={() => setPollDuration(d.hours)}
+                    >
+                      <Text style={[styles.chipText, pollDuration === d.hours && styles.chipTextActive]}>
+                        {d.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            )}
+
+            {/* ── Link ─────────────────────────────────── */}
+            {mode === 'link' && (
+              <View style={styles.linkRow}>
+                <Feather name="link" size={15} color={colors.primary} />
+                <TextInput
+                  style={styles.linkInput}
+                  value={linkUrl}
+                  onChangeText={setLinkUrl}
+                  placeholder="Paste a URL..."
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="url"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {linkUrl.length > 0 && (
+                  <Pressable onPress={() => setLinkUrl('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Feather name="x" size={15} color={colors.textMuted} />
+                  </Pressable>
+                )}
+              </View>
+            )}
+
+            {/* ── PR ───────────────────────────────────── */}
+            {mode === 'pr' && (
+              <View style={styles.prSection}>
+                <TextInput
+                  style={styles.prInput}
+                  value={prExercise}
+                  onChangeText={setPrExercise}
+                  placeholder="Exercise (e.g. Bench Press)"
+                  placeholderTextColor={colors.textMuted}
+                  maxLength={50}
+                />
+                <TextInput
+                  style={[styles.prInput, { marginTop: spacing.sm }]}
+                  value={prValue}
+                  onChangeText={setPrValue}
+                  placeholder="Value"
+                  placeholderTextColor={colors.textMuted}
+                  keyboardType="decimal-pad"
+                  maxLength={10}
+                />
+                <View style={styles.chipRow}>
+                  {PR_UNITS.map(u => (
+                    <Pressable
+                      key={u}
+                      style={[styles.chip, prUnit === u && styles.chipActive]}
+                      onPress={() => setPrUnit(u)}
+                    >
+                      <Text style={[styles.chipText, prUnit === u && styles.chipTextActive]}>{u}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
+
+        {/* ── Character count ───────────────────────────── */}
+        {text.length > 0 && (
+          <Text style={[styles.charCount, text.length > 450 && styles.charCountWarn]}>
+            {text.length}/500
+          </Text>
+        )}
+
+        {/* ── Divider ───────────────────────────────────── */}
+        <View style={styles.divider} />
+
+        {/* ── Bottom toolbar ────────────────────────────── */}
+        <View style={styles.toolbar}>
+          <View style={styles.toolbarIcons}>
+            <ToolbarBtn
+              icon="image"
+              active={mode === 'media' || !!photo || !!video}
+              onPress={photo || video ? pickMedia : () => toggleMode('media')}
+            />
+            <ToolbarBtn
+              icon="bar-chart-2"
+              active={mode === 'poll'}
+              onPress={() => toggleMode('poll')}
+            />
+            <ToolbarBtn
+              icon="link"
+              active={mode === 'link'}
+              onPress={() => toggleMode('link')}
+            />
+            <ToolbarBtn
+              icon="award"
+              active={mode === 'pr'}
+              onPress={() => toggleMode('pr')}
+            />
+          </View>
+
           <Pressable
             style={[styles.postBtn, !canSubmit && styles.postBtnDisabled]}
             onPress={handleSubmit}
@@ -213,277 +460,43 @@ export default function CreatePostSheet({ sheetRef, onSuccess }: Props) {
           </Pressable>
         </View>
 
-        {/* ── Text input ──────────────────────────────── */}
-        <TextInput
-          style={styles.textInput}
-          value={text}
-          onChangeText={setText}
-          placeholder="What's on your mind?"
-          placeholderTextColor={colors.textMuted}
-          multiline
-          maxLength={500}
-          textAlignVertical="top"
-        />
-        <Text style={[styles.charCount, text.length > 450 && styles.charCountWarn]}>
-          {text.length}/500
-        </Text>
-
-        {/* ── Attachment sections ──────────────────────── */}
-
-        {/* Photo preview — always visible when a photo is selected */}
-        {photo && (
-          <View style={styles.mediaPreview}>
-            <Image source={{ uri: photo.uri }} style={styles.mediaImage} resizeMode="cover" />
-            <Pressable style={styles.mediaRemoveBtn} onPress={() => setPhoto(null)}>
-              <Feather name="x" size={14} color="#fff" />
-            </Pressable>
-            <Pressable style={styles.mediaRetakeBtn} onPress={pickPhoto}>
-              <Feather name="image" size={13} color="#fff" />
-              <Text style={styles.mediaRetakeText}>Change</Text>
-            </Pressable>
-          </View>
-        )}
-
-        {/* Photo picker — only when photo tab is open and no photo yet */}
-        {activeTab === 'photo' && !photo && (
-          <Pressable style={styles.mediaPlaceholder} onPress={pickPhoto}>
-            <Feather name="image" size={28} color={colors.primary} />
-            <Text style={styles.mediaPlaceholderTitle}>Choose a Photo</Text>
-            <Text style={styles.mediaPlaceholderSub}>Opens your gallery</Text>
-          </Pressable>
-        )}
-
-        {/* Video card — always visible when a video is selected */}
-        {video && (
-          <View style={styles.videoCard}>
-            <View style={styles.videoCardIcon}>
-              <Feather name="video" size={22} color={colors.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.videoCardTitle}>Video selected</Text>
-              <Text style={styles.videoCardSub}>Ready to post</Text>
-            </View>
-            <Pressable onPress={() => setVideo(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Feather name="x" size={18} color={colors.textMuted} />
-            </Pressable>
-          </View>
-        )}
-
-        {/* Video picker — only when video tab is open and no video yet */}
-        {activeTab === 'video' && !video && (
-          <Pressable style={styles.mediaPlaceholder} onPress={pickVideo}>
-            <Feather name="video" size={28} color={colors.primary} />
-            <Text style={styles.mediaPlaceholderTitle}>Choose a Video</Text>
-            <Text style={styles.mediaPlaceholderSub}>Opens your gallery</Text>
-          </Pressable>
-        )}
-
-        {/* Link */}
-        {activeTab === 'link' && (
-          <View style={styles.linkRow}>
-            <Feather name="link" size={16} color={colors.primary} />
-            <TextInput
-              style={styles.linkInput}
-              value={linkUrl}
-              onChangeText={setLinkUrl}
-              placeholder="Paste a URL..."
-              placeholderTextColor={colors.textMuted}
-              keyboardType="url"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            {linkUrl.length > 0 && (
-              <Pressable onPress={() => setLinkUrl('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                <Feather name="x" size={16} color={colors.textMuted} />
-              </Pressable>
-            )}
-          </View>
-        )}
-
-        {/* Poll */}
-        {activeTab === 'poll' && (
-          <View style={styles.pollSection}>
-            <TextInput
-              style={styles.pollQuestionInput}
-              value={pollQuestion}
-              onChangeText={setPollQuestion}
-              placeholder="Ask a question..."
-              placeholderTextColor={colors.textMuted}
-              maxLength={100}
-            />
-            {pollOptions.map((opt, i) => (
-              <View key={i} style={styles.pollOptionRow}>
-                <TextInput
-                  style={styles.pollOptionInput}
-                  value={opt}
-                  onChangeText={v => updatePollOption(i, v)}
-                  placeholder={`Option ${i + 1}`}
-                  placeholderTextColor={colors.textMuted}
-                  maxLength={50}
-                />
-                {pollOptions.length > 2 && (
-                  <Pressable
-                    onPress={() => removePollOption(i)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    style={{ marginLeft: spacing.sm }}
-                  >
-                    <Feather name="x" size={16} color={colors.textMuted} />
-                  </Pressable>
-                )}
-              </View>
-            ))}
-            {pollOptions.length < 4 && (
-              <Pressable
-                style={styles.addOptionBtn}
-                onPress={() => setPollOptions([...pollOptions, ''])}
-              >
-                <Feather name="plus-circle" size={14} color={colors.primary} />
-                <Text style={styles.addOptionText}>Add option</Text>
-              </Pressable>
-            )}
-            <Text style={styles.pollDurationLabel}>Poll Duration</Text>
-            <View style={styles.durationRow}>
-              {POLL_DURATIONS.map(d => (
-                <Pressable
-                  key={d.hours}
-                  style={[styles.durationChip, pollDuration === d.hours && styles.chipSelected]}
-                  onPress={() => setPollDuration(d.hours)}
-                >
-                  <Text style={[styles.durationChipText, pollDuration === d.hours && styles.chipTextSelected]}>
-                    {d.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* PR */}
-        {activeTab === 'pr' && (
-          <View style={styles.prSection}>
-            <TextInput
-              style={styles.prExerciseInput}
-              value={prExercise}
-              onChangeText={setPrExercise}
-              placeholder="Exercise (e.g. Bench Press)"
-              placeholderTextColor={colors.textMuted}
-              maxLength={50}
-            />
-            <View style={styles.prValueRow}>
-              <TextInput
-                style={styles.prValueInput}
-                value={prValue}
-                onChangeText={setPrValue}
-                placeholder="Value"
-                placeholderTextColor={colors.textMuted}
-                keyboardType="decimal-pad"
-                maxLength={10}
-              />
-            </View>
-            <View style={styles.prUnitsRow}>
-              {PR_UNITS.map(u => (
-                <Pressable
-                  key={u}
-                  style={[styles.unitChip, prUnit === u && styles.chipSelected]}
-                  onPress={() => setPrUnit(u)}
-                >
-                  <Text style={[styles.unitChipText, prUnit === u && styles.chipTextSelected]}>{u}</Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {/* ── Toolbar ──────────────────────────────────── */}
-        <View style={styles.toolbar}>
-          <ToolbarBtn
-            icon="camera"
-            label="Photo"
-            active={activeTab === 'photo' || !!photo}
-            onPress={() => setActiveTab(activeTab === 'photo' ? null : 'photo')}
-          />
-          <ToolbarBtn
-            icon="video"
-            label="Video"
-            active={activeTab === 'video' || !!video}
-            onPress={() => setActiveTab(activeTab === 'video' ? null : 'video')}
-          />
-          <ToolbarBtn
-            icon="link"
-            label="Link"
-            active={activeTab === 'link'}
-            onPress={() => setActiveTab(activeTab === 'link' ? null : 'link')}
-          />
-          <ToolbarBtn
-            icon="bar-chart-2"
-            label="Poll"
-            active={activeTab === 'poll'}
-            onPress={() => setActiveTab(activeTab === 'poll' ? null : 'poll')}
-          />
-          <ToolbarBtn
-            icon="award"
-            label="PR"
-            active={activeTab === 'pr'}
-            onPress={() => setActiveTab(activeTab === 'pr' ? null : 'pr')}
-          />
-        </View>
-
-        <View style={styles.divider} />
-
-        {/* ── Audience ──────────────────────────────────── */}
-        <Text style={styles.settingLabel}>Audience</Text>
-        <View style={styles.toggleRow}>
-          <Pressable
-            style={[styles.toggleChip, visibility === 'main' && styles.chipSelected]}
-            onPress={() => setVisibility('main')}
-          >
-            <Feather name="globe" size={14} color={visibility === 'main' ? colors.primary : colors.textMuted} />
-            <Text style={[styles.toggleChipText, visibility === 'main' && styles.chipTextSelected]}>Main Feed</Text>
-          </Pressable>
-          <Pressable
-            style={[styles.toggleChip, visibility === 'friends' && styles.chipSelected]}
-            onPress={() => setVisibility('friends')}
-          >
-            <Feather name="users" size={14} color={visibility === 'friends' ? colors.primary : colors.textMuted} />
-            <Text style={[styles.toggleChipText, visibility === 'friends' && styles.chipTextSelected]}>Friends Only</Text>
-          </Pressable>
-        </View>
-
-        {/* ── Who can reply ────────────────────────────── */}
-        <Text style={[styles.settingLabel, { marginTop: spacing.base }]}>Who can reply</Text>
-        <View style={styles.toggleRow}>
+        {/* ── Who can reply (compact) ───────────────────── */}
+        <View style={styles.replyRow}>
+          <Feather name="message-circle" size={13} color={colors.textMuted} />
+          <Text style={styles.replyLabel}>Who can reply:</Text>
           {(['everyone', 'friends', 'mentions'] as const).map(r => (
             <Pressable
               key={r}
-              style={[styles.toggleChip, replyRestriction === r && styles.chipSelected]}
+              style={[styles.replyChip, replyRestriction === r && styles.chipActive]}
               onPress={() => setReplyRestriction(r)}
             >
-              <Text style={[styles.toggleChipText, replyRestriction === r && styles.chipTextSelected]}>
-                {r === 'everyone' ? 'Everyone' : r === 'friends' ? 'Friends' : 'Mentions'}
+              <Text style={[styles.chipText, replyRestriction === r && styles.chipTextActive]}>
+                {r === 'everyone' ? 'Everyone' : r === 'friends' ? 'Friends' : '@Mentions'}
               </Text>
             </Pressable>
           ))}
         </View>
-
       </BottomSheetScrollView>
     </BottomSheet>
   );
 }
 
-// ─── Toolbar button ───────────────────────────────────────────────────────────
+// ─── Toolbar button ────────────────────────────────────────────────────────────
 
 function ToolbarBtn({
-  icon, label, active, onPress,
+  icon, active, onPress,
 }: {
   icon: React.ComponentProps<typeof Feather>['name'];
-  label: string;
   active: boolean;
   onPress: () => void;
 }) {
   return (
-    <Pressable style={styles.toolbarBtn} onPress={onPress}>
-      <Feather name={icon} size={22} color={active ? colors.primary : colors.iconInactive} />
-      <Text style={[styles.toolbarBtnLabel, active && styles.toolbarBtnLabelActive]}>{label}</Text>
+    <Pressable
+      style={({ pressed }) => [styles.toolbarBtn, pressed && { opacity: 0.7 }]}
+      onPress={onPress}
+      hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+    >
+      <Feather name={icon} size={21} color={active ? colors.primary : colors.iconInactive} />
     </Pressable>
   );
 }
@@ -501,29 +514,236 @@ const styles = StyleSheet.create({
   },
   handle: { backgroundColor: colors.borderColor, width: 36 },
   content: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.sm,
     paddingBottom: spacing['2xl'],
   },
 
-  // Header
-  header: {
+  // Top bar
+  topBar: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: spacing.base,
+    paddingHorizontal: spacing.xs,
   },
-  title: {
+  cancelText: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.medium,
+    color: colors.textSecondary,
+  },
+  audienceRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  audienceChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+    borderRadius: 9999,
+    borderWidth: 1.5,
+    borderColor: colors.borderColor,
+    backgroundColor: colors.background.elevated,
+  },
+  audienceChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(79,195,224,0.08)',
+  },
+  audienceChipText: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.medium,
+    color: colors.textMuted,
+  },
+  audienceChipTextActive: {
+    color: colors.primary,
+  },
+
+  // Compose row
+  composeRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    paddingHorizontal: spacing.xs,
+  },
+  inputArea: {
+    flex: 1,
+    paddingTop: 2,
+  },
+  textInput: {
     fontSize: typography.size.lg,
-    fontWeight: '700',
+    fontFamily: typography.family.regular,
     color: colors.textPrimary,
+    minHeight: 80,
+    textAlignVertical: 'top',
+    paddingTop: 0,
+    paddingBottom: spacing.sm,
+    lineHeight: 26,
+  },
+
+  // Media preview
+  mediaPreview: {
+    position: 'relative',
+    height: 220,
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: spacing.sm,
+  },
+  mediaImage: { width: '100%', height: '100%' },
+  mediaRemoveBtn: {
+    position: 'absolute', top: 10, right: 10,
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  mediaChangeBtn: {
+    position: 'absolute', bottom: 10, right: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 4,
+    paddingHorizontal: spacing.md, paddingVertical: 6,
+    borderRadius: 9999, backgroundColor: 'rgba(0,0,0,0.6)',
+  },
+  mediaChangeBtnText: {
+    fontSize: typography.size.xs, fontWeight: '600', color: '#fff',
+  },
+
+  // Video preview card
+  videoPreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+    borderRadius: 14,
+    backgroundColor: colors.background.elevated,
+    borderWidth: 1.5,
+    borderColor: colors.borderColor,
+    marginBottom: spacing.sm,
+  },
+  videoIconWrap: {
+    width: 42, height: 42, borderRadius: 21,
+    backgroundColor: 'rgba(79,195,224,0.1)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  videoTitle: {
+    fontSize: typography.size.sm, fontFamily: typography.family.semibold, color: colors.textPrimary,
+  },
+  videoSub: {
+    fontSize: typography.size.xs, fontFamily: typography.family.regular, color: colors.textMuted,
+  },
+
+  // Media placeholder
+  mediaPlaceholder: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    height: 100,
+    borderRadius: 14,
+    borderWidth: 2,
+    borderStyle: 'dashed',
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(79,195,224,0.04)',
+    marginBottom: spacing.sm,
+  },
+  mediaPlaceholderText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.medium,
+    color: colors.primary,
+  },
+
+  // Poll
+  pollSection: { marginBottom: spacing.sm },
+  pollQuestionInput: {
+    backgroundColor: colors.background.elevated,
+    borderRadius: 12, borderWidth: 1.5, borderColor: colors.borderColor,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    fontSize: typography.size.sm, fontFamily: typography.family.regular,
+    color: colors.textPrimary, marginBottom: spacing.sm,
+  },
+  pollOptionRow: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
+  pollOptionInput: {
+    flex: 1,
+    backgroundColor: colors.background.elevated,
+    borderRadius: 10, borderWidth: 1.5, borderColor: colors.borderColor,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    fontSize: typography.size.sm, fontFamily: typography.family.regular,
+    color: colors.textPrimary,
+  },
+  addOptionBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    paddingVertical: spacing.xs, marginBottom: spacing.sm,
+  },
+  addOptionText: {
+    fontSize: typography.size.sm, fontFamily: typography.family.semibold, color: colors.primary,
+  },
+  sectionLabel: {
+    fontSize: typography.size.xs, fontFamily: typography.family.semibold,
+    color: colors.textMuted, textTransform: 'uppercase',
+    letterSpacing: 0.8, marginBottom: spacing.sm, marginTop: spacing.xs,
+  },
+  chipRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap', marginBottom: spacing.sm },
+  chip: {
+    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+    borderRadius: 9999, borderWidth: 1.5, borderColor: colors.borderColor,
+    backgroundColor: colors.background.elevated,
+  },
+  chipActive: { borderColor: colors.primary, backgroundColor: 'rgba(79,195,224,0.1)' },
+  chipText: { fontSize: typography.size.sm, fontFamily: typography.family.medium, color: colors.textSecondary },
+  chipTextActive: { color: colors.primary, fontFamily: typography.family.semibold },
+
+  // Link
+  linkRow: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+    backgroundColor: colors.background.elevated,
+    borderRadius: 12, borderWidth: 1.5, borderColor: colors.borderColor,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  linkInput: {
+    flex: 1, fontSize: typography.size.sm, fontFamily: typography.family.regular,
+    color: colors.textPrimary, paddingVertical: 0,
+  },
+
+  // PR
+  prSection: { marginBottom: spacing.sm },
+  prInput: {
+    backgroundColor: colors.background.elevated,
+    borderRadius: 12, borderWidth: 1.5, borderColor: colors.borderColor,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    fontSize: typography.size.sm, fontFamily: typography.family.regular,
+    color: colors.textPrimary, marginBottom: spacing.xs,
+  },
+
+  // Char count
+  charCount: {
+    fontSize: typography.size.xs, fontFamily: typography.family.regular,
+    color: colors.textMuted, textAlign: 'right',
+    marginTop: spacing.xs, paddingRight: spacing.xs,
+  },
+  charCountWarn: { color: colors.warning },
+
+  // Divider
+  divider: { height: 1, backgroundColor: colors.borderColor, marginVertical: spacing.md },
+
+  // Toolbar
+  toolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xs,
+  },
+  toolbarIcons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xl,
+  },
+  toolbarBtn: {
+    padding: spacing.xs,
   },
   postBtn: {
     backgroundColor: colors.primary,
     borderRadius: 9999,
     paddingHorizontal: spacing.xl,
     paddingVertical: spacing.sm,
-    minWidth: 70,
+    minWidth: 72,
     alignItems: 'center',
     ...Platform.select({
       ios: { shadowColor: 'rgba(79,195,224,0.4)', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 1, shadowRadius: 10 },
@@ -534,179 +754,31 @@ const styles = StyleSheet.create({
     backgroundColor: colors.borderColor,
     ...Platform.select({ ios: { shadowOpacity: 0 }, android: { elevation: 0 } }),
   },
-  postBtnText: { fontSize: typography.size.base, fontWeight: '700', color: '#fff' },
-
-  // Text input
-  textInput: {
-    fontSize: typography.size.base,
-    color: colors.textPrimary,
-    minHeight: 100,
-    textAlignVertical: 'top',
-    paddingTop: 0,
-  },
-  charCount: {
-    fontSize: typography.size.xs,
-    color: colors.textMuted,
-    textAlign: 'right',
-    marginBottom: spacing.base,
-  },
-  charCountWarn: { color: colors.warning },
-
-  // Media attachment
-  mediaPlaceholder: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: spacing.sm,
-    height: 140,
-    borderRadius: 16,
-    borderWidth: 2,
-    borderStyle: 'dashed',
-    borderColor: colors.primary,
-    backgroundColor: 'rgba(79,195,224,0.05)',
-    marginBottom: spacing.base,
-  },
-  mediaPlaceholderTitle: { fontSize: typography.size.base, fontWeight: '700', color: colors.primary },
-  mediaPlaceholderSub: { fontSize: typography.size.xs, color: colors.textMuted },
-  mediaPreview: {
-    position: 'relative',
-    height: 200,
-    borderRadius: 16,
-    overflow: 'hidden',
-    marginBottom: spacing.base,
-  },
-  mediaImage: { width: '100%', height: '100%' },
-  mediaRemoveBtn: {
-    position: 'absolute', top: 10, right: 10,
-    width: 28, height: 28, borderRadius: 14,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  mediaRetakeBtn: {
-    position: 'absolute', bottom: 10, right: 10,
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: spacing.md, paddingVertical: 6,
-    borderRadius: 9999, backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  mediaRetakeText: { fontSize: typography.size.xs, fontWeight: '600', color: '#fff' },
-
-  // Video card
-  videoCard: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
-    padding: spacing.base, borderRadius: 14,
-    backgroundColor: colors.background.elevated,
-    borderWidth: 1.5, borderColor: colors.borderColor,
-    marginBottom: spacing.base,
-  },
-  videoCardIcon: {
-    width: 44, height: 44, borderRadius: 22,
-    backgroundColor: 'rgba(79,195,224,0.1)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  videoCardTitle: { fontSize: typography.size.sm, fontWeight: '600', color: colors.textPrimary },
-  videoCardSub: { fontSize: typography.size.xs, color: colors.textMuted },
-
-  // Link
-  linkRow: {
-    flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-    backgroundColor: colors.background.elevated,
-    borderRadius: 12, borderWidth: 1.5, borderColor: colors.borderColor,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    marginBottom: spacing.base,
-  },
-  linkInput: {
-    flex: 1, fontSize: typography.size.sm, color: colors.textPrimary,
-    paddingVertical: 0,
+  postBtnText: {
+    fontSize: typography.size.base, fontFamily: typography.family.semibold, color: '#fff',
   },
 
-  // Poll
-  pollSection: { marginBottom: spacing.base },
-  pollQuestionInput: {
-    backgroundColor: colors.background.elevated,
-    borderRadius: 12, borderWidth: 1.5, borderColor: colors.borderColor,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    fontSize: typography.size.sm, color: colors.textPrimary,
-    marginBottom: spacing.sm,
-  },
-  pollOptionRow: {
-    flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm,
-  },
-  pollOptionInput: {
-    flex: 1,
-    backgroundColor: colors.background.elevated,
-    borderRadius: 10, borderWidth: 1.5, borderColor: colors.borderColor,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    fontSize: typography.size.sm, color: colors.textPrimary,
-  },
-  addOptionBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingVertical: spacing.sm, marginBottom: spacing.base,
-  },
-  addOptionText: { fontSize: typography.size.sm, fontWeight: '600', color: colors.primary },
-  pollDurationLabel: {
-    fontSize: typography.size.xs, fontWeight: '600', color: colors.textMuted,
-    textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: spacing.sm,
-  },
-  durationRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
-  durationChip: {
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderRadius: 9999, borderWidth: 1.5, borderColor: colors.borderColor,
-    backgroundColor: colors.background.elevated,
-  },
-  durationChipText: { fontSize: typography.size.sm, fontWeight: '500', color: colors.textSecondary },
-
-  // PR
-  prSection: { marginBottom: spacing.base },
-  prExerciseInput: {
-    backgroundColor: colors.background.elevated,
-    borderRadius: 12, borderWidth: 1.5, borderColor: colors.borderColor,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    fontSize: typography.size.sm, color: colors.textPrimary,
-    marginBottom: spacing.sm,
-  },
-  prValueRow: { marginBottom: spacing.sm },
-  prValueInput: {
-    backgroundColor: colors.background.elevated,
-    borderRadius: 12, borderWidth: 1.5, borderColor: colors.borderColor,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    fontSize: typography.size.sm, color: colors.textPrimary,
-  },
-  prUnitsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
-  unitChip: {
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderRadius: 9999, borderWidth: 1.5, borderColor: colors.borderColor,
-    backgroundColor: colors.background.elevated,
-  },
-  unitChipText: { fontSize: typography.size.sm, fontWeight: '500', color: colors.textSecondary },
-
-  // Shared chip selected state
-  chipSelected: { borderColor: colors.primary, backgroundColor: 'rgba(79,195,224,0.1)' },
-  chipTextSelected: { color: colors.primary, fontWeight: '600' },
-
-  // Toolbar
-  toolbar: {
+  // Reply restriction (compact, below toolbar)
+  replyRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    borderTopWidth: 1,
-    borderTopColor: colors.borderColor,
-    paddingTop: spacing.base,
-    marginTop: spacing.sm,
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.md,
+    paddingHorizontal: spacing.xs,
   },
-  toolbarBtn: { alignItems: 'center', gap: 4, flex: 1 },
-  toolbarBtnLabel: { fontSize: typography.size.xs, color: colors.iconInactive },
-  toolbarBtnLabelActive: { color: colors.primary },
-
-  // Settings
-  divider: { height: 1, backgroundColor: colors.borderColor, marginVertical: spacing.base },
-  settingLabel: {
-    fontSize: typography.size.xs, fontWeight: '600', color: colors.textMuted,
-    textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: spacing.sm,
+  replyLabel: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+    marginRight: 2,
   },
-  toggleRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
-  toggleChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
-    borderRadius: 9999, borderWidth: 1.5, borderColor: colors.borderColor,
+  replyChip: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: 9999,
+    borderWidth: 1.5,
+    borderColor: colors.borderColor,
     backgroundColor: colors.background.elevated,
   },
-  toggleChipText: { fontSize: typography.size.sm, fontWeight: '500', color: colors.textSecondary },
 });
