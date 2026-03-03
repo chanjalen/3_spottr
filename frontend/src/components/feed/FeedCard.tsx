@@ -35,47 +35,28 @@ export default function FeedCard({
         entering={FadeIn.delay(index * 40).duration(300)}
         style={styles.card}
       >
-        {/* Twitter layout: avatar column | content column */}
-        <View style={styles.row}>
-
-          {/* Left column — avatar */}
-          <View style={styles.avatarCol}>
-            <Pressable onPress={onPressUser} disabled={!onPressUser}>
-              <Avatar
-                uri={item.user.avatar_url}
-                name={item.user.display_name}
-                size={44}
-              />
-            </Pressable>
-          </View>
-
-          {/* Right column — header + body + actions */}
-          <View style={styles.contentCol}>
-            <FeedCardHeader
-              user={item.user}
-              createdAt={item.created_at}
-              locationName={item.location_name}
-              workoutType={item.workout_type}
-              sharedContext={item.shared_context}
-              onPressUser={onPressUser}
-            />
-            <FeedCardBody
-              item={item}
-              onPollVote={onPollVote}
-              onWorkoutPress={
-                item.workout ? () => setWorkoutDetailId(item.workout!.id) : undefined
-              }
-            />
-            <FeedCardActions
-              likeCount={item.like_count}
-              commentCount={item.comment_count}
-              userLiked={item.user_liked}
-              onLike={onLike}
-              onComment={onComment}
-              shareUrl={shareUrl}
-            />
-          </View>
-        </View>
+        <FeedCardHeader
+          user={item.user}
+          createdAt={item.created_at}
+          locationName={item.location_name}
+          workoutType={item.workout_type}
+          sharedContext={item.shared_context}
+          onPressUser={onPressUser}
+        />
+        <FeedCardBody
+          item={item}
+          onPollVote={onPollVote}
+          onWorkoutPress={item.workout ? () => setWorkoutDetailId(item.workout!.id) : undefined}
+        />
+        <FeedCardActions
+          likeCount={item.like_count}
+          commentCount={item.comment_count}
+          userLiked={item.user_liked}
+          onLike={onLike}
+          onComment={onComment}
+          shareUrl={shareUrl}
+          shareTitle={item.description ? `${item.user.display_name}: ${item.description.slice(0, 60)}` : `${item.user.display_name}'s post`}
+        />
       </Animated.View>
 
       <WorkoutDetailModal

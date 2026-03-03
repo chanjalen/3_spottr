@@ -92,6 +92,7 @@ export interface Comment {
   id: number;
   user: UserBrief;
   description: string;
+  photo_url?: string | null;
   created_at: string;
   like_count: number;
   user_liked: boolean;

@@ -1091,6 +1091,7 @@ def get_comments_view(request, post_id):
                 'avatar_url': comment.user.avatar_url or None,
             },
             'description': comment.description,
+            'photo_url': request.build_absolute_uri(comment.photo.url) if comment.photo else None,
             'created_at': comment.created_at.isoformat(),
             'like_count': comment.reaction_count,
             'user_liked': comment.user_liked_ann,
@@ -1138,6 +1139,7 @@ def get_checkin_comments_view(request, checkin_id):
                 'avatar_url': comment.user.avatar_url or None,
             },
             'description': comment.description,
+            'photo_url': request.build_absolute_uri(comment.photo.url) if comment.photo else None,
             'created_at': comment.created_at.isoformat(),
             'like_count': comment.reaction_count,
             'user_liked': comment.user_liked_ann,
@@ -1179,15 +1181,17 @@ def get_time_ago(dt):
 def add_comment_view(request, post_id):
     """
     Add a comment to a post. Max 15 comments per user per post.
+    Accepts multipart/form-data (for photo) or JSON (text only).
     """
     post = get_object_or_404(Post, id=post_id)
 
     text = (request.data.get('text', '') or '').strip()
+    photo = request.FILES.get('photo')
 
-    if not text:
+    if not text and not photo:
         return DRFResponse({
             'success': False,
-            'error': 'Comment text is required'
+            'error': 'Comment must have text or a photo'
         }, status=400)
 
     if len(text) > 500:
@@ -1210,6 +1214,9 @@ def add_comment_view(request, post_id):
         user=request.user,
         description=text,
     )
+    if photo:
+        comment.photo = photo
+        comment.save(update_fields=['photo'])
 
     from notifications.dispatcher import notify_comment
     notify_comment(request.user, post, comment)
@@ -1225,6 +1232,7 @@ def add_comment_view(request, post_id):
                 'avatar_url': request.user.avatar_url or None,
             },
             'description': comment.description,
+            'photo_url': request.build_absolute_uri(comment.photo.url) if comment.photo else None,
             'created_at': comment.created_at.isoformat(),
             'like_count': 0,
             'user_liked': False,
@@ -1239,15 +1247,17 @@ def add_comment_view(request, post_id):
 def add_checkin_comment_view(request, checkin_id):
     """
     Add a comment to a check-in. Max 15 comments per user per check-in.
+    Accepts multipart/form-data (for photo) or JSON (text only).
     """
     checkin = get_object_or_404(QuickWorkout, id=checkin_id)
 
     text = (request.data.get('text', '') or '').strip()
+    photo = request.FILES.get('photo')
 
-    if not text:
+    if not text and not photo:
         return DRFResponse({
             'success': False,
-            'error': 'Comment text is required'
+            'error': 'Comment must have text or a photo'
         }, status=400)
 
     if len(text) > 500:
@@ -1268,6 +1278,9 @@ def add_checkin_comment_view(request, checkin_id):
         user=request.user,
         description=text,
     )
+    if photo:
+        comment.photo = photo
+        comment.save(update_fields=['photo'])
 
     from notifications.dispatcher import notify_comment_on_checkin
     notify_comment_on_checkin(request.user, checkin, comment)
@@ -1283,6 +1296,7 @@ def add_checkin_comment_view(request, checkin_id):
                 'avatar_url': request.user.avatar_url or None,
             },
             'description': comment.description,
+            'photo_url': request.build_absolute_uri(comment.photo.url) if comment.photo else None,
             'created_at': comment.created_at.isoformat(),
             'like_count': 0,
             'user_liked': False,
@@ -1376,6 +1390,7 @@ def get_comment_replies_view(request, comment_id):
                 'avatar_url': reply.user.avatar_url or None,
             },
             'description': reply.description,
+            'photo_url': request.build_absolute_uri(reply.photo.url) if reply.photo else None,
             'created_at': reply.created_at.isoformat(),
             'like_count': like_count,
             'user_liked': user_liked,
@@ -1395,15 +1410,17 @@ def get_comment_replies_view(request, comment_id):
 def add_comment_reply_view(request, comment_id):
     """
     Add a reply to a comment. Max 15 replies per user per parent comment.
+    Accepts multipart/form-data (for photo) or JSON (text only).
     """
     parent_comment = get_object_or_404(Comment, id=comment_id)
 
     text = (request.data.get('text', '') or '').strip()
+    photo = request.FILES.get('photo')
 
-    if not text:
+    if not text and not photo:
         return DRFResponse({
             'success': False,
-            'error': 'Reply text is required'
+            'error': 'Reply must have text or a photo'
         }, status=400)
 
     if len(text) > 500:
@@ -1426,6 +1443,9 @@ def add_comment_reply_view(request, comment_id):
         user=request.user,
         description=text,
     )
+    if photo:
+        reply.photo = photo
+        reply.save(update_fields=['photo'])
 
     from notifications.dispatcher import notify_comment_reply
     notify_comment_reply(request.user, parent_comment, reply)
@@ -1441,6 +1461,7 @@ def add_comment_reply_view(request, comment_id):
                 'avatar_url': request.user.avatar_url or None,
             },
             'description': reply.description,
+            'photo_url': request.build_absolute_uri(reply.photo.url) if reply.photo else None,
             'created_at': reply.created_at.isoformat(),
             'like_count': 0,
             'user_liked': False,

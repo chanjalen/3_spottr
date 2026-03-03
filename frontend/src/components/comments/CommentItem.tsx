@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, Image, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Avatar from '../common/Avatar';
 import ReplyItem from './ReplyItem';
@@ -50,7 +50,16 @@ export default function CommentItem({
             <Text style={styles.name}>{comment.user.display_name}</Text>
             <Text style={styles.time}>{timeAgo(comment.created_at)}</Text>
           </View>
-          <Text style={styles.text}>{comment.description}</Text>
+          {!!comment.description && (
+            <Text style={styles.text}>{comment.description}</Text>
+          )}
+          {!!comment.photo_url && (
+            <Image
+              source={{ uri: comment.photo_url }}
+              style={styles.photo}
+              resizeMode="cover"
+            />
+          )}
           <View style={styles.actions}>
             <Pressable
               style={styles.actionBtn}
@@ -151,6 +160,12 @@ const styles = StyleSheet.create({
     fontFamily: typography.family.regular,
     color: colors.textPrimary,
     lineHeight: 20,
+  },
+  photo: {
+    width: '100%',
+    height: 180,
+    borderRadius: 10,
+    marginTop: spacing.xs,
   },
   actions: {
     flexDirection: 'row',
