@@ -10,10 +10,10 @@ import { colors, spacing, typography } from '../../theme';
 interface CommentItemProps {
   comment: Comment;
   currentUserId?: string;
-  onLike: (id: number) => void;
-  onDelete: (id: number) => void;
-  onLoadReplies: (id: number) => void;
-  onStartReply: (commentId: number, username: string) => void;
+  onLike: (id: string) => void;
+  onDelete: (id: string) => void;
+  onLoadReplies: (id: string) => void;
+  onStartReply: (commentId: string, username: string) => void;
 }
 
 export default function CommentItem({

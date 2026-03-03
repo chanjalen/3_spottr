@@ -9,8 +9,8 @@ import { colors, spacing, typography } from '../../theme';
 interface ReplyItemProps {
   reply: Comment;
   currentUserId?: string;
-  onLike: (id: number) => void;
-  onDelete: (id: number) => void;
+  onLike: (id: string) => void;
+  onDelete: (id: string) => void;
 }
 
 export default function ReplyItem({

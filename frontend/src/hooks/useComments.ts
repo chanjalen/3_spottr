@@ -45,13 +45,13 @@ export function useComments(onCommentCountChange?: (delta: number) => void) {
     [onCommentCountChange],
   );
 
-  const removeComment = useCallback(async (commentId: number) => {
+  const removeComment = useCallback(async (commentId: string) => {
     await apiDeleteComment(commentId);
     setComments((prev) => prev.filter((c) => c.id !== commentId));
     onCommentCountChange?.(-1);
   }, [onCommentCountChange]);
 
-  const likeComment = useCallback(async (commentId: number) => {
+  const likeComment = useCallback(async (commentId: string) => {
     // Optimistic update
     setComments((prev) =>
       prev.map((c) => {
@@ -82,7 +82,7 @@ export function useComments(onCommentCountChange?: (delta: number) => void) {
     }
   }, []);
 
-  const loadReplies = useCallback(async (commentId: number) => {
+  const loadReplies = useCallback(async (commentId: string) => {
     try {
       const replies = await fetchReplies(commentId);
       setComments((prev) =>
@@ -95,7 +95,7 @@ export function useComments(onCommentCountChange?: (delta: number) => void) {
 
   const postReply = useCallback(
     async (
-      commentId: number,
+      commentId: string,
       text: string,
       photo?: { uri: string; name: string; type: string },
     ) => {
