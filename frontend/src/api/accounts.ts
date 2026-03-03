@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { apiClient, API_BASE_URL } from './client';
-import { UserBrief, UserProfile, UserSearchResult, PersonalRecord } from '../types/user';
+import { UserBrief, UserProfile, UserSearchResult, SuggestedUser, PersonalRecord } from '../types/user';
 
 export async function apiLogin(username: string, password: string): Promise<{ token: string; user: UserBrief }> {
   const res = await apiClient.post('/accounts/api/login/', { username, password });
@@ -73,6 +73,11 @@ export async function fetchProfile(username: string): Promise<UserProfile> {
 
 export async function searchUsers(q: string): Promise<UserSearchResult[]> {
   const res = await apiClient.get('/accounts/api/search-users/', { params: { q } });
+  return res.data?.results ?? [];
+}
+
+export async function fetchSuggestedUsers(limit = 20): Promise<SuggestedUser[]> {
+  const res = await apiClient.get('/accounts/api/suggested-users/', { params: { limit } });
   return res.data?.results ?? [];
 }
 

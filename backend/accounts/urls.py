@@ -38,4 +38,5 @@ urlpatterns = [
     path('api/user/<str:username>/posts/', api_views.api_user_posts_view, name='api_user_posts'),
     path('api/user/<str:username>/prs/', api_views.api_user_prs_view, name='api_user_prs'),
     path('api/user/<str:username>/checkins/', api_views.api_user_checkins_view, name='api_user_checkins'),
+    path('api/suggested-users/', api_views.api_suggested_users_view, name='api_suggested_users'),
 ]

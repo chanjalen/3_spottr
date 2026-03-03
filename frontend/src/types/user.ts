@@ -30,6 +30,16 @@ export interface UserSearchResult extends UserBrief {
   is_following: boolean;
 }
 
+export interface SuggestedUser {
+  id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  is_following: boolean;
+  mutual_count: number;
+  mutual_previews: Array<{ id: string; username: string; avatar_url: string | null }>;
+}
+
 export interface PersonalRecord {
   id: string;
   exercise_name: string;

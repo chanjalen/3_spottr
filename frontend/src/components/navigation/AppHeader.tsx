@@ -55,7 +55,8 @@ export default function AppHeader() {
 
           <Pressable
             style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
-            accessibilityLabel="Add friend"
+            onPress={() => navigation.navigate('FindFriends')}
+            accessibilityLabel="Find friends"
             accessibilityRole="button"
           >
             <Feather name="user-plus" size={17} color={colors.iconActive} />
