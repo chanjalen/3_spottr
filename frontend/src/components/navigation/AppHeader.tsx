@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -9,6 +8,7 @@ import Avatar from '../common/Avatar';
 import { useAuth } from '../../store/AuthContext';
 import { fetchUnreadCount } from '../../api/notifications';
 import { fetchStreakInfo } from '../../api/workouts';
+import { fetchMe } from '../../api/accounts';
 import { colors, spacing, typography, shadow } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 
@@ -16,7 +16,7 @@ type RootNav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function AppHeader() {
   const insets = useSafeAreaInsets();
-  const { user, token, currentStreak, setCurrentStreak } = useAuth();
+  const { user, token, currentStreak, setCurrentStreak, updateUser } = useAuth();
   const navigation = useNavigation<RootNav>();
   const [notificationCount, setNotificationCount] = useState(0);
 
@@ -28,6 +28,9 @@ export default function AppHeader() {
         .catch(() => {});
       fetchStreakInfo()
         .then(data => setCurrentStreak(data.current_streak))
+        .catch(() => {});
+      fetchMe()
+        .then(latestUser => updateUser(latestUser))
         .catch(() => {});
     }, [token]),
   );
@@ -78,26 +81,11 @@ export default function AppHeader() {
             <Text style={styles.streakNum}>{currentStreak}</Text>
           </Pressable>
           <Pressable onPress={() => user && navigation.navigate('Profile', { username: user.username })}>
-            <StoryRingAvatar uri={user?.avatar_url ?? null} name={user?.display_name ?? 'Me'} />
+            <Avatar uri={user?.avatar_url ?? null} name={user?.display_name ?? 'Me'} size={34} />
           </Pressable>
         </View>
       </View>
     </View>
-  );
-}
-
-function StoryRingAvatar({ uri, name }: { uri: string | null; name: string }) {
-  return (
-    <LinearGradient
-      colors={[colors.storyGradientStart, colors.storyGradientMid, colors.storyGradientEnd]}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 1, y: 1 }}
-      style={styles.storyRing}
-    >
-      <View style={styles.storyRingInner}>
-        <Avatar uri={uri} name={name} size={30} />
-      </View>
-    </LinearGradient>
   );
 }
 
@@ -176,23 +164,4 @@ const styles = StyleSheet.create({
   },
   streakEmoji: { fontSize: 12 },
   streakNum: { fontSize: typography.size.sm, fontWeight: '700', color: colors.textPrimary },
-  storyRing: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    padding: 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  storyRingInner: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 2,
-    borderColor: colors.surface,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: colors.background.elevated,
-  },
 });

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Pressable } from 'react-native';
+import { View, StyleSheet, Pressable, Alert } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { FeedItem } from '../../types/feed';
 import FeedCardHeader from './FeedCardHeader';
@@ -16,6 +16,7 @@ interface FeedCardProps {
   onComment: () => void;
   onPollVote: (optionId: number | string) => void;
   onPressUser?: () => void;
+  onDelete?: () => void;
 }
 
 export default function FeedCard({
@@ -25,9 +26,19 @@ export default function FeedCard({
   onComment,
   onPollVote,
   onPressUser,
+  onDelete,
 }: FeedCardProps) {
   const shareUrl = `https://spottr.app/${item.type}/${item.id}`;
   const [workoutDetailId, setWorkoutDetailId] = useState<string | null>(null);
+
+  const handleMore = onDelete
+    ? () => {
+        Alert.alert('Post Options', undefined, [
+          { text: 'Delete Post', style: 'destructive', onPress: onDelete },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
+      }
+    : undefined;
 
   return (
     <>
@@ -42,6 +53,7 @@ export default function FeedCard({
           workoutType={item.workout_type}
           sharedContext={item.shared_context}
           onPressUser={onPressUser}
+          onMore={handleMore}
         />
         <FeedCardBody
           item={item}

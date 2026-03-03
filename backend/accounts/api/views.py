@@ -500,6 +500,51 @@ def api_profile_view(request, username):
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
+def api_mutual_followers_view(request, username):
+    """
+    Return users that the requester follows who also follow <username>.
+    Optional ?q= for search.
+    """
+    from django.db import models as db_models
+    from social.models import Follow
+    from django.shortcuts import get_object_or_404
+
+    target = get_object_or_404(User, username=username)
+    if target == request.user:
+        return Response([])
+
+    # IDs of people I follow
+    my_following_ids = set(
+        Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
+    )
+    # IDs of people who follow target
+    target_follower_ids = set(
+        Follow.objects.filter(following=target).values_list('follower_id', flat=True)
+    )
+
+    mutual_ids = my_following_ids & target_follower_ids
+
+    q = request.query_params.get('q', '').strip()[:50]
+    qs = User.objects.filter(id__in=mutual_ids)
+    if q:
+        qs = qs.filter(
+            db_models.Q(username__icontains=q) | db_models.Q(display_name__icontains=q)
+        )
+    qs = qs.order_by('display_name')[:50]
+
+    return Response([
+        {
+            'id': str(u.id),
+            'username': u.username,
+            'display_name': u.display_name,
+            'avatar_url': u.avatar_url or None,
+        }
+        for u in qs
+    ])
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def api_user_post_thumbnails_view(request, username):
     """
     Fast thumbnail endpoint for the profile grid.
@@ -613,16 +658,17 @@ def api_save_pr_view(request):
     if len(exercise_name) > 100:
         return Response({'error': 'Exercise name cannot exceed 100 characters.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if unit not in ('lbs', 'kg'):
-        return Response({'error': "Unit must be 'lbs' or 'kg'."}, status=status.HTTP_400_BAD_REQUEST)
+    if unit not in ('lbs', 'kg', 'reps', 'sec', 'min'):
+        return Response({'error': "Unit must be one of: lbs, kg, reps, sec, min."}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
         value = float(value)
     except (ValueError, TypeError):
         return Response({'error': 'Invalid value.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if value <= 0 or value > 2000:
-        return Response({'error': 'Value must be between 0 and 2000.'}, status=status.HTTP_400_BAD_REQUEST)
+    max_value = 2000 if unit in ('lbs', 'kg') else 100000
+    if value <= 0 or value > max_value:
+        return Response({'error': f'Value must be between 0 and {max_value}.'}, status=status.HTTP_400_BAD_REQUEST)
 
     if pr_id:
         try:

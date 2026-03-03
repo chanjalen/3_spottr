@@ -183,6 +183,11 @@ export async function listMyOrgs(): Promise<OrgListItem[]> {
   return data;
 }
 
+export async function fetchUserOrgs(username: string): Promise<OrgListItem[]> {
+  const { data } = await apiClient.get(`/api/organizations/user/${username}/orgs/`);
+  return data;
+}
+
 export async function discoverOrgs(query?: string): Promise<OrgListItem[]> {
   const params: Record<string, string> = {};
   if (query) params.q = query;
