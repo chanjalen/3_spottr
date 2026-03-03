@@ -2,8 +2,50 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
 
 from social.models import Follow
+
+
+# ── Likes ─────────────────────────────────────────────────────────────────────
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def like_post(request, post_id):
+    """Toggle like on a post (token-auth friendly)."""
+    from social.models import Post, Reaction
+    post = get_object_or_404(Post, id=post_id)
+    existing = Reaction.objects.filter(post=post, user=request.user).first()
+    if existing:
+        existing.delete()
+        liked = False
+    else:
+        Reaction.objects.create(post=post, user=request.user, type='like')
+        liked = True
+        try:
+            from notifications.dispatcher import notify_like_post
+            notify_like_post(request.user, post)
+        except Exception:
+            pass
+    like_count = Reaction.objects.filter(post=post).count()
+    return Response({'liked': liked, 'like_count': like_count})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def like_checkin(request, checkin_id):
+    """Toggle like on a check-in (token-auth friendly)."""
+    from social.models import QuickWorkout, Reaction
+    checkin = get_object_or_404(QuickWorkout, id=checkin_id)
+    existing = Reaction.objects.filter(quick_workout=checkin, user=request.user).first()
+    if existing:
+        existing.delete()
+        liked = False
+    else:
+        Reaction.objects.create(quick_workout=checkin, user=request.user, type='like')
+        liked = True
+    like_count = Reaction.objects.filter(quick_workout=checkin).count()
+    return Response({'liked': liked, 'like_count': like_count})
 
 
 @api_view(['POST'])
@@ -335,3 +377,83 @@ def mutual_follows(request):
     ]
 
     return Response(data)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def vote_poll(request, poll_id):
+    from social.models import Poll, PollOption, PollVote
+    try:
+        poll = Poll.objects.get(id=poll_id)
+    except Poll.DoesNotExist:
+        return Response({'error': 'Poll not found'}, status=404)
+
+    if not poll.is_active:
+        return Response({'error': 'This poll has ended'}, status=400)
+
+    option_id = request.data.get('option_id')
+    if not option_id:
+        return Response({'error': 'option_id is required'}, status=400)
+
+    try:
+        option = PollOption.objects.get(id=option_id, poll=poll)
+    except PollOption.DoesNotExist:
+        return Response({'error': 'Option not found'}, status=404)
+
+    existing_vote = PollVote.objects.filter(poll=poll, user=request.user).first()
+    if existing_vote:
+        if str(existing_vote.option.id) != str(option_id):
+            old_option = existing_vote.option
+            old_option.votes = max(0, old_option.votes - 1)
+            old_option.save()
+            existing_vote.option = option
+            existing_vote.save()
+            option.votes += 1
+            option.save()
+    else:
+        PollVote.objects.create(poll=poll, user=request.user, option=option)
+        option.votes += 1
+        option.save()
+
+    total_votes = poll.get_total_votes()
+    options_data = [
+        {'id': opt.id, 'text': opt.text, 'votes': opt.votes, 'order': opt.order}
+        for opt in poll.options.all().order_by('order')
+    ]
+    return Response({
+        'id': poll.id,
+        'question': poll.question,
+        'options': options_data,
+        'total_votes': total_votes,
+        'user_vote_id': option.id,
+        'is_active': poll.is_active,
+        'ends_at': poll.ends_at.isoformat() if poll.ends_at else None,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def poll_voters(request, poll_id):
+    from social.models import Poll, PollVote
+    try:
+        poll = Poll.objects.get(id=poll_id)
+    except Poll.DoesNotExist:
+        return Response({'error': 'Poll not found'}, status=404)
+
+    if poll.post.user != request.user:
+        return Response({'error': 'Permission denied'}, status=403)
+
+    options_data = []
+    for opt in poll.options.all().order_by('order'):
+        votes = PollVote.objects.filter(option=opt).select_related('user')
+        voters = [
+            {
+                'username': v.user.username,
+                'display_name': getattr(v.user, 'display_name', '') or v.user.username,
+                'avatar_url': getattr(v.user, 'avatar_url', None),
+            }
+            for v in votes
+        ]
+        options_data.append({'id': str(opt.id), 'text': opt.text, 'voters': voters})
+
+    return Response({'options': options_data})

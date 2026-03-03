@@ -54,6 +54,7 @@ export default function FeedCard({
           onLike={onLike}
           onComment={onComment}
           shareUrl={shareUrl}
+          shareTitle={item.description ? `${item.user.display_name}: ${item.description.slice(0, 60)}` : `${item.user.display_name}'s post`}
         />
       </Animated.View>
 
