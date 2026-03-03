@@ -224,6 +224,20 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 CELERY_TASK_TRACK_STARTED = True
 # Set CELERY_TASK_ALWAYS_EAGER = True in test settings to run tasks inline
+CELERY_BEAT_SCHEDULE = {
+    'reset-broken-streaks-hourly': {
+        'task': 'workouts.tasks.reset_broken_streaks',
+        'schedule': 3600,  # every hour (UTC) — catches each user's 3 AM window
+    },
+}
+
+# Email — from address used for all outgoing mail
+# Using Resend's shared sender until spottr.app domain is verified.
+# Switch back to 'Spottr <noreply@spottr.app>' after DNS verification.
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'Spottr <onboarding@resend.dev>')
+
+# Google OAuth — set GOOGLE_CLIENT_ID in your environment (Web client ID from Google Cloud Console)
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
 
 # Logging
 LOGGING = {

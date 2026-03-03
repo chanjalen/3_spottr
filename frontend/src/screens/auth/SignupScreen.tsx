@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -9,13 +9,14 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
-  Alert,
 } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../navigation/types';
-import { apiSignup } from '../../api/accounts';
+import { useAuth } from '../../store/AuthContext';
+import { apiSignup, apiGoogleAuth } from '../../api/accounts';
+import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import { colors, spacing, typography } from '../../theme';
 
 type Props = {
@@ -61,6 +62,8 @@ function formatDisplayDate(d: Date): string {
 
 export default function SignupScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { signIn } = useAuth();
+  const { request, response, promptAsync } = useGoogleAuth();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -68,7 +71,45 @@ export default function SignupScreen({ navigation }: Props) {
   const [birthday, setBirthday] = useState<Date | null>(null);
   const [showPicker, setShowPicker] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (response?.type === 'success') {
+      const idToken = response.params?.id_token ?? (response as any).authentication?.idToken;
+      if (idToken) {
+        handleGoogleToken(idToken);
+      } else {
+        setError('Google sign-in failed. Please try again.');
+        setGoogleLoading(false);
+      }
+    } else if (response?.type === 'error') {
+      setError('Google sign-in was cancelled or failed.');
+      setGoogleLoading(false);
+    } else if (response?.type === 'dismiss') {
+      setGoogleLoading(false);
+    }
+  }, [response]);
+
+  const handleGoogleToken = async (idToken: string) => {
+    setGoogleLoading(true);
+    setError(null);
+    try {
+      const { token, user } = await apiGoogleAuth(idToken);
+      await signIn(token, user);
+    } catch (e: any) {
+      const msg = e?.response?.data?.error ?? 'Google sign-in failed. Please try again.';
+      setError(msg);
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  const handleGoogleSignUp = async () => {
+    setGoogleLoading(true);
+    setError(null);
+    await promptAsync();
+  };
 
   const strength = getPasswordStrength(password);
 
@@ -116,9 +157,6 @@ export default function SignupScreen({ navigation }: Props) {
     }
   };
 
-  const handleGoogleSignIn = () => {
-    Alert.alert('Coming Soon', 'Google sign-in is coming soon!');
-  };
 
   const maxBirthday = new Date();
   maxBirthday.setFullYear(maxBirthday.getFullYear() - 13);
@@ -253,10 +291,19 @@ export default function SignupScreen({ navigation }: Props) {
           </View>
 
           <Pressable
-            style={({ pressed }) => [styles.googleBtn, pressed && styles.btnPressed]}
-            onPress={handleGoogleSignIn}
+            style={({ pressed }) => [
+              styles.googleBtn,
+              pressed && styles.btnPressed,
+              !request && styles.btnDisabled,
+            ]}
+            onPress={handleGoogleSignUp}
+            disabled={!request || loading || googleLoading}
           >
-            <Text style={styles.googleBtnText}>Continue with Google</Text>
+            {googleLoading ? (
+              <ActivityIndicator color={colors.textPrimary} />
+            ) : (
+              <Text style={styles.googleBtnText}>Continue with Google</Text>
+            )}
           </Pressable>
 
           <Text style={styles.consent}>
@@ -386,6 +433,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
     alignItems: 'center',
     marginTop: spacing.sm,
+  },
+  btnDisabled: {
+    opacity: 0.5,
   },
   btnPressed: {
     opacity: 0.85,

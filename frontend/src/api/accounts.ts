@@ -7,6 +7,11 @@ export async function apiLogin(username: string, password: string): Promise<{ to
   return res.data;
 }
 
+export async function apiUpdateProfile(data: { display_name?: string; bio?: string; timezone?: string }): Promise<UserBrief> {
+  const res = await apiClient.patch('/accounts/api/me/profile/', data);
+  return res.data;
+}
+
 export async function apiSignup(data: {
   email: string;
   password: string;
@@ -158,4 +163,24 @@ export async function updateUserProfile(data: {
 
 export async function apiDeleteAccount(): Promise<void> {
   await apiClient.delete('/accounts/api/me/delete/');
+}
+
+/** Authenticate (or create) a Spottr account using a Google ID token. */
+export async function apiGoogleAuth(idToken: string): Promise<{ token: string; user: UserBrief }> {
+  const res = await apiClient.post('/accounts/api/google-auth/', { id_token: idToken });
+  return res.data;
+}
+
+/** Request a password reset code for the given email address. */
+export async function apiPasswordResetRequest(email: string): Promise<void> {
+  await apiClient.post('/accounts/api/password-reset/request/', { email });
+}
+
+/** Confirm a password reset using the 6-digit code. */
+export async function apiPasswordResetConfirm(data: {
+  email: string;
+  code: string;
+  new_password: string;
+}): Promise<void> {
+  await apiClient.post('/accounts/api/password-reset/confirm/', data);
 }
