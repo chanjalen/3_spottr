@@ -25,8 +25,8 @@ export const ENDPOINTS = {
   createPost: '/api/social/post/create/',
   createCheckin: '/api/social/checkin/create/',
 
-  votePoll: (id: ID) => `${BASE}/poll/${id}/vote/`,
-  pollVoters: (id: ID) => `${BASE}/poll/${id}/voters/`,
+  votePoll: (id: ID) => `/api/social/poll/${id}/vote/`,
+  pollVoters: (id: ID) => `/api/social/poll/${id}/voters/`,
 
   userPostThumbnails: (username: string) => `/accounts/api/user/${username}/post-thumbnails/`,
   userPosts: (username: string) => `/accounts/api/user/${username}/posts/`,

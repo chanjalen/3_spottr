@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -19,6 +19,7 @@ import BottomSheet, { BottomSheetFlatList, BottomSheetBackdrop } from '@gorhom/b
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../../store/AuthContext';
 import { createPost } from '../../api/feed';
+import { emitFeedRefresh } from '../../utils/feedEvents';
 import { fetchRecentWorkouts } from '../../api/workouts';
 import { RecentWorkout } from '../../types/workout';
 import { colors, spacing, typography } from '../../theme';
@@ -31,30 +32,59 @@ type Props = {
 
 const PR_UNITS = ['lbs', 'kg', 'miles', 'km', 'mins', 'reps'];
 
+const POLL_DURATIONS: Array<{ label: string; hours: number }> = [
+  { label: '1h',  hours: 1 },
+  { label: '6h',  hours: 6 },
+  { label: '24h', hours: 24 },
+  { label: '3d',  hours: 72 },
+  { label: '7d',  hours: 168 },
+];
+
 export default function CreatePostScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { user } = useAuth();
 
+  // Text
   const [text, setText] = useState('');
+
+  // Media
   const [media, setMedia] = useState<{ uri: string; name: string; type: string; isVideo: boolean } | null>(null);
+
+  // Workout
   const [attachedWorkout, setAttachedWorkout] = useState<RecentWorkout | null>(null);
+  const workoutSheetRef = useRef<BottomSheet>(null);
+  const [recentWorkouts, setRecentWorkouts] = useState<RecentWorkout[]>([]);
+  const [workoutsLoading, setWorkoutsLoading] = useState(false);
+
+  // PR
   const [showPR, setShowPR] = useState(false);
   const [prExercise, setPrExercise] = useState('');
   const [prValue, setPrValue] = useState('');
   const [prUnit, setPrUnit] = useState('lbs');
-  const [submitting, setSubmitting] = useState(false);
 
-  // Workout picker sheet
-  const workoutSheetRef = useRef<BottomSheet>(null);
-  const [recentWorkouts, setRecentWorkouts] = useState<RecentWorkout[]>([]);
-  const [workoutsLoading, setWorkoutsLoading] = useState(false);
+  // Poll
+  const [showPoll, setShowPoll] = useState(false);
+  const [pollQuestion, setPollQuestion] = useState('');
+  const [pollOptions, setPollOptions] = useState(['', '']);
+  const [pollDuration, setPollDuration] = useState(24);
+
+  const [submitting, setSubmitting] = useState(false);
 
   const hashtags = useMemo(() => {
     const matches = text.match(/#[\w\u0080-\uFFFF]+/g) ?? [];
     return [...new Set(matches)];
   }, [text]);
 
-  const hasContent = text.trim().length > 0 || !!media || !!attachedWorkout || (showPR && prExercise && prValue);
+  const validPollOptions = pollOptions.filter(o => o.trim().length > 0);
+  const hasPoll = showPoll && pollQuestion.trim().length > 0 && validPollOptions.length >= 2;
+  const hasContent =
+    text.trim().length > 0 ||
+    !!media ||
+    !!attachedWorkout ||
+    (showPR && prExercise.trim() && prValue.trim()) ||
+    hasPoll;
+
+  // ── Media picker ─────────────────────────────────────────────────────────────
 
   const handlePickMedia = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -64,19 +94,29 @@ export default function CreatePostScreen({ navigation }: Props) {
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.All,
-      allowsEditing: true,
+      allowsEditing: false,
       quality: 0.85,
+      videoMaxDuration: 120,
+      preferredAssetRepresentationMode:
+        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
     });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
-      const filename = asset.uri.split('/').pop() ?? 'media';
       const isVideo = asset.type === 'video';
-      const mimeType = isVideo
-        ? (filename.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4')
-        : 'image/jpeg';
-      setMedia({ uri: asset.uri, name: filename, type: mimeType, isVideo });
+      if (isVideo) {
+        // iOS Compatible mode exports H.264 MP4 — always use mp4 mime type
+        const mimeType = Platform.OS === 'ios' ? 'video/mp4' : (asset.mimeType ?? 'video/mp4');
+        const ext = Platform.OS === 'ios' ? 'mp4' : (asset.uri.split('.').pop()?.toLowerCase() ?? 'mp4');
+        setMedia({ uri: asset.uri, name: `video.${ext}`, type: mimeType, isVideo: true });
+      } else {
+        const mimeType = asset.mimeType ?? 'image/jpeg';
+        const ext = mimeType === 'image/png' ? 'png' : 'jpg';
+        setMedia({ uri: asset.uri, name: `photo.${ext}`, type: mimeType, isVideo: false });
+      }
     }
   };
+
+  // ── Workout picker ────────────────────────────────────────────────────────────
 
   const openWorkoutPicker = () => {
     if (recentWorkouts.length === 0) {
@@ -94,9 +134,45 @@ export default function CreatePostScreen({ navigation }: Props) {
     workoutSheetRef.current?.close();
   };
 
+  // ── Poll helpers ──────────────────────────────────────────────────────────────
+
+  const updatePollOption = (index: number, value: string) => {
+    const next = [...pollOptions];
+    next[index] = value;
+    setPollOptions(next);
+  };
+
+  const removePollOption = (index: number) => {
+    setPollOptions(pollOptions.filter((_, i) => i !== index));
+  };
+
+  const togglePoll = () => {
+    setShowPoll(v => !v);
+    if (showPoll) {
+      // Reset poll when closing
+      setPollQuestion('');
+      setPollOptions(['', '']);
+      setPollDuration(24);
+    }
+  };
+
+  // ── Submit ────────────────────────────────────────────────────────────────────
+
   const handleSubmit = async () => {
     if (!hasContent) {
-      Alert.alert('Nothing to post', 'Add some text, media, or a workout to share.');
+      Alert.alert('Nothing to post', 'Add some text, media, a poll, or a workout to share.');
+      return;
+    }
+    // Only block for an incomplete poll when it's the only content being added.
+    // If the user also has text, media, a workout, or a PR, proceed and simply
+    // omit the incomplete poll (hasPoll will be false → poll: undefined is sent).
+    const hasNonPollContent =
+      text.trim().length > 0 ||
+      !!media ||
+      !!attachedWorkout ||
+      (showPR && prExercise.trim() && prValue.trim());
+    if (showPoll && pollQuestion.trim() && validPollOptions.length < 2 && !hasNonPollContent) {
+      Alert.alert('Poll incomplete', 'Add at least 2 options to your poll.');
       return;
     }
     setSubmitting(true);
@@ -109,7 +185,11 @@ export default function CreatePostScreen({ navigation }: Props) {
         pr: showPR && prExercise.trim() && prValue.trim()
           ? { exerciseName: prExercise.trim(), value: prValue.trim(), unit: prUnit }
           : undefined,
+        poll: hasPoll
+          ? { question: pollQuestion.trim(), options: validPollOptions, duration: pollDuration }
+          : undefined,
       });
+      emitFeedRefresh(); // signal FeedScreen to reload before navigating back
       navigation.goBack();
     } catch (err: any) {
       const msg = err?.response?.data?.error ?? 'Could not create post.';
@@ -125,6 +205,8 @@ export default function CreatePostScreen({ navigation }: Props) {
     ),
     [],
   );
+
+  // ── Render ────────────────────────────────────────────────────────────────────
 
   return (
     <KeyboardAvoidingView
@@ -151,17 +233,17 @@ export default function CreatePostScreen({ navigation }: Props) {
       </View>
 
       <ScrollView
-        contentContainerStyle={{ padding: spacing.base, gap: spacing.lg, paddingBottom: insets.bottom + 100 }}
+        contentContainerStyle={{ paddingBottom: insets.bottom + 80 }}
         keyboardShouldPersistTaps="handled"
       >
         {/* Composer row */}
         <View style={styles.composerRow}>
-          <Avatar uri={user?.avatar_url ?? null} name={user?.display_name ?? 'Me'} size={40} />
+          <Avatar uri={user?.avatar_url ?? null} name={user?.display_name ?? 'Me'} size={42} />
           <View style={{ flex: 1 }}>
             <Text style={styles.composerName}>{user?.display_name ?? ''}</Text>
             <TextInput
               style={styles.textInput}
-              placeholder="What's on your mind? Use #hashtags to tag topics."
+              placeholder="What's happening?"
               placeholderTextColor={colors.textMuted}
               value={text}
               onChangeText={setText}
@@ -169,9 +251,11 @@ export default function CreatePostScreen({ navigation }: Props) {
               maxLength={500}
               autoFocus
             />
-            <Text style={[styles.charCount, text.length > 450 && styles.charCountWarn]}>
-              {text.length}/500
-            </Text>
+            {text.length > 0 && (
+              <Text style={[styles.charCount, text.length > 450 && styles.charCountWarn]}>
+                {text.length}/500
+              </Text>
+            )}
           </View>
         </View>
 
@@ -186,57 +270,79 @@ export default function CreatePostScreen({ navigation }: Props) {
           </View>
         )}
 
-        {/* Media preview / picker */}
-        {media ? (
+        {/* ── Media preview ──────────────────────────────────────────── */}
+        {media && (
           <View style={styles.mediaPreviewWrap}>
             <Image source={{ uri: media.uri }} style={styles.mediaPreview} resizeMode="cover" />
             {media.isVideo && (
               <View style={styles.videoOverlay}>
-                <Feather name="play-circle" size={32} color="#fff" />
+                <View style={styles.videoPlayIcon}>
+                  <Feather name="play" size={22} color="#fff" style={{ marginLeft: 2 }} />
+                </View>
               </View>
             )}
             <Pressable style={styles.mediaRemove} onPress={() => setMedia(null)}>
               <Feather name="x" size={14} color="#fff" />
             </Pressable>
           </View>
-        ) : (
-          <Pressable style={styles.mediaPickBtn} onPress={handlePickMedia}>
-            <Feather name="image" size={20} color={colors.primary} />
-            <Text style={styles.mediaPickText}>Add Photo / Video</Text>
-          </Pressable>
         )}
 
-        {/* Tag a Workout */}
-        {attachedWorkout ? (
-          <WorkoutCard workout={attachedWorkout} onRemove={() => setAttachedWorkout(null)} />
-        ) : (
-          <Pressable style={styles.attachRow} onPress={openWorkoutPicker}>
-            <View style={styles.attachIcon}>
-              <Feather name="activity" size={18} color={colors.primary} />
+        {/* ── Poll builder ───────────────────────────────────────────── */}
+        {showPoll && (
+          <View style={styles.pollForm}>
+            <TextInput
+              style={styles.pollQuestionInput}
+              placeholder="Ask a question..."
+              placeholderTextColor={colors.textMuted}
+              value={pollQuestion}
+              onChangeText={setPollQuestion}
+              maxLength={100}
+            />
+            {pollOptions.map((opt, i) => (
+              <View key={i} style={styles.pollOptionRow}>
+                <TextInput
+                  style={styles.pollOptionInput}
+                  placeholder={`Choice ${i + 1}`}
+                  placeholderTextColor={colors.textMuted}
+                  value={opt}
+                  onChangeText={v => updatePollOption(i, v)}
+                  maxLength={50}
+                />
+                {pollOptions.length > 2 && (
+                  <Pressable
+                    onPress={() => removePollOption(i)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    style={{ marginLeft: spacing.sm }}
+                  >
+                    <Feather name="x" size={16} color={colors.textMuted} />
+                  </Pressable>
+                )}
+              </View>
+            ))}
+            {pollOptions.length < 4 && (
+              <Pressable style={styles.addOptionBtn} onPress={() => setPollOptions([...pollOptions, ''])}>
+                <Feather name="plus-circle" size={14} color={colors.primary} />
+                <Text style={styles.addOptionText}>Add choice</Text>
+              </Pressable>
+            )}
+            <Text style={styles.pollDurationLabel}>Poll duration</Text>
+            <View style={styles.durationRow}>
+              {POLL_DURATIONS.map(d => (
+                <Pressable
+                  key={d.hours}
+                  style={[styles.durationChip, pollDuration === d.hours && styles.durationChipActive]}
+                  onPress={() => setPollDuration(d.hours)}
+                >
+                  <Text style={[styles.durationChipText, pollDuration === d.hours && styles.durationChipTextActive]}>
+                    {d.label}
+                  </Text>
+                </Pressable>
+              ))}
             </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.attachLabel}>Tag a Workout</Text>
-              <Text style={styles.attachSub}>Share a recap of a past session</Text>
-            </View>
-            <Feather name="chevron-right" size={18} color={colors.textMuted} />
-          </Pressable>
+          </View>
         )}
 
-        {/* PR / Milestone */}
-        <Pressable
-          style={styles.attachRow}
-          onPress={() => setShowPR((v) => !v)}
-        >
-          <View style={styles.attachIcon}>
-            <Feather name="award" size={18} color={colors.primary} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.attachLabel}>Add PR / Milestone</Text>
-            <Text style={styles.attachSub}>Share a personal record</Text>
-          </View>
-          <Feather name={showPR ? 'chevron-up' : 'chevron-right'} size={18} color={colors.textMuted} />
-        </Pressable>
-
+        {/* ── PR form ────────────────────────────────────────────────── */}
         {showPR && (
           <View style={styles.prForm}>
             <TextInput
@@ -271,6 +377,41 @@ export default function CreatePostScreen({ navigation }: Props) {
             </View>
           </View>
         )}
+
+        {/* ── Attached workout (always last) ─────────────────────────── */}
+        {attachedWorkout && (
+          <View style={styles.attachedSection}>
+            <WorkoutCard workout={attachedWorkout} onRemove={() => setAttachedWorkout(null)} />
+          </View>
+        )}
+
+        {/* ── Compact icon toolbar ───────────────────────────────────── */}
+        <View style={styles.toolbar}>
+          <ToolbarBtn
+            icon="image"
+            label="Media"
+            active={!!media}
+            onPress={handlePickMedia}
+          />
+          <ToolbarBtn
+            icon="bar-chart-2"
+            label="Poll"
+            active={showPoll}
+            onPress={togglePoll}
+          />
+          <ToolbarBtn
+            icon="activity"
+            label="Workout"
+            active={!!attachedWorkout}
+            onPress={openWorkoutPicker}
+          />
+          <ToolbarBtn
+            icon="award"
+            label="PR"
+            active={showPR}
+            onPress={() => setShowPR(v => !v)}
+          />
+        </View>
       </ScrollView>
 
       {/* Workout Picker Bottom Sheet */}
@@ -316,11 +457,38 @@ export default function CreatePostScreen({ navigation }: Props) {
                 <Feather name="plus-circle" size={20} color={colors.primary} />
               </Pressable>
             )}
-            ItemSeparatorComponent={() => <View style={{ height: 1, backgroundColor: colors.border.subtle, marginLeft: 56 }} />}
+            ItemSeparatorComponent={() => (
+              <View style={{ height: 1, backgroundColor: colors.border.subtle, marginLeft: 56 }} />
+            )}
           />
         )}
       </BottomSheet>
     </KeyboardAvoidingView>
+  );
+}
+
+// ─── Toolbar Button ───────────────────────────────────────────────────────────
+
+function ToolbarBtn({
+  icon,
+  label,
+  active,
+  onPress,
+}: {
+  icon: React.ComponentProps<typeof Feather>['name'];
+  label: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [styles.toolbarBtn, pressed && { opacity: 0.6 }]}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+    >
+      <Feather name={icon} size={20} color={active ? colors.primary : colors.textMuted} />
+      <Text style={[styles.toolbarLabel, active && styles.toolbarLabelActive]}>{label}</Text>
+    </Pressable>
   );
 }
 
@@ -368,11 +536,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: spacing.base,
     paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.subtle,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderColor,
   },
   headerBtn: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: typography.size.base, fontWeight: '700', color: colors.textPrimary },
+  headerTitle: { fontSize: typography.size.base, fontFamily: typography.family.semibold, color: colors.textPrimary },
   postBtn: {
     backgroundColor: colors.primary,
     borderRadius: 20,
@@ -382,182 +550,147 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   postBtnDisabled: { opacity: 0.4 },
-  postBtnText: { fontSize: typography.size.sm, fontWeight: '700', color: '#fff' },
+  postBtnText: { fontSize: typography.size.sm, fontFamily: typography.family.semibold, color: '#fff' },
 
-  composerRow: {
-    flexDirection: 'row',
-    gap: spacing.md,
-    alignItems: 'flex-start',
-  },
-  composerName: {
-    fontSize: typography.size.sm,
-    fontWeight: '600',
-    color: colors.textPrimary,
-    marginBottom: 4,
-  },
-  textInput: {
-    fontSize: typography.size.base,
-    color: colors.textPrimary,
-    minHeight: 100,
-    textAlignVertical: 'top',
-    lineHeight: 22,
-  },
-  charCount: {
-    fontSize: typography.size.xs,
-    color: colors.textMuted,
-    textAlign: 'right',
-    marginTop: 4,
-  },
+  composerRow: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start', padding: spacing.base, paddingBottom: spacing.sm },
+  composerName: { fontSize: typography.size.sm, fontFamily: typography.family.semibold, color: colors.textPrimary, marginBottom: 4 },
+  textInput: { fontSize: typography.size.lg, color: colors.textPrimary, minHeight: 80, textAlignVertical: 'top', lineHeight: 26 },
+  charCount: { fontSize: typography.size.xs, color: colors.textMuted, textAlign: 'right', marginTop: 4 },
   charCountWarn: { color: colors.warning },
 
-  hashtagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs },
-  hashtagChip: {
-    backgroundColor: colors.primary + '18',
-    borderRadius: 12,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: 3,
-  },
-  hashtagText: { fontSize: typography.size.xs, color: colors.primary, fontWeight: '600' },
+  hashtagRow: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs, paddingHorizontal: spacing.base, marginBottom: spacing.xs },
+  hashtagChip: { backgroundColor: colors.primary + '18', borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: 3 },
+  hashtagText: { fontSize: typography.size.xs, color: colors.primary, fontFamily: typography.family.semibold },
 
-  mediaPickBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.sm,
-    backgroundColor: colors.background.elevated,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: colors.border.default,
-    borderStyle: 'dashed',
-    padding: spacing.lg,
-    justifyContent: 'center',
-  },
-  mediaPickText: { fontSize: typography.size.sm, fontWeight: '600', color: colors.primary },
-  mediaPreviewWrap: { position: 'relative', borderRadius: 12, overflow: 'hidden' },
-  mediaPreview: { width: '100%', height: 200, borderRadius: 12 },
+  mediaPreviewWrap: { position: 'relative', borderRadius: 14, overflow: 'hidden', marginHorizontal: spacing.base, marginBottom: spacing.sm },
+  mediaPreview: { width: '100%', height: 200, borderRadius: 14 },
   videoOverlay: {
     ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.25)',
+    alignItems: 'center', justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  videoPlayIcon: {
+    width: 48, height: 48, borderRadius: 24,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center', justifyContent: 'center',
   },
   mediaRemove: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    borderRadius: 12,
-    width: 24,
-    height: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
+    position: 'absolute', top: 8, right: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12,
+    width: 26, height: 26, alignItems: 'center', justifyContent: 'center',
   },
 
-  attachRow: {
+  attachedSection: { paddingHorizontal: spacing.base, marginBottom: spacing.sm },
+
+  // Compact icon toolbar
+  toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.md,
-    backgroundColor: colors.background.elevated,
-    borderRadius: 14,
-    padding: spacing.md,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderColor,
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.sm,
+    gap: spacing.xl,
   },
-  attachIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 10,
-    backgroundColor: colors.primary + '18',
+  toolbarBtn: {
     alignItems: 'center',
-    justifyContent: 'center',
+    gap: 3,
   },
-  attachLabel: { fontSize: typography.size.base, fontWeight: '600', color: colors.textPrimary },
-  attachSub: { fontSize: typography.size.xs, color: colors.textMuted, marginTop: 2 },
+  toolbarLabel: {
+    fontSize: 10,
+    fontFamily: typography.family.medium,
+    color: colors.textMuted,
+  },
+  toolbarLabelActive: {
+    color: colors.primary,
+  },
 
-  prForm: {
+  // Poll form
+  pollForm: {
     backgroundColor: colors.background.elevated,
-    borderRadius: 14,
-    padding: spacing.md,
-    gap: spacing.sm,
+    borderRadius: 14, padding: spacing.md, gap: spacing.sm,
+    borderWidth: 1.5, borderColor: colors.primary + '30',
+    marginHorizontal: spacing.base, marginBottom: spacing.sm,
   },
-  prInput: {
+  pollQuestionInput: {
     backgroundColor: colors.surface,
-    borderRadius: 10,
-    padding: spacing.md,
-    fontSize: typography.size.base,
-    color: colors.textPrimary,
-    borderWidth: 1,
-    borderColor: colors.border.default,
+    borderRadius: 10, borderWidth: 1, borderColor: colors.borderColor,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    fontSize: typography.size.base, color: colors.textPrimary,
+    fontFamily: typography.family.regular,
+  },
+  pollOptionRow: { flexDirection: 'row', alignItems: 'center' },
+  pollOptionInput: {
+    flex: 1, backgroundColor: colors.surface,
+    borderRadius: 10, borderWidth: 1, borderColor: colors.borderColor,
+    paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+    fontSize: typography.size.sm, color: colors.textPrimary,
+    fontFamily: typography.family.regular,
+  },
+  addOptionBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: spacing.xs },
+  addOptionText: { fontSize: typography.size.sm, fontFamily: typography.family.semibold, color: colors.primary },
+  pollDurationLabel: {
+    fontSize: typography.size.xs, fontFamily: typography.family.semibold,
+    color: colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.8,
+    marginTop: spacing.xs,
+  },
+  durationRow: { flexDirection: 'row', gap: spacing.sm, flexWrap: 'wrap' },
+  durationChip: {
+    paddingHorizontal: spacing.md, paddingVertical: spacing.xs,
+    borderRadius: 9999, borderWidth: 1.5, borderColor: colors.borderColor,
+    backgroundColor: colors.surface,
+  },
+  durationChipActive: { borderColor: colors.primary, backgroundColor: colors.primary + '15' },
+  durationChipText: { fontSize: typography.size.sm, fontFamily: typography.family.medium, color: colors.textSecondary },
+  durationChipTextActive: { color: colors.primary, fontFamily: typography.family.semibold },
+
+  // PR form
+  prForm: { backgroundColor: colors.background.elevated, borderRadius: 14, padding: spacing.md, gap: spacing.sm, marginHorizontal: spacing.base, marginBottom: spacing.sm },
+  prInput: {
+    backgroundColor: colors.surface, borderRadius: 10, padding: spacing.md,
+    fontSize: typography.size.base, color: colors.textPrimary,
+    borderWidth: 1, borderColor: colors.borderColor,
   },
   prRow: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center' },
   unitScroll: { flex: 1 },
   unitRow: { flexDirection: 'row', gap: spacing.xs },
   unitChip: {
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: colors.border.default,
+    paddingHorizontal: spacing.sm, paddingVertical: spacing.xs,
+    borderRadius: 8, borderWidth: 1.5, borderColor: colors.borderColor,
     backgroundColor: colors.surface,
   },
   unitChipSelected: { borderColor: colors.primary, backgroundColor: colors.primary + '15' },
-  unitText: { fontSize: typography.size.xs, color: colors.textSecondary, fontWeight: '500' },
-  unitTextSelected: { color: colors.primary, fontWeight: '700' },
+  unitText: { fontSize: typography.size.xs, color: colors.textSecondary, fontFamily: typography.family.medium },
+  unitTextSelected: { color: colors.primary, fontFamily: typography.family.semibold },
 
   workoutCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.primary + '0F',
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: colors.primary + '40',
-    padding: spacing.md,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: colors.primary + '0F', borderRadius: 14,
+    borderWidth: 1.5, borderColor: colors.primary + '40', padding: spacing.md,
   },
   workoutCardLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1 },
   workoutCardIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: colors.primary + '20',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 36, height: 36, borderRadius: 10,
+    backgroundColor: colors.primary + '20', alignItems: 'center', justifyContent: 'center',
   },
-  workoutCardName: { fontSize: typography.size.sm, fontWeight: '700', color: colors.textPrimary },
+  workoutCardName: { fontSize: typography.size.sm, fontFamily: typography.family.semibold, color: colors.textPrimary },
   workoutCardMeta: { fontSize: typography.size.xs, color: colors.textSecondary, marginTop: 2 },
 
-  // Workout picker sheet
+  // Sheet
   sheetBg: {
-    backgroundColor: colors.surface,
-    borderRadius: 24,
+    backgroundColor: colors.surface, borderRadius: 24,
     ...Platform.select({
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.1, shadowRadius: 20 },
       android: { elevation: 10 },
     }),
   },
   sheetHandle: { backgroundColor: colors.borderColor, width: 36 },
-  sheetHeader: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-    paddingBottom: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.subtle,
-  },
-  sheetTitle: { fontSize: typography.size.base, fontWeight: '700', color: colors.textPrimary },
+  sheetHeader: { paddingHorizontal: spacing.xl, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border.subtle },
+  sheetTitle: { fontSize: typography.size.base, fontFamily: typography.family.semibold, color: colors.textPrimary },
   sheetCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl },
   sheetEmpty: { fontSize: typography.size.base, color: colors.textMuted },
-  workoutRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    paddingVertical: spacing.md,
-    paddingHorizontal: spacing.xl,
-  },
-  workoutRowIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: colors.primary + '18',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  workoutRowName: { fontSize: typography.size.base, fontWeight: '600', color: colors.textPrimary },
+  workoutRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, paddingHorizontal: spacing.xl },
+  workoutRowIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.primary + '18', alignItems: 'center', justifyContent: 'center' },
+  workoutRowName: { fontSize: typography.size.base, fontFamily: typography.family.semibold, color: colors.textPrimary },
   workoutRowMeta: { fontSize: typography.size.xs, color: colors.textMuted, marginTop: 2 },
 });

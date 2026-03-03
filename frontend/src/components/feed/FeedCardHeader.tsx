@@ -1,7 +1,6 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
-import Avatar from '../common/Avatar';
 import { UserBrief } from '../../types/user';
 import { timeAgo } from '../../utils/timeAgo';
 import { colors, spacing, typography } from '../../theme';
@@ -23,50 +22,52 @@ export default function FeedCardHeader({
   sharedContext,
   onPressUser,
 }: FeedCardHeaderProps) {
-  const postedIn = workoutType ?? locationName;
-
   if (!user) return null;
+
+  const contextTag = workoutType ?? locationName;
 
   return (
     <View style={styles.container}>
-      <Pressable onPress={onPressUser} disabled={!onPressUser} style={styles.userPressable}>
-        <Avatar uri={user.avatar_url} name={user.display_name} size={40} />
-      </Pressable>
-
-      <Pressable onPress={onPressUser} disabled={!onPressUser} style={styles.info}>
-        <View style={styles.nameRow}>
-          <Text style={styles.name} numberOfLines={1}>
-            {user.display_name}
-          </Text>
-          {sharedContext && sharedContext.length > 0 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.tagsScroll}
-              contentContainerStyle={styles.tagsContainer}
-            >
-              {sharedContext.map((tag, i) => (
-                <View key={i} style={styles.tag}>
-                  <Text style={styles.tagText}>{tag}</Text>
-                </View>
-              ))}
-            </ScrollView>
-          )}
-        </View>
-        <Text style={styles.meta} numberOfLines={1}>
-          {postedIn ? `Posted in ${postedIn} · ` : ''}{timeAgo(createdAt)}
+      {/* Name · @handle · time — all on one compact line */}
+      <Pressable
+        onPress={onPressUser}
+        disabled={!onPressUser}
+        style={styles.nameLine}
+      >
+        <Text style={styles.displayName} numberOfLines={1}>
+          {user.display_name}
+        </Text>
+        <Text style={styles.handle} numberOfLines={1}>
+          @{user.username}
+        </Text>
+        <Text style={styles.dot}>·</Text>
+        <Text style={styles.time} numberOfLines={1}>
+          {timeAgo(createdAt)}
         </Text>
       </Pressable>
 
-      {/* Three-dot overflow button */}
+      {/* More button */}
       <Pressable
-        style={({ pressed }) => [styles.moreBtn, pressed && styles.moreBtnPressed]}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        style={({ pressed }) => [styles.moreBtn, pressed && { opacity: 0.5 }]}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         accessibilityLabel="More options"
-        accessibilityRole="button"
       >
-        <Feather name="more-horizontal" size={20} color={colors.textMuted} />
+        <Feather name="more-horizontal" size={18} color={colors.textMuted} />
       </Pressable>
+
+      {/* Context tag (workout type / location) below name row */}
+      {contextTag && (
+        <View style={styles.tagWrap}>
+          <View style={styles.tag}>
+            <Text style={styles.tagText}>{contextTag}</Text>
+          </View>
+          {sharedContext?.map((t, i) => (
+            <View key={i} style={styles.tag}>
+              <Text style={styles.tagText}>{t}</Text>
+            </View>
+          ))}
+        </View>
+      )}
     </View>
   );
 }
@@ -74,64 +75,63 @@ export default function FeedCardHeader({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
-    marginBottom: spacing.md,
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    marginBottom: spacing.xs,
+    gap: 0,
   },
-  userPressable: {
-    // no extra styles — just wraps the avatar for hit target
-  },
-  info: {
+  nameLine: {
     flex: 1,
-  },
-  nameRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.xs,
     flexWrap: 'nowrap',
+    gap: 4,
+    minWidth: 0,
   },
-  name: {
-    fontSize: 14,
+  displayName: {
+    fontSize: typography.size.sm,
     fontFamily: typography.family.semibold,
     color: colors.textPrimary,
-    lineHeight: 20,
     flexShrink: 1,
   },
-  tagsScroll: {
+  handle: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
     flexShrink: 1,
   },
-  tagsContainer: {
+  dot: {
+    fontSize: typography.size.sm,
+    color: colors.textMuted,
+  },
+  time: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+    flexShrink: 0,
+  },
+  moreBtn: {
+    marginLeft: spacing.xs,
+    padding: 2,
+  },
+  tagWrap: {
+    width: '100%',
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 4,
-    alignItems: 'center',
+    marginTop: 3,
   },
   tag: {
-    backgroundColor: colors.primary + '18',
+    backgroundColor: colors.primary + '15',
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderWidth: 1,
-    borderColor: colors.primary + '30',
+    borderColor: colors.primary + '25',
   },
   tagText: {
     fontSize: 10,
     fontFamily: typography.family.semibold,
     color: colors.primary,
-  },
-  meta: {
-    fontSize: 12,
-    fontFamily: typography.family.regular,
-    color: colors.textSecondary,
-    lineHeight: 16,
-    marginTop: 1,
-  },
-  moreBtn: {
-    width: 32,
-    height: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  moreBtnPressed: {
-    opacity: 0.6,
   },
 });

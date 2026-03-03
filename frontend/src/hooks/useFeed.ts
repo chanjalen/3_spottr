@@ -1,10 +1,12 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { DeviceEventEmitter } from 'react-native';
 import { FeedItem } from '../types/feed';
 import { FeedTab } from '../components/common/FeedTabs';
 import { fetchFeed, searchFeed } from '../api/feed';
 import { searchUsers } from '../api/accounts';
 import { UserSearchResult } from '../types/user';
 import { SAMPLE_FEED } from '../utils/sampleData';
+import { FEED_REFRESH_EVENT } from '../utils/feedEvents';
 
 const USE_SAMPLE_DATA = false;
 
@@ -58,6 +60,23 @@ export function useFeed() {
   useEffect(() => {
     loadFeed('friends');
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Keep a ref to the current active tab so the event handler never has a stale value
+  const activeTabRef = useRef<FeedTab>('friends');
+  useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
+
+  // Refresh the feed whenever a post is created (fired by CreatePostScreen).
+  // Always switch to 'main' tab since new posts go to the main feed.
+  useEffect(() => {
+    const sub = DeviceEventEmitter.addListener(FEED_REFRESH_EVENT, () => {
+      setActiveTab('main');
+      activeTabRef.current = 'main';
+      setItems([]);
+      setNextCursor('');
+      loadFeed('main');
+    });
+    return () => sub.remove();
+  }, [loadFeed]); // loadFeed is stable (no deps)
 
   const loadMore = useCallback(async () => {
     if (!nextCursor || isLoadingMore || isLoading) return;
