@@ -89,9 +89,10 @@ export interface FeedItem {
 }
 
 export interface Comment {
-  id: number;
+  id: string;
   user: UserBrief;
   description: string;
+  photo_url?: string | null;
   created_at: string;
   like_count: number;
   user_liked: boolean;

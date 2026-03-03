@@ -9,6 +9,7 @@ import { Image } from 'expo-image';
 import { Feather } from '@expo/vector-icons';
 import Avatar from '../common/Avatar';
 import VideoThumbnail from '../common/VideoThumbnail';
+import MentionText from '../common/MentionText';
 import { Message, MessageReaction } from '../../types/messaging';
 import { colors, spacing, typography } from '../../theme';
 
@@ -28,6 +29,7 @@ export interface MessageRowProps {
   onLongPressReaction: (msg: Message) => void;
   onVideoPress: (url: string) => void;
   onImagePress: (url: string) => void;
+  onMentionPress?: (username: string) => void;
 }
 
 // ── Status icon ───────────────────────────────────────────────────────────────
@@ -58,6 +60,7 @@ function MessageRowInner({
   onLongPressReaction,
   onVideoPress,
   onImagePress,
+  onMentionPress,
 }: MessageRowProps) {
   // Guard prevents the outer Pressable from double-firing after the inner media Pressable
   // already handled the long press (both have onLongPress; inner fires first with correct coords,
@@ -173,14 +176,15 @@ function MessageRowInner({
                   isFailed && styles.bubbleFailed,
                 ]}
               >
-                <Text
-                  style={[
+                <MentionText
+                  content={item.content}
+                  textStyle={[
                     styles.bubbleText,
                     isOwn ? styles.bubbleTextOwn : styles.bubbleTextOther,
                   ]}
-                >
-                  {item.content}
-                </Text>
+                  mentionStyle={isOwn ? styles.mentionOwn : undefined}
+                  onMentionPress={onMentionPress}
+                />
               </View>
             )}
             {isOwn && item.status != null && (
@@ -214,7 +218,7 @@ function MessageRowInner({
 }
 
 function areEqual(prev: MessageRowProps, next: MessageRowProps): boolean {
-  return prev.item === next.item && prev.myId === next.myId;
+  return prev.item === next.item && prev.myId === next.myId && prev.onMentionPress === next.onMentionPress;
 }
 
 const MessageRow = React.memo(MessageRowInner, areEqual);
@@ -281,6 +285,7 @@ const styles = StyleSheet.create({
   bubbleText: { fontSize: typography.size.sm, lineHeight: 20 },
   bubbleTextOwn: { color: '#fff' },
   bubbleTextOther: { color: colors.textPrimary },
+  mentionOwn: { color: '#fff', fontWeight: '700' as const, opacity: 0.9 },
   msgStatus: {
     alignSelf: 'flex-end',
     marginTop: 2,

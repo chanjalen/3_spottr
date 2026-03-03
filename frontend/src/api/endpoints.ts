@@ -6,8 +6,9 @@ export const ENDPOINTS = {
   feed: `${BASE}/feed/`,
   searchFeed: `${BASE}/search/`,
 
-  likePost: (id: ID) => `${BASE}/post/${id}/like/`,
-  likeCheckin: (id: ID) => `${BASE}/checkin/${id}/like/`,
+  // Likes — use DRF token-auth endpoints under /api/social/
+  likePost: (id: ID) => `/api/social/post/${id}/like/`,
+  likeCheckin: (id: ID) => `/api/social/checkin/${id}/like/`,
   likeComment: (id: ID) => `${BASE}/comment/${id}/like/`,
 
   postComments: (id: ID) => `${BASE}/post/${id}/comments/`,

@@ -1,67 +1,160 @@
-import React, { useState } from 'react';
-import { View, Pressable, Text, StyleSheet } from 'react-native';
-import { BottomSheetTextInput } from '@gorhom/bottom-sheet';
+import React, { useState, useCallback } from 'react';
+import { View, Pressable, Text, Image, TextInput, StyleSheet, Platform, Alert } from 'react-native';
+import { Feather } from '@expo/vector-icons';
+import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, typography } from '../../theme';
+import MentionAutocomplete, { MentionableUser } from '../messages/MentionAutocomplete';
 
 interface CommentInputProps {
   placeholder?: string;
-  onSubmit: (text: string) => void;
+  onSubmit: (text: string, photo?: { uri: string; name: string; type: string }) => void;
+  mentionableUsers?: MentionableUser[];
+  onMentionQueryChange?: (query: string | null) => void;
 }
 
 export default function CommentInput({
   placeholder = 'Add a comment...',
   onSubmit,
+  mentionableUsers,
+  onMentionQueryChange,
 }: CommentInputProps) {
   const [text, setText] = useState('');
+  const [photo, setPhoto] = useState<{ uri: string; name: string; type: string } | null>(null);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+
+  const canSubmit = text.trim().length > 0 || !!photo;
+
+  const detectMention = useCallback((value: string) => {
+    const match = value.match(/@(\w*)$/);
+    const query = match ? match[1] : null;
+    setMentionQuery(query);
+    onMentionQueryChange?.(query);
+  }, [onMentionQueryChange]);
+
+  const handleMentionSelect = useCallback((user: MentionableUser) => {
+    const newText = text.replace(/@(\w*)$/, `@${user.username} `);
+    setText(newText);
+    setMentionQuery(null);
+    onMentionQueryChange?.(null);
+  }, [text, onMentionQueryChange]);
 
   const handleSubmit = () => {
-    const trimmed = text.trim();
-    if (!trimmed) return;
-    onSubmit(trimmed);
+    if (!canSubmit) return;
+    onSubmit(text.trim(), photo ?? undefined);
     setText('');
+    setPhoto(null);
+    setMentionQuery(null);
+    onMentionQueryChange?.(null);
+  };
+
+  const handlePickPhoto = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission needed', 'Please allow access to your photos.');
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 0.8,
+    });
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      const mimeType = asset.mimeType ?? 'image/jpeg';
+      const ext = mimeType === 'image/png' ? 'png' : 'jpg';
+      setPhoto({ uri: asset.uri, name: `comment.${ext}`, type: mimeType });
+    }
   };
 
   return (
-    <View style={styles.container}>
-      <BottomSheetTextInput
-        style={styles.input}
-        value={text}
-        onChangeText={setText}
-        placeholder={placeholder}
-        placeholderTextColor={colors.textMuted}
-        multiline
-        maxLength={500}
-      />
-      <Pressable
-        style={[styles.button, !text.trim() && styles.buttonDisabled]}
-        onPress={handleSubmit}
-        disabled={!text.trim()}
-        accessibilityLabel="Post comment"
-        accessibilityRole="button"
-      >
-        <Text
-          style={[
-            styles.buttonText,
-            !text.trim() && styles.buttonTextDisabled,
-          ]}
+    <View style={styles.wrapper}>
+      {mentionQuery !== null && mentionableUsers && mentionableUsers.length > 0 && (
+        <MentionAutocomplete
+          query={mentionQuery}
+          users={mentionableUsers}
+          onSelect={handleMentionSelect}
+        />
+      )}
+      {photo && (
+        <View style={styles.photoPreviewRow}>
+          <Image source={{ uri: photo.uri }} style={styles.photoPreview} />
+          <Pressable
+            onPress={() => setPhoto(null)}
+            style={styles.photoRemove}
+            hitSlop={8}
+          >
+            <Feather name="x" size={12} color="#fff" />
+          </Pressable>
+        </View>
+      )}
+      <View style={styles.inputRow}>
+        <Pressable
+          onPress={handlePickPhoto}
+          style={styles.mediaBtn}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityLabel="Attach photo"
         >
-          Post
-        </Text>
-      </Pressable>
+          <Feather name="image" size={20} color={photo ? colors.primary : colors.textMuted} />
+        </Pressable>
+        <TextInput
+          style={styles.input}
+          value={text}
+          onChangeText={(v) => { detectMention(v); setText(v); }}
+          placeholder={placeholder}
+          placeholderTextColor={colors.textMuted}
+          multiline
+          maxLength={500}
+        />
+        <Pressable
+          style={[styles.button, !canSubmit && styles.buttonDisabled]}
+          onPress={handleSubmit}
+          disabled={!canSubmit}
+          accessibilityLabel="Post comment"
+          accessibilityRole="button"
+        >
+          <Text style={[styles.buttonText, !canSubmit && styles.buttonTextDisabled]}>
+            Post
+          </Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
+  wrapper: {
+    borderTopWidth: 1,
+    borderTopColor: colors.border.default,
+    backgroundColor: colors.surface,
+  },
+  photoPreviewRow: {
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.sm,
+  },
+  photoPreview: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+  },
+  photoRemove: {
+    position: 'absolute',
+    top: spacing.sm + 4,
+    left: spacing.base + 56,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  inputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
     gap: spacing.sm,
     paddingHorizontal: spacing.base,
     paddingVertical: spacing.md,
-    borderTopWidth: 1,
-    borderTopColor: colors.border.default,
-    backgroundColor: colors.surface,
+  },
+  mediaBtn: {
+    paddingBottom: Platform.OS === 'ios' ? 6 : 8,
   },
   input: {
     flex: 1,

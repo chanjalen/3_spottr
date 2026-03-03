@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, Share, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -8,7 +8,6 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import * as Haptics from 'expo-haptics';
-import * as Clipboard from 'expo-clipboard';
 import { Feather } from '@expo/vector-icons';
 import { colors, spacing, typography } from '../../theme';
 
@@ -19,6 +18,7 @@ interface FeedCardActionsProps {
   onLike: () => void;
   onComment: () => void;
   shareUrl: string;
+  shareTitle?: string;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -30,6 +30,7 @@ export default function FeedCardActions({
   onLike,
   onComment,
   shareUrl,
+  shareTitle,
 }: FeedCardActionsProps) {
   const likeScale = useSharedValue(1);
 
@@ -47,12 +48,38 @@ export default function FeedCardActions({
   };
 
   const handleShare = async () => {
-    await Clipboard.setStringAsync(shareUrl);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      await Share.share({
+        message: shareTitle ? `${shareTitle} — ${shareUrl}` : shareUrl,
+        url: shareUrl, // iOS only — opens share sheet with URL
+        title: shareTitle ?? 'Check this out on Spottr',
+      });
+    } catch {
+      // User cancelled — ignore
+    }
   };
 
   return (
     <View style={styles.container}>
+      {/* Like */}
+      <AnimatedPressable
+        style={[styles.action, likeAnimatedStyle]}
+        onPress={handleLike}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Feather
+          name="heart"
+          size={18}
+          color={userLiked ? colors.semantic.like : colors.textMuted}
+        />
+        {likeCount > 0 && (
+          <Text style={[styles.count, userLiked && { color: colors.semantic.like }]}>
+            {likeCount}
+          </Text>
+        )}
+      </AnimatedPressable>
+
       {/* Comment */}
       <Pressable
         style={styles.action}
@@ -64,24 +91,6 @@ export default function FeedCardActions({
           <Text style={styles.count}>{commentCount}</Text>
         )}
       </Pressable>
-
-      {/* Like */}
-      <AnimatedPressable
-        style={[styles.action, likeAnimatedStyle]}
-        onPress={handleLike}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <Feather
-          name={userLiked ? 'heart' : 'heart'}
-          size={17}
-          color={userLiked ? colors.semantic.like : colors.textMuted}
-        />
-        {likeCount > 0 && (
-          <Text style={[styles.count, userLiked && { color: colors.semantic.like }]}>
-            {likeCount}
-          </Text>
-        )}
-      </AnimatedPressable>
 
       {/* Share */}
       <Pressable

@@ -36,6 +36,7 @@ class Comment(BaseModel):
     )
 
     description = models.TextField(blank=True)
+    photo = models.ImageField(upload_to='comment_photos/', null=True, blank=True)
 
     class Meta:
         ordering = ['created_at']

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import Avatar from '../common/Avatar';
 import { UserBrief } from '../../types/user';
 import { timeAgo } from '../../utils/timeAgo';
 import { colors, spacing, typography } from '../../theme';
@@ -12,6 +13,7 @@ interface FeedCardHeaderProps {
   workoutType?: string;
   sharedContext?: string[];
   onPressUser?: () => void;
+  onMore?: () => void;
 }
 
 export default function FeedCardHeader({
@@ -21,6 +23,7 @@ export default function FeedCardHeader({
   workoutType,
   sharedContext,
   onPressUser,
+  onMore,
 }: FeedCardHeaderProps) {
   if (!user) return null;
 
@@ -28,6 +31,13 @@ export default function FeedCardHeader({
 
   return (
     <View style={styles.container}>
+      <Avatar
+        uri={user.avatar_url}
+        name={user.display_name}
+        size={36}
+        onPress={onPressUser}
+      />
+
       {/* Name · @handle · time — all on one compact line */}
       <Pressable
         onPress={onPressUser}
@@ -51,6 +61,7 @@ export default function FeedCardHeader({
         style={({ pressed }) => [styles.moreBtn, pressed && { opacity: 0.5 }]}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         accessibilityLabel="More options"
+        onPress={onMore}
       >
         <Feather name="more-horizontal" size={18} color={colors.textMuted} />
       </Pressable>
@@ -78,7 +89,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flexWrap: 'wrap',
     marginBottom: spacing.xs,
-    gap: 0,
+    gap: spacing.sm,
   },
   nameLine: {
     flex: 1,

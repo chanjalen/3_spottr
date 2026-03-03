@@ -5,6 +5,7 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
+  RefreshControl,
   Platform,
   ScrollView,
   Dimensions,
@@ -102,13 +103,15 @@ export default function GymLiveActivityScreen({ navigation, route }: Props) {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [data, setData] = useState<HourlyBusyEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selectedEntry, setSelectedEntry] = useState<HourlyBusyEntry | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isToday = formatDateLabel(selectedDate) === 'Today';
 
-  const load = useCallback(async (date: Date, showLoading = false) => {
-    if (showLoading) setLoading(true);
+  const load = useCallback(async (date: Date, showLoading = false, isRefresh = false) => {
+    if (isRefresh) setRefreshing(true);
+    else if (showLoading) setLoading(true);
     try {
       const result = await fetchHourlyBusyLevel(gymId, toDateString(date));
       setData(result);
@@ -116,6 +119,7 @@ export default function GymLiveActivityScreen({ navigation, route }: Props) {
       // silently ignore
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [gymId]);
 
@@ -199,7 +203,17 @@ export default function GymLiveActivityScreen({ navigation, route }: Props) {
         </View>
       </LinearGradient>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => load(selectedDate, false, true)}
+            tintColor={colors.primary}
+          />
+        }
+      >
 
         {loading ? (
           <View style={styles.center}>

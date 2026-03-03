@@ -331,6 +331,13 @@ export default function FeedScreen() {
         <CommentsSheet
           item={commentItem}
           onClose={() => setCommentItem(null)}
+          onCommentCountChange={(delta) => {
+            if (commentItem) {
+              updateItem(commentItem.id, {
+                comment_count: Math.max(0, (commentItem.comment_count ?? 0) + delta),
+              });
+            }
+          }}
         />
       </View>
     );
@@ -534,6 +541,13 @@ export default function FeedScreen() {
       <CommentsSheet
         item={commentItem}
         onClose={() => setCommentItem(null)}
+        onCommentCountChange={(delta) => {
+          if (commentItem) {
+            updateItem(commentItem.id, {
+              comment_count: Math.max(0, (commentItem.comment_count ?? 0) + delta),
+            });
+          }
+        }}
       />
     </View>
   );

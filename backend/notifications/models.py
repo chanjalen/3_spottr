@@ -12,9 +12,12 @@ class Notification(BaseModel):
 
     class Type(models.TextChoices):
         LIKE_POST = 'like_post', 'Like Post'
+        LIKE_CHECKIN = 'like_checkin', 'Like Checkin'
+        LIKE_COMMENT = 'like_comment', 'Like Comment'
         COMMENT = 'comment', 'Comment'
         FOLLOW = 'follow', 'Follow'
         PR = 'pr', 'Personal Record'
+        MENTION = 'mention', 'Mention'
         WORKOUT_INVITE = 'workout_invite', 'Workout Invite'
         JOIN_REQUEST = 'join_request', 'Join Request'
 

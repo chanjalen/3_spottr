@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, Image, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import Avatar from '../common/Avatar';
+import MentionText from '../common/MentionText';
 import { Comment } from '../../types/feed';
 import { timeAgo } from '../../utils/timeAgo';
 import { colors, spacing, typography } from '../../theme';
@@ -9,8 +10,8 @@ import { colors, spacing, typography } from '../../theme';
 interface ReplyItemProps {
   reply: Comment;
   currentUserId?: string;
-  onLike: (id: number) => void;
-  onDelete: (id: number) => void;
+  onLike: (id: string) => void;
+  onDelete: (id: string) => void;
 }
 
 export default function ReplyItem({
@@ -31,7 +32,16 @@ export default function ReplyItem({
           <Text style={styles.name}>{reply.user.display_name}</Text>
           <Text style={styles.time}>{timeAgo(reply.created_at)}</Text>
         </View>
-        <Text style={styles.text}>{reply.description}</Text>
+        {!!reply.description && (
+          <MentionText content={reply.description} textStyle={styles.text} />
+        )}
+        {!!reply.photo_url && (
+          <Image
+            source={{ uri: reply.photo_url }}
+            style={styles.photo}
+            resizeMode="cover"
+          />
+        )}
         <View style={styles.actions}>
           <Pressable
             style={styles.actionBtn}
@@ -100,6 +110,12 @@ const styles = StyleSheet.create({
     fontFamily: typography.family.regular,
     color: colors.textPrimary,
     lineHeight: 18,
+  },
+  photo: {
+    width: '100%',
+    height: 140,
+    borderRadius: 10,
+    marginTop: spacing.xs,
   },
   actions: {
     flexDirection: 'row',

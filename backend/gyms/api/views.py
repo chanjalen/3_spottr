@@ -191,6 +191,17 @@ def gym_current(request):
     return Response(serializer.data)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def user_gyms(request, username):
+    """Get all gyms a specific user is enrolled at."""
+    from accounts.models import User
+    user = get_object_or_404(User, username=username)
+    gyms = user.enrolled_gyms.all()
+    serializer = GymDetailSerializer(gyms, many=True, context={'request': request})
+    return Response(serializer.data)
+
+
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def gym_busy_level(request, gym_id):
