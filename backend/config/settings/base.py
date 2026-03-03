@@ -182,15 +182,31 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ],
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
     'DEFAULT_THROTTLE_RATES': {
-        # Applied to login/signup via AuthRateThrottle — limits brute-force attempts
+        # Global fallback — catches any endpoint not explicitly throttled
+        'anon': '60/minute',
+        'user': '300/minute',
+        # Auth endpoints — brute-force / email-abuse guards
         'auth': '10/minute',
-        # Applied to send_dm / send_group_message — prevents message spam
-        'message': '30/minute',
-        # Applied to send_zap — zaps are a special action, tighter limit
-        'zap': '5/minute',
-        # Applied to resend-verification — prevent abuse of email sending
         'resend_verification': '3/hour',
+        # Messaging
+        'message': '30/minute',
+        'zap': '5/minute',
+        'reaction': '60/minute',
+        # Social writes (posts, check-ins)
+        'social_write': '20/minute',
+        # Follow / unfollow
+        'follow': '60/minute',
+        # User search / username enumeration
+        'search': '30/minute',
+        # Entity creation (groups, orgs)
+        'create': '30/hour',
+        # File uploads
+        'upload': '20/hour',
     },
 }
 
@@ -224,6 +240,20 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 CELERY_TASK_TRACK_STARTED = True
 # Set CELERY_TASK_ALWAYS_EAGER = True in test settings to run tasks inline
+CELERY_BEAT_SCHEDULE = {
+    'reset-broken-streaks-hourly': {
+        'task': 'workouts.tasks.reset_broken_streaks',
+        'schedule': 3600,  # every hour (UTC) — catches each user's 3 AM window
+    },
+}
+
+# Email — from address used for all outgoing mail
+# Using Resend's shared sender until spottr.app domain is verified.
+# Switch back to 'Spottr <noreply@spottr.app>' after DNS verification.
+DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'Spottr <onboarding@resend.dev>')
+
+# Google OAuth — set GOOGLE_CLIENT_ID in your environment (Web client ID from Google Cloud Console)
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
 
 # Logging
 LOGGING = {

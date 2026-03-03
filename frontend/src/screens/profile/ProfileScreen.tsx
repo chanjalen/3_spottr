@@ -542,6 +542,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
                     {profile.is_following ? 'Following' : 'Follow'}
                   </Text>}
             </Pressable>
+            {profile.is_following && profile.is_followed_by && (
             <Pressable
               style={[styles.actionBtn, styles.actionBtnFlex, styles.actionBtnOutline]}
               onPress={() => navigation.navigate('Chat', {
@@ -553,6 +554,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
             >
               <Text style={styles.actionBtnTextOutline}>Message</Text>
             </Pressable>
+            )}
           </View>
         )}
 

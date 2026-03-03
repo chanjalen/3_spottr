@@ -11,6 +11,4 @@ urlpatterns = [
     path('checkin/create/', views.create_checkin, name='create-checkin'),
     path('poll/<str:poll_id>/vote/', views.vote_poll, name='vote-poll'),
     path('poll/<str:poll_id>/voters/', views.poll_voters, name='poll-voters'),
-    path('post/<str:post_id>/like/', views.like_post, name='like-post'),
-    path('checkin/<str:checkin_id>/like/', views.like_checkin, name='like-checkin'),
 ]

@@ -38,6 +38,13 @@ class User(AbstractBaseUser, PermissionsMixin):
     is_email_verified = models.BooleanField(default=False)
     email_verification_token = models.CharField(max_length=64, blank=True, null=True)
     email_verification_token_expires = models.DateTimeField(null=True, blank=True)
+
+    # Password reset
+    password_reset_token = models.CharField(max_length=64, blank=True, null=True)
+    password_reset_token_expires = models.DateTimeField(null=True, blank=True)
+
+    # Google OAuth
+    google_id = models.CharField(max_length=128, unique=True, blank=True, null=True)
     # default=5 so all existing users skip the onboarding flow
     onboarding_step = models.IntegerField(default=5)
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
@@ -65,6 +72,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     )
 
     # ── Preferences ──
+    timezone = models.CharField(max_length=50, default='UTC')
     weekly_workout_goal = models.IntegerField(default=4)
     weight_unit = models.CharField(
         max_length=5,

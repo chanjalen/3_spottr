@@ -58,6 +58,19 @@ export default function FeedScreen() {
 
   const handleLike = useToggleLike(updateItem);
   const handlePollVote = usePollVote(updateItem);
+  // Refresh feed whenever this screen comes back into focus (e.g. after creating a post)
+  const initialFocusHandled = useRef(false);
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('focus', () => {
+      if (!initialFocusHandled.current) {
+        initialFocusHandled.current = true;
+        return; // Skip initial mount — useFeed already loads on mount
+      }
+      refresh();
+    });
+    return unsubscribe;
+  }, [navigation, refresh]);
+
   const [commentItem, setCommentItem] = useState<FeedItem | null>(null);
   const [containerHeight, setContainerHeight] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(0);

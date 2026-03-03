@@ -7,12 +7,14 @@ import {
   Pressable,
   StyleSheet,
   ActivityIndicator,
+  Alert,
   Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { WorkoutDetail, ExerciseDetail } from '../../types/feed';
 import { fetchWorkoutDetail } from '../../api/feed';
+import { saveWorkoutAsTemplate } from '../../api/workouts';
 import { colors, spacing, typography } from '../../theme';
 
 interface WorkoutDetailModalProps {
@@ -25,11 +27,13 @@ export default function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetail
   const [detail, setDetail] = useState<WorkoutDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
   useEffect(() => {
     if (!workoutId) {
       setDetail(null);
       setError(false);
+      setSaveStatus('idle');
       return;
     }
     setLoading(true);
@@ -39,6 +43,18 @@ export default function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetail
       .catch(() => setError(true))
       .finally(() => setLoading(false));
   }, [workoutId]);
+
+  const handleSaveTemplate = async () => {
+    if (!workoutId || saveStatus !== 'idle') return;
+    setSaveStatus('saving');
+    try {
+      await saveWorkoutAsTemplate(workoutId);
+      setSaveStatus('saved');
+    } catch {
+      setSaveStatus('idle');
+      Alert.alert('Error', 'Could not save template. Try again.');
+    }
+  };
 
   return (
     <Modal
@@ -84,13 +100,41 @@ export default function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetail
             </View>
 
             <ScrollView
-              contentContainerStyle={{ padding: spacing.base, paddingBottom: insets.bottom + 40 }}
+              contentContainerStyle={{ padding: spacing.base, paddingBottom: spacing.lg }}
               showsVerticalScrollIndicator={false}
             >
               {detail.exercises.map((ex, i) => (
                 <ExerciseCard key={ex.id} exercise={ex} index={i} />
               ))}
             </ScrollView>
+
+            {/* Save as Template — sticky footer */}
+            <View style={[styles.footer, { paddingBottom: Math.max(insets.bottom, spacing.md) + spacing.md }]}>
+              <Pressable
+                style={[
+                  styles.templateBtn,
+                  saveStatus === 'saved' && styles.templateBtnSaved,
+                  saveStatus === 'saving' && styles.templateBtnDisabled,
+                ]}
+                onPress={handleSaveTemplate}
+                disabled={saveStatus !== 'idle'}
+              >
+                {saveStatus === 'saving' ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Feather
+                      name={saveStatus === 'saved' ? 'check' : 'bookmark'}
+                      size={16}
+                      color="#fff"
+                    />
+                    <Text style={styles.templateBtnText}>
+                      {saveStatus === 'saved' ? 'Template Saved!' : 'Save as Template'}
+                    </Text>
+                  </>
+                )}
+              </Pressable>
+            </View>
           </>
         )}
       </View>
@@ -128,25 +172,25 @@ function ExerciseCard({ exercise, index }: { exercise: ExerciseDetail; index: nu
         </Text>
       </View>
 
-      {/* Sets table */}
+      {/* Sets table — column order: SET | REPS | WEIGHT | ✓ */}
       {exercise.sets.length > 0 && (
         <View style={styles.setsTable}>
           {/* Column headers */}
           <View style={[styles.setRow, styles.setHeaderRow]}>
             <Text style={[styles.setCell, styles.setCellSet, styles.setHeader]}>SET</Text>
+            <Text style={[styles.setCell, styles.setCellReps, styles.setHeader]}>REPS</Text>
             <Text style={[styles.setCell, styles.setCellWeight, styles.setHeader]}>
               {exercise.unit === 'bodyweight' ? '' : `WEIGHT (${exercise.unit.toUpperCase()})`}
             </Text>
-            <Text style={[styles.setCell, styles.setCellReps, styles.setHeader]}>REPS</Text>
             <View style={styles.setCellCheck} />
           </View>
           {exercise.sets.map((s) => (
             <View key={s.set_number} style={styles.setRow}>
               <Text style={[styles.setCell, styles.setCellSet, styles.setNum]}>{s.set_number}</Text>
+              <Text style={[styles.setCell, styles.setCellReps, styles.setData]}>{s.reps}</Text>
               <Text style={[styles.setCell, styles.setCellWeight, styles.setData]}>
                 {exercise.unit === 'bodyweight' ? '—' : (s.weight > 0 ? s.weight : '—')}
               </Text>
-              <Text style={[styles.setCell, styles.setCellReps, styles.setData]}>{s.reps}</Text>
               <View style={styles.setCellCheck}>
                 <View style={[styles.checkDot, s.completed && styles.checkDotCompleted]}>
                   {s.completed && <Feather name="check" size={10} color="#fff" />}
@@ -286,8 +330,8 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
   },
   setCellSet: { width: 36 },
+  setCellReps: { width: 52 },
   setCellWeight: { flex: 1 },
-  setCellReps: { width: 44, textAlign: 'right' },
   setCellCheck: { width: 36, alignItems: 'flex-end' },
   setHeader: {
     fontSize: 10,
@@ -315,5 +359,34 @@ const styles = StyleSheet.create({
   checkDotCompleted: {
     backgroundColor: colors.primary,
     borderColor: colors.primary,
+  },
+
+  // ─── Save as Template footer ─────────────────────────────────────────────────
+  footer: {
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.subtle,
+    backgroundColor: colors.background.base,
+  },
+  templateBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    backgroundColor: colors.primary,
+    borderRadius: 12,
+    paddingVertical: spacing.md,
+  },
+  templateBtnSaved: {
+    backgroundColor: colors.semantic.share, // green (#10B981)
+  },
+  templateBtnDisabled: {
+    opacity: 0.6,
+  },
+  templateBtnText: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.semibold,
+    color: '#fff',
   },
 });

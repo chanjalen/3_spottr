@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   View,
   Text,
@@ -23,9 +23,11 @@ export interface MessageRowProps {
   isGroup: boolean;
   onNavigateToProfile: (username: string | null) => void;
   onRetry: (msg: Message) => void;
-  onLongPress: (msg: Message) => void;
+  onLongPress: (msg: Message, pageY: number, height: number) => void;
   onTapReaction: (msg: Message, emoji: string) => void;
+  onLongPressReaction: (msg: Message) => void;
   onVideoPress: (url: string) => void;
+  onImagePress: (url: string) => void;
 }
 
 // ── Status icon ───────────────────────────────────────────────────────────────
@@ -53,8 +55,24 @@ function MessageRowInner({
   onRetry,
   onLongPress,
   onTapReaction,
+  onLongPressReaction,
   onVideoPress,
+  onImagePress,
 }: MessageRowProps) {
+  // Guard prevents the outer Pressable from double-firing after the inner media Pressable
+  // already handled the long press (both have onLongPress; inner fires first with correct coords,
+  // outer fires ~1ms later and would overwrite them with bad values).
+  const longPressGuard = useRef(false);
+  const rowRef = useRef<View>(null);
+  const fireLongPress = () => {
+    if (longPressGuard.current) return;
+    longPressGuard.current = true;
+    setTimeout(() => { longPressGuard.current = false; }, 800);
+    rowRef.current?.measureInWindow((_x, y, _w, h) => {
+      onLongPress(item as Message, y, h);
+    });
+  };
+
   if ('isDivider' in item) {
     return (
       <View style={styles.dividerRow}>
@@ -79,7 +97,7 @@ function MessageRowInner({
   const mediaItems = item.media && item.media.length > 0 ? item.media : null;
 
   return (
-    <View style={[styles.msgWrap, isOwn ? styles.msgWrapOwn : styles.msgWrapOther]}>
+    <View ref={rowRef} style={[styles.msgWrap, isOwn ? styles.msgWrapOwn : styles.msgWrapOther]}>
       {!isOwn && (
         <Pressable onPress={() => onNavigateToProfile(item.sender_username)}>
           <Avatar
@@ -92,7 +110,7 @@ function MessageRowInner({
       <View style={styles.msgBubbleCol}>
         <Pressable
           onPress={isFailed ? () => onRetry(item) : undefined}
-          onLongPress={() => onLongPress(item)}
+          onLongPress={fireLongPress}
           delayLongPress={400}
         >
           <View style={styles.msgContent}>
@@ -115,7 +133,12 @@ function MessageRowInner({
                         <Feather name="play-circle" size={28} color="#fff" />
                       </View>
                     ) : (
-                      <Pressable key={idx} onPress={() => onVideoPress(m.url)}>
+                      <Pressable
+                        key={idx}
+                        onPress={() => onVideoPress(m.url)}
+                        onLongPress={fireLongPress}
+                        delayLongPress={400}
+                      >
                         <VideoThumbnail
                           videoUrl={m.url}
                           thumbnailUrl={m.thumbnail_url}
@@ -124,12 +147,20 @@ function MessageRowInner({
                       </Pressable>
                     )
                   ) : (
-                    <Image
+                    <Pressable
                       key={idx}
-                      source={{ uri: m.thumbnail_url ?? m.url }}
-                      style={styles.msgMediaThumb}
-                      contentFit="cover"
-                    />
+                      onPress={isFailed ? undefined : () => onImagePress(m.url)}
+                      onLongPress={fireLongPress}
+                      delayLongPress={400}
+                    >
+                      <View pointerEvents="none">
+                        <Image
+                          source={{ uri: m.thumbnail_url ?? m.url }}
+                          style={styles.msgMediaThumb}
+                          contentFit="cover"
+                        />
+                      </View>
+                    </Pressable>
                   )
                 )}
               </View>
@@ -166,6 +197,8 @@ function MessageRowInner({
                 key={r.emoji}
                 style={[styles.reactionChip, r.user_reacted && styles.reactionChipActive]}
                 onPress={() => onTapReaction(item, r.emoji)}
+                onLongPress={() => onLongPressReaction(item)}
+                delayLongPress={350}
               >
                 <Text style={styles.reactionEmoji}>{r.emoji}</Text>
                 <Text style={[styles.reactionCount, r.user_reacted && styles.reactionCountActive]}>

@@ -10,6 +10,8 @@ export type AuthStackParamList = {
   Login: undefined;
   Signup: undefined;
   EmailVerification: { email: string; token: string; autoResend?: boolean };
+  ForgotPassword: undefined;
+  ResetPassword: { email: string };
 };
 
 // ─── Onboarding Stack ─────────────────────────────────────────────────────────

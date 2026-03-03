@@ -13,22 +13,28 @@ import {
   Modal,
   Image,
   ScrollView,
-  Clipboard,
+  Dimensions,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import * as MediaLibrary from 'expo-media-library';
+import * as FileSystem from 'expo-file-system/legacy';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
+import { BlurView } from 'expo-blur';
 import { pickMedia } from '../../utils/pickMedia';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp, useFocusEffect } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
+import ReactionDetailModal from '../../components/messages/ReactionDetailModal';
 import VideoThumbnail from '../../components/common/VideoThumbnail';
 import {
   fetchAnnouncements,
   createAnnouncement,
   deleteAnnouncement,
   reactToAnnouncement,
+  fetchAnnouncementReactionDetails,
   voteOnPoll,
   markAnnouncementsRead,
   uploadMedia,
@@ -85,6 +91,23 @@ const EMOJI_QUICK = ['👍', '👎', '😂', '😡', '❤️'];
 // ---------------------------------------------------------------------------
 // Poll card
 // ---------------------------------------------------------------------------
+
+function formatTimeRemaining(endsAt: string | null): string {
+  if (!endsAt) return '';
+  const diff = new Date(endsAt).getTime() - Date.now();
+  if (diff <= 0) return '';
+  const totalMinutes = Math.floor(diff / 60_000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours >= 24) {
+    const days = Math.floor(hours / 24);
+    return `${days}d ${hours % 24}h remaining`;
+  }
+  if (hours > 0) {
+    return `${hours}h ${minutes}m remaining`;
+  }
+  return `${minutes}m remaining`;
+}
 
 function PollCard({
   poll,
@@ -146,7 +169,10 @@ function PollCard({
         );
       })}
       <Text style={pollStyles.meta}>
-        {totalVotes} {totalVotes !== 1 ? 'votes' : 'vote'} {'\u2022'} {poll.is_active ? 'Active' : 'Ended'}
+        {totalVotes} {totalVotes !== 1 ? 'votes' : 'vote'}
+        {poll.is_active
+          ? ` \u2022 Active \u2022 ${formatTimeRemaining(poll.ends_at)}`
+          : ' \u2022 Ended'}
       </Text>
     </View>
   );
@@ -219,9 +245,11 @@ const pollStyles = StyleSheet.create({
 function ReactionRow({
   reactions,
   onReact,
+  onLongPressReaction,
 }: {
   reactions: Announcement['reactions'];
   onReact: (emoji: string) => void;
+  onLongPressReaction: () => void;
 }) {
   if (reactions.length === 0) return null;
   return (
@@ -231,6 +259,8 @@ function ReactionRow({
           key={r.emoji}
           style={[rxStyles.chip, r.user_reacted && rxStyles.chipActive]}
           onPress={() => onReact(r.emoji)}
+          onLongPress={onLongPressReaction}
+          delayLongPress={350}
         >
           <Text style={rxStyles.emoji}>{r.emoji}</Text>
           <Text style={[rxStyles.count, r.user_reacted && rxStyles.countActive]}>
@@ -294,6 +324,7 @@ function AnnouncementBubble({
   isAdmin,
   onLongPress,
   onReact,
+  onLongPressReaction,
   onVoted,
   onRetry,
   onVideoPress,
@@ -301,19 +332,28 @@ function AnnouncementBubble({
   item: OptimisticAnnouncement;
   orgId: string;
   isAdmin: boolean;
-  onLongPress: (item: OptimisticAnnouncement) => void;
+  onLongPress: (item: OptimisticAnnouncement, pageY: number) => void;
   onReact: (announcementId: string, emoji: string) => void;
+  onLongPressReaction: (announcementId: string) => void;
   onVoted: (announcementId: string, poll: AnnouncementPoll) => void;
   onRetry: (item: OptimisticAnnouncement) => void;
   onVideoPress: (url: string) => void;
 }) {
   const isPending = item._status === 'pending';
   const isFailed = item._status === 'failed';
+  const bubbleRef = useRef<View>(null);
 
   return (
+    <View ref={bubbleRef}>
     <Pressable
       style={[styles.bubble, isPending && styles.bubblePending, isFailed && styles.bubbleFailed]}
-      onLongPress={() => !isPending && !isFailed && onLongPress(item)}
+      onLongPress={() => {
+        if (!isPending && !isFailed) {
+          bubbleRef.current?.measureInWindow((_x, y) => {
+            onLongPress(item, y);
+          });
+        }
+      }}
       delayLongPress={400}
     >
       <View style={styles.bubbleHeader}>
@@ -369,6 +409,7 @@ function AnnouncementBubble({
         <ReactionRow
           reactions={item.reactions}
           onReact={(emoji) => onReact(item.id, emoji)}
+          onLongPressReaction={() => onLongPressReaction(item.id)}
         />
       )}
 
@@ -379,6 +420,7 @@ function AnnouncementBubble({
         </Pressable>
       )}
     </Pressable>
+    </View>
   );
 }
 
@@ -412,6 +454,8 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
   // ── Long-press context menu ──────────────────────────────────────────────
   const [contextItem, setContextItem] = useState<OptimisticAnnouncement | null>(null);
   const [contextVisible, setContextVisible] = useState(false);
+  const [contextPageY, setContextPageY] = useState(0);
+  const [reactionDetailAnnId, setReactionDetailAnnId] = useState<string | null>(null);
 
   // ── Create announcement sheet ────────────────────────────────────────────
   const [sheetVisible, setSheetVisible] = useState(false);
@@ -457,18 +501,21 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
         fetchOrgDetail(orgId),
       ]);
       const fetchMs = Date.now() - t0;
-      // Insert "NEW" divider between unread (front/bottom) and read (back/top) announcements.
-      // API returns newest-first; FlatList is inverted so index 0 appears at the bottom.
-      const firstReadIdx = page.results.findIndex(a => a.is_read);
-      const listItems: AnnouncementListItem[] = firstReadIdx > 0
+      // Store oldest-first so the non-inverted FlatList shows oldest at top, newest at bottom.
+      // API returns newest-first, so we reverse before storing.
+      const reversed = [...page.results].reverse();
+      const firstUnreadIdx = reversed.findIndex(a => !a.is_read);
+      const listItems: AnnouncementListItem[] = firstUnreadIdx > 0
         ? [
-            ...page.results.slice(0, firstReadIdx),
+            ...reversed.slice(0, firstUnreadIdx),
             { id: '__new_divider__', isDivider: true as const },
-            ...page.results.slice(firstReadIdx),
+            ...reversed.slice(firstUnreadIdx),
           ]
-        : page.results;
+        : reversed;
       staleCache.set(cacheKey, { announcements: listItems, has_more: page.has_more, oldest_id: page.oldest_id, userRole: detail.user_role }, 5 * 60 * 1000);
       setAnnouncements(listItems);
+      // Scroll to bottom to show the latest announcement (like the messages screen).
+      setTimeout(() => flatRef.current?.scrollToEnd({ animated: false }), 50);
       setHasMore(page.has_more);
       setOldestId(page.oldest_id);
       setUserRole(detail.user_role);
@@ -501,7 +548,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
       setAnnouncements(prev => {
         // Dedup: skip if we already have an item with this real ID
         if (prev.some(a => isAnn(a) && a.id === announcement.id)) return prev;
-        return [announcement, ...prev];
+        return [...prev, announcement];
       });
     };
 
@@ -522,7 +569,8 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
     setLoadingMore(true);
     try {
       const page = await fetchAnnouncements(orgId, { before_id: oldestId, limit: 30 });
-      setAnnouncements(prev => [...prev, ...page.results]);
+      // Prepend older items (reversed to oldest-first) at the front of the list.
+      setAnnouncements(prev => [...page.results.reverse(), ...prev]);
       setHasMore(page.has_more);
       setOldestId(page.oldest_id);
     } catch {
@@ -555,10 +603,11 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
 
   // ── Long-press context ───────────────────────────────────────────────────
 
-  const handleLongPress = (item: OptimisticAnnouncement) => {
+  const handleLongPress = (item: OptimisticAnnouncement, pageY: number) => {
     // Only allow context menu on fully-delivered items
     if (item._status) return;
     setContextItem(item);
+    setContextPageY(pageY);
     setContextVisible(true);
   };
 
@@ -571,7 +620,32 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
   const handleContextCopy = () => {
     if (!contextItem) return;
     setContextVisible(false);
-    Clipboard.setString(contextItem.content ?? '');
+    Clipboard.setStringAsync(contextItem.content ?? '');
+  };
+
+  const handleContextSave = async () => {
+    if (!contextItem?.media?.length) return;
+    setContextVisible(false);
+    try {
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Allow camera roll access to save media.');
+        return;
+      }
+      for (const m of contextItem.media) {
+        let filename = m.url.split('/').pop()?.split('?')[0] ?? '';
+        if (!filename.includes('.')) {
+          filename = `spottr_${Date.now()}.${m.kind === 'video' ? 'mp4' : 'jpg'}`;
+        }
+        const dest = `${FileSystem.cacheDirectory}${filename}`;
+        const result = await FileSystem.downloadAsync(m.url, dest);
+        if (result.status !== 200) throw new Error(`Download failed (${result.status})`);
+        await MediaLibrary.createAssetAsync(result.uri);
+      }
+      Alert.alert('Saved', 'Media saved to your camera roll.');
+    } catch (e: any) {
+      Alert.alert('Error', e?.message ?? 'Failed to save media.');
+    }
   };
 
   const handleContextDelete = async () => {
@@ -696,9 +770,9 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
     };
 
     setSubmitting(true);
-    setAnnouncements(prev => [optimistic, ...prev]);
+    setAnnouncements(prev => [...prev, optimistic]);
     resetSheet(); // close sheet and clear draft immediately
-    flatRef.current?.scrollToOffset({ offset: 0, animated: true });
+    setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 50);
 
     await submitPayload(payload, clientId);
     setSubmitting(false);
@@ -737,6 +811,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
         isAdmin={isAdmin}
         onLongPress={handleLongPress}
         onReact={handleReact}
+        onLongPressReaction={setReactionDetailAnnId}
         onVoted={handlePollVoted}
         onRetry={handleRetry}
         onVideoPress={setVideoPlayerUrl}
@@ -781,15 +856,19 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
           data={announcements}
           keyExtractor={(item) => isAnn(item) ? (item._clientId ?? item.id) : item.id}
           renderItem={renderItem}
-          inverted
           contentContainerStyle={{
-            paddingTop: insets.bottom + (isAdmin ? 90 : 24),
-            paddingBottom: spacing.md,
+            paddingTop: spacing.md,
+            paddingBottom: insets.bottom + (isAdmin ? 90 : 24),
             paddingHorizontal: spacing.base,
           }}
-          onEndReached={loadMore}
-          onEndReachedThreshold={0.3}
-          ListFooterComponent={
+          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+          onScroll={(e) => {
+            if (e.nativeEvent.contentOffset.y < 80 && hasMore && !loadingMore) {
+              loadMore();
+            }
+          }}
+          scrollEventThrottle={200}
+          ListHeaderComponent={
             loadingMore
               ? <ActivityIndicator color={colors.primary} style={{ padding: spacing.md }} />
               : null
@@ -816,45 +895,133 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
         </Pressable>
       )}
 
-      {/* Long-press context menu */}
+      {/* Long-press context menu — focused view */}
       <Modal
         visible={contextVisible}
         transparent
         animationType="fade"
         onRequestClose={() => setContextVisible(false)}
       >
+        <BlurView intensity={55} tint="dark" style={StyleSheet.absoluteFill}>
         <Pressable style={styles.contextOverlay} onPress={() => setContextVisible(false)}>
-          <View style={styles.contextCard}>
-            {/* Emoji row */}
-            <View style={styles.emojiRow}>
-              {EMOJI_QUICK.map((e) => (
-                <Pressable key={e} style={styles.emojiBtn} onPress={() => handleContextReact(e)}>
-                  <Text style={styles.emojiText}>{e}</Text>
+          {(() => {
+            const SCREEN_H = Dimensions.get('window').height;
+            const EMOJI_H = 64;
+            const GAP = 12;
+            const hasMedia = !!(contextItem?.media?.length);
+            const hasPoll = !!contextItem?.poll;
+            const PREVIEW_EST_H = (hasMedia ? 300 : 160) + (hasPoll ? 150 : 0);
+            const ACTIONS_EST_H = 150;
+            const rawTop = contextPageY - EMOJI_H - GAP;
+            const maxTop = SCREEN_H - EMOJI_H - GAP - PREVIEW_EST_H - GAP - ACTIONS_EST_H - 16;
+            const clampedTop = Math.max(insets.top + 8, Math.min(rawTop, maxTop));
+            return (
+              <View style={[styles.contextContent, { top: clampedTop }]}>
+                {/* 1. Emoji reactions bar */}
+                <View style={styles.contextEmojiBar}>
+                  {EMOJI_QUICK.map((e) => (
+                    <Pressable key={e} style={styles.emojiBtn} onPress={() => handleContextReact(e)}>
+                      <Text style={styles.emojiText}>{e}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                {/* 2. Announcement preview — mirrors the full AnnouncementBubble card */}
+                {contextItem && (
+                  <Pressable style={styles.contextPreviewCard} onPress={() => {}}>
+                    {/* Author header */}
+                    <View style={styles.contextAnnHeader}>
+                      <Avatar uri={contextItem.author_avatar_url} name={contextItem.author_display_name} size={28} />
+                      <View style={{ marginLeft: 8, flex: 1 }}>
+                        <Text style={styles.contextAnnAuthor}>{contextItem.author_display_name}</Text>
+                        <Text style={styles.contextAnnTime}>{timeAgo(contextItem.created_at)}</Text>
+                      </View>
+                    </View>
+
+                    {/* Text content */}
+                    {!!contextItem.content && (
+                      <Text style={styles.contextAnnContent} numberOfLines={5}>
+                        {contextItem.content}
+                      </Text>
+                    )}
+
+                    {/* Media */}
+                    {!!contextItem.media?.length && (
+                      <View style={styles.contextMediaRow}>
+                        {contextItem.media.map((m, idx) =>
+                          m.kind === 'video' ? (
+                            <VideoThumbnail
+                              key={idx}
+                              videoUrl={m.url}
+                              thumbnailUrl={m.thumbnail_url}
+                              style={styles.contextMediaThumb}
+                              iconSize={28}
+                            />
+                          ) : (
+                            <Image key={idx} source={{ uri: m.thumbnail_url ?? m.url }} style={styles.contextMediaThumb} resizeMode="cover" />
+                          )
+                        )}
+                      </View>
+                    )}
+
+                    {/* Poll */}
+                    {!!contextItem.poll && (
+                      <PollCard
+                        poll={contextItem.poll}
+                        orgId={orgId}
+                        announcementId={contextItem.id}
+                        onVoted={(p) => {
+                          handlePollVoted(contextItem.id, p);
+                          setContextVisible(false);
+                        }}
+                      />
+                    )}
+                  </Pressable>
+                )}
+
+                {/* 3. Action buttons */}
+                <Pressable style={styles.contextActionsCard} onPress={() => {}}>
+                  {!!contextItem?.content && (
+                    <Pressable style={styles.contextAction} onPress={handleContextCopy}>
+                      <Feather name="copy" size={16} color={colors.textPrimary} />
+                      <Text style={styles.contextActionText}>Copy Text</Text>
+                    </Pressable>
+                  )}
+                  {!!contextItem?.content && !!(contextItem?.media?.length) && (
+                    <View style={styles.contextDivider} />
+                  )}
+                  {!!(contextItem?.media?.length) && (
+                    <Pressable style={styles.contextAction} onPress={handleContextSave}>
+                      <Feather name="download" size={16} color={colors.textPrimary} />
+                      <Text style={styles.contextActionText}>Save to Camera Roll</Text>
+                    </Pressable>
+                  )}
+                  {isAdmin && (!!contextItem?.content || !!(contextItem?.media?.length)) && (
+                    <View style={styles.contextDivider} />
+                  )}
+                  {isAdmin && (
+                    <Pressable style={styles.contextAction} onPress={handleContextDelete}>
+                      <Feather name="trash-2" size={16} color="#ef4444" />
+                      <Text style={[styles.contextActionText, { color: '#ef4444' }]}>Delete</Text>
+                    </Pressable>
+                  )}
                 </Pressable>
-              ))}
-            </View>
-            <View style={styles.contextDivider} />
-            {/* Copy */}
-            {!!contextItem?.content && (
-              <Pressable style={styles.contextAction} onPress={handleContextCopy}>
-                <Feather name="copy" size={16} color={colors.textPrimary} />
-                <Text style={styles.contextActionText}>Copy Text</Text>
-              </Pressable>
-            )}
-            {/* Delete (admin only) */}
-            {isAdmin && (
-              <Pressable style={styles.contextAction} onPress={handleContextDelete}>
-                <Feather name="trash-2" size={16} color="#ef4444" />
-                <Text style={[styles.contextActionText, { color: '#ef4444' }]}>Delete</Text>
-              </Pressable>
-            )}
-          </View>
+              </View>
+            );
+          })()}
         </Pressable>
+        </BlurView>
       </Modal>
 
       {videoPlayerUrl != null && (
         <VideoPlayerModal url={videoPlayerUrl} onClose={() => setVideoPlayerUrl(null)} />
       )}
+
+      <ReactionDetailModal
+        visible={reactionDetailAnnId != null}
+        onClose={() => setReactionDetailAnnId(null)}
+        fetchDetails={() => fetchAnnouncementReactionDetails(orgId, reactionDetailAnnId!)}
+      />
 
       {/* Create announcement bottom sheet */}
       <Modal
@@ -1137,33 +1304,89 @@ const styles = StyleSheet.create({
   // Context menu
   contextOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    justifyContent: 'center',
-    alignItems: 'center',
   },
-  contextCard: {
+  contextContent: {
+    position: 'absolute',
+    left: spacing.xl,
+    right: spacing.xl,
+    gap: 12,
+  },
+  contextEmojiBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-evenly',
     backgroundColor: colors.background.card,
-    borderRadius: 16,
-    padding: spacing.md,
-    width: '80%',
+    borderRadius: 32,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 6,
     shadowColor: '#000',
-    shadowOpacity: 0.2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
     shadowRadius: 12,
     elevation: 8,
   },
-  emojiRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: spacing.sm,
-  },
   emojiBtn: { padding: 8 },
-  emojiText: { fontSize: 26 },
-  contextDivider: { height: 1, backgroundColor: colors.borderColor, marginVertical: spacing.sm },
+  emojiText: { fontSize: 28 },
+  contextPreviewCard: {
+    width: '100%',
+    backgroundColor: colors.background.card,
+    borderRadius: 16,
+    padding: spacing.md,
+    gap: spacing.sm,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  contextAnnHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  contextAnnAuthor: {
+    fontSize: typography.size.sm,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  contextAnnTime: {
+    fontSize: typography.size.xs,
+    color: colors.textMuted,
+    marginTop: 1,
+  },
+  contextAnnContent: {
+    fontSize: typography.size.sm,
+    lineHeight: 20,
+    color: colors.textPrimary,
+  },
+  contextMediaRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  contextMediaThumb: {
+    width: 160,
+    height: 160,
+    borderRadius: 12,
+    backgroundColor: '#111',
+    overflow: 'hidden',
+  },
+  contextActionsCard: {
+    width: '100%',
+    backgroundColor: colors.background.card,
+    borderRadius: 16,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 12,
+    elevation: 6,
+  },
+  contextDivider: { height: 1, backgroundColor: colors.borderColor },
   contextAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    gap: 10,
+    paddingVertical: 14,
+    gap: 12,
   },
   contextActionText: { fontSize: typography.size.sm, color: colors.textPrimary, fontWeight: '500' },
 

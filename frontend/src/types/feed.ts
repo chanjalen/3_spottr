@@ -74,6 +74,7 @@ export interface FeedItem {
   description: string;
   location_name: string | null;
   photo_url: string | null;
+  video_url?: string | null;
   link_url: string | null;
   like_count: number;
   comment_count: number;

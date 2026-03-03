@@ -2,34 +2,51 @@
   "expo": {
     "name": "Spottr",
     "slug": "spottr",
+    "owner": "spottr123",
     "version": "1.0.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
       "backgroundColor": "#4FC3E0"
     },
     "assetBundlePatterns": [
       "**/*"
     ],
+    "scheme": "app.spottr.mobile",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.spottr.app"
+      "bundleIdentifier": "app.spottr.mobile",
+      "infoPlist": {
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": [
+              "com.googleusercontent.apps.265741649084-vabnoi82qr737r6fk6d1b462mb7qo9vv"
+            ]
+          }
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#4FC3E0"
       },
-      "package": "com.spottr.app"
+      "package": "app.spottr.mobile"
     },
     "plugins": [
       "expo-font",
       "expo-secure-store",
       "@react-native-community/datetimepicker",
-      "expo-video"
+      "expo-video",
+      "expo-web-browser"
     ],
     "extra": {
       "eas": {
-        "projectId": "2f119204-6d9e-4f6e-8052-b040e2ab5349"
+        "projectId": "a4ef3539-a6f7-405d-ac11-ef7a72dec022"
       }
     }
   }

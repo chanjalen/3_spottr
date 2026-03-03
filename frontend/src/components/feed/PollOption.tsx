@@ -30,115 +30,120 @@ export default function PollOption({
 }: PollOptionProps) {
   const percentage = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
   const barWidth = useSharedValue(0);
-  // Show results if the user voted OR if the poll has ended
+  // Show results once user has voted OR poll has ended
   const showResults = hasVoted || !isActive;
 
   useEffect(() => {
-    if (showResults) {
-      barWidth.value = withTiming(percentage, {
-        duration: 600,
-        easing: Easing.out(Easing.cubic),
-      });
-    }
+    barWidth.value = showResults
+      ? withTiming(percentage, { duration: 700, easing: Easing.out(Easing.cubic) })
+      : withTiming(0, { duration: 200 });
   }, [showResults, percentage]);
 
   const barStyle = useAnimatedStyle(() => ({
     width: `${barWidth.value}%`,
   }));
 
+  const isLeading = showResults && totalVotes > 0 && votes === Math.max(...[votes]);
+
   return (
     <Pressable
-      style={[
-        styles.container,
-        isSelected && styles.selected,
-        !isActive && !hasVoted && styles.disabled,
-      ]}
       onPress={isActive ? onVote : undefined}
       disabled={!isActive}
       accessibilityRole="button"
-      accessibilityLabel={`${text}, ${percentage}%`}
+      accessibilityLabel={`${text}${showResults ? `, ${percentage}%` : ''}`}
       accessibilityState={{ selected: isSelected }}
     >
-      {showResults && (
-        <Animated.View
-          style={[
-            styles.bar,
-            isSelected && styles.barSelected,
-            barStyle,
-          ]}
-        />
-      )}
-      <View style={styles.content}>
-        <View style={styles.textRow}>
-          {isSelected && (
-            <Feather name="check-circle" size={14} color={colors.primary} />
-          )}
-          <Text style={[styles.text, isSelected && styles.textSelected]}>
-            {text}
-          </Text>
-        </View>
+      <View style={[styles.row, isSelected && styles.rowSelected]}>
+        {/* Animated fill bar behind content */}
         {showResults && (
-          <Text style={[styles.percent, isSelected && styles.percentSelected]}>
-            {percentage}%
-          </Text>
+          <Animated.View
+            style={[
+              styles.bar,
+              isSelected ? styles.barSelected : styles.barDefault,
+              barStyle,
+            ]}
+          />
         )}
+
+        {/* Option text */}
+        <View style={styles.content}>
+          <View style={styles.left}>
+            {isSelected && (
+              <Feather name="check-circle" size={13} color={colors.primary} />
+            )}
+            <Text
+              style={[styles.text, isSelected && styles.textSelected]}
+              numberOfLines={2}
+            >
+              {text}
+            </Text>
+          </View>
+
+          {showResults && (
+            <Text style={[styles.percent, isSelected && styles.percentSelected]}>
+              {percentage}%
+            </Text>
+          )}
+        </View>
       </View>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border.default,
-    marginBottom: spacing.sm,
-    overflow: 'hidden',
+  row: {
     position: 'relative',
+    overflow: 'hidden',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderColor,
+    minHeight: 44,
+    justifyContent: 'center',
   },
-  selected: {
-    borderColor: colors.primary,
-    borderWidth: 1.5,
-  },
-  disabled: {
-    opacity: 0.6,
+  rowSelected: {
+    // slightly brighter tint for selected row background is provided by the bar
   },
   bar: {
     position: 'absolute',
     top: 0,
     left: 0,
     bottom: 0,
-    backgroundColor: 'rgba(79,195,224,0.12)',
-    borderRadius: 11,
+  },
+  barDefault: {
+    backgroundColor: 'rgba(0,0,0,0.06)',
   },
   barSelected: {
-    backgroundColor: 'rgba(79,195,224,0.2)',
+    backgroundColor: 'rgba(79,195,224,0.18)',
   },
   content: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: spacing.md,
+    paddingHorizontal: spacing.base,
     paddingVertical: spacing.sm + 2,
+    gap: spacing.sm,
   },
-  textRow: {
+  left: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.xs,
+    flex: 1,
   },
   text: {
     fontSize: typography.size.sm,
     fontFamily: typography.family.medium,
     color: colors.textPrimary,
+    flex: 1,
   },
   textSelected: {
-    color: colors.primary,
     fontFamily: typography.family.semibold,
+    color: colors.primary,
   },
   percent: {
     fontSize: typography.size.sm,
     fontFamily: typography.family.medium,
-    color: colors.textSecondary,
+    color: colors.textMuted,
+    minWidth: 32,
+    textAlign: 'right',
   },
   percentSelected: {
     color: colors.primary,

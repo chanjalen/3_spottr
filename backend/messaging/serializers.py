@@ -386,7 +386,16 @@ class SendGroupMessageSerializer(serializers.Serializer):
 
 
 class ReactMessageSerializer(serializers.Serializer):
-    emoji = serializers.CharField(max_length=16)
+    emoji = serializers.CharField(max_length=8)
+
+    def validate_emoji(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Emoji cannot be empty.")
+        # Reject plain ASCII alphanumeric strings — they are not emoji
+        if value.isascii() and value.replace(' ', '').isalnum():
+            raise serializers.ValidationError("Invalid emoji.")
+        return value
 
 
 class MarkReadSerializer(serializers.Serializer):
