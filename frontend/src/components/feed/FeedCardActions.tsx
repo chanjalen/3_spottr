@@ -62,6 +62,24 @@ export default function FeedCardActions({
 
   return (
     <View style={styles.container}>
+      {/* Like */}
+      <AnimatedPressable
+        style={[styles.action, likeAnimatedStyle]}
+        onPress={handleLike}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Feather
+          name="heart"
+          size={18}
+          color={userLiked ? colors.semantic.like : colors.textMuted}
+        />
+        {likeCount > 0 && (
+          <Text style={[styles.count, userLiked && { color: colors.semantic.like }]}>
+            {likeCount}
+          </Text>
+        )}
+      </AnimatedPressable>
+
       {/* Comment */}
       <Pressable
         style={styles.action}
@@ -73,24 +91,6 @@ export default function FeedCardActions({
           <Text style={styles.count}>{commentCount}</Text>
         )}
       </Pressable>
-
-      {/* Like */}
-      <AnimatedPressable
-        style={[styles.action, likeAnimatedStyle]}
-        onPress={handleLike}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-      >
-        <Feather
-          name={userLiked ? 'heart' : 'heart'}
-          size={18}
-          color={userLiked ? colors.semantic.like : colors.textMuted}
-        />
-        {likeCount > 0 && (
-          <Text style={[styles.count, userLiked && { color: colors.semantic.like }]}>
-            {likeCount}
-          </Text>
-        )}
-      </AnimatedPressable>
 
       {/* Share */}
       <Pressable

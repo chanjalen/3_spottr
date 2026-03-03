@@ -10,7 +10,6 @@ import {
   Dimensions,
   Keyboard,
 } from 'react-native';
-import { Image } from 'expo-image';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -25,17 +24,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FeedItem } from '../../types/feed';
 import CommentItem from './CommentItem';
 import CommentInput from './CommentInput';
-import FeedCardVideo from '../feed/FeedCardVideo';
 import { useComments } from '../../hooks/useComments';
 import { useAuth } from '../../store/AuthContext';
 import { colors, spacing, typography } from '../../theme';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
-// Sheet opens to this position (top edge of sheet from top of screen) and stays fixed
+// Sheet opens to this position (top edge of sheet from top of screen)
 const SNAP_OPEN = SCREEN_H * 0.28;
 // Drag past this → dismiss
-const DISMISS_Y = SCREEN_H * 0.50;
+const DISMISS_Y = SCREEN_H * 0.52;
 
 interface CommentsSheetProps {
   item: FeedItem | null;
@@ -46,7 +44,6 @@ interface CommentsSheetProps {
 export default function CommentsSheet({ item, onClose, onCommentCountChange }: CommentsSheetProps) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  // Must match CustomTabBar wrapper height so the sheet stops above the nav bar
   const bottomNavHeight = 52 + Math.max(insets.bottom, 16);
   const [visible, setVisible] = useState(false);
   const [replyingTo, setReplyingTo] = useState<{ commentId: string; username: string } | null>(null);
@@ -57,6 +54,7 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange }: C
   const sheetY        = useSharedValue(SCREEN_H);
   const dragStartY    = useSharedValue(SNAP_OPEN);
   const keyboardHeight = useSharedValue(0);
+  const backdropOpacity = useSharedValue(0);
 
   const { comments, isLoading, loadComments, postComment, removeComment, likeComment, loadReplies, postReply } =
     useComments(onCommentCountChange);
@@ -64,15 +62,16 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange }: C
   // ── Animate closed then call onClose ──────────────────────────────────────
   const animateClose = useCallback(() => {
     runOnJS(Keyboard.dismiss)();
+    backdropOpacity.value = withTiming(0, { duration: 240 });
     sheetY.value = withTiming(SCREEN_H, { duration: 280 }, (done) => {
       if (done) {
         runOnJS(setVisible)(false);
         runOnJS(onClose)();
       }
     });
-  }, [onClose, sheetY]);
+  }, [onClose, sheetY, backdropOpacity]);
 
-  // ── Keyboard listeners — animate sheet bottom above keyboard ──────────────
+  // ── Keyboard listeners ─────────────────────────────────────────────────────
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
     const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
@@ -97,33 +96,38 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange }: C
       loadComments(item);
       setVisible(true);
       sheetY.value = SCREEN_H;
+      backdropOpacity.value = 0;
       sheetY.value = withTiming(SNAP_OPEN, { duration: 320, easing: Easing.out(Easing.cubic) });
+      backdropOpacity.value = withTiming(1, { duration: 280 });
     } else {
       animateClose();
     }
   }, [item]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Pan gesture — only drag down to dismiss, no snap up ───────────────────
+  // ── Pan gesture ────────────────────────────────────────────────────────────
   const panGesture = Gesture.Pan()
     .onStart(() => {
       dragStartY.value = sheetY.value;
     })
     .onUpdate((e) => {
       const next = dragStartY.value + e.translationY;
-      // Clamp: can only drag downward from SNAP_OPEN
       sheetY.value = Math.max(SNAP_OPEN, next);
+      // Fade backdrop as user drags down
+      const progress = Math.max(0, Math.min(1, 1 - (sheetY.value - SNAP_OPEN) / (DISMISS_Y - SNAP_OPEN)));
+      backdropOpacity.value = progress;
     })
     .onEnd((e) => {
       if (sheetY.value > DISMISS_Y || e.velocityY > 700) {
         runOnJS(animateClose)();
       } else {
         sheetY.value = withSpring(SNAP_OPEN, { damping: 22, stiffness: 180 });
+        backdropOpacity.value = withTiming(1, { duration: 200 });
       }
     });
 
   // ── Animated styles ────────────────────────────────────────────────────────
-  const postAreaStyle = useAnimatedStyle(() => ({
-    height: sheetY.value,
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: backdropOpacity.value * 0.5,
   }));
 
   const sheetStyle = useAnimatedStyle(() => ({
@@ -131,7 +135,6 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange }: C
     bottom: bottomNavHeight,
   }));
 
-  // Grows to push CommentInput above the keyboard without moving the sheet
   const keyboardSpacerStyle = useAnimatedStyle(() => ({
     height: Math.max(0, keyboardHeight.value - bottomNavHeight),
   }));
@@ -141,35 +144,15 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange }: C
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
 
-      {/* ── Media preview (shrunk post, above sheet) ───────────────────── */}
-      <Animated.View pointerEvents="auto" style={[styles.postArea, postAreaStyle]}>
-        {item && (
-          <View style={[styles.mediaContainer, { paddingTop: insets.top }]}>
-            {item.video_url ? (
-              <View style={styles.mediaFill}>
-                <FeedCardVideo uri={item.video_url} />
-              </View>
-            ) : item.photo_url ? (
-              <Image
-                source={{ uri: item.photo_url }}
-                style={styles.mediaFill}
-                contentFit="cover"
-              />
-            ) : (
-              <View style={[styles.mediaFill, styles.textOnlyPreview]}>
-                <Text style={styles.textPreviewContent} numberOfLines={5}>
-                  {item.description}
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
+      {/* ── Dark backdrop ────────────────────────────────────────────────── */}
+      <Animated.View pointerEvents="auto" style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={animateClose} />
       </Animated.View>
 
       {/* ── Comments sheet ─────────────────────────────────────────────── */}
       <Animated.View pointerEvents="auto" style={[styles.sheet, sheetStyle]}>
 
-        {/* Drag handle — only this area triggers the pan */}
+        {/* Drag handle + header */}
         <GestureDetector gesture={panGesture}>
           <View style={styles.handleArea}>
             <View style={styles.handle} />
@@ -246,37 +229,8 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange }: C
 }
 
 const styles = StyleSheet.create({
-  // ── Post preview area ─────────────────────────────────────────────────────
-  postArea: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
+  backdrop: {
     backgroundColor: '#000',
-    overflow: 'hidden',
-  },
-  // Fills the full postArea height; paddingTop applied inline (insets.top)
-  mediaContainer: {
-    flex: 1,
-    paddingHorizontal: spacing.base,
-    paddingBottom: spacing.sm,
-  },
-  // Media stretches to fill available height — eliminates top/bottom black gaps
-  mediaFill: {
-    flex: 1,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  textOnlyPreview: {
-    backgroundColor: colors.surface,
-    padding: spacing.base,
-    justifyContent: 'center',
-  },
-  textPreviewContent: {
-    fontSize: typography.size.sm,
-    fontFamily: typography.family.regular,
-    color: colors.textPrimary,
-    lineHeight: 20,
   },
 
   // ── Comments sheet ────────────────────────────────────────────────────────
@@ -291,10 +245,10 @@ const styles = StyleSheet.create({
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: -3 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
+        shadowOpacity: 0.12,
+        shadowRadius: 16,
       },
-      android: { elevation: 8 },
+      android: { elevation: 10 },
     }),
   },
   handleArea: {
@@ -332,8 +286,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing['3xl'],
   },
   commentsList: {
-    padding: spacing.base,
-    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
   },
   empty: {
     alignItems: 'center',
