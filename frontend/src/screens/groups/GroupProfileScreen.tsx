@@ -3,6 +3,7 @@ import {
   View,
   Text,
   ScrollView,
+  FlatList,
   TouchableOpacity,
   Pressable,
   StyleSheet,
@@ -30,9 +31,12 @@ import {
   leaveGroup,
   generateInviteCode,
   updateGroup,
+  addMember,
   GroupDetail,
   GroupStreakDetail,
 } from '../../api/groups';
+import { fetchFriends } from '../../api/accounts';
+import { UserBrief } from '../../types/user';
 import { useAuth } from '../../store/AuthContext';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
@@ -62,6 +66,14 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
   const [editName, setEditName] = useState('');
   const [editAvatarUri, setEditAvatarUri] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Add Members modal state
+  const [addMembersVisible, setAddMembersVisible] = useState(false);
+  const [addMembersFriends, setAddMembersFriends] = useState<UserBrief[]>([]);
+  const [addMembersLoading, setAddMembersLoading] = useState(false);
+  const [selectedAddIds, setSelectedAddIds] = useState<Set<string>>(new Set());
+  const [addSearchQuery, setAddSearchQuery] = useState('');
+  const [isAdding, setIsAdding] = useState(false);
 
   const loadGroup = useCallback(async () => {
     try {
@@ -199,6 +211,39 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
   };
 
 
+  const handleOpenAddMembers = async () => {
+    setSelectedAddIds(new Set());
+    setAddSearchQuery('');
+    setAddMembersVisible(true);
+    setAddMembersLoading(true);
+    try {
+      const friends = await fetchFriends();
+      const existingIds = new Set(group?.members.map(m => m.user) ?? []);
+      setAddMembersFriends(friends.filter(f => !existingIds.has(String(f.id))));
+    } catch {
+      setAddMembersFriends([]);
+    } finally {
+      setAddMembersLoading(false);
+    }
+  };
+
+  const handleConfirmAddMembers = async () => {
+    if (selectedAddIds.size === 0 || isAdding) return;
+    setIsAdding(true);
+    try {
+      await Promise.all(Array.from(selectedAddIds).map(id => addMember(groupId, id)));
+      await loadGroup();
+      setAddMembersVisible(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch {
+      Alert.alert('Error', 'Could not add all members. Some may already be in the group.');
+      await loadGroup();
+      setAddMembersVisible(false);
+    } finally {
+      setIsAdding(false);
+    }
+  };
+
   if (isLoading || !group) {
     return (
       <View style={[styles.loader, { paddingTop: insets.top }]}>
@@ -333,6 +378,16 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
               )}
               <Feather name="chevron-right" size={15} color={hasActiveStreak ? colors.brand.primary : colors.text.muted} />
             </TouchableOpacity>
+            {(group.user_role === 'creator' || group.user_role === 'admin') && (
+              <TouchableOpacity
+                style={styles.addMembersButton}
+                onPress={handleOpenAddMembers}
+                activeOpacity={0.75}
+              >
+                <Feather name="user-plus" size={14} color={colors.brand.primary} />
+                <Text style={styles.addMembersButtonText}>Add</Text>
+              </TouchableOpacity>
+            )}
             {isMember && (
               <TouchableOpacity
                 style={styles.leaveButton}
@@ -383,6 +438,114 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
         isLoading={streakLoading}
         onClose={() => setStreakSheetVisible(false)}
       />
+
+      {/* ── Add Members Modal ── */}
+      <Modal
+        visible={addMembersVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAddMembersVisible(false)}
+      >
+        <View style={styles.addModalContainer}>
+          <View style={[styles.addModalSheet, { paddingBottom: insets.bottom + spacing.lg }]}>
+            {/* Header */}
+            <View style={styles.addModalHeader}>
+              <Text style={styles.addModalTitle}>Add Members</Text>
+              <Pressable style={styles.modalCloseBtn} onPress={() => setAddMembersVisible(false)}>
+                <Feather name="x" size={18} color={colors.text.secondary} />
+              </Pressable>
+            </View>
+
+            {/* Search */}
+            <View style={styles.addModalSearch}>
+              <Feather name="search" size={15} color={colors.text.muted} />
+              <TextInput
+                style={styles.addModalSearchInput}
+                placeholder="Search friends..."
+                placeholderTextColor={colors.text.muted}
+                value={addSearchQuery}
+                onChangeText={setAddSearchQuery}
+                autoCapitalize="none"
+              />
+              {!!addSearchQuery && (
+                <Pressable onPress={() => setAddSearchQuery('')} hitSlop={8}>
+                  <Feather name="x" size={15} color={colors.text.muted} />
+                </Pressable>
+              )}
+            </View>
+
+            {/* List */}
+            {addMembersLoading ? (
+              <ActivityIndicator color={colors.brand.primary} style={{ marginTop: spacing.xl }} />
+            ) : (() => {
+              const filtered = addSearchQuery.trim()
+                ? addMembersFriends.filter(f =>
+                    f.display_name.toLowerCase().includes(addSearchQuery.toLowerCase()) ||
+                    f.username.toLowerCase().includes(addSearchQuery.toLowerCase()),
+                  )
+                : addMembersFriends;
+              return filtered.length === 0 ? (
+                <View style={styles.addModalEmpty}>
+                  <Feather name="users" size={32} color={colors.text.muted} />
+                  <Text style={styles.addModalEmptyText}>
+                    {addMembersFriends.length === 0 ? 'No friends to add' : 'No results'}
+                  </Text>
+                </View>
+              ) : (
+                <FlatList
+                  data={filtered}
+                  keyExtractor={f => String(f.id)}
+                  keyboardShouldPersistTaps="handled"
+                  contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingTop: spacing.xs }}
+                  renderItem={({ item }) => {
+                    const selected = selectedAddIds.has(String(item.id));
+                    return (
+                      <Pressable
+                        style={styles.addModalRow}
+                        onPress={() => {
+                          setSelectedAddIds(prev => {
+                            const next = new Set(prev);
+                            if (next.has(String(item.id))) next.delete(String(item.id));
+                            else next.add(String(item.id));
+                            return next;
+                          });
+                        }}
+                      >
+                        <Avatar uri={item.avatar_url} name={item.display_name} size={40} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.addModalRowName}>{item.display_name}</Text>
+                          <Text style={styles.addModalRowUsername}>@{item.username}</Text>
+                        </View>
+                        <View style={[styles.addModalCheckbox, selected && styles.addModalCheckboxSelected]}>
+                          {selected && <Feather name="check" size={13} color="#fff" />}
+                        </View>
+                      </Pressable>
+                    );
+                  }}
+                />
+              );
+            })()}
+
+            {/* Confirm button */}
+            <Pressable
+              style={[
+                styles.addModalConfirmBtn,
+                (selectedAddIds.size === 0 || isAdding) && styles.addModalConfirmBtnDisabled,
+              ]}
+              onPress={handleConfirmAddMembers}
+              disabled={selectedAddIds.size === 0 || isAdding}
+            >
+              {isAdding ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <Text style={styles.addModalConfirmText}>
+                  {selectedAddIds.size > 0 ? `Add ${selectedAddIds.size} Member${selectedAddIds.size > 1 ? 's' : ''}` : 'Select Friends'}
+                </Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Group Settings Modal ── */}
       <Modal
@@ -673,6 +836,123 @@ const styles = StyleSheet.create({
     fontSize: typography.size.sm,
     fontFamily: typography.family.medium,
     color: '#ef4444',
+  },
+  addMembersButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: colors.brand.primary + '15',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.brand.primary + '40',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  addMembersButtonText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.medium,
+    color: colors.brand.primary,
+  },
+
+  // ── Add Members Modal ──────────────────────────────────────────────────────
+  addModalContainer: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  addModalSheet: {
+    backgroundColor: colors.background.elevated,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: '85%',
+  },
+  addModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.sm,
+  },
+  addModalTitle: {
+    fontSize: typography.size.lg,
+    fontFamily: typography.family.bold,
+    color: colors.text.primary,
+  },
+  addModalSearch: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.background.base,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+  },
+  addModalSearchInput: {
+    flex: 1,
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.text.primary,
+  },
+  addModalEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing['2xl'],
+  },
+  addModalEmptyText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.text.muted,
+  },
+  addModalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm + 2,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.subtle,
+  },
+  addModalRowName: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.medium,
+    color: colors.text.primary,
+  },
+  addModalRowUsername: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.text.muted,
+  },
+  addModalCheckbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.border.default,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  addModalCheckboxSelected: {
+    backgroundColor: colors.brand.primary,
+    borderColor: colors.brand.primary,
+  },
+  addModalConfirmBtn: {
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    backgroundColor: colors.brand.primary,
+    borderRadius: 14,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+  },
+  addModalConfirmBtnDisabled: { opacity: 0.45 },
+  addModalConfirmText: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.bold,
+    color: '#fff',
   },
 
   // ── Members ───────────────────────────────────────────────────────────────────

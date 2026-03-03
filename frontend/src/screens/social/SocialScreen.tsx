@@ -106,6 +106,7 @@ export default function SocialScreen({ navigation, route }: Props) {
 
   // ── Zap ───────────────────────────────────────────────────────────────────
   const [zapping, setZapping] = useState<string | null>(null); // partner_id being zapped
+  const [zapCooldowns, setZapCooldowns] = useState<Record<string, number>>({}); // partnerId → sentAt ms
 
   // ── New message modal ─────────────────────────────────────────────────────
   const [newMsgVisible, setNewMsgVisible] = useState(false);
@@ -201,6 +202,7 @@ export default function SocialScreen({ navigation, route }: Props) {
           const updated: GroupConversation = {
             ...conv,
             latest_message: msg,
+            preview_text: null,
             unread_count: !isOwnMessage ? conv.unread_count + 1 : conv.unread_count,
           };
           return [updated, ...prev.filter((_, i) => i !== idx)];
@@ -223,6 +225,7 @@ export default function SocialScreen({ navigation, route }: Props) {
           const updated: Conversation = {
             ...conv,
             latest_message: msg,
+            preview_text: null,
             unread_count: !isOwnMessage ? conv.unread_count + 1 : conv.unread_count,
           };
           return [updated, ...prev.filter((_, i) => i !== idx)];
@@ -399,6 +402,10 @@ export default function SocialScreen({ navigation, route }: Props) {
     setZapping(partnerId);
     try {
       await sendZap(partnerId);
+      setZapCooldowns(prev => ({ ...prev, [partnerId]: Date.now() }));
+      setTimeout(() => {
+        setZapCooldowns(prev => { const n = { ...prev }; delete n[partnerId]; return n; });
+      }, 60_000);
     } catch {
       // silently ignore
     } finally {
@@ -590,7 +597,9 @@ export default function SocialScreen({ navigation, route }: Props) {
           </View>
           {ann ? (
             <Text style={styles.convoLast} numberOfLines={1}>
-              {ann.author_display_name}: {annPreviewText(ann)}
+              {me?.username && ann.content?.includes(`@${me.username}`)
+                ? `${ann.author_display_name} mentioned you`
+                : `${ann.author_display_name}: ${annPreviewText(ann)}`}
             </Text>
           ) : !!item.description && (
             <Text style={styles.convoLast} numberOfLines={1}>{item.description}</Text>
@@ -655,7 +664,7 @@ export default function SocialScreen({ navigation, route }: Props) {
           )}
         </View>
         <Text style={styles.convoLast} numberOfLines={1}>
-          {!item.latest_message
+          {item.preview_text ?? (!item.latest_message
             ? 'No messages yet'
             : item.latest_message.content
             ? item.latest_message.content
@@ -663,7 +672,7 @@ export default function SocialScreen({ navigation, route }: Props) {
             ? (item.latest_message.media.some((m: any) => m.kind === 'video') ? 'Video' : 'Photo')
             : item.latest_message.shared_post
             ? 'Shared a post'
-            : ''}
+            : '')}
         </Text>
       </View>
       {item.unread_count > 0 && (
@@ -671,7 +680,7 @@ export default function SocialScreen({ navigation, route }: Props) {
           <Text style={styles.unreadBadgeText}>{item.unread_count}</Text>
         </View>
       )}
-      {!item.partner_has_activity_today && (
+      {!item.partner_has_activity_today && !zapCooldowns[item.partner_id] && (
         <Pressable
           style={[styles.zapBtn, zapping === item.partner_id && styles.zapBtnDisabled]}
           onPress={() => handleZap(item.partner_id)}
@@ -718,7 +727,7 @@ export default function SocialScreen({ navigation, route }: Props) {
           )}
         </View>
         <Text style={styles.convoLast} numberOfLines={1}>
-          {!item.latest_message
+          {item.preview_text ?? (!item.latest_message
             ? 'No messages yet'
             : (() => {
                 const sender = item.latest_message.sender_username ? `${item.latest_message.sender_username}: ` : '';
@@ -727,7 +736,7 @@ export default function SocialScreen({ navigation, route }: Props) {
                   return `${sender}${item.latest_message.media.some((m: any) => m.kind === 'video') ? 'Video' : 'Photo'}`;
                 if (item.latest_message.shared_post) return `${sender}Shared a post`;
                 return '';
-              })()}
+              })())}
         </Text>
       </View>
       {item.unread_count > 0 && (

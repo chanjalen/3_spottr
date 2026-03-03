@@ -33,8 +33,10 @@ def _build_avatar_map(user_ids):
     """
     Bulk-fetch user avatar URLs for all user_ids in one query.
     Returns a dict mapping str(user_id) → url string.
+    Falls back to legacy User.avatar ImageField for users without a MediaLink.
     """
     from media.models import MediaLink
+    from media.utils import build_media_url
     ids = [str(uid) for uid in user_ids if uid is not None]
     if not ids:
         return {}
@@ -43,7 +45,16 @@ def _build_avatar_map(user_ids):
         .filter(destination_type='user', destination_id__in=ids, type='avatar')
         .select_related('asset')
     )
-    return {link.destination_id: link.asset.url for link in links}
+    result = {link.destination_id: link.asset.url for link in links}
+    # Fall back to legacy User.avatar ImageField for users not covered by MediaLink.
+    missing_ids = [uid for uid in ids if uid not in result]
+    if missing_ids:
+        from accounts.models import User
+        for u in User.objects.filter(id__in=missing_ids).exclude(avatar='').exclude(avatar__isnull=True).only('id', 'avatar'):
+            url = build_media_url(u.avatar.name)
+            if url:
+                result[str(u.id)] = url
+    return result
 
 
 def _build_media_map(destination_type, items):
@@ -550,6 +561,7 @@ def announcement_react(request, org_id, announcement_id):
         from organizations.models import Announcement
         announcement = Announcement.objects.get(id=announcement_id)
         reactions = services.get_announcement_reactions(announcement, request.user)
+        services.broadcast_announcement_reaction_update(announcement)
     except OrgNotFoundError as e:
         return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
     except NotOrgMemberError as e:
@@ -594,6 +606,53 @@ def announcement_reaction_details(request, org_id, announcement_id):
             'avatar_url': avatar_map.get(str(r.user_id)),
         }
         for r in reactions
+    ]
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def member_activity(request, org_id):
+    """
+    GET /api/organizations/{org_id}/member-activity/?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
+    Admin/creator only. Returns workout counts per member for optional date range (all-time if omitted).
+    """
+    try:
+        services.get_org(org_id)
+    except OrgNotFoundError as e:
+        return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+    membership = OrgMember.objects.filter(org_id=org_id, user=request.user).first()
+    if not membership or membership.role not in (OrgMember.Role.ADMIN, OrgMember.Role.CREATOR):
+        return Response({'error': 'You do not have admin permissions for this organization.'}, status=status.HTTP_403_FORBIDDEN)
+
+    start_date = request.query_params.get('start_date')
+    end_date = request.query_params.get('end_date')
+
+    members_qs = OrgMember.objects.filter(org_id=org_id).select_related('user')
+    member_ids = [m.user_id for m in members_qs]
+
+    from workouts.models import Workout
+    from django.db.models import Count
+    qs = Workout.objects.filter(user_id__in=member_ids)
+    if start_date:
+        qs = qs.filter(start_time__date__gte=start_date)
+    if end_date:
+        qs = qs.filter(start_time__date__lte=end_date)
+    count_map = {str(r['user_id']): r['count'] for r in qs.values('user_id').annotate(count=Count('id'))}
+
+    avatar_map = _build_avatar_map(member_ids)
+
+    data = [
+        {
+            'user_id': str(m.user_id),
+            'username': m.user.username,
+            'display_name': m.user.display_name or m.user.username,
+            'avatar_url': avatar_map.get(str(m.user_id)),
+            'current_streak': m.user.current_streak,
+            'workout_count': count_map.get(str(m.user_id), 0),
+        }
+        for m in members_qs
     ]
     return Response(data)
 

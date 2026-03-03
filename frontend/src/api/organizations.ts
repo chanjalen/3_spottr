@@ -377,3 +377,30 @@ export async function voteOnPoll(
 export async function markAnnouncementsRead(orgId: string): Promise<void> {
   await apiClient.post(`/api/organizations/${orgId}/announcements/read/`);
 }
+
+// ---------------------------------------------------------------------------
+// Member Activity (admin only)
+// ---------------------------------------------------------------------------
+
+export interface MemberActivityItem {
+  user_id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  current_streak: number;
+  workout_count: number;
+}
+
+export async function fetchOrgMemberActivity(
+  orgId: string,
+  startDate: string | null,
+  endDate: string | null,
+): Promise<MemberActivityItem[]> {
+  const { data } = await apiClient.get(`/api/organizations/${orgId}/member-activity/`, {
+    params: {
+      ...(startDate && { start_date: startDate }),
+      ...(endDate   && { end_date:   endDate   }),
+    },
+  });
+  return data;
+}

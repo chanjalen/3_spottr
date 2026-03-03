@@ -15,12 +15,12 @@ const DEFAULT_MENTION_STYLE: TextStyle = {
 };
 
 export default function MentionText({ content, textStyle, mentionStyle, onMentionPress }: Props) {
-  const parts = content.split(/(@\w+)/g);
+  const parts = content.split(/(@[\w.\-]+)/g);
 
   return (
     <Text style={textStyle}>
       {parts.map((part, index) => {
-        if (/^@\w+$/.test(part)) {
+        if (/^@[\w.\-]+$/.test(part)) {
           const username = part.slice(1);
           return (
             <Text

@@ -73,6 +73,7 @@ export interface Conversation {
   latest_message: Message;
   unread_count: number;
   partner_has_activity_today: boolean;
+  preview_text?: string | null;
 }
 
 /**
@@ -87,6 +88,7 @@ export interface GroupConversation {
   member_count: number;
   latest_message: Message | null;
   unread_count: number;
+  preview_text?: string | null;
 }
 
 /**

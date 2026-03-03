@@ -163,6 +163,23 @@ class MessagingConsumer(AsyncWebsocketConsumer):
             'announcement': event['announcement'],
         }))
 
+    async def reaction_update(self, event):
+        """Forward a reaction update to this WebSocket client."""
+        await self.send(text_data=json.dumps({
+            'type': 'reaction_update',
+            'message_id': event['message_id'],
+            'reactions': event['reactions'],
+        }))
+
+    async def announcement_reaction_update(self, event):
+        """Forward an announcement reaction update to this WebSocket client."""
+        await self.send(text_data=json.dumps({
+            'type': 'announcement_reaction_update',
+            'announcement_id': event['announcement_id'],
+            'org_id': event['org_id'],
+            'reactions': event['reactions'],
+        }))
+
     # ── DB helpers (must be async-safe) ──────────────────────────────────────
 
     @database_sync_to_async

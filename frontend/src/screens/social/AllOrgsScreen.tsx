@@ -18,6 +18,7 @@ import { listMyOrgs, OrgListItem, LatestAnnouncement } from '../../api/organizat
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 import { useUnreadCount } from '../../store/UnreadCountContext';
+import { useAuth } from '../../store/AuthContext';
 import { timeAgo } from '../../utils/timeAgo';
 import { staleCache } from '../../utils/staleCache';
 
@@ -34,6 +35,7 @@ const annPreviewText = (ann: LatestAnnouncement): string => {
 
 export default function AllOrgsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
+  const { user: me } = useAuth();
   const { optimisticDecrement } = useUnreadCount();
   const [orgs, setOrgs] = useState<OrgListItem[]>(() => staleCache.getSync<OrgListItem[]>('social:orgs') ?? []);
   const [loading, setLoading] = useState(() => staleCache.getSync<OrgListItem[]>('social:orgs') === null);
@@ -155,7 +157,9 @@ export default function AllOrgsScreen({ navigation }: Props) {
                   </View>
                   {ann ? (
                     <Text style={styles.rowLast} numberOfLines={1}>
-                      {ann.author_display_name}: {annPreviewText(ann)}
+                      {me?.username && ann.content.includes(`@${me.username}`)
+                        ? `${ann.author_display_name} mentioned you`
+                        : `${ann.author_display_name}: ${annPreviewText(ann)}`}
                     </Text>
                   ) : !!item.description && (
                     <Text style={styles.rowLast} numberOfLines={1}>{item.description}</Text>

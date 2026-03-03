@@ -421,6 +421,25 @@ def api_update_avatar_view(request):
     user = request.user
     user.avatar = avatar
     user.save(update_fields=['avatar'])
+
+    # Keep MediaLink in sync so _build_avatar_map can find the avatar.
+    from media.utils import create_media_asset
+    from media.models import MediaLink
+    old_links = MediaLink.objects.filter(
+        destination_type='user',
+        destination_id=str(user.pk),
+        type='avatar',
+    ).select_related('asset')
+    for ml in old_links:
+        ml.asset.delete()
+    asset = create_media_asset(user, avatar, user.avatar.name, 'image', already_saved=True)
+    MediaLink.objects.create(
+        asset=asset,
+        destination_type='user',
+        destination_id=str(user.pk),
+        type='avatar',
+    )
+
     return Response(_user_brief(user))
 
 

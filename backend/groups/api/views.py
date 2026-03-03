@@ -289,6 +289,17 @@ def member_add(request, group_id, user_id):
     except GroupFullError as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
+    try:
+        from messaging.services import send_system_group_message
+        added_name = membership.user.display_name or membership.user.username
+        send_system_group_message(
+            group_id=membership.group.id,
+            content=f"{added_name} was added to the group",
+            sender=membership.user,
+        )
+    except Exception:
+        pass
+
     return Response(
         GroupMemberSerializer(membership).data,
         status=status.HTTP_201_CREATED,
@@ -498,6 +509,17 @@ def join_request_accept(request, group_id, request_id):
         return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
     except GroupFullError as e:
         return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        from messaging.services import send_system_group_message
+        joined_name = join_request.user.display_name or join_request.user.username
+        send_system_group_message(
+            group_id=join_request.group.id,
+            content=f"{joined_name} has joined the group",
+            sender=join_request.user,
+        )
+    except Exception:
+        pass
 
     return Response(GroupJoinRequestSerializer(join_request).data)
 
