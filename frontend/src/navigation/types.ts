@@ -86,4 +86,5 @@ export type RootStackParamList = {
   CheckInSelection: undefined;
   CameraCapture: undefined;
   CheckInReview: { mediaUri: string; mediaType: 'photo' | 'video' };
+  FindFriends: undefined;
 };

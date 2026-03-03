@@ -815,6 +815,145 @@ def api_password_reset_confirm_view(request):
     return Response({'detail': 'Password reset successfully. You can now log in.'})
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def api_suggested_users_view(request):
+    """
+    Return a ranked list of suggested users to follow.
+    Scoring: mutual_count × 1.0 + same_gym × 2.0 + freq_diff_bonus × 0.5
+    Fallback for new users: top users by follower count.
+    ~6–7 DB queries, no N+1.
+    """
+    from social.models import Follow
+    from django.db.models import Count
+    from media.models import MediaLink
+    from collections import defaultdict
+
+    me = request.user
+    try:
+        limit = max(1, min(int(request.GET.get('limit', 20)), 50))
+    except (ValueError, TypeError):
+        limit = 20
+
+    # Q1: ids of everyone current user already follows
+    following_ids = list(Follow.objects.filter(follower=me).values_list('following_id', flat=True))
+    excluded = set(following_ids) | {me.id}
+
+    # Q2: second-degree follows with mutual count
+    second_degree = (
+        Follow.objects.filter(follower_id__in=following_ids)
+        .exclude(following_id__in=excluded)
+        .values('following_id')
+        .annotate(mutual_count=Count('follower_id'))
+    )
+    mutual_map = {row['following_id']: row['mutual_count'] for row in second_degree}
+
+    # Q3: my gym ids
+    my_gym_ids = list(me.enrolled_gyms.values_list('id', flat=True))
+
+    # Q4: gym candidates
+    gym_candidate_ids = set()
+    if my_gym_ids:
+        gym_candidate_ids = set(
+            User.objects.filter(enrolled_gyms__in=my_gym_ids)
+            .exclude(id__in=excluded)
+            .values_list('id', flat=True)
+        )
+
+    candidate_ids = set(mutual_map.keys()) | gym_candidate_ids
+
+    # Fallback: new user with no follows and no gym
+    if not candidate_ids:
+        fallback_ids = list(
+            User.objects.exclude(id__in=excluded)
+            .annotate(follower_count=Count('followers'))
+            .order_by('-follower_count')
+            .values_list('id', flat=True)[:limit * 2]
+        )
+        candidate_ids = set(fallback_ids)
+
+    if not candidate_ids:
+        return Response({'results': []})
+
+    # Q5: fetch candidate details
+    candidates = {
+        u.id: u for u in
+        User.objects.filter(id__in=candidate_ids)
+        .only('id', 'username', 'display_name', 'avatar', 'workout_frequency')
+    }
+
+    # Score and rank
+    scored = []
+    for cid, candidate in candidates.items():
+        mutual_count = mutual_map.get(cid, 0)
+        same_gym = 1.0 if cid in gym_candidate_ids else 0.0
+        freq_bonus = 0.5 if abs(candidate.workout_frequency - me.workout_frequency) <= 1 else 0.0
+        score = mutual_count * 3.0 + same_gym * 1.0 + freq_bonus
+        scored.append((score, cid))
+
+    scored.sort(key=lambda x: -x[0])
+    top_ids = [cid for _, cid in scored[:limit]]
+
+    # Q6: bulk fetch connectors (people I follow who also follow a candidate)
+    connectors_by_candidate: dict = defaultdict(list)
+    if following_ids and top_ids:
+        connector_follows = list(
+            Follow.objects.filter(follower_id__in=following_ids, following_id__in=top_ids)
+            .select_related('follower')[:3 * limit]
+        )
+        for f in connector_follows:
+            bucket = connectors_by_candidate[f.following_id]
+            if len(bucket) < 3:
+                bucket.append(f.follower)
+
+    # Q7: bulk fetch avatar URLs (avoids N+1 via user.avatar_url)
+    all_avatar_ids = set(top_ids)
+    for connectors in connectors_by_candidate.values():
+        for c in connectors:
+            all_avatar_ids.add(c.id)
+
+    avatar_url_map = {
+        link.destination_id: link.asset.url
+        for link in MediaLink.objects.filter(
+            destination_type='user',
+            destination_id__in=[str(uid) for uid in all_avatar_ids],
+            type='avatar',
+        ).select_related('asset')
+    }
+
+    def _avatar(user_obj):
+        url = avatar_url_map.get(str(user_obj.id))
+        if url:
+            return url
+        if user_obj.avatar:
+            from media.utils import build_media_url
+            return build_media_url(user_obj.avatar.name)
+        return None
+
+    # Build response
+    results = []
+    for cid in top_ids:
+        if cid not in candidates:
+            continue
+        candidate = candidates[cid]
+        connectors = connectors_by_candidate.get(cid, [])
+        mutual_previews = [
+            {'id': str(c.id), 'username': c.username, 'avatar_url': _avatar(c)}
+            for c in connectors
+        ]
+        results.append({
+            'id': str(candidate.id),
+            'username': candidate.username,
+            'display_name': candidate.display_name,
+            'avatar_url': _avatar(candidate),
+            'is_following': False,
+            'mutual_count': mutual_map.get(cid, 0),
+            'mutual_previews': mutual_previews,
+        })
+
+    return Response({'results': results})
+
+
 @api_view(['POST'])
 @permission_classes([AllowAny])
 @throttle_classes([AuthRateThrottle])
