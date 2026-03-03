@@ -6,6 +6,7 @@ app_name = 'organizations-api'
 urlpatterns = [
     # Org list / create / discover
     path('', views.org_list_create, name='org-list-create'),
+    path('user/<str:username>/orgs/', views.user_orgs, name='user-orgs'),
     path('discover/', views.org_discover, name='org-discover'),
     path('join-via-code/', views.join_via_code, name='join-via-code'),
 

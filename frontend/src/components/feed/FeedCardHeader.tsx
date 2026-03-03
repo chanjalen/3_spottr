@@ -12,6 +12,7 @@ interface FeedCardHeaderProps {
   workoutType?: string;
   sharedContext?: string[];
   onPressUser?: () => void;
+  onMore?: () => void;
 }
 
 export default function FeedCardHeader({
@@ -21,6 +22,7 @@ export default function FeedCardHeader({
   workoutType,
   sharedContext,
   onPressUser,
+  onMore,
 }: FeedCardHeaderProps) {
   if (!user) return null;
 
@@ -51,6 +53,7 @@ export default function FeedCardHeader({
         style={({ pressed }) => [styles.moreBtn, pressed && { opacity: 0.5 }]}
         hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         accessibilityLabel="More options"
+        onPress={onMore}
       >
         <Feather name="more-horizontal" size={18} color={colors.textMuted} />
       </Pressable>

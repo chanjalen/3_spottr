@@ -83,6 +83,22 @@ def _build_media_map(destination_type, items):
 ORG_LIST_TTL = 2 * 60  # 2 minutes
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def user_orgs(request, username):
+    """Get all orgs a specific user is a member of."""
+    from accounts.models import User
+    from django.shortcuts import get_object_or_404
+    user = get_object_or_404(User, username=username)
+    orgs = services.list_user_orgs(user)
+    serializer = OrgListSerializer(orgs, many=True, context={
+        'request': request,
+        'unread_map': {},
+        'latest_ann_map': {},
+    })
+    return Response(serializer.data)
+
+
 @api_view(['GET', 'POST'])
 @permission_classes([IsAuthenticated])
 def org_list_create(request):

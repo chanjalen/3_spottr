@@ -106,6 +106,11 @@ export async function fetchUserPRs(username: string): Promise<PersonalRecord[]> 
   return Array.isArray(res.data) ? res.data : [];
 }
 
+export async function fetchMutualFollowers(username: string): Promise<UserBrief[]> {
+  const res = await apiClient.get(`/accounts/api/user/${username}/mutual-followers/`);
+  return Array.isArray(res.data) ? res.data : [];
+}
+
 export async function fetchFriends(username?: string): Promise<UserBrief[]> {
   const [followers, following] = await Promise.all([
     fetchFollowers(username),
@@ -120,12 +125,14 @@ export async function savePR(data: {
   value: number;
   unit: string;
   videoUri?: string;
+  prId?: string;
 }): Promise<PersonalRecord> {
   if (data.videoUri) {
     const formData = new FormData();
     formData.append('exercise_name', data.exercise_name);
     formData.append('value', String(data.value));
     formData.append('unit', data.unit);
+    if (data.prId) formData.append('pr_id', data.prId);
     const filename = data.videoUri.split('/').pop() ?? 'video.mp4';
     const fileType = filename.toLowerCase().endsWith('.mov') ? 'video/quicktime' : 'video/mp4';
     formData.append('video', { uri: data.videoUri, name: filename, type: fileType } as any);
@@ -138,6 +145,7 @@ export async function savePR(data: {
     exercise_name: data.exercise_name,
     value: data.value,
     unit: data.unit,
+    ...(data.prId ? { pr_id: data.prId } : {}),
   });
   return res.data;
 }

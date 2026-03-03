@@ -15,29 +15,32 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RouteProp } from '@react-navigation/native';
 import { useAuth } from '../../store/AuthContext';
 import Avatar from '../../components/common/Avatar';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
-import { updateUserAvatar, apiDeleteAccount } from '../../api/accounts';
+import { updateUserAvatar, apiDeleteAccount, apiUpdateProfile } from '../../api/accounts';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'EditProfile'>;
+  route: RouteProp<RootStackParamList, 'EditProfile'>;
 };
 
 type SideTab = 'Profile' | 'Account' | 'Preferences' | 'Privacy' | 'Notifications';
 const SIDE_TABS: SideTab[] = ['Profile', 'Account', 'Preferences', 'Privacy', 'Notifications'];
 
-export default function EditProfileScreen({ navigation }: Props) {
+export default function EditProfileScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { user, signOut } = useAuth();
+  const { user, signOut, updateUser } = useAuth();
   const [activeTab, setActiveTab] = useState<SideTab>('Profile');
 
-  // Profile fields
-  const [displayName, setDisplayName] = useState(user?.display_name ?? '');
-  const [bio, setBio] = useState('');
+  // Profile fields — pre-populated from route params (passed by ProfileScreen)
+  const [displayName, setDisplayName] = useState(route.params?.display_name ?? user?.display_name ?? '');
+  const [bio, setBio] = useState(route.params?.bio ?? '');
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const handlePickAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -56,12 +59,27 @@ export default function EditProfileScreen({ navigation }: Props) {
     setAvatarUri(uri);
     setUploadingAvatar(true);
     try {
-      await updateUserAvatar(uri);
+      const updatedUser = await updateUserAvatar(uri);
+      await updateUser(updatedUser);
     } catch {
       Alert.alert('Error', 'Failed to upload profile picture. Please try again.');
       setAvatarUri(null);
     } finally {
       setUploadingAvatar(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (saving) return;
+    setSaving(true);
+    try {
+      const updated = await apiUpdateProfile({ display_name: displayName, bio });
+      await updateUser(updated);
+      navigation.goBack();
+    } catch {
+      Alert.alert('Error', 'Failed to save profile. Please try again.');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -135,8 +153,8 @@ export default function EditProfileScreen({ navigation }: Props) {
           <Feather name="x" size={22} color={colors.textPrimary} />
         </Pressable>
         <Text style={styles.headerTitle}>Edit Profile</Text>
-        <Pressable style={styles.saveBtn}>
-          <Text style={styles.saveBtnText}>Save</Text>
+        <Pressable style={[styles.saveBtn, saving && { opacity: 0.6 }]} onPress={handleSave} disabled={saving}>
+          <Text style={styles.saveBtnText}>{saving ? 'Saving…' : 'Save'}</Text>
         </Pressable>
       </View>
 
