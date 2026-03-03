@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import Avatar from '../common/Avatar';
 import { UserBrief } from '../../types/user';
 import { timeAgo } from '../../utils/timeAgo';
 import { colors, spacing, typography } from '../../theme';
@@ -28,6 +29,13 @@ export default function FeedCardHeader({
 
   return (
     <View style={styles.container}>
+      <Avatar
+        uri={user.avatar_url}
+        name={user.display_name}
+        size={36}
+        onPress={onPressUser}
+      />
+
       {/* Name · @handle · time — all on one compact line */}
       <Pressable
         onPress={onPressUser}
@@ -78,7 +86,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flexWrap: 'wrap',
     marginBottom: spacing.xs,
-    gap: 0,
+    gap: spacing.sm,
   },
   nameLine: {
     flex: 1,

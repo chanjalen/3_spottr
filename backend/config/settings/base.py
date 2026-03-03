@@ -92,7 +92,7 @@ DATABASES = {
         "PASSWORD": os.environ.get("DB_PASSWORD"),
         "HOST": os.environ.get("DB_HOST"),
         "PORT": os.environ.get("DB_PORT", "6543"),
-        "CONN_MAX_AGE": 60,  # reuse connections for up to 60 s (eliminates per-request TCP handshake)
+        "CONN_MAX_AGE": 0,   # release immediately — required for Supabase Session-mode pooler (port 6543)
         "OPTIONS": {
             "sslmode": os.environ.get("DB_SSLMODE", "require"),
         },
