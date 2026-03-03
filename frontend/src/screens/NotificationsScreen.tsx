@@ -326,6 +326,8 @@ export default function NotificationsScreen({ navigation }: Props) {
       navigation.navigate('Profile', { username: actor.username });
     } else if (item.type === 'pr' && actor) {
       navigation.navigate('Profile', { username: actor.username });
+    } else if (item.type === 'mention' && actor) {
+      navigation.navigate('Profile', { username: actor.username });
     } else if (item.type === 'join_request' && item.target_type === 'group' && item.target_id) {
       navigation.navigate('GroupProfile', { groupId: item.target_id });
     }

@@ -39,17 +39,17 @@ export async function addComment(
   return response.data.comment;
 }
 
-export async function deleteComment(commentId: number): Promise<void> {
+export async function deleteComment(commentId: string): Promise<void> {
   await apiClient.post(ENDPOINTS.deleteComment(commentId));
 }
 
-export async function fetchReplies(commentId: number): Promise<Comment[]> {
+export async function fetchReplies(commentId: string): Promise<Comment[]> {
   const response = await apiClient.get(ENDPOINTS.commentReplies(commentId));
   return response.data.replies;
 }
 
 export async function addReply(
-  commentId: number,
+  commentId: string,
   text: string,
   photo?: { uri: string; name: string; type: string },
 ): Promise<Comment> {
@@ -68,7 +68,7 @@ export async function addReply(
 }
 
 export async function toggleCommentLike(
-  commentId: number,
+  commentId: string,
 ): Promise<{ liked: boolean; like_count: number }> {
   const response = await apiClient.post(ENDPOINTS.likeComment(commentId));
   return response.data;

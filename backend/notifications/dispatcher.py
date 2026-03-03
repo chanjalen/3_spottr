@@ -111,12 +111,12 @@ def notify_like_comment(actor, comment):
     )
 
 
-def notify_mention(actor, recipient, target_type, target_id):
+def notify_mention(actor, recipient, target_type, target_id, context_type=None, context_id=None):
     """
-    Generic mention notifier. Called by post/checkin/comment creation
-    once @mention parsing is implemented.
+    Generic mention notifier. Called when @username is found in a comment or reply.
     target_type: Notification.TargetType value (POST, QUICK_WORKOUT, COMMENT)
-    target_id:   str UUID of the containing content
+    target_id:   str UUID of the containing content (comment id for comment mentions)
+    context_type/context_id: optional parent content (e.g. the post or checkin)
     """
     if actor.id == recipient.id:
         return
@@ -126,6 +126,8 @@ def notify_mention(actor, recipient, target_type, target_id):
         type=Notification.Type.MENTION,
         target_type=target_type,
         target_id=str(target_id),
+        context_type=context_type or '',
+        context_id=str(context_id) if context_id else '',
     )
 
 

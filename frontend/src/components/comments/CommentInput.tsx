@@ -1,28 +1,50 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Pressable, Text, Image, TextInput, StyleSheet, Platform, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { colors, spacing, typography } from '../../theme';
+import MentionAutocomplete, { MentionableUser } from '../messages/MentionAutocomplete';
 
 interface CommentInputProps {
   placeholder?: string;
   onSubmit: (text: string, photo?: { uri: string; name: string; type: string }) => void;
+  mentionableUsers?: MentionableUser[];
+  onMentionQueryChange?: (query: string | null) => void;
 }
 
 export default function CommentInput({
   placeholder = 'Add a comment...',
   onSubmit,
+  mentionableUsers,
+  onMentionQueryChange,
 }: CommentInputProps) {
   const [text, setText] = useState('');
   const [photo, setPhoto] = useState<{ uri: string; name: string; type: string } | null>(null);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
 
   const canSubmit = text.trim().length > 0 || !!photo;
+
+  const detectMention = useCallback((value: string) => {
+    const match = value.match(/@(\w*)$/);
+    const query = match ? match[1] : null;
+    setMentionQuery(query);
+    onMentionQueryChange?.(query);
+  }, [onMentionQueryChange]);
+
+  const handleMentionSelect = useCallback((user: MentionableUser) => {
+    const newText = text.replace(/@(\w*)$/, `@${user.username} `);
+    setText(newText);
+    setMentionQuery(null);
+    onMentionQueryChange?.(null);
+  }, [text, onMentionQueryChange]);
 
   const handleSubmit = () => {
     if (!canSubmit) return;
     onSubmit(text.trim(), photo ?? undefined);
     setText('');
     setPhoto(null);
+    setMentionQuery(null);
+    onMentionQueryChange?.(null);
   };
 
   const handlePickPhoto = async () => {
@@ -33,9 +55,7 @@ export default function CommentInput({
     }
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: true,
       quality: 0.8,
-      aspect: [4, 3],
     });
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
@@ -47,6 +67,13 @@ export default function CommentInput({
 
   return (
     <View style={styles.wrapper}>
+      {mentionQuery !== null && mentionableUsers && mentionableUsers.length > 0 && (
+        <MentionAutocomplete
+          query={mentionQuery}
+          users={mentionableUsers}
+          onSelect={handleMentionSelect}
+        />
+      )}
       {photo && (
         <View style={styles.photoPreviewRow}>
           <Image source={{ uri: photo.uri }} style={styles.photoPreview} />
@@ -71,7 +98,7 @@ export default function CommentInput({
         <TextInput
           style={styles.input}
           value={text}
-          onChangeText={setText}
+          onChangeText={(v) => { detectMention(v); setText(v); }}
           placeholder={placeholder}
           placeholderTextColor={colors.textMuted}
           multiline

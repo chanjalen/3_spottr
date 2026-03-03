@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -6,36 +6,36 @@ import {
   StyleSheet,
   ActivityIndicator,
   FlatList,
-  ScrollView,
   Platform,
   Dimensions,
-  KeyboardAvoidingView,
+  Keyboard,
 } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withSpring,
   withTiming,
+  Easing,
   runOnJS,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { FeedItem, Comment } from '../../types/feed';
+import { FeedItem } from '../../types/feed';
 import CommentItem from './CommentItem';
 import CommentInput from './CommentInput';
-import FeedCardHeader from '../feed/FeedCardHeader';
-import FeedCardBody from '../feed/FeedCardBody';
+import { MentionableUser } from '../messages/MentionAutocomplete';
 import { useComments } from '../../hooks/useComments';
 import { useAuth } from '../../store/AuthContext';
+import { fetchFriends, searchUsers } from '../../api/accounts';
 import { colors, spacing, typography } from '../../theme';
 
 const { height: SCREEN_H } = Dimensions.get('window');
 
-// translateY = position of the sheet's top edge (from top of screen)
-const SNAP_HALF = SCREEN_H * 0.52;   // half screen open
-const SNAP_FULL = SCREEN_H * 0.08;   // almost full screen
-const DISMISS_Y  = SCREEN_H * 0.75;  // drag below here → dismiss
+// Sheet opens to this position (top edge of sheet from top of screen)
+const SNAP_OPEN = SCREEN_H * 0.28;
+// Drag past this → dismiss
+const DISMISS_Y = SCREEN_H * 0.52;
 
 interface CommentsSheetProps {
   item: FeedItem | null;
@@ -46,25 +46,115 @@ interface CommentsSheetProps {
 export default function CommentsSheet({ item, onClose, onCommentCountChange }: CommentsSheetProps) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const bottomNavHeight = 52 + Math.max(insets.bottom, 16);
   const [visible, setVisible] = useState(false);
-  const [replyingTo, setReplyingTo] = useState<{ commentId: number; username: string } | null>(null);
+  const [replyingTo, setReplyingTo] = useState<{ commentId: string; username: string } | null>(null);
+  const [baseMentionUsers, setBaseMentionUsers] = useState<MentionableUser[]>([]);
+  const [searchedMentionUsers, setSearchedMentionUsers] = useState<MentionableUser[]>([]);
+  const mentionSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Shared value: top edge of sheet in screen coordinates
-  const sheetY = useSharedValue(SCREEN_H);
-  const dragStartY = useSharedValue(SNAP_HALF);
+  const itemRef = useRef<FeedItem | null>(null);
+  useEffect(() => { itemRef.current = item; }, [item]);
+
+  // ── Load mentionable users when a post's comments open ────────────────────
+  useEffect(() => {
+    if (!item) return;
+    const postAuthor = item.user;
+    const myId = String(user?.id ?? '');
+    fetchFriends().then((friends) => {
+      const seen = new Set<string>();
+      const list: MentionableUser[] = [];
+      // Post author first (if not self)
+      if (postAuthor && String(postAuthor.id) !== myId) {
+        seen.add(String(postAuthor.id));
+        list.push({
+          id: String(postAuthor.id),
+          username: postAuthor.username,
+          display_name: postAuthor.display_name,
+          avatar_url: postAuthor.avatar_url,
+        });
+      }
+      // Then mutual friends
+      for (const f of friends) {
+        if (String(f.id) !== myId && !seen.has(String(f.id))) {
+          seen.add(String(f.id));
+          list.push({
+            id: String(f.id),
+            username: f.username,
+            display_name: f.display_name,
+            avatar_url: f.avatar_url,
+          });
+        }
+      }
+      setBaseMentionUsers(list);
+    }).catch(() => {});
+  }, [item]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleMentionQueryChange = useCallback((query: string | null) => {
+    if (mentionSearchTimer.current) clearTimeout(mentionSearchTimer.current);
+    if (!query) {
+      setSearchedMentionUsers([]);
+      return;
+    }
+    mentionSearchTimer.current = setTimeout(async () => {
+      try {
+        const results = await searchUsers(query);
+        const myId = String(user?.id ?? '');
+        const baseIds = new Set(baseMentionUsers.map((u) => u.id));
+        setSearchedMentionUsers(
+          results
+            .filter((u) => String(u.id) !== myId && !baseIds.has(String(u.id)))
+            .map((u) => ({
+              id: String(u.id),
+              username: u.username,
+              display_name: u.display_name,
+              avatar_url: u.avatar_url,
+            })),
+        );
+      } catch {
+        // ignore
+      }
+    }, 300);
+  }, [baseMentionUsers, user]);
+
+  const sheetY        = useSharedValue(SCREEN_H);
+  const dragStartY    = useSharedValue(SNAP_OPEN);
+  const keyboardHeight = useSharedValue(0);
+  const backdropOpacity = useSharedValue(0);
 
   const { comments, isLoading, loadComments, postComment, removeComment, likeComment, loadReplies, postReply } =
     useComments(onCommentCountChange);
 
   // ── Animate closed then call onClose ──────────────────────────────────────
   const animateClose = useCallback(() => {
+    runOnJS(Keyboard.dismiss)();
+    backdropOpacity.value = withTiming(0, { duration: 240 });
     sheetY.value = withTiming(SCREEN_H, { duration: 280 }, (done) => {
       if (done) {
         runOnJS(setVisible)(false);
         runOnJS(onClose)();
       }
     });
-  }, [onClose, sheetY]);
+  }, [onClose, sheetY, backdropOpacity]);
+
+  // ── Keyboard listeners ─────────────────────────────────────────────────────
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const show = Keyboard.addListener(showEvent, (e) => {
+      keyboardHeight.value = withTiming(e.endCoordinates.height, {
+        duration: Platform.OS === 'ios' ? e.duration : 200,
+      });
+    });
+    const hide = Keyboard.addListener(hideEvent, (e) => {
+      keyboardHeight.value = withTiming(0, {
+        duration: Platform.OS === 'ios' ? e.duration : 200,
+      });
+    });
+
+    return () => { show.remove(); hide.remove(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Open / close on item change ────────────────────────────────────────────
   useEffect(() => {
@@ -72,44 +162,47 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange }: C
       loadComments(item);
       setVisible(true);
       sheetY.value = SCREEN_H;
-      sheetY.value = withSpring(SNAP_HALF, { damping: 22, stiffness: 180 });
+      backdropOpacity.value = 0;
+      sheetY.value = withTiming(SNAP_OPEN, { duration: 320, easing: Easing.out(Easing.cubic) });
+      backdropOpacity.value = withTiming(1, { duration: 280 });
     } else {
       animateClose();
     }
   }, [item]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Pan gesture on the drag handle ────────────────────────────────────────
+  // ── Pan gesture ────────────────────────────────────────────────────────────
   const panGesture = Gesture.Pan()
     .onStart(() => {
       dragStartY.value = sheetY.value;
     })
     .onUpdate((e) => {
       const next = dragStartY.value + e.translationY;
-      sheetY.value = Math.max(SNAP_FULL, next);
+      sheetY.value = Math.max(SNAP_OPEN, next);
+      // Fade backdrop as user drags down
+      const progress = Math.max(0, Math.min(1, 1 - (sheetY.value - SNAP_OPEN) / (DISMISS_Y - SNAP_OPEN)));
+      backdropOpacity.value = progress;
     })
     .onEnd((e) => {
-      const y = sheetY.value;
-      const vy = e.velocityY;
-
-      if (y > DISMISS_Y || vy > 700) {
+      if (sheetY.value > DISMISS_Y || e.velocityY > 700) {
         runOnJS(animateClose)();
-      } else if (y < (SNAP_FULL + SNAP_HALF) / 2 || vy < -600) {
-        sheetY.value = withSpring(SNAP_FULL, { damping: 22, stiffness: 180 });
       } else {
-        sheetY.value = withSpring(SNAP_HALF, { damping: 22, stiffness: 180 });
+        sheetY.value = withSpring(SNAP_OPEN, { damping: 22, stiffness: 180 });
+        backdropOpacity.value = withTiming(1, { duration: 200 });
       }
     });
 
   // ── Animated styles ────────────────────────────────────────────────────────
-  // Post area: height = sheetY (top edge of sheet) so content fills the space above
-  const postAreaStyle = useAnimatedStyle(() => ({
-    height: sheetY.value,
-    overflow: 'hidden' as const,
+  const backdropStyle = useAnimatedStyle(() => ({
+    opacity: backdropOpacity.value * 0.5,
   }));
 
-  // Sheet: sits at sheetY and stretches to bottom of screen
   const sheetStyle = useAnimatedStyle(() => ({
     top: sheetY.value,
+    bottom: bottomNavHeight,
+  }));
+
+  const keyboardSpacerStyle = useAnimatedStyle(() => ({
+    height: Math.max(0, keyboardHeight.value - bottomNavHeight),
   }));
 
   if (!visible) return null;
@@ -117,30 +210,15 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange }: C
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
 
-      {/* ── Post content (shrinks as sheet rises) ─────────────────────── */}
-      <Animated.View pointerEvents="auto" style={[styles.postArea, postAreaStyle]}>
-        {item && (
-          <ScrollView
-            contentContainerStyle={[styles.postScroll, { paddingTop: insets.top + spacing.sm }]}
-            showsVerticalScrollIndicator={false}
-            bounces={false}
-          >
-            <FeedCardHeader
-              user={item.user}
-              createdAt={item.created_at}
-              locationName={item.location_name}
-              workoutType={item.workout_type}
-              sharedContext={item.shared_context}
-            />
-            <FeedCardBody item={item} onPollVote={() => {}} />
-          </ScrollView>
-        )}
+      {/* ── Dark backdrop ────────────────────────────────────────────────── */}
+      <Animated.View pointerEvents="auto" style={[StyleSheet.absoluteFill, styles.backdrop, backdropStyle]}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={animateClose} />
       </Animated.View>
 
       {/* ── Comments sheet ─────────────────────────────────────────────── */}
       <Animated.View pointerEvents="auto" style={[styles.sheet, sheetStyle]}>
 
-        {/* Drag handle + header — only this area triggers the pan */}
+        {/* Drag handle + header */}
         <GestureDetector gesture={panGesture}>
           <View style={styles.handleArea}>
             <View style={styles.handle} />
@@ -156,16 +234,14 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange }: C
         </GestureDetector>
 
         {/* Comments list + input */}
-        <KeyboardAvoidingView
-          style={{ flex: 1 }}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
+        <View style={{ flex: 1 }}>
           {isLoading ? (
             <View style={styles.loader}>
               <ActivityIndicator color={colors.primary} />
             </View>
           ) : (
             <FlatList
+              style={{ flex: 1 }}
               data={comments}
               keyExtractor={(c) => String(c.id)}
               renderItem={({ item: comment }) => (
@@ -201,42 +277,35 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange }: C
           <CommentInput
             placeholder={replyingTo ? `Reply to @${replyingTo.username}...` : 'Add a comment...'}
             onSubmit={(text, photo) => {
-              if (!item) return;
+              const currentItem = itemRef.current;
+              if (!currentItem) return;
               if (replyingTo) {
                 postReply(replyingTo.commentId, text, photo);
                 setReplyingTo(null);
               } else {
-                postComment(item, text, photo);
+                postComment(currentItem, text, photo);
               }
             }}
+            mentionableUsers={[...baseMentionUsers, ...searchedMentionUsers]}
+            onMentionQueryChange={handleMentionQueryChange}
           />
-          <View style={{ height: insets.bottom || 8 }} />
-        </KeyboardAvoidingView>
+          <Animated.View style={keyboardSpacerStyle} />
+        </View>
       </Animated.View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  // Post preview area — sits at the top, height driven by sheetY
-  postArea: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: colors.background.base,
-  },
-  postScroll: {
-    padding: spacing.base,
-    paddingBottom: spacing.md,
+  backdrop: {
+    backgroundColor: '#000',
   },
 
-  // Comments sheet — sits below the post area
+  // ── Comments sheet ────────────────────────────────────────────────────────
   sheet: {
     position: 'absolute',
     left: 0,
     right: 0,
-    bottom: 0,
     backgroundColor: colors.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
@@ -244,14 +313,12 @@ const styles = StyleSheet.create({
       ios: {
         shadowColor: '#000',
         shadowOffset: { width: 0, height: -3 },
-        shadowOpacity: 0.1,
-        shadowRadius: 12,
+        shadowOpacity: 0.12,
+        shadowRadius: 16,
       },
-      android: { elevation: 8 },
+      android: { elevation: 10 },
     }),
   },
-
-  // Drag handle area (the pannable zone)
   handleArea: {
     paddingTop: spacing.sm,
     paddingHorizontal: spacing.base,
@@ -280,8 +347,6 @@ const styles = StyleSheet.create({
     fontFamily: typography.family.semibold,
     color: colors.textPrimary,
   },
-
-  // Comments content
   loader: {
     flex: 1,
     alignItems: 'center',
@@ -289,8 +354,9 @@ const styles = StyleSheet.create({
     paddingVertical: spacing['3xl'],
   },
   commentsList: {
-    padding: spacing.base,
-    paddingBottom: spacing.md,
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
   },
   empty: {
     alignItems: 'center',

@@ -316,6 +316,14 @@ def notification_list(request):
                     item['thumbnail'] = _post_thumbnail(post) if post else None
                 elif notif.target_type == Notification.TargetType.COMMENT:
                     item['message'] = f"{actor_name} mentioned you in a comment"
+                    if notif.target_id:
+                        from social.models import Comment
+                        try:
+                            mention_comment = Comment.objects.get(id=notif.target_id)
+                            if mention_comment.description:
+                                item['description'] = mention_comment.description
+                        except Comment.DoesNotExist:
+                            pass
                 else:
                     item['message'] = f"{actor_name} mentioned you in a check-in"
 
