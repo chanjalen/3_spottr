@@ -11,7 +11,6 @@ import {
   RefreshControl,
   Modal,
   Animated,
-  PanResponder,
   Share,
   Dimensions,
   Platform,
@@ -127,7 +126,6 @@ export default function ProfileScreen({ navigation, route }: Props) {
   const [calViewerVisible, setCalViewerVisible] = useState(false);
   const [calViewerDays, setCalViewerDays] = useState<CalViewerDay[]>([]);
   const [calViewerDayIdx, setCalViewerDayIdx] = useState(0);
-  const [calCheckinIdx, setCalCheckinIdx] = useState(0);
   const [calLikeState, setCalLikeState] = useState<Record<string, { liked: boolean; count: number }>>({});
   const [calCheckinCommentItem, setCalCheckinCommentItem] = useState<FeedItem | null>(null);
 
@@ -327,15 +325,30 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
   // ── Follow ────────────────────────────────────────────────────────────────────
 
+  // Ref guard prevents spam-clicks racing through before state update commits
+  const followLoadingRef = useRef(false);
+
   const handleFollow = async () => {
-    if (!profile) return;
+    if (!profile || followLoadingRef.current) return;
+    followLoadingRef.current = true;
     setFollowLoading(true);
+    // Optimistic update immediately so UI feels instant
+    const prevFollowing = profile.is_following;
+    const prevCount = profile.follower_count;
+    setProfile((p) =>
+      p ? { ...p, is_following: !prevFollowing, follower_count: prevCount + (prevFollowing ? -1 : 1) } : p,
+    );
     try {
       const res = await toggleFollow(username);
+      // Sync with server truth
       setProfile((p) =>
-        p ? { ...p, is_following: res.following, follower_count: p.follower_count + (res.following ? 1 : -1) } : p,
+        p ? { ...p, is_following: res.following, follower_count: prevCount + (res.following ? 1 : 0) } : p,
       );
+    } catch {
+      // Rollback on error
+      setProfile((p) => p ? { ...p, is_following: prevFollowing, follower_count: prevCount } : p);
     } finally {
+      followLoadingRef.current = false;
       setFollowLoading(false);
     }
   };
@@ -502,25 +515,6 @@ export default function ProfileScreen({ navigation, route }: Props) {
   // ── Calendar viewer: cross-month lazy loading ────────────────────────────────
 
   const calViewerLoadedMonths = useRef<Set<string>>(new Set());
-  // Tracks which day the user is currently viewing so dayIdx stays correct after merging new months
-  const calViewerCurrentDayKey = useRef<string | null>(null);
-
-  // Keep current day key in sync with dayIdx
-  useEffect(() => {
-    if (calViewerDays.length === 0) return;
-    const d = calViewerDays[Math.min(calViewerDayIdx, calViewerDays.length - 1)];
-    if (d) calViewerCurrentDayKey.current = `${d.year}-${d.month}-${d.day}`;
-  }, [calViewerDayIdx, calViewerDays]);
-
-  // When calViewerDays grows (adjacent month loaded), recompute dayIdx to stay on same day
-  useEffect(() => {
-    if (!calViewerCurrentDayKey.current || calViewerDays.length === 0) return;
-    const newIdx = calViewerDays.findIndex(
-      (d) => `${d.year}-${d.month}-${d.day}` === calViewerCurrentDayKey.current,
-    );
-    if (newIdx >= 0 && newIdx !== calViewerDayIdx) setCalViewerDayIdx(newIdx);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [calViewerDays]);
 
   const loadAdjacentCalMonth = useCallback(async (year: number, month: number) => {
     const key = `${year}-${month}`;
@@ -630,6 +624,17 @@ export default function ProfileScreen({ navigation, route }: Props) {
     }));
   }, [posts, profile]);
 
+  // Today's check-ins only — passed to the stories ring viewer
+  const todayCheckins = useMemo(() => {
+    const now = new Date();
+    return checkins.filter((c) => {
+      const d = new Date(c.created_at);
+      return d.getFullYear() === now.getFullYear() &&
+        d.getMonth() === now.getMonth() &&
+        d.getDate() === now.getDate();
+    });
+  }, [checkins]);
+
   // ── Loading/error ─────────────────────────────────────────────────────────────
 
   if (loading) {
@@ -706,6 +711,8 @@ export default function ProfileScreen({ navigation, route }: Props) {
               { borderColor: profile.has_checkin_today ? colors.primary : '#555' },
             ]}
             onPress={() => {
+              // Only block if we know for certain they have no check-in today
+              if (profile.has_checkin_today === false) return;
               if (checkins.length === 0 && !checkinsLoadingRef.current) loadCheckins();
               setCheckinViewerVisible(true);
             }}
@@ -827,10 +834,8 @@ export default function ProfileScreen({ navigation, route }: Props) {
                 // Seed loaded-months so we don't re-fetch what CalendarTab already loaded
                 calViewerLoadedMonths.current.clear();
                 days.forEach((d) => calViewerLoadedMonths.current.add(`${d.year}-${d.month}`));
-                calViewerCurrentDayKey.current = null;
                 setCalViewerDays(days);
                 setCalViewerDayIdx(index);
-                setCalCheckinIdx(0);
                 setCalLikeState({});
                 setCalViewerVisible(true);
               }}
@@ -969,12 +974,8 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
       <CheckinViewer
         visible={checkinViewerVisible}
-        checkins={checkins}
+        checkins={todayCheckins}
         onClose={() => setCheckinViewerVisible(false)}
-        onLoadMore={() => {
-          if (checkinsHasMore && !checkinsLoadingRef.current) loadCheckins(checkinsCursor);
-        }}
-        hasMore={checkinsHasMore}
       />
 
       {/* ── All Posts feed overlay (tab bar stays visible) ─────────────── */}
@@ -1025,22 +1026,18 @@ export default function ProfileScreen({ navigation, route }: Props) {
         <CommentsSheet item={allPostsCommentItem} onClose={() => setAllPostsCommentItem(null)} />
       </Animated.View>
 
-      {/* ── Calendar check-in viewer (floating card, tab bar stays visible) ── */}
+      {/* ── Calendar check-in viewer (FlatList pager, tab bar stays visible) ── */}
       <Animated.View
-        style={[StyleSheet.absoluteFill, styles.calModalBackdrop, { transform: [{ translateY: calViewerAnim }] }]}
+        style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.88)', transform: [{ translateY: calViewerAnim }] }]}
         pointerEvents={calViewerVisible ? 'auto' : 'none'}
       >
-        <Pressable style={StyleSheet.absoluteFill} onPress={() => setCalViewerVisible(false)} />
-
         {calViewerDays.length > 0 && (
-          <CalViewerCard
+          <CalViewerFlatList
             days={calViewerDays}
-            dayIdx={calViewerDayIdx}
-            checkinIdx={calCheckinIdx}
+            initialDayIdx={calViewerDayIdx}
             likeState={calLikeState}
             onClose={() => setCalViewerVisible(false)}
             onDayChange={(idx) => setCalViewerDayIdx(idx)}
-            onCheckinChange={(idx) => setCalCheckinIdx(idx)}
             onLike={handleCalLike}
             onComment={handleCalComment}
           />
@@ -2617,186 +2614,175 @@ const styles = StyleSheet.create({
   },
 });
 
-// ── CalViewerCard ─────────────────────────────────────────────────────────────
-// Extracted so it can use React hooks (PanResponder) for swipe gestures.
-// Left/right swipe: navigate check-ins within the day (or spill to next/prev day).
-// Up/down swipe: navigate between days.
+// ── CalViewerFlatList ─────────────────────────────────────────────────────────
+// FlatList-based pager: vertical scroll = days, horizontal scroll = check-ins.
+// Gives the same continuous scroll feel as the friends/following feed.
 
-type CalViewerCardProps = {
+type CalViewerFlatListProps = {
   days: CalViewerDay[];
-  dayIdx: number;
-  checkinIdx: number;
+  initialDayIdx: number;
   likeState: Record<string, { liked: boolean; count: number }>;
   onClose: () => void;
   onDayChange: (idx: number) => void;
-  onCheckinChange: (idx: number) => void;
   onLike: (checkin: CheckinItem) => void;
   onComment: (checkin: CheckinItem) => void;
 };
 
-function CalViewerCard({ days, dayIdx, checkinIdx, likeState, onClose, onDayChange, onCheckinChange, onLike, onComment }: CalViewerCardProps) {
-  const entry = days[dayIdx];
-  const checkin = entry?.checkins[checkinIdx] ?? entry?.checkins[0];
+function CalViewerFlatList({ days, initialDayIdx, likeState, onClose, onDayChange, onLike, onComment }: CalViewerFlatListProps) {
+  const onDayChangeRef = useRef(onDayChange);
+  useEffect(() => { onDayChangeRef.current = onDayChange; }, [onDayChange]);
 
-  // Stale-closure refs so PanResponder callbacks always read latest values
-  const dayIdxRef = useRef(dayIdx);
-  const checkinIdxRef = useRef(checkinIdx);
-  const daysRef = useRef(days);
-  useEffect(() => { dayIdxRef.current = dayIdx; }, [dayIdx]);
-  useEffect(() => { checkinIdxRef.current = checkinIdx; }, [checkinIdx]);
-  useEffect(() => { daysRef.current = days; }, [days]);
+  // Must be stable — React Native warns if onViewableItemsChanged changes after mount
+  const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
+    if (viewableItems.length > 0) {
+      onDayChangeRef.current(viewableItems[0].index ?? 0);
+    }
+  }).current;
 
-  // dragX/dragY: subtle resistance feedback while finger is held down
-  const dragX = useRef(new Animated.Value(0)).current;
-  const dragY = useRef(new Animated.Value(0)).current;
-  // slideY: spring animation when day changes (new card slides in from top or bottom)
-  const slideY = useRef(new Animated.Value(0)).current;
-  const prevDayRef = useRef(dayIdx);
-
-  useEffect(() => {
-    if (prevDayRef.current === dayIdx) return;
-    const forward = dayIdx > prevDayRef.current; // going to newer day
-    prevDayRef.current = dayIdx;
-    // New card slides in from bottom (forward) or top (backward)
-    slideY.setValue(forward ? 300 : -300);
-    Animated.spring(slideY, { toValue: 0, useNativeDriver: true, tension: 110, friction: 14 }).start();
-  }, [dayIdx]);
-
-  const panResponder = useRef(
-    PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 10 || Math.abs(g.dy) > 10,
-      onPanResponderMove: (_, g) => {
-        dragX.setValue(g.dx * 0.18);
-        dragY.setValue(g.dy * 0.12);
-      },
-      onPanResponderRelease: (_, g) => {
-        const idx = dayIdxRef.current;
-        const cIdx = checkinIdxRef.current;
-        const allDays = daysRef.current;
-        const curEntry = allDays[idx];
-        const absX = Math.abs(g.dx);
-        const absY = Math.abs(g.dy);
-
-        if (absX > absY && absX > 40) {
-          // Horizontal swipe → only navigate check-ins within this day; ignore if single check-in
-          Animated.spring(dragX, { toValue: 0, useNativeDriver: true, tension: 200, friction: 20 }).start();
-          Animated.spring(dragY, { toValue: 0, useNativeDriver: true, tension: 200, friction: 20 }).start();
-          if (curEntry.checkins.length > 1) {
-            if (g.dx < 0 && cIdx < curEntry.checkins.length - 1) onCheckinChange(cIdx + 1);
-            else if (g.dx > 0 && cIdx > 0) onCheckinChange(cIdx - 1);
-          }
-        } else if (absY > absX && absY > 50) {
-          // Vertical swipe → navigate between days; snap drag instantly, slideY handles animation
-          dragX.setValue(0);
-          dragY.setValue(0);
-          if (g.dy < 0 && idx < allDays.length - 1) {
-            onDayChange(idx + 1);
-            onCheckinChange(0);
-          } else if (g.dy > 0 && idx > 0) {
-            onDayChange(idx - 1);
-            onCheckinChange(0);
-          }
-        } else {
-          // Not enough gesture — spring back
-          Animated.spring(dragX, { toValue: 0, useNativeDriver: true, tension: 200, friction: 20 }).start();
-          Animated.spring(dragY, { toValue: 0, useNativeDriver: true, tension: 200, friction: 20 }).start();
-        }
-      },
-      onPanResponderTerminate: () => {
-        dragX.setValue(0);
-        dragY.setValue(0);
-      },
-    })
-  ).current;
-
-  if (!checkin) return null;
-  const likeData = likeState[checkin.id] ?? { liked: checkin.user_liked, count: checkin.like_count };
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
 
   return (
-    <View style={styles.calModalOuter} pointerEvents="box-none">
-      <Animated.View
-        {...panResponder.panHandlers}
-        style={[styles.calModalCard, { transform: [{ translateX: dragX }, { translateY: Animated.add(dragY, slideY) }] }]}
-      >
-        {/* Photo */}
-        {checkin.photo_url ? (
-          <Image source={{ uri: checkin.photo_url }} style={StyleSheet.absoluteFill} contentFit="cover" />
-        ) : (
-          <View style={[StyleSheet.absoluteFill, styles.calModalNoPhoto]}>
-            <Feather name="camera" size={48} color="rgba(255,255,255,0.2)" />
+    <FlatList
+      data={days}
+      keyExtractor={(d) => `${d.year}-${d.month}-${d.day}`}
+      pagingEnabled
+      showsVerticalScrollIndicator={false}
+      decelerationRate="fast"
+      initialScrollIndex={initialDayIdx > 0 ? initialDayIdx : undefined}
+      getItemLayout={(_, index) => ({ length: SCREEN_HEIGHT, offset: SCREEN_HEIGHT * index, index })}
+      maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
+      onViewableItemsChanged={onViewableItemsChanged}
+      viewabilityConfig={viewabilityConfig}
+      renderItem={({ item: day }) => (
+        <CalDayPage
+          day={day}
+          likeState={likeState}
+          onClose={onClose}
+          onLike={onLike}
+          onComment={onComment}
+        />
+      )}
+    />
+  );
+}
+
+// One full-screen page per day. If the day has multiple check-ins, an inner
+// horizontal FlatList lets the user swipe between them.
+function CalDayPage({ day, likeState, onClose, onLike, onComment }: {
+  day: CalViewerDay;
+  likeState: Record<string, { liked: boolean; count: number }>;
+  onClose: () => void;
+  onLike: (c: CheckinItem) => void;
+  onComment: (c: CheckinItem) => void;
+}) {
+  if (day.checkins.length === 1) {
+    return (
+      <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, alignItems: 'center', justifyContent: 'center' }}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <CalCheckinCard
+          checkin={day.checkins[0]}
+          day={day}
+          checkinIdx={0}
+          totalCheckins={1}
+          likeState={likeState}
+          onClose={onClose}
+          onLike={onLike}
+          onComment={onComment}
+        />
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT }}>
+      <FlatList
+        horizontal
+        pagingEnabled
+        data={day.checkins}
+        keyExtractor={(c) => c.id}
+        showsHorizontalScrollIndicator={false}
+        decelerationRate="fast"
+        getItemLayout={(_, index) => ({ length: SCREEN_WIDTH, offset: SCREEN_WIDTH * index, index })}
+        renderItem={({ item: checkin, index }) => (
+          <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, alignItems: 'center', justifyContent: 'center' }}>
+            <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+            <CalCheckinCard
+              checkin={checkin}
+              day={day}
+              checkinIdx={index}
+              totalCheckins={day.checkins.length}
+              likeState={likeState}
+              onClose={onClose}
+              onLike={onLike}
+              onComment={onComment}
+            />
           </View>
         )}
+      />
+    </View>
+  );
+}
 
-        {/* Top gradient: date */}
-        <LinearGradient colors={['rgba(0,0,0,0.6)', 'transparent']} style={styles.calModalTopGrad}>
-          <Text style={styles.calModalDateText}>{MONTHS[entry.month]} {entry.day}, {entry.year}</Text>
-          {entry.checkins.length > 1 && (
-            <Text style={styles.calModalCheckinOf}>{checkinIdx + 1} / {entry.checkins.length}</Text>
-          )}
-        </LinearGradient>
-
-        {/* Bottom gradient: details */}
-        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.82)']} style={styles.calModalBottomGrad}>
-          {checkin.workout_type ? <Text style={styles.calModalWorkoutType}>{checkin.workout_type}</Text> : null}
-          {checkin.location_name ? (
-            <View style={styles.calModalLocRow}>
-              <Feather name="map-pin" size={12} color="rgba(255,255,255,0.75)" />
-              <Text style={styles.calModalLocation}>{checkin.location_name}</Text>
-            </View>
-          ) : null}
-          {checkin.description ? <Text style={styles.calModalDesc}>{checkin.description}</Text> : null}
-        </LinearGradient>
-
-        {/* Right-side action buttons */}
-        <View style={styles.calModalActions}>
-          <Pressable style={styles.calModalAction} onPress={() => onLike(checkin)}>
-            <Feather name="heart" size={26} color={likeData.liked ? colors.semantic.like : '#fff'} />
-            {likeData.count > 0 && <Text style={styles.calModalActionCount}>{likeData.count}</Text>}
-          </Pressable>
-          <Pressable style={styles.calModalAction} onPress={() => onComment(checkin)}>
-            <Feather name="message-circle" size={26} color="#fff" />
-            {checkin.comment_count > 0 && <Text style={styles.calModalActionCount}>{checkin.comment_count}</Text>}
-          </Pressable>
-          <Pressable
-            style={styles.calModalAction}
-            onPress={() => Share.share({ message: `Check out this workout on Spottr!` })}
-          >
-            <Feather name="share" size={24} color="#fff" />
-          </Pressable>
-        </View>
-
-        {/* X close button */}
-        <Pressable style={styles.calModalXBtn} onPress={onClose}>
-          <Feather name="x" size={18} color="#fff" />
-        </Pressable>
-      </Animated.View>
-
-      {/* Check-in arrows — only shown when this day has multiple check-ins */}
-      {entry.checkins.length > 1 && (
-        <View style={styles.calModalDateNav}>
-          <Pressable
-            style={[styles.calModalCardNavBtn, checkinIdx === 0 && { opacity: 0.3 }]}
-            disabled={checkinIdx === 0}
-            onPress={() => onCheckinChange(checkinIdx - 1)}
-          >
-            <Feather name="chevron-left" size={20} color="#fff" />
-          </Pressable>
-          <View style={styles.calModalCheckinDots}>
-            {entry.checkins.map((_, i) => (
-              <Pressable key={i} onPress={() => onCheckinChange(i)}>
-                <View style={[styles.calModalSmDot, i === checkinIdx && styles.calModalSmDotActive]} />
-              </Pressable>
-            ))}
-          </View>
-          <Pressable
-            style={[styles.calModalCardNavBtn, checkinIdx === entry.checkins.length - 1 && { opacity: 0.3 }]}
-            disabled={checkinIdx === entry.checkins.length - 1}
-            onPress={() => onCheckinChange(checkinIdx + 1)}
-          >
-            <Feather name="chevron-right" size={20} color="#fff" />
-          </Pressable>
+// The actual bezel card shown for a single check-in.
+function CalCheckinCard({ checkin, day, checkinIdx, totalCheckins, likeState, onClose, onLike, onComment }: {
+  checkin: CheckinItem;
+  day: CalViewerDay;
+  checkinIdx: number;
+  totalCheckins: number;
+  likeState: Record<string, { liked: boolean; count: number }>;
+  onClose: () => void;
+  onLike: (c: CheckinItem) => void;
+  onComment: (c: CheckinItem) => void;
+}) {
+  const likeData = likeState[checkin.id] ?? { liked: checkin.user_liked, count: checkin.like_count };
+  return (
+    <View style={styles.calModalCard}>
+      {checkin.photo_url ? (
+        <Image source={{ uri: checkin.photo_url }} style={StyleSheet.absoluteFill} contentFit="cover" />
+      ) : (
+        <View style={[StyleSheet.absoluteFill, styles.calModalNoPhoto]}>
+          <Feather name="camera" size={48} color="rgba(255,255,255,0.2)" />
         </View>
       )}
+
+      <LinearGradient colors={['rgba(0,0,0,0.6)', 'transparent']} style={styles.calModalTopGrad}>
+        <Text style={styles.calModalDateText}>{MONTHS[day.month]} {day.day}, {day.year}</Text>
+        {totalCheckins > 1 && (
+          <Text style={styles.calModalCheckinOf}>{checkinIdx + 1} / {totalCheckins}</Text>
+        )}
+      </LinearGradient>
+
+      <LinearGradient colors={['transparent', 'rgba(0,0,0,0.82)']} style={styles.calModalBottomGrad}>
+        {checkin.workout_type ? <Text style={styles.calModalWorkoutType}>{checkin.workout_type}</Text> : null}
+        {checkin.location_name ? (
+          <View style={styles.calModalLocRow}>
+            <Feather name="map-pin" size={12} color="rgba(255,255,255,0.75)" />
+            <Text style={styles.calModalLocation}>{checkin.location_name}</Text>
+          </View>
+        ) : null}
+        {checkin.description ? <Text style={styles.calModalDesc}>{checkin.description}</Text> : null}
+      </LinearGradient>
+
+      <View style={styles.calModalActions}>
+        <Pressable style={styles.calModalAction} onPress={() => onLike(checkin)}>
+          <Feather name="heart" size={26} color={likeData.liked ? colors.semantic.like : '#fff'} />
+          {likeData.count > 0 && <Text style={styles.calModalActionCount}>{likeData.count}</Text>}
+        </Pressable>
+        <Pressable style={styles.calModalAction} onPress={() => onComment(checkin)}>
+          <Feather name="message-circle" size={26} color="#fff" />
+          {checkin.comment_count > 0 && <Text style={styles.calModalActionCount}>{checkin.comment_count}</Text>}
+        </Pressable>
+        <Pressable
+          style={styles.calModalAction}
+          onPress={() => Share.share({ message: `Check out this workout on Spottr!` })}
+        >
+          <Feather name="share" size={24} color="#fff" />
+        </Pressable>
+      </View>
+
+      <Pressable style={styles.calModalXBtn} onPress={onClose}>
+        <Feather name="x" size={18} color="#fff" />
+      </Pressable>
     </View>
   );
 }
