@@ -1467,9 +1467,18 @@ def add_comment_reply_view(request, comment_id):
             'error': 'You have reached the maximum number of replies (15) on this comment'
         }, status=400)
 
+    # Walk up to the root comment to inherit its post/quick_workout.
+    # Replies created without this would have post=NULL and be invisible
+    # to every comment_count query (which filters by post=<id>).
+    root = parent_comment
+    while root.parent_comment_id:
+        root = root.parent_comment
+
     # Create the reply
     reply = Comment.objects.create(
         parent_comment=parent_comment,
+        post=root.post,
+        quick_workout=root.quick_workout,
         user=request.user,
         description=text,
     )

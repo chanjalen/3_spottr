@@ -4,6 +4,7 @@ import {
   Text,
   Pressable,
   StyleSheet,
+  Dimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { Feather } from '@expo/vector-icons';
@@ -168,12 +169,37 @@ function MessageRowInner({
                 )}
               </View>
             )}
+            {item.shared_post && (
+              <View style={[styles.sharedPostCard, isOwn ? styles.sharedPostCardOwn : styles.sharedPostCardOther]}>
+                {item.shared_post.photo_url && (
+                  <Image
+                    source={{ uri: item.shared_post.photo_url }}
+                    style={styles.sharedPostPhoto}
+                    contentFit="cover"
+                  />
+                )}
+                <View style={styles.sharedPostBody}>
+                  <Text style={[styles.sharedPostAuthor, isOwn && styles.sharedPostAuthorOwn]} numberOfLines={1}>
+                    @{item.shared_post.author_username ?? 'unknown'}
+                  </Text>
+                  {!!item.shared_post.description && (
+                    <Text style={[styles.sharedPostDesc, isOwn && styles.sharedPostDescOwn]} numberOfLines={2}>
+                      {item.shared_post.description}
+                    </Text>
+                  )}
+                  <Text style={[styles.sharedPostMeta, isOwn && styles.sharedPostMetaOwn]}>
+                    {item.shared_post.like_count} likes · {item.shared_post.comment_count} comments
+                  </Text>
+                </View>
+              </View>
+            )}
             {!!item.content && (
               <View
                 style={[
                   styles.bubble,
                   isOwn ? styles.bubbleOwn : styles.bubbleOther,
                   isFailed && styles.bubbleFailed,
+                  item.shared_post ? styles.bubbleWithPost : null,
                 ]}
               >
                 <MentionText
@@ -329,4 +355,53 @@ const styles = StyleSheet.create({
   reactionEmoji: { fontSize: 13 },
   reactionCount: { fontSize: 11, color: colors.textMuted },
   reactionCountActive: { color: colors.primary, fontWeight: '600' },
+
+  // ── Shared post card ──────────────────────────────────────────────────────
+  sharedPostCard: {
+    width: Dimensions.get('window').width * 0.62,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+  },
+  sharedPostCardOwn: {
+    borderColor: 'rgba(255,255,255,0.35)',
+    backgroundColor: 'rgba(255,255,255,0.15)',
+  },
+  sharedPostCardOther: {
+    borderColor: colors.border.default,
+    backgroundColor: colors.background.elevated,
+  },
+  sharedPostPhoto: {
+    width: '100%',
+    height: 120,
+  },
+  sharedPostBody: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs + 2,
+    gap: 2,
+  },
+  sharedPostAuthor: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.semibold,
+    color: colors.textSecondary,
+  },
+  sharedPostAuthorOwn: { color: 'rgba(255,255,255,0.8)' },
+  sharedPostDesc: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.textPrimary,
+    lineHeight: 16,
+  },
+  sharedPostDescOwn: { color: 'rgba(255,255,255,0.95)' },
+  sharedPostMeta: {
+    fontSize: 10,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  sharedPostMetaOwn: { color: 'rgba(255,255,255,0.6)' },
+  bubbleWithPost: {
+    borderTopLeftRadius: 4,
+    borderTopRightRadius: 4,
+  },
 });

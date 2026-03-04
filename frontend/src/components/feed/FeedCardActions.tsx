@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, Pressable, Share, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -17,8 +17,7 @@ interface FeedCardActionsProps {
   userLiked: boolean;
   onLike: () => void;
   onComment: () => void;
-  shareUrl: string;
-  shareTitle?: string;
+  onShare: () => void;
 }
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -29,8 +28,7 @@ export default function FeedCardActions({
   userLiked,
   onLike,
   onComment,
-  shareUrl,
-  shareTitle,
+  onShare,
 }: FeedCardActionsProps) {
   const likeScale = useSharedValue(1);
 
@@ -47,17 +45,9 @@ export default function FeedCardActions({
     onLike();
   };
 
-  const handleShare = async () => {
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      await Share.share({
-        message: shareTitle ? `${shareTitle} — ${shareUrl}` : shareUrl,
-        url: shareUrl, // iOS only — opens share sheet with URL
-        title: shareTitle ?? 'Check this out on Spottr',
-      });
-    } catch {
-      // User cancelled — ignore
-    }
+  const handleShare = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onShare();
   };
 
   return (
@@ -98,7 +88,7 @@ export default function FeedCardActions({
         onPress={handleShare}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Feather name="share" size={17} color={colors.textMuted} />
+        <Feather name="send" size={17} color={colors.textMuted} />
       </Pressable>
     </View>
   );

@@ -2,6 +2,8 @@ from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
+from rest_framework.views import APIView
+from django.db import models
 from django.shortcuts import get_object_or_404
 
 from social.models import Follow
@@ -595,3 +597,201 @@ def poll_voters(request, poll_id):
         options_data.append({'id': str(opt.id), 'text': opt.text, 'voters': voters})
 
     return Response({'options': options_data})
+
+
+# ── Share ──────────────────────────────────────────────────────────────────────
+
+
+class ShareRecipientsView(APIView):
+    """
+    GET /api/social/share/recipients/?q=
+    Returns friends, group chats, and orgs the user can share a post to.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        from accounts.models import User
+        from groups.models import Group, GroupMember
+        from organizations.models import Organization, OrgMember
+        from messaging.models import InboxEntry
+
+        q = (request.query_params.get('q') or '').strip()[:100]
+
+        # Mutual-follow ids (needed for both paths)
+        my_following_ids = set(
+            Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
+        )
+        my_follower_ids = set(
+            Follow.objects.filter(following=request.user).values_list('follower_id', flat=True)
+        )
+        mutual_ids = my_following_ids & my_follower_ids
+
+        if q:
+            # Full filtered search
+            friends_qs = (
+                User.objects.filter(id__in=mutual_ids)
+                .filter(models.Q(username__icontains=q) | models.Q(display_name__icontains=q))
+                [:20]
+            )
+            member_group_ids = GroupMember.objects.filter(
+                user=request.user
+            ).values_list('group_id', flat=True)
+            groups_qs = Group.objects.filter(id__in=member_group_ids, name__icontains=q)[:10]
+            admin_org_ids = OrgMember.objects.filter(
+                user=request.user, role__in=['admin', 'creator']
+            ).values_list('org_id', flat=True)
+            orgs_qs = Organization.objects.filter(id__in=admin_org_ids, name__icontains=q)[:10]
+        else:
+            # Default: top 5 most recently messaged friends, top 3 groups, all admin orgs
+            recent_partner_ids = list(
+                InboxEntry.objects
+                .filter(user=request.user, partner__isnull=False)
+                .order_by('-latest_message_at')
+                .values_list('partner_id', flat=True)[:20]
+            )
+            # Keep only mutual follows, preserve recency order
+            ordered_friend_ids = [i for i in recent_partner_ids if i in mutual_ids][:5]
+            friends_qs = sorted(
+                User.objects.filter(id__in=ordered_friend_ids),
+                key=lambda u: ordered_friend_ids.index(u.id)
+            )
+
+            recent_group_ids = list(
+                InboxEntry.objects
+                .filter(user=request.user, group__isnull=False)
+                .order_by('-latest_message_at')
+                .values_list('group_id', flat=True)[:3]
+            )
+            groups_qs = sorted(
+                Group.objects.filter(id__in=recent_group_ids),
+                key=lambda g: recent_group_ids.index(g.id)
+            )
+
+            admin_org_ids = list(
+                OrgMember.objects.filter(
+                    user=request.user, role__in=['admin', 'creator']
+                ).values_list('org_id', flat=True)
+            )
+            orgs_qs = Organization.objects.filter(id__in=admin_org_ids)
+
+        friends_data = [
+            {
+                'id': str(u.id),
+                'display_name': getattr(u, 'display_name', '') or u.username,
+                'username': u.username,
+                'avatar_url': u.avatar_url if hasattr(u, 'avatar_url') else None,
+                'type': 'user',
+            }
+            for u in friends_qs
+        ]
+        groups_data = [
+            {
+                'id': str(g.id),
+                'name': g.name,
+                'avatar_url': g.avatar_url if hasattr(g, 'avatar_url') else None,
+                'type': 'group',
+            }
+            for g in groups_qs
+        ]
+        orgs_data = [
+            {
+                'id': str(o.id),
+                'name': o.name,
+                'avatar_url': o.avatar_url if hasattr(o, 'avatar_url') else None,
+                'type': 'org',
+            }
+            for o in orgs_qs
+        ]
+
+        return Response({'friends': friends_data, 'groups': groups_data, 'orgs': orgs_data})
+
+
+class SharePostView(APIView):
+    """
+    POST /api/social/share/send/
+    Body: { post_id, item_type, recipient_ids, group_ids, org_ids, message }
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from messaging.services import send_dm, send_group_message
+        from organizations.models import Organization, OrgMember, Announcement
+
+        post_id = (request.data.get('post_id') or '').strip()
+        item_type = (request.data.get('item_type') or 'post').strip()
+        recipient_ids = request.data.get('recipient_ids') or []
+        group_ids = request.data.get('group_ids') or []
+        org_ids = request.data.get('org_ids') or []
+        message = (request.data.get('message') or '').strip()
+
+        if not post_id:
+            return Response({'error': 'post_id is required'}, status=400)
+
+        # Resolve post or checkin
+        shared_post_id = None
+        shared_checkin_id = None
+        if item_type == 'post':
+            from social.models import Post
+            try:
+                Post.objects.get(id=post_id)
+                shared_post_id = post_id
+            except Post.DoesNotExist:
+                return Response({'error': 'Post not found'}, status=404)
+        else:
+            from social.models import QuickWorkout
+            try:
+                QuickWorkout.objects.get(id=post_id)
+                shared_checkin_id = post_id
+            except QuickWorkout.DoesNotExist:
+                return Response({'error': 'Check-in not found'}, status=404)
+
+        sent_count = 0
+        errors = []
+
+        # DMs to individual friends
+        for rid in recipient_ids:
+            try:
+                send_dm(
+                    sender=request.user,
+                    recipient_id=rid,
+                    content=message,
+                    post_id=shared_post_id,
+                    quick_workout_id=shared_checkin_id,
+                )
+                sent_count += 1
+            except Exception as e:
+                errors.append(str(e))
+
+        # Group messages
+        for gid in group_ids:
+            try:
+                send_group_message(
+                    sender=request.user,
+                    group_id=gid,
+                    content=message,
+                    post_id=shared_post_id,
+                    quick_workout_id=shared_checkin_id,
+                )
+                sent_count += 1
+            except Exception as e:
+                errors.append(str(e))
+
+        # Org announcements — only if user is admin/creator
+        for oid in org_ids:
+            try:
+                membership = OrgMember.objects.get(
+                    org_id=oid, user=request.user, role__in=['admin', 'creator']
+                )
+                content = message if message else f'Shared a {item_type}'
+                Announcement.objects.create(
+                    org=membership.org,
+                    author=request.user,
+                    content=content,
+                )
+                sent_count += 1
+            except OrgMember.DoesNotExist:
+                errors.append(f'Not an admin of org {oid}')
+            except Exception as e:
+                errors.append(str(e))
+
+        return Response({'sent_count': sent_count, 'errors': errors})
