@@ -1715,25 +1715,6 @@ function CalendarTab({
     setCheckins([]);
     fetchUserCheckins(profileUsername, undefined, month + 1, year)
       .then((res) => setCheckins(res.items))
-    setRestDayNums(new Set());
-    setWorkoutDayNums(new Set());
-    setCalendarPostsData([]);
-    fetchCalendarPosts(year, month + 1, profileUsername)
-      .then((res) => {
-        const restNums = new Set<number>();
-        const workoutNums = new Set<number>();
-        for (const p of res.posts) {
-          const day = parseInt(p.date.split('-')[2], 10);
-          if (p.type === 'rest') {
-            restNums.add(day);
-          } else if (p.type === 'checkin') {
-            workoutNums.add(day);
-          }
-        }
-        setRestDayNums(restNums);
-        setWorkoutDayNums(workoutNums);
-        setCalendarPostsData(res.posts);
-      })
       .catch(() => {});
   }, [year, month, profileUsername]);
 
