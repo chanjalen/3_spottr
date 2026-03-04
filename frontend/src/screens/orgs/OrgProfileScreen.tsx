@@ -38,10 +38,17 @@ import {
   joinOrgViaCode,
   requestJoinOrg,
   fetchOrgMemberActivity,
+  fetchOrgMemberLogs,
+  fetchOrgMemberStatus,
   OrgDetail,
   OrgMember,
   OrgJoinRequest,
   MemberActivityItem,
+  OrgLogItem,
+  OrgLogType,
+  MemberStatusItem,
+  TodayCheckin,
+  TodayWorkout,
 } from '../../api/organizations';
 import RangeCalendar from '../../components/common/RangeCalendar';
 import { useAuth } from '../../store/AuthContext';
@@ -54,6 +61,7 @@ type Props = {
 };
 
 type ProfileTab = 'Info' | 'Admin' | 'Activity';
+type ActivitySubTab = 'Logs' | 'Users' | 'Stats';
 type SettingsTab = 'info' | 'danger';
 
 function toDateStr(d: Date): string {
@@ -65,6 +73,15 @@ function toDateStr(d: Date): string {
 
 const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function fmtShortDate(d: Date): string {
+  return `${SHORT_MONTHS[d.getMonth()]} ${d.getDate()}`;
+}
+
+function fmtRelativeTime(isoStr: string): string {
+  const diff = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000);
+  if (diff < 60) return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+  const d = new Date(isoStr);
   return `${SHORT_MONTHS[d.getMonth()]} ${d.getDate()}`;
 }
 
@@ -99,6 +116,9 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
   };
 
   // ── Activity tab ─────────────────────────────────────────────────────────
+  const [activitySubTab, setActivitySubTab] = useState<ActivitySubTab>('Logs');
+
+  // Stats sub-tab
   const [activityData, setActivityData] = useState<MemberActivityItem[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
   const [activityQuery, setActivityQuery] = useState('');
@@ -108,6 +128,27 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [pendingStart, setPendingStart] = useState<Date | null>(null);
   const [pendingEnd, setPendingEnd] = useState<Date | null>(null);
+
+  // Logs sub-tab
+  const [logs, setLogs] = useState<OrgLogItem[]>([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logsNextCursor, setLogsNextCursor] = useState<string | null>(null);
+  const [logsFetchingMore, setLogsFetchingMore] = useState(false);
+  // Log filters
+  const [logTypeFilter, setLogTypeFilter] = useState<OrgLogType>('all');
+  const [logStartDate, setLogStartDate] = useState<Date | null>(null);
+  const [logEndDate, setLogEndDate] = useState<Date | null>(null);
+  const [logCalOpen, setLogCalOpen] = useState(false);
+  const [logPendingStart, setLogPendingStart] = useState<Date | null>(null);
+  const [logPendingEnd, setLogPendingEnd] = useState<Date | null>(null);
+
+  // Users sub-tab
+  const [memberStatus, setMemberStatus] = useState<MemberStatusItem[]>([]);
+  const [memberStatusLoading, setMemberStatusLoading] = useState(false);
+  // Detail modal for Users tab
+  const [detailModal, setDetailModal] = useState<
+    { kind: 'checkin'; data: TodayCheckin } | { kind: 'workout'; data: TodayWorkout } | null
+  >(null);
 
   // ── Join (public) / Request (private) ───────────────────────────────────
   const [requested, setRequested] = useState(false);
@@ -174,11 +215,58 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
     }
   }, [orgId]);
 
+  const loadLogs = useCallback(async (
+    cursor?: string,
+    type: OrgLogType = 'all',
+    start: Date | null = null,
+    end: Date | null = null,
+  ) => {
+    if (!cursor) setLogsLoading(true);
+    else setLogsFetchingMore(true);
+    try {
+      const res = await fetchOrgMemberLogs(
+        orgId, cursor,
+        start ? toDateStr(start) : undefined,
+        end ? toDateStr(end) : undefined,
+        type,
+      );
+      setLogs(prev => cursor ? [...prev, ...res.items] : res.items);
+      setLogsNextCursor(res.next_cursor);
+    } catch {
+      // ignore
+    } finally {
+      setLogsLoading(false);
+      setLogsFetchingMore(false);
+    }
+  }, [orgId]);
+
+  const loadMemberStatus = useCallback(async () => {
+    setMemberStatusLoading(true);
+    try {
+      const data = await fetchOrgMemberStatus(orgId);
+      setMemberStatus(data);
+    } catch {
+      // ignore
+    } finally {
+      setMemberStatusLoading(false);
+    }
+  }, [orgId]);
+
   // Load admin data when switching to Admin/Activity tab
   const handleTabChange = (tab: ProfileTab) => {
     setActiveTab(tab);
     if (tab === 'Admin' && isAdmin) loadAdminData();
-    if (tab === 'Activity' && isAdmin) loadActivityData(actStart, actEnd);
+    if (tab === 'Activity' && isAdmin) {
+      setActivitySubTab('Logs');
+      loadLogs(undefined, logTypeFilter, logStartDate, logEndDate);
+    }
+  };
+
+  const handleActivitySubTabChange = (sub: ActivitySubTab) => {
+    setActivitySubTab(sub);
+    if (sub === 'Logs' && logs.length === 0) loadLogs(undefined, logTypeFilter, logStartDate, logEndDate);
+    if (sub === 'Users' && memberStatus.length === 0) loadMemberStatus();
+    if (sub === 'Stats' && activityData.length === 0) loadActivityData(actStart, actEnd);
   };
 
   // ── Join requests ────────────────────────────────────────────────────────
@@ -578,7 +666,290 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
 
   // ── Activity tab ─────────────────────────────────────────────────────────
 
-  const renderActivityTab = () => {
+  const renderLogsTab = () => {
+    const logDateLabel =
+      logStartDate && logEndDate ? `${fmtShortDate(logStartDate)} – ${fmtShortDate(logEndDate)}`
+      : logStartDate ? `From ${fmtShortDate(logStartDate)}`
+      : logEndDate ? `Until ${fmtShortDate(logEndDate)}`
+      : 'All time';
+
+    const typeOptions: { key: OrgLogType; label: string }[] = [
+      { key: 'all', label: 'All' },
+      { key: 'checkin', label: 'Check-ins' },
+      { key: 'workout', label: 'Workouts' },
+      { key: 'post', label: 'Posts' },
+    ];
+
+    return (
+      <View style={{ flex: 1 }}>
+        {/* Type filter chips */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.logFilterRow}>
+          {typeOptions.map(opt => (
+            <Pressable
+              key={opt.key}
+              style={[styles.logFilterChip, logTypeFilter === opt.key && styles.logFilterChipActive]}
+              onPress={() => {
+                setLogTypeFilter(opt.key);
+                setLogs([]);
+                setLogsNextCursor(null);
+                loadLogs(undefined, opt.key, logStartDate, logEndDate);
+              }}
+            >
+              <Text style={[styles.logFilterChipText, logTypeFilter === opt.key && styles.logFilterChipTextActive]}>
+                {opt.label}
+              </Text>
+            </Pressable>
+          ))}
+          {/* Date chip */}
+          <Pressable
+            style={[styles.logFilterChip, (logStartDate || logEndDate) && styles.logFilterChipActive]}
+            onPress={() => { setLogPendingStart(logStartDate); setLogPendingEnd(logEndDate); setLogCalOpen(true); }}
+          >
+            <Feather name="calendar" size={12} color={(logStartDate || logEndDate) ? '#fff' : colors.textSecondary} />
+            <Text style={[styles.logFilterChipText, (logStartDate || logEndDate) && styles.logFilterChipTextActive]}>
+              {logDateLabel}
+            </Text>
+          </Pressable>
+        </ScrollView>
+
+        {logsLoading ? (
+          <ActivityIndicator color={colors.primary} style={{ marginTop: 32 }} />
+        ) : (
+          <FlatList
+            data={logs}
+            keyExtractor={item => item.id}
+            contentContainerStyle={{ paddingHorizontal: spacing.base, paddingBottom: 120 }}
+            ListEmptyComponent={<Text style={styles.actEmpty}>No activity yet.</Text>}
+            onEndReached={() => {
+              if (logsNextCursor && !logsFetchingMore) loadLogs(logsNextCursor, logTypeFilter, logStartDate, logEndDate);
+            }}
+            onEndReachedThreshold={0.3}
+            ListFooterComponent={logsFetchingMore ? <ActivityIndicator color={colors.primary} style={{ marginVertical: 12 }} /> : null}
+            renderItem={({ item }) => (
+              <Pressable
+                style={styles.logCard}
+                onPress={() => navigation.navigate('Profile', { username: item.username })}
+              >
+                <Avatar uri={item.avatar_url} name={item.display_name} size={36} />
+                <View style={styles.logBody}>
+                  <View style={styles.logHeader}>
+                    <Text style={styles.logName}>{item.display_name}</Text>
+                    <Text style={styles.logTime}>{fmtRelativeTime(item.created_at)}</Text>
+                  </View>
+                  {item.type === 'checkin' && (
+                    <>
+                      <View style={styles.logBadge}>
+                        <Feather name="check-circle" size={11} color="#10B981" />
+                        <Text style={styles.logBadgeText}>Checked in</Text>
+                        {!!item.workout_type && (
+                          <Text style={styles.logBadgeSub}> · {item.workout_type.replace(/_/g, ' ')}</Text>
+                        )}
+                      </View>
+                      {!!item.description && <Text style={styles.logDesc} numberOfLines={2}>{item.description}</Text>}
+                      {!!item.location_name && (
+                        <View style={styles.logLocation}>
+                          <Feather name="map-pin" size={11} color={colors.textMuted} />
+                          <Text style={styles.logLocationText}>{item.location_name}</Text>
+                        </View>
+                      )}
+                    </>
+                  )}
+                  {item.type === 'workout' && (
+                    <>
+                      <View style={styles.logBadge}>
+                        <Feather name="activity" size={11} color={colors.primary} />
+                        <Text style={[styles.logBadgeText, { color: colors.primary }]}>Logged workout</Text>
+                      </View>
+                      <Text style={styles.logDesc}>
+                        {item.workout_name}{item.duration_minutes != null ? ` · ${item.duration_minutes}min` : ''}
+                      </Text>
+                    </>
+                  )}
+                  {item.type === 'post' && (
+                    <>
+                      <View style={styles.logBadge}>
+                        <Feather name="file-text" size={11} color={colors.textSecondary} />
+                        <Text style={[styles.logBadgeText, { color: colors.textSecondary }]}>Posted</Text>
+                      </View>
+                      {!!item.description && <Text style={styles.logDesc} numberOfLines={2}>{item.description}</Text>}
+                    </>
+                  )}
+                </View>
+              </Pressable>
+            )}
+          />
+        )}
+
+        {/* Log date filter calendar modal */}
+        <Modal visible={logCalOpen} transparent animationType="fade" onRequestClose={() => setLogCalOpen(false)}>
+          <Pressable style={styles.calOverlay} onPress={() => setLogCalOpen(false)}>
+            <Pressable style={styles.calCard} onPress={e => e.stopPropagation()}>
+              <View style={styles.calHeader}>
+                <Text style={styles.calTitle}>Filter by Date</Text>
+                <Pressable onPress={() => setLogCalOpen(false)}>
+                  <Feather name="x" size={18} color={colors.textSecondary} />
+                </Pressable>
+              </View>
+              <RangeCalendar
+                startDate={logPendingStart}
+                endDate={logPendingEnd}
+                onChange={(s, e) => { setLogPendingStart(s); setLogPendingEnd(e); }}
+              />
+              <View style={styles.calActions}>
+                <Pressable
+                  style={[styles.calActionBtn, styles.calClearBtn]}
+                  onPress={() => {
+                    setLogStartDate(null); setLogEndDate(null);
+                    setLogPendingStart(null); setLogPendingEnd(null);
+                    setLogCalOpen(false);
+                    setLogs([]); setLogsNextCursor(null);
+                    loadLogs(undefined, logTypeFilter, null, null);
+                  }}
+                >
+                  <Text style={styles.calClearText}>Clear</Text>
+                </Pressable>
+                <Pressable style={[styles.calActionBtn, styles.calCancelBtn]} onPress={() => setLogCalOpen(false)}>
+                  <Text style={styles.calCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.calActionBtn, styles.calApplyBtn]}
+                  onPress={() => {
+                    setLogStartDate(logPendingStart); setLogEndDate(logPendingEnd);
+                    setLogCalOpen(false);
+                    setLogs([]); setLogsNextCursor(null);
+                    loadLogs(undefined, logTypeFilter, logPendingStart, logPendingEnd);
+                  }}
+                >
+                  <Text style={styles.calApplyText}>Apply</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      </View>
+    );
+  };
+
+  const renderUsersTab = () => {
+    if (memberStatusLoading) {
+      return <ActivityIndicator color={colors.primary} style={{ marginTop: 32 }} />;
+    }
+    return (
+      <>
+        <FlatList
+          data={memberStatus}
+          keyExtractor={item => item.user_id}
+          contentContainerStyle={{ paddingHorizontal: spacing.base, paddingBottom: 120 }}
+          ListEmptyComponent={<Text style={styles.actEmpty}>No members found.</Text>}
+          renderItem={({ item }) => (
+            <Pressable
+              style={styles.userRow}
+              onPress={() => navigation.navigate('Profile', { username: item.username })}
+            >
+              <Avatar uri={item.avatar_url} name={item.display_name} size={40} />
+              <View style={styles.actInfo}>
+                <Text style={styles.actName}>{item.display_name}</Text>
+                <Text style={styles.actUsername}>@{item.username}</Text>
+              </View>
+              <View style={styles.userChecks}>
+                {/* Check-in checkmark — tappable when done */}
+                <Pressable
+                  style={styles.userCheckRow}
+                  disabled={!item.checked_in_today}
+                  onPress={() => item.checkin_today && setDetailModal({ kind: 'checkin', data: item.checkin_today })}
+                >
+                  <Feather
+                    name={item.checked_in_today ? 'check-circle' : 'circle'}
+                    size={15}
+                    color={item.checked_in_today ? '#10B981' : colors.borderColor}
+                  />
+                  <Text style={[styles.userCheckLabel, item.checked_in_today && styles.userCheckLabelActive]}>
+                    Check-in
+                  </Text>
+                </Pressable>
+                {/* Workout checkmark — tappable when done */}
+                <Pressable
+                  style={styles.userCheckRow}
+                  disabled={!item.logged_workout_today}
+                  onPress={() => item.workout_today && setDetailModal({ kind: 'workout', data: item.workout_today })}
+                >
+                  <Feather
+                    name={item.logged_workout_today ? 'check-circle' : 'circle'}
+                    size={15}
+                    color={item.logged_workout_today ? '#10B981' : colors.borderColor}
+                  />
+                  <Text style={[styles.userCheckLabel, item.logged_workout_today && styles.userCheckLabelActive]}>
+                    Workout
+                  </Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          )}
+        />
+
+        {/* Detail modal */}
+        <Modal
+          visible={detailModal !== null}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setDetailModal(null)}
+        >
+          <Pressable style={styles.calOverlay} onPress={() => setDetailModal(null)}>
+            <Pressable style={styles.detailCard} onPress={e => e.stopPropagation()}>
+              <View style={styles.detailHeader}>
+                <Text style={styles.detailTitle}>
+                  {detailModal?.kind === 'checkin' ? 'Today\'s Check-in' : 'Today\'s Workout'}
+                </Text>
+                <Pressable onPress={() => setDetailModal(null)}>
+                  <Feather name="x" size={18} color={colors.textSecondary} />
+                </Pressable>
+              </View>
+
+              {detailModal?.kind === 'checkin' && (
+                <View style={styles.detailBody}>
+                  {!!detailModal.data.photo_url && (
+                    <Image source={{ uri: detailModal.data.photo_url }} style={styles.detailPhoto} />
+                  )}
+                  {!!detailModal.data.workout_type && (
+                    <View style={styles.detailPill}>
+                      <Text style={styles.detailPillText}>
+                        {detailModal.data.workout_type.replace(/_/g, ' ')}
+                      </Text>
+                    </View>
+                  )}
+                  {!!detailModal.data.location_name && (
+                    <View style={styles.detailRow}>
+                      <Feather name="map-pin" size={13} color={colors.primary} />
+                      <Text style={styles.detailMeta}>{detailModal.data.location_name}</Text>
+                    </View>
+                  )}
+                  {!!detailModal.data.description && (
+                    <Text style={styles.detailDesc}>{detailModal.data.description}</Text>
+                  )}
+                  <Text style={styles.detailTime}>{fmtRelativeTime(detailModal.data.created_at)}</Text>
+                </View>
+              )}
+
+              {detailModal?.kind === 'workout' && (
+                <View style={styles.detailBody}>
+                  <Text style={styles.detailWorkoutName}>{detailModal.data.name}</Text>
+                  {detailModal.data.duration_minutes != null && (
+                    <View style={styles.detailRow}>
+                      <Feather name="clock" size={13} color={colors.textSecondary} />
+                      <Text style={styles.detailMeta}>{detailModal.data.duration_minutes} min</Text>
+                    </View>
+                  )}
+                  <Text style={styles.detailTime}>{fmtRelativeTime(detailModal.data.created_at)}</Text>
+                </View>
+              )}
+            </Pressable>
+          </Pressable>
+        </Modal>
+      </>
+    );
+  };
+
+  const renderStatsTab = () => {
     const q = activityQuery.toLowerCase();
     const displayed = activityData
       .filter(m =>
@@ -600,12 +971,6 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
 
     return (
       <View style={{ flex: 1 }}>
-        {/* Subtitle */}
-        <Text style={styles.actSubtitle}>
-          See how much {org?.name} has worked out!
-        </Text>
-
-        {/* Search bar */}
         <View style={styles.actSearchRow}>
           <Feather name="search" size={15} color={colors.textMuted} />
           <TextInput
@@ -617,34 +982,23 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
             autoCorrect={false}
           />
         </View>
-
-        {/* Filter chips */}
         <View style={styles.actChipRow}>
           <Pressable
             style={styles.actChip}
-            onPress={() => {
-              setPendingStart(actStart);
-              setPendingEnd(actEnd);
-              setCalendarOpen(true);
-            }}
+            onPress={() => { setPendingStart(actStart); setPendingEnd(actEnd); setCalendarOpen(true); }}
           >
             <Feather name="calendar" size={13} color={colors.primary} />
             <Text style={styles.actChipText}>{dateChipLabel}</Text>
             <Feather name="chevron-down" size={13} color={colors.primary} />
           </Pressable>
-
           <Pressable
             style={styles.actChip}
             onPress={() => setActivitySort(s => s === 'desc' ? 'asc' : 'desc')}
           >
             <Feather name="arrow-up" size={13} color={colors.primary} />
-            <Text style={styles.actChipText}>
-              {activitySort === 'desc' ? 'Highest' : 'Lowest'}
-            </Text>
+            <Text style={styles.actChipText}>{activitySort === 'desc' ? 'Highest' : 'Lowest'}</Text>
           </Pressable>
         </View>
-
-        {/* List */}
         {activityLoading ? (
           <ActivityIndicator color={colors.primary} style={{ marginTop: 32 }} />
         ) : (
@@ -652,9 +1006,7 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
             data={displayed}
             keyExtractor={item => item.user_id}
             contentContainerStyle={{ paddingHorizontal: spacing.base, paddingBottom: 120 }}
-            ListEmptyComponent={
-              <Text style={styles.actEmpty}>No members found.</Text>
-            }
+            ListEmptyComponent={<Text style={styles.actEmpty}>No members found.</Text>}
             renderItem={({ item }) => (
               <Pressable
                 style={styles.actRow}
@@ -666,16 +1018,13 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
                   <Text style={styles.actUsername}>@{item.username}</Text>
                 </View>
                 <View style={styles.actRight}>
-                  <View style={styles.actStreakRow}>
-                    <Text style={styles.actStreakText}>🔥 {item.current_streak}d</Text>
-                  </View>
+                  <Text style={styles.actStreakText}>🔥 {item.current_streak}d</Text>
                   <Text style={styles.actCount}>Workouts: {item.workout_count}</Text>
                 </View>
               </Pressable>
             )}
           />
         )}
-
         {/* Calendar modal */}
         <Modal
           visible={calendarOpen}
@@ -691,24 +1040,17 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
                   <Feather name="x" size={18} color={colors.textSecondary} />
                 </Pressable>
               </View>
-
               <RangeCalendar
                 startDate={pendingStart}
                 endDate={pendingEnd}
-                onChange={(s, e) => {
-                  setPendingStart(s);
-                  setPendingEnd(e);
-                }}
+                onChange={(s, e) => { setPendingStart(s); setPendingEnd(e); }}
               />
-
               <View style={styles.calActions}>
                 <Pressable
                   style={[styles.calActionBtn, styles.calClearBtn]}
                   onPress={() => {
-                    setActStart(null);
-                    setActEnd(null);
-                    setPendingStart(null);
-                    setPendingEnd(null);
+                    setActStart(null); setActEnd(null);
+                    setPendingStart(null); setPendingEnd(null);
                     setCalendarOpen(false);
                     loadActivityData(null, null);
                   }}
@@ -724,8 +1066,7 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
                 <Pressable
                   style={[styles.calActionBtn, styles.calApplyBtn]}
                   onPress={() => {
-                    setActStart(pendingStart);
-                    setActEnd(pendingEnd);
+                    setActStart(pendingStart); setActEnd(pendingEnd);
                     setCalendarOpen(false);
                     loadActivityData(pendingStart, pendingEnd);
                   }}
@@ -736,6 +1077,32 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
             </Pressable>
           </Pressable>
         </Modal>
+      </View>
+    );
+  };
+
+  const renderActivityTab = () => {
+    const subTabs: ActivitySubTab[] = ['Logs', 'Users', 'Stats'];
+    return (
+      <View style={{ flex: 1 }}>
+        {/* Sub-tab bar */}
+        <View style={styles.actSubTabBar}>
+          {subTabs.map(sub => (
+            <Pressable
+              key={sub}
+              style={[styles.actSubTab, activitySubTab === sub && styles.actSubTabActive]}
+              onPress={() => handleActivitySubTabChange(sub)}
+            >
+              <Text style={[styles.actSubTabText, activitySubTab === sub && styles.actSubTabTextActive]}>
+                {sub}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+
+        {activitySubTab === 'Logs' && renderLogsTab()}
+        {activitySubTab === 'Users' && renderUsersTab()}
+        {activitySubTab === 'Stats' && renderStatsTab()}
       </View>
     );
   };
@@ -1557,6 +1924,176 @@ const styles = StyleSheet.create({
   },
   settingsDeleteBtnDisabled: { opacity: 0.6 },
   settingsDeleteBtnText: { fontSize: typography.size.base, fontWeight: '700', color: '#fff' },
+
+  // ── Activity sub-tabs ─────────────────────────────────────────────────────
+  actSubTabBar: {
+    flexDirection: 'row',
+    marginHorizontal: spacing.base,
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+    backgroundColor: colors.background.elevated,
+    borderRadius: 12,
+    padding: 3,
+  },
+  actSubTab: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 7,
+    borderRadius: 10,
+  },
+  actSubTabActive: {
+    backgroundColor: colors.surface,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.07,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  actSubTabText: {
+    fontSize: typography.size.sm,
+    fontWeight: '500',
+    color: colors.textMuted,
+  },
+  actSubTabTextActive: {
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+
+  // ── Logs sub-tab ──────────────────────────────────────────────────────────
+  logCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderColor,
+    gap: spacing.sm,
+  },
+  logBody: { flex: 1, gap: 3 },
+  logHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  logName: { fontSize: typography.size.sm, fontWeight: '700', color: colors.textPrimary },
+  logTime: { fontSize: typography.size.xs, color: colors.textMuted },
+  logBadge: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  logBadgeText: { fontSize: typography.size.xs, fontWeight: '600', color: '#10B981' },
+  logBadgeSub: { fontSize: typography.size.xs, color: colors.textMuted },
+  logDesc: { fontSize: typography.size.xs, color: colors.textSecondary, lineHeight: 16 },
+  logLocation: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  logLocationText: { fontSize: typography.size.xs, color: colors.textMuted },
+
+  // ── Users sub-tab ─────────────────────────────────────────────────────────
+  userRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderColor,
+    gap: spacing.sm,
+  },
+  userChecks: { gap: 4, alignItems: 'flex-end' },
+  userCheckRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  userCheckLabel: { fontSize: typography.size.xs, color: colors.textMuted },
+  userCheckLabelActive: { color: '#10B981', fontWeight: '600' },
+
+  // ── Log filter chips ──────────────────────────────────────────────────────
+  logFilterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.base,
+    paddingVertical: spacing.xs,
+    gap: spacing.xs,
+  },
+  logFilterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: colors.borderColor,
+    backgroundColor: colors.background.elevated,
+  },
+  logFilterChipActive: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primary,
+  },
+  logFilterChipText: {
+    fontSize: typography.size.xs,
+    color: colors.textSecondary,
+    fontWeight: '600',
+  },
+  logFilterChipTextActive: {
+    color: '#fff',
+  },
+
+  // ── Detail modal (today's check-in / workout) ─────────────────────────────
+  detailCard: {
+    width: '100%',
+    backgroundColor: colors.background.card,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  detailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderColor,
+  },
+  detailTitle: {
+    fontSize: typography.size.base,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  detailBody: {
+    padding: spacing.lg,
+    gap: spacing.sm,
+  },
+  detailPhoto: {
+    width: '100%',
+    height: 180,
+    borderRadius: 12,
+    backgroundColor: colors.background.elevated,
+  },
+  detailPill: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: 20,
+    backgroundColor: 'rgba(79,195,224,0.12)',
+  },
+  detailPillText: {
+    fontSize: typography.size.xs,
+    fontWeight: '600',
+    color: colors.primary,
+    textTransform: 'capitalize',
+  },
+  detailRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  detailMeta: {
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
+  },
+  detailDesc: {
+    fontSize: typography.size.sm,
+    color: colors.textPrimary,
+    lineHeight: 20,
+  },
+  detailTime: {
+    fontSize: typography.size.xs,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+  },
+  detailWorkoutName: {
+    fontSize: typography.size.base,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
 
   // ── Activity tab ──────────────────────────────────────────────────────────
   actSubtitle: {
