@@ -10,6 +10,9 @@ import {
   ActivityIndicator,
   RefreshControl,
   Modal,
+  Animated,
+  PanResponder,
+  Share,
   Dimensions,
   Platform,
   Alert,
@@ -24,18 +27,21 @@ import { Feather } from '@expo/vector-icons';
 import { RouteProp } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
 import FeedCard from '../../components/feed/FeedCard';
+import FeedCardHeader from '../../components/feed/FeedCardHeader';
+import FeedCardBody from '../../components/feed/FeedCardBody';
+import FeedCardActions from '../../components/feed/FeedCardActions';
 import CommentsSheet from '../../components/comments/CommentsSheet';
 import { useAuth } from '../../store/AuthContext';
 import { fetchProfile, toggleFollow, fetchUserPRs, savePR, deletePR, fetchMutualFollowers } from '../../api/accounts';
-import { fetchExerciseCatalog, fetchCalendarPosts } from '../../api/workouts';
-import { fetchUserPostThumbnails, fetchUserPosts, fetchUserCheckins, CheckinItem, deletePost } from '../../api/feed';
+import { fetchExerciseCatalog } from '../../api/workouts';
+import { fetchUserPostThumbnails, fetchUserPosts, fetchUserCheckins, toggleLikeCheckin, CheckinItem, deletePost } from '../../api/feed';
 import CheckinViewer from '../../components/profile/CheckinViewer';
 import { fetchMyGyms, fetchUserGyms } from '../../api/gyms';
 import { listMyOrgs, fetchUserOrgs, OrgListItem } from '../../api/organizations';
 import { useToggleLike } from '../../hooks/useToggleLike';
 import { usePollVote } from '../../hooks/usePollVote';
 import { UserProfile, PersonalRecord, UserBrief } from '../../types/user';
-import { ExerciseCatalogItem, CalendarPost } from '../../types/workout';
+import { ExerciseCatalogItem } from '../../types/workout';
 import { FeedItem } from '../../types/feed';
 import { Gym } from '../../types/gym';
 import { colors, spacing, typography } from '../../theme';
@@ -47,11 +53,21 @@ type Props = {
 
 type ProfileTab = 'Posts' | 'Calendar' | 'Records';
 
+type CalViewerDay = {
+  year: number;
+  month: number; // 0-indexed
+  day: number;
+  checkins: CheckinItem[];
+};
+
 const SCREEN_WIDTH = Dimensions.get('window').width;
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const GRID_PADDING = spacing.xl * 2;
 const THUMB_GAP = 1;
 const THUMB_SIZE = (SCREEN_WIDTH - GRID_PADDING - THUMB_GAP * 2) / 3;
+const CAROUSEL_CARD_W = Math.round(SCREEN_WIDTH * 0.9);
+const CAROUSEL_CARD_H = 400;
+const CAROUSEL_GAP = 12;
 
 
 export default function ProfileScreen({ navigation, route }: Props) {
@@ -100,7 +116,20 @@ export default function ProfileScreen({ navigation, route }: Props) {
   // View toggles
   const [showAllPRs, setShowAllPRs] = useState(false);
   const [allPostsModalVisible, setAllPostsModalVisible] = useState(false);
-  const [allPostsViewerItem, setAllPostsViewerItem] = useState<FeedItem | null>(null);
+  const [viewerCommentItem, setViewerCommentItem] = useState<FeedItem | null>(null);
+  const [allPostsCommentItem, setAllPostsCommentItem] = useState<FeedItem | null>(null);
+
+  // Overlay slide animations (replaces Modal so tab bar stays visible)
+  const viewerAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const allPostsAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  const calViewerAnim = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
+  // Calendar check-in viewer (floating card, tab-bar-visible overlay)
+  const [calViewerVisible, setCalViewerVisible] = useState(false);
+  const [calViewerDays, setCalViewerDays] = useState<CalViewerDay[]>([]);
+  const [calViewerDayIdx, setCalViewerDayIdx] = useState(0);
+  const [calCheckinIdx, setCalCheckinIdx] = useState(0);
+  const [calLikeState, setCalLikeState] = useState<Record<string, { liked: boolean; count: number }>>({});
+  const [calCheckinCommentItem, setCalCheckinCommentItem] = useState<FeedItem | null>(null);
 
   // Add PR modal
   const [prModalVisible, setPrModalVisible] = useState(false);
@@ -344,6 +373,30 @@ export default function ProfileScreen({ navigation, route }: Props) {
     if (catalogVisible) loadCatalog();
   }, [catalogVisible, loadCatalog]);
 
+  useEffect(() => {
+    Animated.timing(viewerAnim, {
+      toValue: viewerStartIndex !== null ? 0 : SCREEN_HEIGHT,
+      duration: 280,
+      useNativeDriver: true,
+    }).start();
+  }, [viewerStartIndex]);
+
+  useEffect(() => {
+    Animated.timing(allPostsAnim, {
+      toValue: allPostsModalVisible ? 0 : SCREEN_HEIGHT,
+      duration: 280,
+      useNativeDriver: true,
+    }).start();
+  }, [allPostsModalVisible]);
+
+  useEffect(() => {
+    Animated.timing(calViewerAnim, {
+      toValue: calViewerVisible ? 0 : SCREEN_HEIGHT,
+      duration: 260,
+      useNativeDriver: true,
+    }).start();
+  }, [calViewerVisible]);
+
   // ── Video picker ──────────────────────────────────────────────────────────────
 
   const pickVideo = async () => {
@@ -390,7 +443,11 @@ export default function ProfileScreen({ navigation, route }: Props) {
         }
         return [saved, ...prev];
       });
+      const hadVideo = !!prVideoUri;
       closePrModal();
+      if (hadVideo) {
+        Alert.alert('Video uploaded', 'Your video was uploaded successfully!');
+      }
     } catch {
       Alert.alert('Error', 'Could not save PR. Please try again.');
     } finally {
@@ -420,7 +477,6 @@ export default function ProfileScreen({ navigation, route }: Props) {
     try {
       await deletePost(item.id);
       setPosts((prev) => prev.filter((p) => p.id !== item.id));
-      setAllPostsViewerItem((cur) => (cur?.id === item.id ? null : cur));
     } catch {
       Alert.alert('Error', 'Could not delete post.');
     }
@@ -443,6 +499,101 @@ export default function ProfileScreen({ navigation, route }: Props) {
     ]);
   };
 
+  // ── Calendar viewer: cross-month lazy loading ────────────────────────────────
+
+  const calViewerLoadedMonths = useRef<Set<string>>(new Set());
+  // Tracks which day the user is currently viewing so dayIdx stays correct after merging new months
+  const calViewerCurrentDayKey = useRef<string | null>(null);
+
+  // Keep current day key in sync with dayIdx
+  useEffect(() => {
+    if (calViewerDays.length === 0) return;
+    const d = calViewerDays[Math.min(calViewerDayIdx, calViewerDays.length - 1)];
+    if (d) calViewerCurrentDayKey.current = `${d.year}-${d.month}-${d.day}`;
+  }, [calViewerDayIdx, calViewerDays]);
+
+  // When calViewerDays grows (adjacent month loaded), recompute dayIdx to stay on same day
+  useEffect(() => {
+    if (!calViewerCurrentDayKey.current || calViewerDays.length === 0) return;
+    const newIdx = calViewerDays.findIndex(
+      (d) => `${d.year}-${d.month}-${d.day}` === calViewerCurrentDayKey.current,
+    );
+    if (newIdx >= 0 && newIdx !== calViewerDayIdx) setCalViewerDayIdx(newIdx);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [calViewerDays]);
+
+  const loadAdjacentCalMonth = useCallback(async (year: number, month: number) => {
+    const key = `${year}-${month}`;
+    if (calViewerLoadedMonths.current.has(key)) return;
+    calViewerLoadedMonths.current.add(key);
+    try {
+      const { items } = await fetchUserCheckins(username, undefined, month + 1, year);
+      if (items.length === 0) return;
+      const grouped: Record<string, CalViewerDay> = {};
+      items.forEach((ci) => {
+        const d = new Date(ci.created_at);
+        const k = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+        if (!grouped[k]) grouped[k] = { year: d.getFullYear(), month: d.getMonth(), day: d.getDate(), checkins: [] };
+        grouped[k].checkins.push(ci);
+      });
+      const newDays = Object.values(grouped).sort(
+        (a, b) => new Date(a.year, a.month, a.day).getTime() - new Date(b.year, b.month, b.day).getTime(),
+      );
+      setCalViewerDays((prev) => {
+        const existingKeys = new Set(prev.map((d) => `${d.year}-${d.month}-${d.day}`));
+        const trulyNew = newDays.filter((d) => !existingKeys.has(`${d.year}-${d.month}-${d.day}`));
+        if (trulyNew.length === 0) return prev;
+        return [...prev, ...trulyNew].sort(
+          (a, b) => new Date(a.year, a.month, a.day).getTime() - new Date(b.year, b.month, b.day).getTime(),
+        );
+      });
+    } catch { /* silent */ }
+  }, [username]);
+
+  // Load adjacent months when near the edges of loaded data
+  useEffect(() => {
+    if (!calViewerVisible || calViewerDays.length === 0) return;
+    if (calViewerDayIdx <= 3) {
+      const first = calViewerDays[0];
+      loadAdjacentCalMonth(
+        first.month === 0 ? first.year - 1 : first.year,
+        first.month === 0 ? 11 : first.month - 1,
+      );
+    }
+    if (calViewerDayIdx >= calViewerDays.length - 4) {
+      const last = calViewerDays[calViewerDays.length - 1];
+      loadAdjacentCalMonth(
+        last.month === 11 ? last.year + 1 : last.year,
+        last.month === 11 ? 0 : last.month + 1,
+      );
+    }
+  }, [calViewerDayIdx, calViewerVisible, calViewerDays, loadAdjacentCalMonth]);
+
+  // ── Calendar viewer handlers ──────────────────────────────────────────────────
+
+  const handleCalLike = useCallback(async (checkin: CheckinItem) => {
+    const prev = calLikeState[checkin.id] ?? { liked: checkin.user_liked, count: checkin.like_count };
+    setCalLikeState((s) => ({ ...s, [checkin.id]: { liked: !prev.liked, count: prev.count + (prev.liked ? -1 : 1) } }));
+    try {
+      const res = await toggleLikeCheckin(checkin.id);
+      setCalLikeState((s) => ({ ...s, [checkin.id]: { liked: res.liked, count: res.like_count } }));
+    } catch {
+      setCalLikeState((s) => ({ ...s, [checkin.id]: prev }));
+    }
+  }, [calLikeState]);
+
+  const handleCalComment = useCallback((checkin: CheckinItem) => {
+    if (!profile) return;
+    setCalCheckinCommentItem({
+      id: checkin.id, type: 'checkin',
+      user: { id: profile.id, username: profile.username, display_name: profile.display_name, avatar_url: profile.avatar_url },
+      created_at: checkin.created_at, description: checkin.description,
+      location_name: checkin.location_name || null, photo_url: checkin.photo_url,
+      link_url: null, like_count: checkin.like_count, comment_count: checkin.comment_count,
+      user_liked: checkin.user_liked, workout: null, personal_record: null, poll: null, visibility: 'main',
+    });
+  }, [profile]);
+
   // ── Auto-load more posts on scroll ───────────────────────────────────────────
 
   const handleScroll = useCallback((e: any) => {
@@ -464,6 +615,20 @@ export default function ProfileScreen({ navigation, route }: Props) {
     setActiveTab(tab);
     setShowAllPRs(false);
   };
+
+  // Enrich posts with profile data so Phase-1 thumbnails never show a blank avatar
+  const enrichedPosts = useMemo(() => {
+    if (!profile) return posts;
+    return posts.map((item) => ({
+      ...item,
+      user: {
+        ...item.user,
+        avatar_url: item.user.avatar_url ?? profile.avatar_url,
+        display_name: item.user.display_name || profile.display_name,
+        username: item.user.username || profile.username,
+      },
+    }));
+  }, [posts, profile]);
 
   // ── Loading/error ─────────────────────────────────────────────────────────────
 
@@ -643,24 +808,32 @@ export default function ProfileScreen({ navigation, route }: Props) {
         <View style={styles.tabContent}>
           {activeTab === 'Posts' && (
             <PostsTab
-              posts={posts}
+              posts={enrichedPosts}
               loading={postsLoading}
+              isOwn={isOwn}
               onOpenPost={openPost}
               onViewAllPosts={() => setAllPostsModalVisible(true)}
+              onLike={handleLike}
+              onComment={(item) => setCommentItem(item)}
+              onPollVote={handlePollVote}
+              onDelete={isOwn ? handleDeletePost : undefined}
             />
           )}
 
           {activeTab === 'Calendar' && (
             <CalendarTab
-              posts={posts}
-              postsLoading={postsLoading}
               profileUsername={username}
-              profile={profile}
-              onLike={handleLike}
-              onComment={(item) => setCommentItem(item)}
-              onPollVote={handlePollVote}
-              onDelete={isOwn ? handleDeletePost : undefined}
-              isOwn={isOwn}
+              onOpenViewer={(days, index) => {
+                // Seed loaded-months so we don't re-fetch what CalendarTab already loaded
+                calViewerLoadedMonths.current.clear();
+                days.forEach((d) => calViewerLoadedMonths.current.add(`${d.year}-${d.month}`));
+                calViewerCurrentDayKey.current = null;
+                setCalViewerDays(days);
+                setCalViewerDayIdx(index);
+                setCalCheckinIdx(0);
+                setCalLikeState({});
+                setCalViewerVisible(true);
+              }}
             />
           )}
 
@@ -752,49 +925,46 @@ export default function ProfileScreen({ navigation, route }: Props) {
         </View>
       </Modal>
 
-      {/* ── Post viewer modal (vertical feed) ───────────────────────────────── */}
-      <Modal
-        visible={viewerStartIndex !== null}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setViewerStartIndex(null)}
+      {/* ── Post viewer overlay (tab bar stays visible) ───────────────────── */}
+      <Animated.View
+        style={[StyleSheet.absoluteFill, { backgroundColor: colors.background.base, transform: [{ translateY: viewerAnim }] }]}
+        pointerEvents={viewerStartIndex !== null ? 'auto' : 'none'}
       >
-        <View style={{ flex: 1, backgroundColor: colors.background.base }}>
-          <View style={[styles.viewerHeader, { paddingTop: insets.top > 0 ? insets.top : 16 }]}>
-            <View style={styles.viewerUserRow}>
-              <Avatar uri={profile.avatar_url} name={profile.display_name} size={32} />
-              <Text style={styles.viewerName}>{profile.display_name}</Text>
-            </View>
-            <Pressable style={styles.viewerClose} onPress={() => setViewerStartIndex(null)}>
-              <Feather name="x" size={22} color={colors.textPrimary} />
-            </Pressable>
+        <View style={[styles.viewerHeader, { paddingTop: insets.top > 0 ? insets.top : 16 }]}>
+          <View style={styles.viewerUserRow}>
+            <Avatar uri={profile.avatar_url} name={profile.display_name} size={32} />
+            <Text style={styles.viewerName}>{profile.display_name}</Text>
           </View>
-
-          <FlatList
-            data={viewerStartIndex !== null ? posts.slice(viewerStartIndex) : posts}
-            keyExtractor={(item) => item.id}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 80 }}
-            onEndReached={() => { if (postsHasMore && !postsLoadingRef.current) loadPosts(postsCursor); }}
-            onEndReachedThreshold={0.4}
-            ListFooterComponent={postsHasMore ? (
-              <View style={styles.feedFooter}>
-                <ActivityIndicator size="small" color={colors.primary} />
-              </View>
-            ) : null}
-            renderItem={({ item }) => (
-              <FeedCard
-                item={item}
-                index={0}
-                onLike={() => handleLike(item)}
-                onComment={() => setCommentItem(item)}
-                onPollVote={(optionId) => handlePollVote(item, optionId)}
-                onDelete={isOwn ? () => handleDeletePost(item) : undefined}
-              />
-            )}
-          />
+          <Pressable style={styles.viewerClose} onPress={() => setViewerStartIndex(null)}>
+            <Feather name="x" size={22} color={colors.textPrimary} />
+          </Pressable>
         </View>
-      </Modal>
+
+        <FlatList
+          data={viewerStartIndex !== null ? enrichedPosts.slice(viewerStartIndex) : enrichedPosts}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 80 }}
+          onEndReached={() => { if (postsHasMore && !postsLoadingRef.current) loadPosts(postsCursor); }}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={postsHasMore ? (
+            <View style={styles.feedFooter}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : null}
+          renderItem={({ item }) => (
+            <FeedCard
+              item={item}
+              index={0}
+              onLike={() => handleLike(item)}
+              onComment={() => setViewerCommentItem(item)}
+              onPollVote={(optionId) => handlePollVote(item, optionId)}
+              onDelete={isOwn ? () => handleDeletePost(item) : undefined}
+            />
+          )}
+        />
+        <CommentsSheet item={viewerCommentItem} onClose={() => setViewerCommentItem(null)} />
+      </Animated.View>
       <CommentsSheet item={commentItem} onClose={() => setCommentItem(null)} />
 
       <CheckinViewer
@@ -807,86 +977,77 @@ export default function ProfileScreen({ navigation, route }: Props) {
         hasMore={checkinsHasMore}
       />
 
-      {/* ── All Posts grid modal ─────────────────────────────────────────── */}
-      <Modal
-        visible={allPostsModalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => {
-          if (allPostsViewerItem) { setAllPostsViewerItem(null); }
-          else { setAllPostsModalVisible(false); }
-        }}
+      {/* ── All Posts feed overlay (tab bar stays visible) ─────────────── */}
+      <Animated.View
+        style={[StyleSheet.absoluteFill, { backgroundColor: colors.background.base, transform: [{ translateY: allPostsAnim }] }]}
+        pointerEvents={allPostsModalVisible ? 'auto' : 'none'}
       >
-        <View style={{ flex: 1, backgroundColor: colors.background.base }}>
-          {/* Header: back arrow when viewing a post, X to close the modal */}
-          <View style={[styles.viewerHeader, { paddingTop: insets.top > 0 ? insets.top : 16 }]}>
-            {allPostsViewerItem ? (
-              <Pressable style={styles.viewerClose} onPress={() => setAllPostsViewerItem(null)}>
-                <Feather name="arrow-left" size={22} color={colors.textPrimary} />
-              </Pressable>
-            ) : (
-              <View style={{ width: 36 }} />
-            )}
-            <View style={styles.viewerUserRow}>
-              <Avatar uri={profile.avatar_url} name={profile.display_name} size={32} />
-              <Text style={styles.viewerName}>{profile.display_name}</Text>
-            </View>
-            <Pressable style={styles.viewerClose} onPress={() => { setAllPostsModalVisible(false); setAllPostsViewerItem(null); }}>
-              <Feather name="x" size={22} color={colors.textPrimary} />
-            </Pressable>
+        <View style={[styles.viewerHeader, { paddingTop: insets.top > 0 ? insets.top : 16 }]}>
+          <View style={{ width: 36 }} />
+          <View style={styles.viewerUserRow}>
+            <Avatar uri={profile.avatar_url} name={profile.display_name} size={32} />
+            <Text style={styles.viewerName}>{profile.display_name}</Text>
           </View>
+          <Pressable style={styles.viewerClose} onPress={() => setAllPostsModalVisible(false)}>
+            <Feather name="x" size={22} color={colors.textPrimary} />
+          </Pressable>
+        </View>
 
-          {allPostsViewerItem ? (
-            /* ── Single post view ── */
-            <FlatList
-              key="post-detail"
-              data={[allPostsViewerItem]}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={{ paddingBottom: 80 }}
-              renderItem={({ item }) => (
-                <FeedCard
-                  item={item}
-                  index={0}
-                  onLike={() => handleLike(item)}
-                  onComment={() => setCommentItem(item)}
-                  onPollVote={(optionId) => handlePollVote(item, optionId)}
-                  onDelete={isOwn ? () => handleDeletePost(item) : undefined}
-                />
-              )}
-            />
-          ) : (
-            /* ── Grid view ── */
-            <FlatList
-              key="grid"
-              data={posts}
-              keyExtractor={(item) => item.id}
-              numColumns={3}
-              contentContainerStyle={styles.allPostsGrid}
-              columnWrapperStyle={styles.allPostsRow}
-              onEndReached={() => { if (postsHasMore && !postsLoadingRef.current) loadPosts(postsCursor); }}
-              onEndReachedThreshold={0.4}
-              ListFooterComponent={postsHasMore ? (
-                <View style={styles.feedFooter}>
-                  <ActivityIndicator size="small" color={colors.primary} />
-                </View>
-              ) : null}
-              renderItem={({ item }) => (
-                <PostThumbnail
-                  key={item.id}
-                  item={item}
-                  onPress={() => setAllPostsViewerItem(item)}
-                />
-              )}
-              ListEmptyComponent={
-                <View style={styles.emptyTab}>
-                  <Feather name="image" size={36} color={colors.textMuted} />
-                  <Text style={styles.emptyText}>No posts yet</Text>
-                </View>
-              }
+        <FlatList
+          data={enrichedPosts.slice(5)}
+          keyExtractor={(item) => item.id}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 80 }}
+          onEndReached={() => { if (postsHasMore && !postsLoadingRef.current) loadPosts(postsCursor); }}
+          onEndReachedThreshold={0.4}
+          ListFooterComponent={postsHasMore ? (
+            <View style={styles.feedFooter}>
+              <ActivityIndicator size="small" color={colors.primary} />
+            </View>
+          ) : null}
+          ListEmptyComponent={
+            <View style={styles.emptyTab}>
+              <Feather name="image" size={36} color={colors.textMuted} />
+              <Text style={styles.emptyText}>No more posts</Text>
+            </View>
+          }
+          renderItem={({ item }) => (
+            <FeedCard
+              item={item}
+              index={0}
+              onLike={() => handleLike(item)}
+              onComment={() => setAllPostsCommentItem(item)}
+              onPollVote={(optionId) => handlePollVote(item, optionId)}
+              onDelete={isOwn ? () => handleDeletePost(item) : undefined}
             />
           )}
-        </View>
-      </Modal>
+        />
+        <CommentsSheet item={allPostsCommentItem} onClose={() => setAllPostsCommentItem(null)} />
+      </Animated.View>
+
+      {/* ── Calendar check-in viewer (floating card, tab bar stays visible) ── */}
+      <Animated.View
+        style={[StyleSheet.absoluteFill, styles.calModalBackdrop, { transform: [{ translateY: calViewerAnim }] }]}
+        pointerEvents={calViewerVisible ? 'auto' : 'none'}
+      >
+        <Pressable style={StyleSheet.absoluteFill} onPress={() => setCalViewerVisible(false)} />
+
+        {calViewerDays.length > 0 && (
+          <CalViewerCard
+            days={calViewerDays}
+            dayIdx={calViewerDayIdx}
+            checkinIdx={calCheckinIdx}
+            likeState={calLikeState}
+            onClose={() => setCalViewerVisible(false)}
+            onDayChange={(idx) => setCalViewerDayIdx(idx)}
+            onCheckinChange={(idx) => setCalCheckinIdx(idx)}
+            onLike={handleCalLike}
+            onComment={handleCalComment}
+          />
+        )}
+
+        <CommentsSheet item={calCheckinCommentItem} onClose={() => setCalCheckinCommentItem(null)} />
+      </Animated.View>
 
       {/* ── Add PR modal (with inline catalog picker) ── */}
       <Modal
@@ -1310,14 +1471,32 @@ function OrgsSection({ orgs, isOwn, navigation }: { orgs: OrgListItem[]; isOwn: 
 
 // ─── Posts Tab ────────────────────────────────────────────────────────────────
 
+type CarouselItem = FeedItem | 'view-all';
+
 function PostsTab({
-  posts, loading, onOpenPost, onViewAllPosts,
+  posts,
+  loading,
+  isOwn,
+  onOpenPost,
+  onViewAllPosts,
+  onLike,
+  onComment,
+  onPollVote,
+  onDelete,
 }: {
   posts: FeedItem[];
   loading: boolean;
+  isOwn: boolean;
   onOpenPost: (item: FeedItem) => void;
   onViewAllPosts: () => void;
+  onLike: (item: FeedItem) => void;
+  onComment: (item: FeedItem) => void;
+  onPollVote: (item: FeedItem, optionId: number | string) => void;
+  onDelete?: (item: FeedItem) => void;
 }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+  const carouselRef = useRef<FlatList>(null);
+
   if (loading && posts.length === 0) {
     return <View style={styles.emptyTab}><ActivityIndicator color={colors.primary} /></View>;
   }
@@ -1330,27 +1509,123 @@ function PostsTab({
     );
   }
 
-  const preview = posts.slice(0, 9);
-  const rows = [preview.slice(0, 3), preview.slice(3, 6), preview.slice(6, 9)].filter(row => row.length > 0);
+  const data: CarouselItem[] = [...posts.slice(0, 5), 'view-all' as const];
+
+  const scrollTo = (index: number) => {
+    const target = Math.max(0, Math.min(index, data.length - 1));
+    carouselRef.current?.scrollToOffset({
+      offset: target * (CAROUSEL_CARD_W + CAROUSEL_GAP),
+      animated: true,
+    });
+    setActiveIndex(target);
+  };
+
+  const canGoLeft = activeIndex > 0;
+  const canGoRight = activeIndex < data.length - 1;
+
   return (
-    <View style={styles.postsGrid}>
-      {rows.map((row, rowIndex) => (
-        <View key={rowIndex} style={styles.postsRow}>
-          {row.map((item) => (
-            <PostThumbnail key={item.id} item={item} onPress={() => onOpenPost(item)} />
-          ))}
-          {row.length < 3 && Array.from({ length: 3 - row.length }).map((_, i) => (
-            <View key={`empty-${i}`} style={styles.thumbEmpty} />
+    <View>
+      <FlatList
+        ref={carouselRef}
+        horizontal
+        data={data}
+        keyExtractor={(item) => (item === 'view-all' ? 'view-all' : item.id)}
+        showsHorizontalScrollIndicator={false}
+        snapToInterval={CAROUSEL_CARD_W + CAROUSEL_GAP}
+        decelerationRate="fast"
+        contentContainerStyle={styles.carouselContent}
+        onMomentumScrollEnd={(e) => {
+          setActiveIndex(Math.round(e.nativeEvent.contentOffset.x / (CAROUSEL_CARD_W + CAROUSEL_GAP)));
+        }}
+        renderItem={({ item }) => {
+          if (item === 'view-all') {
+            return (
+              <Pressable
+                style={({ pressed }) => [styles.viewAllCard, pressed && { opacity: 0.8 }]}
+                onPress={onViewAllPosts}
+              >
+                <Feather name="grid" size={32} color={colors.primary} />
+                <Text style={styles.viewAllCardTitle}>View all posts</Text>
+                <Feather name="chevron-right" size={20} color={colors.textMuted} />
+              </Pressable>
+            );
+          }
+          return (
+            // Outer view carries the shadow; inner Pressable clips content with overflow:hidden
+            <View style={styles.carouselCardOuter}>
+              <Pressable style={styles.carouselCard} onPress={() => onOpenPost(item)}>
+                {/* Content area fills available height, taps fall through to open the viewer */}
+                <View style={{ flex: 1 }} pointerEvents="none">
+                  <View style={styles.carouselCardInner}>
+                    <FeedCardHeader
+                      user={item.user}
+                      createdAt={item.created_at}
+                      locationName={item.location_name}
+                      workoutType={item.workout_type}
+                      sharedContext={item.shared_context}
+                    />
+                    <FeedCardBody
+                      item={item}
+                      onPollVote={() => {}}
+                    />
+                  </View>
+                </View>
+                {/* Action bar always pinned to the bottom of the fixed-height card */}
+                <View style={styles.carouselCardActions}>
+                  <FeedCardActions
+                    likeCount={item.like_count}
+                    commentCount={item.comment_count}
+                    userLiked={item.user_liked}
+                    onLike={() => onLike(item)}
+                    onComment={() => onComment(item)}
+                    shareUrl={`https://spottr.app/${item.type}/${item.id}`}
+                    shareTitle={
+                      item.description
+                        ? `${item.user.display_name}: ${item.description.slice(0, 60)}`
+                        : `${item.user.display_name}'s post`
+                    }
+                  />
+                </View>
+              </Pressable>
+            </View>
+          );
+        }}
+      />
+
+      {/* Arrow controls + dot indicators */}
+      <View style={styles.carouselControls}>
+        <Pressable
+          onPress={() => scrollTo(activeIndex - 1)}
+          disabled={!canGoLeft}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={[styles.carouselArrow, !canGoLeft && styles.carouselArrowDisabled]}
+        >
+          <Feather name="chevron-left" size={18} color={canGoLeft ? colors.textPrimary : colors.textMuted} />
+        </Pressable>
+        <View style={styles.carouselDots}>
+          {data.map((_, i) => (
+            <View key={i} style={[styles.carouselDot, i === activeIndex && styles.carouselDotActive]} />
           ))}
         </View>
-      ))}
-      {posts.length > 9 && (
-        <Pressable style={styles.toggleBtn} onPress={onViewAllPosts}>
-          <Feather name="grid" size={14} color={colors.primary} />
-          <Text style={styles.toggleBtnText}>View All Posts</Text>
-          <Feather name="chevron-right" size={14} color={colors.primary} />
+        <Pressable
+          onPress={() => scrollTo(activeIndex + 1)}
+          disabled={!canGoRight}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={[styles.carouselArrow, !canGoRight && styles.carouselArrowDisabled]}
+        >
+          <Feather name="chevron-right" size={18} color={canGoRight ? colors.textPrimary : colors.textMuted} />
         </Pressable>
-      )}
+      </View>
+
+      {/* View all posts button */}
+      <Pressable
+        style={({ pressed }) => [styles.viewAllPostsBtn, pressed && { opacity: 0.75 }]}
+        onPress={onViewAllPosts}
+      >
+        <Feather name="list" size={14} color={colors.primary} />
+        <Text style={styles.viewAllPostsBtnText}>View all posts</Text>
+        <Feather name="chevron-right" size={14} color={colors.primary} />
+      </Pressable>
     </View>
   );
 }
@@ -1421,85 +1696,25 @@ function PostThumbnail({ item, onPress, size }: { item: FeedItem; onPress: () =>
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-function calPostToFeedItem(cp: CalendarPost, profile: UserProfile): FeedItem {
-  return {
-    id: cp.id,
-    type: cp.type === 'checkin' ? 'checkin' : 'post',
-    user: {
-      id: profile.id,
-      username: profile.username,
-      display_name: profile.display_name,
-      avatar_url: profile.avatar_url,
-    },
-    created_at: cp.date,
-    description: cp.description,
-    location_name: cp.location_name || null,
-    photo_url: cp.photo_url,
-    link_url: null,
-    like_count: cp.like_count,
-    comment_count: cp.comment_count,
-    user_liked: cp.user_liked,
-    workout: cp.workout_name ? {
-      id: cp.id,
-      name: cp.workout_name,
-      exercise_count: cp.workout_exercises ?? 0,
-      total_sets: cp.workout_sets ?? 0,
-      duration: '',
-      exercises: [],
-    } : null,
-    personal_record: null,
-    poll: null,
-    workout_type: cp.type === 'checkin' ? cp.description : undefined,
-    visibility: 'main',
-  };
-}
+
+// ─── Calendar Tab ──────────────────────────────────────────────────────────────
 
 function CalendarTab({
-  posts,
-  postsLoading,
   profileUsername,
-  profile,
-  onLike,
-  onComment,
-  onPollVote,
-  onDelete,
-  isOwn,
+  onOpenViewer,
 }: {
-  posts: FeedItem[];
-  postsLoading: boolean;
   profileUsername: string;
-  profile: UserProfile | null;
-  onLike: (item: FeedItem) => void;
-  onComment: (item: FeedItem) => void;
-  onPollVote: (item: FeedItem, optionId: number) => void;
-  onDelete?: (item: FeedItem) => void;
-  isOwn: boolean;
+  onOpenViewer: (days: CalViewerDay[], initialIndex: number) => void;
 }) {
-  const insets = useSafeAreaInsets();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
-  const [restDayNums, setRestDayNums] = useState<Set<number>>(new Set());
-  const [workoutDayNums, setWorkoutDayNums] = useState<Set<number>>(new Set());
-  const [calendarPostsData, setCalendarPostsData] = useState<CalendarPost[]>([]);
-  const [dayModalVisible, setDayModalVisible] = useState(false);
-  const [currentModalDay, setCurrentModalDay] = useState(1);
+  const [checkins, setCheckins] = useState<CheckinItem[]>([]);
 
-  // Posts for the currently selected day — built from the calendar API data
-  // so they're always available regardless of paginated posts loading state.
-  const currentDayPosts = useMemo((): FeedItem[] => {
-    if (!profile) return [];
-    return calendarPostsData
-      .filter((cp) => {
-        const day = parseInt(cp.date.split('-')[2], 10);
-        return day === currentModalDay && cp.type !== 'rest';
-      })
-      .map((cp) => calPostToFeedItem(cp, profile));
-  }, [calendarPostsData, currentModalDay, profile]);
-
-  // Fetch calendar data from the dedicated API — stores full post list so
-  // the day modal can display posts without depending on paginated posts state.
   useEffect(() => {
+    setCheckins([]);
+    fetchUserCheckins(profileUsername, undefined, month + 1, year)
+      .then((res) => setCheckins(res.items))
     setRestDayNums(new Set());
     setWorkoutDayNums(new Set());
     setCalendarPostsData([]);
@@ -1522,11 +1737,27 @@ function CalendarTab({
       .catch(() => {});
   }, [year, month, profileUsername]);
 
-  // Sorted array of days that have workout posts — each becomes one swipeable page
-  const sortedWorkoutDays = useMemo(
-    () => Array.from(workoutDayNums).sort((a, b) => a - b),
-    [workoutDayNums],
-  );
+  // Group check-ins by day number
+  const dayMap = useMemo(() => {
+    const map = new Map<number, CheckinItem[]>();
+    for (const c of checkins) {
+      const d = new Date(c.created_at);
+      if (d.getFullYear() === year && d.getMonth() === month) {
+        const day = d.getDate();
+        if (!map.has(day)) map.set(day, []);
+        map.get(day)!.push(c);
+      }
+    }
+    return map;
+  }, [checkins, year, month]);
+
+  const checkinDayNums = useMemo(() => new Set(dayMap.keys()), [dayMap]);
+
+  const sortedDays = useMemo<CalViewerDay[]>(() => (
+    Array.from(dayMap.entries())
+      .sort(([a], [b]) => a - b)
+      .map(([day, items]) => ({ year, month, day, checkins: items }))
+  ), [dayMap, year, month]);
 
   const prevMonth = () => {
     if (month === 0) { setMonth(11); setYear((y) => y - 1); }
@@ -1542,9 +1773,9 @@ function CalendarTab({
   };
 
   const handleDayPress = (day: number) => {
-    if (!workoutDayNums.has(day)) return;
-    setCurrentModalDay(day);
-    setDayModalVisible(true);
+    if (!checkinDayNums.has(day)) return;
+    const idx = sortedDays.findIndex((d) => d.day === day);
+    if (idx >= 0) onOpenViewer(sortedDays, idx);
   };
 
   const firstDay = new Date(year, month, 1).getDay();
@@ -1552,7 +1783,7 @@ function CalendarTab({
 
   return (
     <View style={styles.calendarWrap}>
-      <Text style={styles.calendarTitle}>📅 Workout Calendar</Text>
+      <Text style={styles.calendarTitle}>📅 Check-in Calendar</Text>
       <View style={styles.calendarCard}>
         <View style={styles.calNav}>
           <Pressable style={styles.calNavBtn} onPress={prevMonth}>
@@ -1580,25 +1811,16 @@ function CalendarTab({
           ))}
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const day = i + 1;
-            const hasWorkout = workoutDayNums.has(day);
-            const isRest = !hasWorkout && restDayNums.has(day);
+            const hasCheckin = checkinDayNums.has(day);
             return (
               <Pressable
                 key={day}
                 style={styles.calDay}
                 onPress={() => handleDayPress(day)}
-                disabled={!hasWorkout}
+                disabled={!hasCheckin}
               >
-                <View style={[
-                  styles.calDayBubble,
-                  hasWorkout && styles.calDayBubbleWorkout,
-                  isRest && styles.calDayBubbleRest,
-                ]}>
-                  <Text style={[
-                    styles.calDayText,
-                    hasWorkout && styles.calDayTextWorkout,
-                    isRest && styles.calDayTextRest,
-                  ]}>
+                <View style={[styles.calDayBubble, hasCheckin && styles.calDayBubbleWorkout]}>
+                  <Text style={[styles.calDayText, hasCheckin && styles.calDayTextWorkout]}>
                     {day}
                   </Text>
                 </View>
@@ -1607,81 +1829,6 @@ function CalendarTab({
           })}
         </View>
       </View>
-
-      {/* Day posts sheet — pageSheet showing full FeedCards for the selected day */}
-      <Modal
-        visible={dayModalVisible}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setDayModalVisible(false)}
-      >
-        <View style={{ flex: 1, backgroundColor: colors.background.base }}>
-          {/* Header: prev arrow, date, next arrow, close */}
-          <View style={[styles.calDaySheetHeader, { paddingTop: insets.top > 0 ? insets.top : 16 }]}>
-            <Pressable
-              style={styles.calModalNavBtn}
-              onPress={() => {
-                const idx = sortedWorkoutDays.indexOf(currentModalDay);
-                if (idx > 0) setCurrentModalDay(sortedWorkoutDays[idx - 1]);
-              }}
-              disabled={sortedWorkoutDays.indexOf(currentModalDay) === 0}
-            >
-              <Feather
-                name="chevron-left"
-                size={20}
-                color={sortedWorkoutDays.indexOf(currentModalDay) === 0 ? colors.textMuted : colors.textPrimary}
-              />
-            </Pressable>
-            <View style={{ alignItems: 'center', flex: 1 }}>
-              <Text style={styles.calModalDate}>{MONTHS[month]} {currentModalDay}</Text>
-              <Text style={styles.calModalYear}>{year}</Text>
-            </View>
-            <Pressable
-              style={styles.calModalNavBtn}
-              onPress={() => {
-                const idx = sortedWorkoutDays.indexOf(currentModalDay);
-                if (idx < sortedWorkoutDays.length - 1) setCurrentModalDay(sortedWorkoutDays[idx + 1]);
-              }}
-              disabled={sortedWorkoutDays.indexOf(currentModalDay) === sortedWorkoutDays.length - 1}
-            >
-              <Feather
-                name="chevron-right"
-                size={20}
-                color={sortedWorkoutDays.indexOf(currentModalDay) === sortedWorkoutDays.length - 1 ? colors.textMuted : colors.textPrimary}
-              />
-            </Pressable>
-            <Pressable style={styles.calModalNavBtn} onPress={() => setDayModalVisible(false)}>
-              <Feather name="x" size={18} color={colors.textMuted} />
-            </Pressable>
-          </View>
-
-          <FlatList
-            data={currentDayPosts}
-            keyExtractor={(item) => item.id}
-            showsVerticalScrollIndicator={false}
-            contentContainerStyle={{ paddingBottom: 80 }}
-            ListEmptyComponent={
-              <View style={styles.emptyTab}>
-                <Feather name="calendar" size={36} color={colors.textMuted} />
-                <Text style={styles.emptyText}>No posts for this day</Text>
-              </View>
-            }
-            renderItem={({ item }) => (
-              <FeedCard
-                item={item}
-                index={0}
-                onLike={() => onLike(item)}
-                onComment={() => onComment(item)}
-                onPollVote={(optionId) => onPollVote(item, optionId)}
-                onDelete={isOwn ? () => {
-                  setCalendarPostsData(prev => prev.filter(cp => cp.id !== item.id));
-                  onDelete?.(item);
-                } : undefined}
-              />
-            )}
-          />
-        </View>
-      </Modal>
     </View>
   );
 }
@@ -2094,6 +2241,109 @@ const styles = StyleSheet.create({
   },
   toggleBtnText: { fontSize: typography.size.sm, fontWeight: '600', color: colors.primary },
 
+  // ── Carousel (Posts tab) ──
+  carouselContent: {
+    paddingLeft: 16,
+    paddingRight: 8,
+    paddingVertical: 10,
+  },
+  // Outer view holds the shadow; no overflow so shadow is visible on iOS
+  carouselCardOuter: {
+    width: CAROUSEL_CARD_W,
+    height: CAROUSEL_CARD_H,
+    marginRight: CAROUSEL_GAP,
+    borderRadius: 14,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.12, shadowRadius: 12 },
+      android: { elevation: 4 },
+    }),
+  },
+  // Inner Pressable clips content to border radius
+  carouselCard: {
+    flex: 1,
+    flexDirection: 'column' as const,
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: colors.surface,
+  },
+  carouselCardInner: {
+    paddingTop: spacing.base,
+    paddingHorizontal: spacing.base,
+  },
+  carouselCardActions: {
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing.sm,
+    paddingTop: 4,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderColor,
+    backgroundColor: colors.surface,
+  },
+  viewAllCard: {
+    width: CAROUSEL_CARD_W,
+    height: CAROUSEL_CARD_H,
+    marginRight: CAROUSEL_GAP,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    backgroundColor: colors.background.elevated,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 14,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12 },
+      android: { elevation: 3 },
+    }),
+  },
+  viewAllCardTitle: {
+    fontSize: 18,
+    fontWeight: '700' as const,
+    color: colors.textPrimary,
+  },
+  carouselControls: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 4,
+    gap: 12,
+  },
+  carouselArrow: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: colors.background.elevated,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  carouselArrowDisabled: { opacity: 0.35 },
+  carouselDots: {
+    flex: 1,
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 6,
+  },
+  carouselDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.border.default },
+  carouselDotActive: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.primary },
+  viewAllPostsBtn: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    gap: 6,
+    marginHorizontal: 16,
+    marginTop: 8,
+    marginBottom: 4,
+    paddingVertical: 11,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    backgroundColor: colors.background.elevated,
+  },
+  viewAllPostsBtnText: { fontSize: 13, fontWeight: '600' as const, color: colors.primary },
+
   // ── Posts full grid ──
   postsGrid: { paddingHorizontal: spacing.xl, paddingBottom: spacing.md },
   postsRow: { flexDirection: 'row', gap: THUMB_GAP, marginBottom: THUMB_GAP },
@@ -2176,6 +2426,66 @@ const styles = StyleSheet.create({
   calModalNavBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   calModalDate: { fontSize: 17, fontWeight: '700', color: colors.textPrimary },
   calModalYear: { fontSize: 13, color: colors.textMuted, marginTop: 1 },
+
+  // ── Calendar floating card modal styles ───────────────────────────────────
+  calModalBackdrop: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.88)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  calModalOuter: {
+    width: SCREEN_WIDTH * 0.88,
+    alignItems: 'center',
+  },
+  calModalCard: {
+    width: SCREEN_WIDTH * 0.88,
+    height: SCREEN_HEIGHT * 0.64,
+    borderRadius: 20,
+    overflow: 'hidden',
+    backgroundColor: '#111',
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 12 }, shadowOpacity: 0.5, shadowRadius: 24 },
+      android: { elevation: 16 },
+    }),
+  },
+  calModalTopGrad: {
+    position: 'absolute', top: 0, left: 0, right: 0,
+    paddingTop: 16, paddingHorizontal: 16, paddingBottom: 40,
+  },
+  calModalDateText: { fontSize: 17, fontWeight: '700', color: '#fff' },
+  calModalCheckinOf: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
+  calModalBottomGrad: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    paddingHorizontal: 16, paddingTop: 60, paddingBottom: 16,
+  },
+  calModalWorkoutType: { fontSize: 18, fontWeight: '700', color: '#fff' },
+  calModalLocRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 5 },
+  calModalLocation: { fontSize: 13, color: 'rgba(255,255,255,0.8)' },
+  calModalDesc: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 5, lineHeight: 19 },
+  calModalNoPhoto: { alignItems: 'center', justifyContent: 'center' },
+  calModalActions: {
+    position: 'absolute', right: 10, bottom: 60,
+    alignItems: 'center', gap: 20,
+  },
+  calModalAction: { alignItems: 'center', gap: 4 },
+  calModalActionCount: { fontSize: 12, fontWeight: '600', color: '#fff' },
+  calModalXBtn: {
+    position: 'absolute', top: 12, right: 12,
+    width: 30, height: 30, borderRadius: 15,
+    backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center',
+  },
+  calModalCheckinDots: {
+    flexDirection: 'row', gap: 6, marginTop: 10, alignItems: 'center',
+  },
+  calModalDateNav: {
+    flexDirection: 'row', alignItems: 'center', gap: 12, marginTop: 14,
+  },
+  calModalCardNavBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center',
+  },
+  calModalDateDots: { flexDirection: 'row', gap: 5, alignItems: 'center', flexWrap: 'wrap', maxWidth: SCREEN_WIDTH * 0.5 },
+  calModalSmDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.35)' },
+  calModalSmDotActive: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#fff' },
   calModalScroll: { flex: 1 },
   calDayCard: {
     backgroundColor: colors.background.elevated, borderRadius: 12,
@@ -2325,3 +2635,187 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20, padding: 6,
   },
 });
+
+// ── CalViewerCard ─────────────────────────────────────────────────────────────
+// Extracted so it can use React hooks (PanResponder) for swipe gestures.
+// Left/right swipe: navigate check-ins within the day (or spill to next/prev day).
+// Up/down swipe: navigate between days.
+
+type CalViewerCardProps = {
+  days: CalViewerDay[];
+  dayIdx: number;
+  checkinIdx: number;
+  likeState: Record<string, { liked: boolean; count: number }>;
+  onClose: () => void;
+  onDayChange: (idx: number) => void;
+  onCheckinChange: (idx: number) => void;
+  onLike: (checkin: CheckinItem) => void;
+  onComment: (checkin: CheckinItem) => void;
+};
+
+function CalViewerCard({ days, dayIdx, checkinIdx, likeState, onClose, onDayChange, onCheckinChange, onLike, onComment }: CalViewerCardProps) {
+  const entry = days[dayIdx];
+  const checkin = entry?.checkins[checkinIdx] ?? entry?.checkins[0];
+
+  // Stale-closure refs so PanResponder callbacks always read latest values
+  const dayIdxRef = useRef(dayIdx);
+  const checkinIdxRef = useRef(checkinIdx);
+  const daysRef = useRef(days);
+  useEffect(() => { dayIdxRef.current = dayIdx; }, [dayIdx]);
+  useEffect(() => { checkinIdxRef.current = checkinIdx; }, [checkinIdx]);
+  useEffect(() => { daysRef.current = days; }, [days]);
+
+  // dragX/dragY: subtle resistance feedback while finger is held down
+  const dragX = useRef(new Animated.Value(0)).current;
+  const dragY = useRef(new Animated.Value(0)).current;
+  // slideY: spring animation when day changes (new card slides in from top or bottom)
+  const slideY = useRef(new Animated.Value(0)).current;
+  const prevDayRef = useRef(dayIdx);
+
+  useEffect(() => {
+    if (prevDayRef.current === dayIdx) return;
+    const forward = dayIdx > prevDayRef.current; // going to newer day
+    prevDayRef.current = dayIdx;
+    // New card slides in from bottom (forward) or top (backward)
+    slideY.setValue(forward ? 300 : -300);
+    Animated.spring(slideY, { toValue: 0, useNativeDriver: true, tension: 110, friction: 14 }).start();
+  }, [dayIdx]);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 10 || Math.abs(g.dy) > 10,
+      onPanResponderMove: (_, g) => {
+        dragX.setValue(g.dx * 0.18);
+        dragY.setValue(g.dy * 0.12);
+      },
+      onPanResponderRelease: (_, g) => {
+        const idx = dayIdxRef.current;
+        const cIdx = checkinIdxRef.current;
+        const allDays = daysRef.current;
+        const curEntry = allDays[idx];
+        const absX = Math.abs(g.dx);
+        const absY = Math.abs(g.dy);
+
+        if (absX > absY && absX > 40) {
+          // Horizontal swipe → only navigate check-ins within this day; ignore if single check-in
+          Animated.spring(dragX, { toValue: 0, useNativeDriver: true, tension: 200, friction: 20 }).start();
+          Animated.spring(dragY, { toValue: 0, useNativeDriver: true, tension: 200, friction: 20 }).start();
+          if (curEntry.checkins.length > 1) {
+            if (g.dx < 0 && cIdx < curEntry.checkins.length - 1) onCheckinChange(cIdx + 1);
+            else if (g.dx > 0 && cIdx > 0) onCheckinChange(cIdx - 1);
+          }
+        } else if (absY > absX && absY > 50) {
+          // Vertical swipe → navigate between days; snap drag instantly, slideY handles animation
+          dragX.setValue(0);
+          dragY.setValue(0);
+          if (g.dy < 0 && idx < allDays.length - 1) {
+            onDayChange(idx + 1);
+            onCheckinChange(0);
+          } else if (g.dy > 0 && idx > 0) {
+            onDayChange(idx - 1);
+            onCheckinChange(0);
+          }
+        } else {
+          // Not enough gesture — spring back
+          Animated.spring(dragX, { toValue: 0, useNativeDriver: true, tension: 200, friction: 20 }).start();
+          Animated.spring(dragY, { toValue: 0, useNativeDriver: true, tension: 200, friction: 20 }).start();
+        }
+      },
+      onPanResponderTerminate: () => {
+        dragX.setValue(0);
+        dragY.setValue(0);
+      },
+    })
+  ).current;
+
+  if (!checkin) return null;
+  const likeData = likeState[checkin.id] ?? { liked: checkin.user_liked, count: checkin.like_count };
+
+  return (
+    <View style={styles.calModalOuter} pointerEvents="box-none">
+      <Animated.View
+        {...panResponder.panHandlers}
+        style={[styles.calModalCard, { transform: [{ translateX: dragX }, { translateY: Animated.add(dragY, slideY) }] }]}
+      >
+        {/* Photo */}
+        {checkin.photo_url ? (
+          <Image source={{ uri: checkin.photo_url }} style={StyleSheet.absoluteFill} contentFit="cover" />
+        ) : (
+          <View style={[StyleSheet.absoluteFill, styles.calModalNoPhoto]}>
+            <Feather name="camera" size={48} color="rgba(255,255,255,0.2)" />
+          </View>
+        )}
+
+        {/* Top gradient: date */}
+        <LinearGradient colors={['rgba(0,0,0,0.6)', 'transparent']} style={styles.calModalTopGrad}>
+          <Text style={styles.calModalDateText}>{MONTHS[entry.month]} {entry.day}, {entry.year}</Text>
+          {entry.checkins.length > 1 && (
+            <Text style={styles.calModalCheckinOf}>{checkinIdx + 1} / {entry.checkins.length}</Text>
+          )}
+        </LinearGradient>
+
+        {/* Bottom gradient: details */}
+        <LinearGradient colors={['transparent', 'rgba(0,0,0,0.82)']} style={styles.calModalBottomGrad}>
+          {checkin.workout_type ? <Text style={styles.calModalWorkoutType}>{checkin.workout_type}</Text> : null}
+          {checkin.location_name ? (
+            <View style={styles.calModalLocRow}>
+              <Feather name="map-pin" size={12} color="rgba(255,255,255,0.75)" />
+              <Text style={styles.calModalLocation}>{checkin.location_name}</Text>
+            </View>
+          ) : null}
+          {checkin.description ? <Text style={styles.calModalDesc}>{checkin.description}</Text> : null}
+        </LinearGradient>
+
+        {/* Right-side action buttons */}
+        <View style={styles.calModalActions}>
+          <Pressable style={styles.calModalAction} onPress={() => onLike(checkin)}>
+            <Feather name="heart" size={26} color={likeData.liked ? colors.semantic.like : '#fff'} />
+            {likeData.count > 0 && <Text style={styles.calModalActionCount}>{likeData.count}</Text>}
+          </Pressable>
+          <Pressable style={styles.calModalAction} onPress={() => onComment(checkin)}>
+            <Feather name="message-circle" size={26} color="#fff" />
+            {checkin.comment_count > 0 && <Text style={styles.calModalActionCount}>{checkin.comment_count}</Text>}
+          </Pressable>
+          <Pressable
+            style={styles.calModalAction}
+            onPress={() => Share.share({ message: `Check out this workout on Spottr!` })}
+          >
+            <Feather name="share" size={24} color="#fff" />
+          </Pressable>
+        </View>
+
+        {/* X close button */}
+        <Pressable style={styles.calModalXBtn} onPress={onClose}>
+          <Feather name="x" size={18} color="#fff" />
+        </Pressable>
+      </Animated.View>
+
+      {/* Check-in arrows — only shown when this day has multiple check-ins */}
+      {entry.checkins.length > 1 && (
+        <View style={styles.calModalDateNav}>
+          <Pressable
+            style={[styles.calModalCardNavBtn, checkinIdx === 0 && { opacity: 0.3 }]}
+            disabled={checkinIdx === 0}
+            onPress={() => onCheckinChange(checkinIdx - 1)}
+          >
+            <Feather name="chevron-left" size={20} color="#fff" />
+          </Pressable>
+          <View style={styles.calModalCheckinDots}>
+            {entry.checkins.map((_, i) => (
+              <Pressable key={i} onPress={() => onCheckinChange(i)}>
+                <View style={[styles.calModalSmDot, i === checkinIdx && styles.calModalSmDotActive]} />
+              </Pressable>
+            ))}
+          </View>
+          <Pressable
+            style={[styles.calModalCardNavBtn, checkinIdx === entry.checkins.length - 1 && { opacity: 0.3 }]}
+            disabled={checkinIdx === entry.checkins.length - 1}
+            onPress={() => onCheckinChange(checkinIdx + 1)}
+          >
+            <Feather name="chevron-right" size={20} color="#fff" />
+          </Pressable>
+        </View>
+      )}
+    </View>
+  );
+}
