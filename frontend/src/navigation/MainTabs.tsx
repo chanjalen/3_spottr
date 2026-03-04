@@ -126,7 +126,7 @@ export default function MainTabs() {
       <Root.Screen name="Profile" component={ProfileScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="Notifications" component={NotificationsScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="WorkoutLog" component={WorkoutLogScreen} options={{ presentation: 'card' }} />
-      <Root.Screen name="ActiveWorkout" component={ActiveWorkoutScreen} options={{ presentation: 'card', gestureEnabled: false }} />
+      <Root.Screen name="ActiveWorkout" component={ActiveWorkoutScreen} options={{ presentation: 'card', gestureEnabled: true }} />
       <Root.Screen name="StreakDetails" component={StreakDetailsScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="EditProfile" component={EditProfileScreen} options={{ presentation: 'modal' }} />
       <Root.Screen name="GroupProfile" component={GroupProfileScreen} options={{ presentation: 'card' }} />
