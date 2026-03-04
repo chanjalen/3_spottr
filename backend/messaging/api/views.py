@@ -234,6 +234,11 @@ def _compute_preview_text(entry, user):
         actor = entry.latest_reaction_actor
         if actor:
             msg_sender_id = entry.latest_reaction_message_sender_id
+            is_self = actor == user.username
+            if is_self:
+                if msg_sender_id and str(msg_sender_id) == str(user.id):
+                    return "You reacted to your message"
+                return "You reacted to a message"
             if msg_sender_id and str(msg_sender_id) == str(user.id):
                 return f"{actor} reacted to your message"
             return f"{actor} reacted to a message"
