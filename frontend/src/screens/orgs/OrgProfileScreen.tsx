@@ -600,6 +600,11 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
 
     return (
       <View style={{ flex: 1 }}>
+        {/* Subtitle */}
+        <Text style={styles.actSubtitle}>
+          See how much {org?.name} has worked out!
+        </Text>
+
         {/* Search bar */}
         <View style={styles.actSearchRow}>
           <Feather name="search" size={15} color={colors.textMuted} />
@@ -664,7 +669,7 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
                   <View style={styles.actStreakRow}>
                     <Text style={styles.actStreakText}>🔥 {item.current_streak}d</Text>
                   </View>
-                  <Text style={styles.actCount}>{item.workout_count}</Text>
+                  <Text style={styles.actCount}>Workouts: {item.workout_count}</Text>
                 </View>
               </Pressable>
             )}
@@ -1554,12 +1559,20 @@ const styles = StyleSheet.create({
   settingsDeleteBtnText: { fontSize: typography.size.base, fontWeight: '700', color: '#fff' },
 
   // ── Activity tab ──────────────────────────────────────────────────────────
+  actSubtitle: {
+    fontSize: typography.size.sm,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.md,
+    marginHorizontal: spacing.base,
+    fontStyle: 'italic',
+  },
   actSearchRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     marginHorizontal: spacing.base,
-    marginTop: spacing.md,
+    marginTop: spacing.lg,
     marginBottom: spacing.sm,
     paddingHorizontal: spacing.sm,
     paddingVertical: spacing.sm,
@@ -1610,7 +1623,7 @@ const styles = StyleSheet.create({
   actRight: { alignItems: 'flex-end', gap: 2 },
   actStreakRow: { flexDirection: 'row', alignItems: 'center' },
   actStreakText: { fontSize: typography.size.xs, color: colors.textSecondary },
-  actCount: { fontSize: typography.size.base, fontWeight: '700', color: colors.textPrimary },
+  actCount: { fontSize: typography.size.sm, fontWeight: '700', color: colors.textPrimary },
   actEmpty: {
     fontSize: typography.size.sm,
     color: colors.textMuted,
