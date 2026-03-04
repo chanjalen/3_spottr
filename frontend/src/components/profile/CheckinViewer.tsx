@@ -1,9 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Animated,
   Dimensions,
   Modal,
-  PanResponder,
   Pressable,
   StyleSheet,
   Text,
@@ -12,6 +10,16 @@ import {
 import { Image } from 'expo-image';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
+import Animated, {
+  Extrapolation,
+  interpolate,
+  runOnJS,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { CheckinItem } from '../../api/feed';
 import { colors, spacing } from '../../theme';
 
@@ -20,7 +28,7 @@ const { width: SW, height: SH } = Dimensions.get('window');
 const CARD_W = SW * 0.88;
 const CARD_H = SH * 0.56;
 const SWIPE_THRESHOLD = SW * 0.22;
-const ROTATION_RANGE = 12;
+const ROTATION_RANGE = 8;
 
 function formatDateLabel(dateStr: string): string {
   const date = new Date(dateStr);
@@ -51,117 +59,181 @@ export default function CheckinViewer({ visible, checkins, onClose, onLoadMore, 
   const insets = useSafeAreaInsets();
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  const currentIndexRef = useRef(0);
+  // Shared values for UI-thread-safe bounds checking in gesture worklets
+  const currentIndexSV = useSharedValue(0);
+  const maxIndexSV = useSharedValue(checkins.length - 1);
   const checkinsLenRef = useRef(checkins.length);
 
-  useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
-  useEffect(() => { checkinsLenRef.current = checkins.length; }, [checkins.length]);
+  useEffect(() => { currentIndexSV.value = currentIndex; }, [currentIndex]);
+  useEffect(() => {
+    maxIndexSV.value = checkins.length - 1;
+    checkinsLenRef.current = checkins.length;
+  }, [checkins.length]);
 
-  const position = useRef(new Animated.ValueXY()).current;
-  const cardOpacity = useRef(new Animated.Value(1)).current;
+  // Card animation
+  const translateX = useSharedValue(0);
+  const cardOpacity = useSharedValue(1);
 
-  // null = "just opened / not yet swiped", number = last index we handled
+  // Backdrop animation (swipe-down-to-dismiss)
+  const backdropTranslateY = useSharedValue(0);
+  const backdropOpacity = useSharedValue(1);
+
   const prevIndexRef = useRef<number | null>(null);
 
-  // ── Reset card when viewer opens ─────────────────────────────────────────────
+  // ── Reset when viewer opens ───────────────────────────────────────────────────
   useEffect(() => {
     if (visible) {
       prevIndexRef.current = null;
-      position.setValue({ x: 0, y: 0 });
-      cardOpacity.setValue(1);
+      translateX.value = 0;
+      cardOpacity.value = 1;
+      backdropTranslateY.value = 0;
+      backdropOpacity.value = 1;
       setCurrentIndex(0);
     }
   }, [visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── After a swipe-driven index change, reset position & fade in ──────────────
-  // This runs AFTER React has committed the new card content. By that point the
-  // card is invisible (opacity=0) and off-screen (position=±1400), so resetting
-  // position and starting the fade-in never shows the old content.
+  // ── After index change: snap position back & fade in ─────────────────────────
   useEffect(() => {
     if (!visible) return;
-
     if (prevIndexRef.current === null) {
-      // First render after open — card is already fully visible, just record index.
       prevIndexRef.current = currentIndex;
       return;
     }
-
     if (prevIndexRef.current === currentIndex) return;
     prevIndexRef.current = currentIndex;
 
-    // Card is off-screen + invisible here. Safe to snap to center.
-    position.setValue({ x: 0, y: 0 });
-    Animated.timing(cardOpacity, {
-      toValue: 1,
-      duration: 150,
-      useNativeDriver: true,
-    }).start();
+    translateX.value = 0;
+    cardOpacity.value = withTiming(1, { duration: 150 });
   }, [currentIndex, visible]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Load more when near the end ──────────────────────────────────────────────
+  // ── Load more when near end ───────────────────────────────────────────────────
   useEffect(() => {
     if (checkins.length > 0 && currentIndex >= checkins.length - 3 && hasMore) {
       onLoadMore();
     }
   }, [currentIndex, checkins.length, hasMore, onLoadMore]);
 
-  // ── Fly-off animation — does NOT reset position/opacity ──────────────────────
-  // Position and opacity are left in their end state (off-screen, transparent).
-  // The useEffect above handles the reset after React commits the new content.
-  const flyOff = useCallback((direction: 'left' | 'right') => {
-    const toX = direction === 'left' ? -SW * 1.4 : SW * 1.4;
-    Animated.parallel([
-      Animated.timing(position, {
-        toValue: { x: toX, y: 0 },
-        duration: 240,
-        useNativeDriver: true,
-      }),
-      Animated.timing(cardOpacity, {
-        toValue: 0,
-        duration: 180,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      const nextIndex = currentIndexRef.current + (direction === 'left' ? 1 : -1);
-      const clamped = Math.max(0, Math.min(nextIndex, checkinsLenRef.current - 1));
-      setCurrentIndex(clamped);
-      // ← No position/opacity reset here. useEffect handles it after render.
+  // ── JS callbacks (dispatched from UI thread via runOnJS) ─────────────────────
+  const goNext = useCallback(() => {
+    setCurrentIndex(i => Math.min(i + 1, checkinsLenRef.current - 1));
+  }, []);
+
+  const goPrev = useCallback(() => {
+    setCurrentIndex(i => Math.max(i - 1, 0));
+  }, []);
+
+  const closeViewer = useCallback(() => { onClose(); }, [onClose]);
+
+  // ── Nav-hint tap handlers (called from JS thread) ─────────────────────────────
+  const triggerLeft = useCallback(() => {
+    cardOpacity.value = withTiming(0, { duration: 160 });
+    translateX.value = withTiming(-SW * 1.4, { duration: 220 }, (done) => {
+      if (done) runOnJS(goNext)();
     });
-  }, [cardOpacity, position]);
+  }, [goNext, cardOpacity, translateX]);
 
-  // ── Pan responder ────────────────────────────────────────────────────────────
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 6,
-      onPanResponderMove: (_, g) => {
-        position.setValue({ x: g.dx, y: 0 });
-      },
-      onPanResponderRelease: (_, g) => {
-        if (g.dx < -SWIPE_THRESHOLD) {
-          if (currentIndexRef.current < checkinsLenRef.current - 1) {
-            flyOff('left');
-          } else {
-            Animated.spring(position, { toValue: { x: 0, y: 0 }, useNativeDriver: true }).start();
-          }
-        } else if (g.dx > SWIPE_THRESHOLD) {
-          if (currentIndexRef.current > 0) {
-            flyOff('right');
-          } else {
-            Animated.spring(position, { toValue: { x: 0, y: 0 }, useNativeDriver: true }).start();
-          }
-        } else {
-          Animated.spring(position, { toValue: { x: 0, y: 0 }, useNativeDriver: true }).start();
-        }
-      },
-    }),
-  ).current;
+  const triggerRight = useCallback(() => {
+    cardOpacity.value = withTiming(0, { duration: 160 });
+    translateX.value = withTiming(SW * 1.4, { duration: 220 }, (done) => {
+      if (done) runOnJS(goPrev)();
+    });
+  }, [goPrev, cardOpacity, translateX]);
 
-  const rotation = position.x.interpolate({
-    inputRange: [-SW / 2, 0, SW / 2],
-    outputRange: [`-${ROTATION_RANGE}deg`, '0deg', `${ROTATION_RANGE}deg`],
-    extrapolate: 'clamp',
-  });
+  // ── Card swipe gesture (horizontal — UI thread) ───────────────────────────────
+  const cardGesture = Gesture.Pan()
+    .activeOffsetX([-6, 6])
+    .failOffsetY([-12, 12])
+    .onUpdate((e) => {
+      translateX.value = e.translationX;
+    })
+    .onEnd((e) => {
+      const shouldLeft = e.translationX < -SWIPE_THRESHOLD || e.velocityX < -800;
+      const shouldRight = e.translationX > SWIPE_THRESHOLD || e.velocityX > 800;
+
+      if (shouldLeft && currentIndexSV.value < maxIndexSV.value) {
+        cardOpacity.value = withTiming(0, { duration: 160 });
+        translateX.value = withTiming(-SW * 1.4, { duration: 220 }, (done) => {
+          if (done) runOnJS(goNext)();
+        });
+      } else if (shouldRight && currentIndexSV.value > 0) {
+        cardOpacity.value = withTiming(0, { duration: 160 });
+        translateX.value = withTiming(SW * 1.4, { duration: 220 }, (done) => {
+          if (done) runOnJS(goPrev)();
+        });
+      } else {
+        translateX.value = withSpring(0, { damping: 18, stiffness: 220, mass: 0.8 });
+      }
+    });
+
+  // ── Dismiss gesture (swipe down — UI thread) ──────────────────────────────────
+  const dismissGesture = Gesture.Pan()
+    .activeOffsetY([0, 12])
+    .failOffsetX([-8, 8])
+    .onUpdate((e) => {
+      backdropTranslateY.value = Math.max(0, e.translationY);
+      backdropOpacity.value = interpolate(
+        e.translationY, [0, 300], [1, 0.3], Extrapolation.CLAMP,
+      );
+    })
+    .onEnd((e) => {
+      if (e.translationY > 120 || e.velocityY > 600) {
+        backdropTranslateY.value = withTiming(SH, { duration: 280 }, (done) => {
+          if (done) runOnJS(closeViewer)();
+        });
+        backdropOpacity.value = withTiming(0, { duration: 250 });
+      } else {
+        backdropTranslateY.value = withSpring(0, { damping: 20, stiffness: 200 });
+        backdropOpacity.value = withSpring(1, { damping: 20, stiffness: 200 });
+      }
+    });
+
+  // ── Animated styles ───────────────────────────────────────────────────────────
+  const cardAnimStyle = useAnimatedStyle(() => ({
+    transform: [
+      { translateX: translateX.value },
+      {
+        rotate: `${interpolate(
+          translateX.value,
+          [-SW / 2, 0, SW / 2],
+          [-ROTATION_RANGE, 0, ROTATION_RANGE],
+          Extrapolation.CLAMP,
+        )}deg`,
+      },
+    ],
+    opacity: cardOpacity.value,
+  }));
+
+  const behindAnimStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        scale: interpolate(
+          Math.abs(translateX.value),
+          [0, SW * 0.5],
+          [0.94, 1],
+          Extrapolation.CLAMP,
+        ),
+      },
+      {
+        translateY: interpolate(
+          Math.abs(translateX.value),
+          [0, SW * 0.5],
+          [12, 0],
+          Extrapolation.CLAMP,
+        ),
+      },
+    ],
+    opacity: interpolate(
+      Math.abs(translateX.value),
+      [0, SW * 0.5],
+      [0.7, 1],
+      Extrapolation.CLAMP,
+    ),
+  }));
+
+  const backdropAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: backdropTranslateY.value }],
+    opacity: backdropOpacity.value,
+  }));
 
   if (!visible || checkins.length === 0) return null;
 
@@ -177,77 +249,80 @@ export default function CheckinViewer({ visible, checkins, onClose, onLoadMore, 
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={[styles.backdrop, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
-
-        {/* Header */}
-        <View style={styles.headerRow}>
-          <Text style={styles.headerTitle}>Check-ins</Text>
-          <Pressable style={styles.closeBtn} onPress={onClose}>
-            <Feather name="x" size={24} color="#fff" />
-          </Pressable>
-        </View>
-
-        {/* Date label */}
-        <Text style={styles.dateLabel}>{dateLabel}</Text>
-
-        {/* Same-day indicator */}
-        {sameDayCount > 1 && (
-          <Text style={styles.sameDayIndicator}>{posInDay} of {sameDayCount} today</Text>
-        )}
-
-        {/* Card stack */}
-        <View style={styles.stackArea} pointerEvents="box-none">
-
-          {/* Card behind */}
-          {behindIndex !== null && (
-            <View style={[styles.card, styles.cardBehind]} pointerEvents="none">
-              <CheckinCard item={checkins[behindIndex]} />
-            </View>
-          )}
-
-          {/* Top card — swipeable */}
+      {/* GestureHandlerRootView needed for RNGH to work inside Modal on Android */}
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <GestureDetector gesture={dismissGesture}>
           <Animated.View
             style={[
-              styles.card,
-              {
-                transform: [{ translateX: position.x }, { rotate: rotation }],
-                opacity: cardOpacity,
-              },
+              styles.backdrop,
+              backdropAnimStyle,
+              { paddingTop: insets.top, paddingBottom: insets.bottom },
             ]}
-            {...panResponder.panHandlers}
           >
-            <CheckinCard item={item} />
+            {/* Header */}
+            <View style={styles.headerRow}>
+              <Text style={styles.headerTitle}>Check-ins</Text>
+              <Pressable style={styles.closeBtn} onPress={onClose}>
+                <Feather name="x" size={24} color="#fff" />
+              </Pressable>
+            </View>
+
+            {/* Date label */}
+            <Text style={styles.dateLabel}>{dateLabel}</Text>
+
+            {/* Same-day indicator */}
+            {sameDayCount > 1 && (
+              <Text style={styles.sameDayIndicator}>{posInDay} of {sameDayCount} today</Text>
+            )}
+
+            {/* Card stack */}
+            <View style={styles.stackArea} pointerEvents="box-none">
+
+              {/* Behind card */}
+              {behindIndex !== null && (
+                <Animated.View style={[styles.card, behindAnimStyle]} pointerEvents="none">
+                  <CheckinCard item={checkins[behindIndex]} />
+                </Animated.View>
+              )}
+
+              {/* Top card — swipeable */}
+              <GestureDetector gesture={cardGesture}>
+                <Animated.View style={[styles.card, cardAnimStyle]}>
+                  <CheckinCard item={item} />
+                </Animated.View>
+              </GestureDetector>
+            </View>
+
+            {/* Dots */}
+            <View style={styles.dotsRow}>
+              {checkins.slice(0, Math.min(checkins.length, 8)).map((_, i) => (
+                <View key={i} style={[styles.dot, i === currentIndex && styles.dotActive]} />
+              ))}
+              {checkins.length > 8 && (
+                <Text style={styles.moreDotsText}>+{checkins.length - 8}</Text>
+              )}
+            </View>
+
+            {/* Nav hints */}
+            <View style={styles.navHintRow}>
+              {currentIndex > 0 && (
+                <Pressable style={styles.navHint} onPress={triggerRight}>
+                  <Feather name="chevron-left" size={18} color="rgba(255,255,255,0.5)" />
+                  <Text style={styles.navHintText}>Newer</Text>
+                </Pressable>
+              )}
+              <View style={{ flex: 1 }} />
+              {currentIndex < checkins.length - 1 && (
+                <Pressable style={styles.navHint} onPress={triggerLeft}>
+                  <Text style={styles.navHintText}>Older</Text>
+                  <Feather name="chevron-right" size={18} color="rgba(255,255,255,0.5)" />
+                </Pressable>
+              )}
+            </View>
+
           </Animated.View>
-        </View>
-
-        {/* Dots */}
-        <View style={styles.dotsRow}>
-          {checkins.slice(0, Math.min(checkins.length, 8)).map((_, i) => (
-            <View key={i} style={[styles.dot, i === currentIndex && styles.dotActive]} />
-          ))}
-          {checkins.length > 8 && (
-            <Text style={styles.moreDotsText}>+{checkins.length - 8}</Text>
-          )}
-        </View>
-
-        {/* Nav hints */}
-        <View style={styles.navHintRow}>
-          {currentIndex > 0 && (
-            <Pressable style={styles.navHint} onPress={() => flyOff('right')}>
-              <Feather name="chevron-left" size={18} color="rgba(255,255,255,0.5)" />
-              <Text style={styles.navHintText}>Newer</Text>
-            </Pressable>
-          )}
-          <View style={{ flex: 1 }} />
-          {currentIndex < checkins.length - 1 && (
-            <Pressable style={styles.navHint} onPress={() => flyOff('left')}>
-              <Text style={styles.navHintText}>Older</Text>
-              <Feather name="chevron-right" size={18} color="rgba(255,255,255,0.5)" />
-            </Pressable>
-          )}
-        </View>
-
-      </View>
+        </GestureDetector>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -341,10 +416,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 16,
     elevation: 12,
-  },
-  cardBehind: {
-    transform: [{ scale: 0.94 }, { translateY: 12 }],
-    opacity: 0.7,
   },
   cardInner: { flex: 1 },
   cardPhoto: { width: '100%', height: '55%' },
