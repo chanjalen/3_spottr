@@ -275,7 +275,8 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange }: C
           )}
 
           <CommentInput
-            placeholder={replyingTo ? `Reply to @${replyingTo.username}...` : 'Add a comment...'}
+            placeholder="Add a comment..."
+            prefill={replyingTo ? `@${replyingTo.username} ` : ''}
             onSubmit={(text, photo) => {
               const currentItem = itemRef.current;
               if (!currentItem) return;
