@@ -101,6 +101,7 @@ const styles = StyleSheet.create({
     gap: spacing.xl,
     paddingTop: spacing.sm,
     marginTop: spacing.xs,
+    paddingHorizontal: spacing.md,
   },
   action: {
     flexDirection: 'row',

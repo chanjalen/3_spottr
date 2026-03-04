@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useMemo, useState } from 'react';
+import React, { useCallback, useRef, useMemo, useState, useImperativeHandle, forwardRef } from 'react';
 import {
   FlatList,
   ActivityIndicator,
@@ -25,6 +25,10 @@ import ShareSheet from './ShareSheet';
 import EmptyState from '../common/EmptyState';
 import { colors } from '../../theme';
 
+export interface ImmersiveFeedListHandle {
+  snapToCurrentItem: () => void;
+}
+
 interface ImmersiveFeedListProps {
   items: FeedItem[];
   /** Full height of the feed container (measures to full screen in immersive layout) */
@@ -43,7 +47,7 @@ interface ImmersiveFeedListProps {
   isLoadingMore: boolean;
 }
 
-export default function ImmersiveFeedList({
+const ImmersiveFeedList = forwardRef<ImmersiveFeedListHandle, ImmersiveFeedListProps>(function ImmersiveFeedList({
   items,
   itemHeight,
   topInset,
@@ -56,8 +60,19 @@ export default function ImmersiveFeedList({
   isRefreshing,
   onEndReached,
   isLoadingMore,
-}: ImmersiveFeedListProps) {
+}, ref) {
   const [shareItem, setShareItem] = useState<FeedItem | null>(null);
+
+  const flatListRef = useRef<FlatList<FeedItem>>(null);
+
+  useImperativeHandle(ref, () => ({
+    snapToCurrentItem: () => {
+      const index = currentIndexRef.current;
+      if (flatListRef.current && index >= 0) {
+        flatListRef.current.scrollToIndex({ index, animated: false });
+      }
+    },
+  }));
 
   // ─── Double-tap to like ─────────────────────────────────────────────────────
   // Gesture lives here (outside FlatList items) so it's unaffected by scroll
@@ -180,6 +195,7 @@ export default function ImmersiveFeedList({
       <GestureDetector gesture={doubleTap}>
         <View style={styles.container}>
           <FlatList
+            ref={flatListRef}
             data={items}
             keyExtractor={(item) => `immersive-${item.type}-${item.id}`}
             renderItem={renderItem}
@@ -218,7 +234,9 @@ export default function ImmersiveFeedList({
       <ShareSheet item={shareItem} onClose={() => setShareItem(null)} />
     </>
   );
-}
+});
+
+export default ImmersiveFeedList;
 
 const styles = StyleSheet.create({
   container: {

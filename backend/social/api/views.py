@@ -599,6 +599,159 @@ def poll_voters(request, poll_id):
     return Response({'options': options_data})
 
 
+# ── Post detail ────────────────────────────────────────────────────────────────
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def post_detail(request, post_id):
+    """
+    GET /api/social/posts/<post_id>/
+    Returns a single post or check-in as a FeedItem-shaped dict.
+    item_type hint: ?type=checkin to skip Post lookup and go straight to QuickWorkout.
+    """
+    from social.models import Post, QuickWorkout, Reaction, Comment
+    from workouts.models import PersonalRecord
+
+    item_type_hint = request.query_params.get('type', '')
+
+    if item_type_hint != 'checkin':
+        post = Post.objects.select_related('user', 'workout').filter(id=post_id).first()
+        if post:
+            like_count = Reaction.objects.filter(post=post).count()
+            comment_count = Comment.objects.filter(post=post).count()
+            user_liked = Reaction.objects.filter(post=post, user=request.user).exists()
+
+            pr = PersonalRecord.objects.filter(post=post).first()
+            personal_record = None
+            if pr:
+                personal_record = {'exercise_name': pr.exercise_name, 'value': pr.value, 'unit': pr.unit}
+
+            workout_data = None
+            if post.workout:
+                from workouts.models import Exercise, ExerciseSet
+                exercises = list(Exercise.objects.filter(workout=post.workout).order_by('order'))
+                total_sets = ExerciseSet.objects.filter(exercise__workout=post.workout).count()
+                duration_str = ''
+                if post.workout.duration:
+                    total_seconds = int(post.workout.duration.total_seconds())
+                    hours = total_seconds // 3600
+                    minutes = (total_seconds % 3600) // 60
+                    duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
+                workout_data = {
+                    'id': str(post.workout.id),
+                    'name': post.workout.name,
+                    'exercise_count': len(exercises),
+                    'total_sets': total_sets,
+                    'duration': duration_str,
+                    'exercises': [e.name for e in exercises[:3]],
+                }
+
+            photo_url = None
+            video_url = None
+            if post.photo:
+                from media.utils import build_media_url
+                photo_url = build_media_url(post.photo.name)
+            if post.video:
+                from media.utils import build_media_url
+                video_url = build_media_url(post.video.name)
+
+            poll_data = None
+            try:
+                poll = post.poll
+                user_vote_id = None
+                try:
+                    from social.models import PollVote
+                    vote = PollVote.objects.filter(poll=poll, user=request.user).first()
+                    if vote:
+                        user_vote_id = vote.option_id
+                except Exception:
+                    pass
+                poll_data = {
+                    'id': poll.id,
+                    'question': poll.question,
+                    'options': [
+                        {
+                            'id': opt.id,
+                            'text': opt.text,
+                            'votes': opt.votes,
+                            'order': opt.order,
+                        }
+                        for opt in poll.options.all()
+                    ],
+                    'total_votes': poll.get_total_votes(),
+                    'user_vote_id': user_vote_id,
+                    'is_active': poll.is_active,
+                    'ends_at': poll.ends_at.isoformat() if poll.ends_at else None,
+                }
+            except Exception:
+                pass
+
+            detected_type = 'workout' if post.workout_id else 'post'
+
+            return Response({
+                'id': str(post.id),
+                'type': detected_type,
+                'user': {
+                    'id': str(post.user.id),
+                    'username': post.user.username,
+                    'display_name': getattr(post.user, 'display_name', '') or post.user.username,
+                    'avatar_url': getattr(post.user, 'avatar_url', None),
+                    'streak': getattr(post.user, 'current_streak', 0),
+                },
+                'created_at': post.created_at.isoformat(),
+                'description': post.description or '',
+                'location_name': None,
+                'photo_url': photo_url,
+                'video_url': video_url,
+                'link_url': getattr(post, 'link_url', None),
+                'like_count': like_count,
+                'comment_count': comment_count,
+                'user_liked': user_liked,
+                'workout': workout_data,
+                'personal_record': personal_record,
+                'poll': poll_data,
+            })
+
+    checkin = QuickWorkout.objects.select_related('user', 'location').filter(id=post_id).first()
+    if checkin:
+        like_count = Reaction.objects.filter(quick_workout=checkin).count()
+        comment_count = Comment.objects.filter(quick_workout=checkin).count()
+        user_liked = Reaction.objects.filter(quick_workout=checkin, user=request.user).exists()
+
+        photo_url = None
+        try:
+            from media.utils import get_media_url
+            photo_url = get_media_url('quick_workout', str(checkin.id))
+        except Exception:
+            pass
+
+        return Response({
+            'id': str(checkin.id),
+            'type': 'checkin',
+            'user': {
+                'id': str(checkin.user.id),
+                'username': checkin.user.username,
+                'display_name': getattr(checkin.user, 'display_name', '') or checkin.user.username,
+                'avatar_url': getattr(checkin.user, 'avatar_url', None),
+                'streak': getattr(checkin.user, 'current_streak', 0),
+            },
+            'created_at': checkin.created_at.isoformat(),
+            'description': checkin.description or '',
+            'location_name': checkin.location_name or (checkin.location.name if checkin.location else None),
+            'photo_url': photo_url,
+            'video_url': None,
+            'link_url': None,
+            'like_count': like_count,
+            'comment_count': comment_count,
+            'user_liked': user_liked,
+            'workout': None,
+            'personal_record': None,
+        })
+
+    return Response({'error': 'Not found'}, status=status.HTTP_404_NOT_FOUND)
+
+
 # ── Share ──────────────────────────────────────────────────────────────────────
 
 

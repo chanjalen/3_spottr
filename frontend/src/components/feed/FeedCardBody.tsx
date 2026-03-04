@@ -14,11 +14,15 @@ interface FeedCardBodyProps {
   item: FeedItem;
   onPollVote: (optionId: number | string) => void;
   onWorkoutPress?: () => void;
+  onMediaPress?: (uri: string, kind: 'image' | 'video') => void;
+  onDoubleTap?: () => void;
 }
 
-export default function FeedCardBody({ item, onPollVote, onWorkoutPress }: FeedCardBodyProps) {
+export default function FeedCardBody({ item, onPollVote, onWorkoutPress, onMediaPress, onDoubleTap }: FeedCardBodyProps) {
   const { user } = useAuth();
   const isOwner = !!user && user.username === item.user.username;
+
+  const hasPaddedContent = !!(item.workout || item.personal_record || item.link_url || item.poll);
 
   return (
     <View>
@@ -27,27 +31,24 @@ export default function FeedCardBody({ item, onPollVote, onWorkoutPress }: FeedC
       )}
 
       {item.video_url
-        ? <FeedCardVideo uri={item.video_url} />
+        ? <FeedCardVideo uri={item.video_url} onExpand={onMediaPress ? () => onMediaPress(item.video_url!, 'video') : undefined} />
         : item.photo_url
-          ? <FeedCardImage uri={item.photo_url} />
+          ? <FeedCardImage uri={item.photo_url} onPress={onMediaPress ? () => onMediaPress(item.photo_url!, 'image') : undefined} onDoubleTap={onDoubleTap} />
           : null}
 
-      {item.workout && (
-        <WorkoutSummaryCard workout={item.workout} onPress={onWorkoutPress} />
-      )}
-
-      {item.personal_record && (
-        <PersonalRecordCard record={item.personal_record} />
-      )}
-
-      {item.link_url && <LinkPreview url={item.link_url} />}
-
-      {item.poll && (
-        <PollCard
-          poll={item.poll}
-          onVote={onPollVote}
-          isOwner={isOwner}
-        />
+      {hasPaddedContent && (
+        <View style={styles.paddedContent}>
+          {item.workout && (
+            <WorkoutSummaryCard workout={item.workout} onPress={onWorkoutPress} />
+          )}
+          {item.personal_record && (
+            <PersonalRecordCard record={item.personal_record} />
+          )}
+          {item.link_url && <LinkPreview url={item.link_url} />}
+          {item.poll && (
+            <PollCard poll={item.poll} onVote={onPollVote} isOwner={isOwner} />
+          )}
+        </View>
       )}
     </View>
   );
@@ -60,5 +61,9 @@ const styles = StyleSheet.create({
     color: colors.textPrimary,
     lineHeight: 22,
     marginBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  paddedContent: {
+    paddingHorizontal: spacing.md,
   },
 });
