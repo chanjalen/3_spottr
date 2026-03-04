@@ -46,7 +46,7 @@ const ACTIVITY_TYPES = [
 
 export default function CheckInReviewScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { mediaUri, mediaType } = route.params;
+  const { mediaUri, mediaType, workoutId: incomingWorkoutId } = route.params;
 
   const [activity, setActivity] = useState('');
   const [description, setDescription] = useState('');
@@ -62,6 +62,17 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
   useEffect(() => {
     fetchMyGyms().then(setGyms).catch(() => {});
   }, []);
+
+  // Auto-attach workout that was logged from the camera screen
+  useEffect(() => {
+    if (!incomingWorkoutId) return;
+    fetchRecentWorkouts()
+      .then((workouts) => {
+        const match = workouts.find((w) => w.id === incomingWorkoutId);
+        if (match) setAttachedWorkout(match);
+      })
+      .catch(() => {});
+  }, [incomingWorkoutId]);
 
   // When returning from WorkoutLog, auto-attach the newest completed workout
   useEffect(() => {

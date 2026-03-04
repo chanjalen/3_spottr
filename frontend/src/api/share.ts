@@ -12,12 +12,21 @@ export interface ShareRecipient {
 export interface ShareGroup {
   id: string;
   name: string;
+  avatar_url: string | null;
   type: 'group';
+}
+
+export interface ShareOrg {
+  id: string;
+  name: string;
+  avatar_url: string | null;
+  type: 'org';
 }
 
 export interface ShareRecipientsResponse {
   friends: ShareRecipient[];
   groups: ShareGroup[];
+  orgs: ShareOrg[];
 }
 
 export async function fetchShareRecipients(
@@ -28,6 +37,7 @@ export async function fetchShareRecipients(
   return {
     friends: response.data?.friends ?? [],
     groups: response.data?.groups ?? [],
+    orgs: response.data?.orgs ?? [],
   };
 }
 
@@ -36,6 +46,7 @@ export async function sendShare(params: {
   itemType: 'post' | 'checkin';
   recipientIds: string[];
   groupIds: string[];
+  orgIds: string[];
   message?: string;
 }): Promise<{ sent_count: number; errors: string[] }> {
   const response = await apiClient.post(ENDPOINTS.sendShare, {
@@ -43,6 +54,7 @@ export async function sendShare(params: {
     item_type: params.itemType,
     recipient_ids: params.recipientIds,
     group_ids: params.groupIds,
+    org_ids: params.orgIds,
     message: params.message ?? '',
   });
   return response.data;

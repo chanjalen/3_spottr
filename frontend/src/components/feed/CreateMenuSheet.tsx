@@ -9,8 +9,8 @@ import {
   useWindowDimensions,
   Alert,
   ActivityIndicator,
+  Modal,
 } from 'react-native';
-import BottomSheet, { BottomSheetBackdrop, BottomSheetView } from '@gorhom/bottom-sheet';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
@@ -22,10 +22,11 @@ import { fetchStreakInfo, takeRestDay } from '../../api/workouts';
 type RootNav = NativeStackNavigationProp<RootStackParamList>;
 
 interface Props {
-  sheetRef: React.RefObject<BottomSheet>;
+  visible: boolean;
+  onClose: () => void;
 }
 
-export default function CreateMenuSheet({ sheetRef }: Props) {
+export default function CreateMenuSheet({ visible, onClose }: Props) {
   const navigation = useNavigation<RootNav>();
   const { width } = useWindowDimensions();
   const pagerRef = useRef<ScrollView>(null);
@@ -36,22 +37,22 @@ export default function CreateMenuSheet({ sheetRef }: Props) {
   const [restLoading, setRestLoading] = useState(false);
   const [submittingRest, setSubmittingRest] = useState(false);
 
-  const renderBackdrop = useCallback(
-    (props: any) => (
-      <BottomSheetBackdrop {...props} disappearsOnIndex={-1} appearsOnIndex={0} opacity={0.4} />
-    ),
-    [],
-  );
+  const cardWidth = width - 48; // 24px margin each side
+  const cardHeight = 320;
 
   const resetPages = useCallback(() => {
     setPage(0);
     pagerRef.current?.scrollTo({ x: 0, animated: false });
   }, []);
 
+  const handleClose = useCallback(() => {
+    onClose();
+    resetPages();
+  }, [onClose, resetPages]);
+
   const goToPage2 = useCallback(async () => {
     setPage(1);
-    pagerRef.current?.scrollTo({ x: width, animated: true });
-    // Fetch streak info so rest day display is accurate
+    pagerRef.current?.scrollTo({ x: cardWidth, animated: true });
     setRestLoading(true);
     try {
       const info = await fetchStreakInfo();
@@ -63,7 +64,7 @@ export default function CreateMenuSheet({ sheetRef }: Props) {
     } finally {
       setRestLoading(false);
     }
-  }, [width]);
+  }, [cardWidth]);
 
   const goToPage1 = useCallback(() => {
     setPage(0);
@@ -71,14 +72,12 @@ export default function CreateMenuSheet({ sheetRef }: Props) {
   }, []);
 
   const handlePost = () => {
-    sheetRef.current?.close();
-    resetPages();
+    handleClose();
     navigation.navigate('CreatePost');
   };
 
   const handleGoToCamera = () => {
-    sheetRef.current?.close();
-    resetPages();
+    handleClose();
     navigation.navigate('CameraCapture');
   };
 
@@ -117,8 +116,7 @@ export default function CreateMenuSheet({ sheetRef }: Props) {
     setSubmittingRest(true);
     try {
       const result = await takeRestDay();
-      sheetRef.current?.close();
-      resetPages();
+      handleClose();
       if (result.success) {
         Alert.alert(
           result.protected ? 'Rest Day Logged' : 'Rest Day Logged (Unprotected)',
@@ -139,104 +137,109 @@ export default function CreateMenuSheet({ sheetRef }: Props) {
     if (hasRestToday) return 'Already rested today';
     if (hasActivityToday) return 'Already active today';
     if (restDaysRemaining === null) return 'Protect your streak';
-    if (restDaysRemaining === 0) return "No rest days left this week";
+    if (restDaysRemaining === 0) return 'No rest days left this week';
     return `${restDaysRemaining} rest day${restDaysRemaining !== 1 ? 's' : ''} left this week`;
   })();
 
   const restDisabled = hasRestToday || hasActivityToday;
 
   return (
-    <BottomSheet
-      ref={sheetRef}
-      index={-1}
-      snapPoints={['46%']}
-      enablePanDownToClose
-      backdropComponent={renderBackdrop}
-      handleIndicatorStyle={styles.handle}
-      backgroundStyle={styles.sheetBg}
-      onClose={resetPages}
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={handleClose}
     >
-      <BottomSheetView style={{ overflow: 'hidden' }}>
-        {/* Horizontal pager */}
-        <ScrollView
-          ref={pagerRef}
-          horizontal
-          scrollEnabled={false}
-          showsHorizontalScrollIndicator={false}
-          pagingEnabled
-          style={{ width }}
-        >
-          {/* ── Page 1: Post / Check-In ── */}
-          <View style={[styles.page, { width }]}>
-            <Text style={styles.title}>Create</Text>
-            <View style={styles.grid}>
-              <Pressable
-                style={({ pressed }) => [styles.gridItem, pressed && styles.gridItemPressed]}
-                onPress={handlePost}
-              >
-                <LinearGradient
-                  colors={['#4FC3E0', '#2FA4C7']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.iconCircle}
+      <View style={styles.overlay}>
+        {/* Tap outside to dismiss */}
+        <Pressable style={StyleSheet.absoluteFill} onPress={handleClose} />
+
+        <View style={[styles.card, { width: cardWidth, height: cardHeight }]}>
+          {/* Horizontal pager — fills entire card */}
+          <ScrollView
+            ref={pagerRef}
+            horizontal
+            scrollEnabled={false}
+            showsHorizontalScrollIndicator={false}
+            pagingEnabled
+            style={{ width: cardWidth, height: cardHeight }}
+          >
+            {/* ── Page 1: Post / Check-In ── */}
+            <View style={[styles.page1, { width: cardWidth, height: cardHeight }]}>
+              <View style={styles.panelRow}>
+                {/* Post panel */}
+                <Pressable
+                  style={({ pressed }) => [styles.panel, pressed && styles.gridItemPressed]}
+                  onPress={handlePost}
                 >
-                  <Feather name="edit-2" size={24} color="#fff" />
-                </LinearGradient>
-                <Text style={styles.itemLabel}>Post</Text>
-                <Text style={styles.itemSublabel}>Share to Main feed</Text>
-              </Pressable>
+                  <LinearGradient
+                    colors={['#4FC3E0', '#2FA4C7']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.iconCircle}
+                  >
+                    <Feather name="edit-2" size={24} color="#fff" />
+                  </LinearGradient>
+                  <Text style={styles.itemLabel}>Post</Text>
+                  <Text style={styles.itemSublabel}>
+                    Share to Main feed. Post PRs, achievements, questions, polls & show off your workouts to the world.
+                  </Text>
+                </Pressable>
 
-              <Pressable
-                style={({ pressed }) => [styles.gridItem, pressed && styles.gridItemPressed]}
-                onPress={goToPage2}
-              >
-                <LinearGradient
-                  colors={['#4FC3E0', '#2FA4C7']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.iconCircle}
+                <View style={styles.panelDivider} />
+
+                {/* Check-In panel */}
+                <Pressable
+                  style={({ pressed }) => [styles.panel, pressed && styles.gridItemPressed]}
+                  onPress={goToPage2}
                 >
-                  <Feather name="map-pin" size={24} color="#fff" />
-                </LinearGradient>
-                <Text style={styles.itemLabel}>Check-In</Text>
-                <Text style={styles.itemSublabel}>Share to Friends feed</Text>
-              </Pressable>
-            </View>
-          </View>
-
-          {/* ── Page 2: Check-In / Rest Day ── */}
-          <View style={[styles.page, { width }]}>
-            {/* Page 2 header with back button */}
-            <View style={styles.page2Header}>
-              <Pressable onPress={goToPage1} style={styles.backBtn} hitSlop={12}>
-                <Feather name="chevron-left" size={22} color={colors.textPrimary} />
-              </Pressable>
-              <Text style={styles.title}>Check-In</Text>
-              <View style={{ width: 36 }} />
+                  <LinearGradient
+                    colors={['#4FC3E0', '#2FA4C7']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.iconCircle}
+                  >
+                    <Feather name="map-pin" size={24} color="#fff" />
+                  </LinearGradient>
+                  <Text style={styles.itemLabel}>Check-In</Text>
+                  <Text style={styles.itemSublabel}>
+                    Update your streak here! Log workouts, rest days & more — everything that keeps your streak alive.
+                  </Text>
+                </Pressable>
+              </View>
             </View>
 
-            <View style={styles.grid}>
-              {/* Camera Check-In */}
+            {/* ── Page 2: Check-In (big) / Rest Day (small) ── */}
+            <View style={[styles.page, { width: cardWidth }]}>
+              <View style={styles.page2Header}>
+                <Pressable onPress={goToPage1} style={styles.backBtn} hitSlop={12}>
+                  <Feather name="chevron-left" size={22} color={colors.textPrimary} />
+                </Pressable>
+                <Text style={styles.page2Title}>Check-In</Text>
+                <View style={{ width: 36 }} />
+              </View>
+
+              {/* Big Check-In button */}
               <Pressable
-                style={({ pressed }) => [styles.gridItem, pressed && styles.gridItemPressed]}
+                style={({ pressed }) => [styles.checkinBigBtn, pressed && styles.gridItemPressed]}
                 onPress={handleGoToCamera}
               >
                 <LinearGradient
                   colors={['#4FC3E0', '#2FA4C7']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 1 }}
-                  style={styles.iconCircle}
+                  style={styles.checkinBigGradient}
                 >
-                  <Feather name="camera" size={24} color="#fff" />
+                  <Feather name="camera" size={30} color="#fff" />
+                  <Text style={styles.checkinBigLabel}>Check-In</Text>
+                  <Text style={styles.checkinBigSublabel}>Snap a photo or video</Text>
                 </LinearGradient>
-                <Text style={styles.itemLabel}>Check-In</Text>
-                <Text style={styles.itemSublabel}>Snap a photo or video</Text>
               </Pressable>
 
-              {/* Rest Day */}
+              {/* Small Rest Day row */}
               <Pressable
                 style={({ pressed }) => [
-                  styles.gridItem,
+                  styles.restRow,
                   pressed && !restDisabled && styles.gridItemPressed,
                   restDisabled && styles.gridItemDisabled,
                 ]}
@@ -244,73 +247,95 @@ export default function CreateMenuSheet({ sheetRef }: Props) {
                 disabled={submittingRest}
               >
                 {submittingRest ? (
-                  <ActivityIndicator size="large" color={colors.primary} style={{ height: 56 }} />
+                  <ActivityIndicator size="small" color={colors.primary} style={styles.restRowIcon} />
                 ) : (
-                  <View style={styles.restIconCircle}>
+                  <View style={styles.restRowIcon}>
                     <Feather
                       name="moon"
-                      size={24}
+                      size={18}
                       color={restDisabled ? colors.textMuted : colors.primary}
                     />
                   </View>
                 )}
-                <Text style={[styles.itemLabel, restDisabled && { color: colors.textMuted }]}>
-                  Rest Day
-                </Text>
-                <Text style={styles.itemSublabel}>{restSubLabel}</Text>
+                <View style={styles.restRowText}>
+                  <Text style={[styles.restRowLabel, restDisabled && { color: colors.textMuted }]}>
+                    Rest Day
+                  </Text>
+                  <Text style={styles.restRowSublabel}>{restSubLabel}</Text>
+                </View>
+                {!submittingRest && (
+                  <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                )}
               </Pressable>
             </View>
-          </View>
-        </ScrollView>
-      </BottomSheetView>
-    </BottomSheet>
+          </ScrollView>
+
+          {/* X button — floats over both pages */}
+          <Pressable style={styles.xBtnOverlay} onPress={handleClose} hitSlop={12}>
+            <Feather name="x" size={20} color={colors.textPrimary} />
+          </Pressable>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  sheetBg: {
-    backgroundColor: colors.surface,
-    borderRadius: 24,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.1,
-        shadowRadius: 20,
-      },
-      android: { elevation: 10 },
-    }),
-  },
-  handle: {
-    backgroundColor: colors.borderColor,
-    width: 36,
-  },
-  page: {
-    paddingHorizontal: spacing.xl,
-    paddingTop: spacing.md,
-    paddingBottom: spacing['2xl'],
-  },
-  page2Header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 0,
-  },
-  backBtn: {
-    width: 36,
-    height: 36,
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  title: {
-    fontSize: typography.size.lg,
-    fontWeight: '700',
-    color: colors.textPrimary,
-    marginBottom: spacing.xl,
+  card: {
+    backgroundColor: colors.surface,
+    borderRadius: 24,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.2,
+        shadowRadius: 24,
+      },
+      android: { elevation: 12 },
+    }),
   },
-  grid: {
+  xBtnOverlay: {
+    position: 'absolute',
+    top: spacing.md,
+    right: spacing.md,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  page: {
+    paddingHorizontal: spacing.xl,
+    paddingTop: spacing.xl,
+    paddingBottom: spacing.xl,
+  },
+  page1: {
+    // panels go edge-to-edge, no extra padding
+  },
+  panelRow: {
     flexDirection: 'row',
-    gap: spacing.md,
+    flex: 1,
+  },
+  panel: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.background.elevated,
+    paddingVertical: spacing['2xl'],
+    paddingHorizontal: spacing.md,
+  },
+  panelDivider: {
+    width: 1,
+    backgroundColor: colors.border.subtle,
   },
   gridItem: {
     flex: 1,
@@ -344,17 +369,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: spacing.xs,
   },
-  restIconCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: spacing.xs,
-    backgroundColor: colors.background.base,
-    borderWidth: 1.5,
-    borderColor: colors.border.default,
-  },
   itemLabel: {
     fontSize: typography.size.base,
     fontWeight: '700',
@@ -365,6 +379,84 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: colors.textMuted,
     textAlign: 'center',
+    lineHeight: 16,
+  },
+
+  // Page 2
+  page2Header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.md,
+  },
+  page2Title: {
+    fontSize: typography.size.lg,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    flex: 1,
+    textAlign: 'center',
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Big check-in button
+  checkinBigBtn: {
+    borderRadius: 16,
+    overflow: 'hidden',
+    marginBottom: spacing.md,
+  },
+  checkinBigGradient: {
+    paddingVertical: spacing['2xl'],
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  checkinBigLabel: {
+    fontSize: typography.size.xl,
+    fontWeight: '800',
+    color: '#fff',
+  },
+  checkinBigSublabel: {
+    fontSize: typography.size.sm,
+    fontWeight: '500',
+    color: 'rgba(255,255,255,0.8)',
+  },
+
+  // Small rest day row
+  restRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
     paddingHorizontal: spacing.sm,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+  },
+  restRowIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background.elevated,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+  },
+  restRowText: {
+    flex: 1,
+    gap: 2,
+  },
+  restRowLabel: {
+    fontSize: typography.size.sm,
+    fontWeight: '600',
+    color: colors.textPrimary,
+  },
+  restRowSublabel: {
+    fontSize: typography.size.xs,
+    color: colors.textMuted,
   },
 });
