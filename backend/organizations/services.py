@@ -649,8 +649,8 @@ def broadcast_announcement_reaction_update(announcement):
 
 def vote_on_poll(user, org_id, announcement_id, option_id):
     """
-    Cast a vote on a poll. One vote per user per poll, no changing votes.
-    Returns the voted AnnouncementPollOption.
+    Cast or change a vote on a poll. One vote per user per poll; users may
+    change their vote to a different option. Returns the selected option.
     """
     org = _get_org(org_id)
 
@@ -670,15 +670,25 @@ def vote_on_poll(user, org_id, announcement_id, option_id):
     if not poll.is_active:
         raise PollExpiredError("This poll has ended.")
 
-    if AnnouncementPollVote.objects.filter(poll=poll, user=user).exists():
-        raise AlreadyVotedError("You have already voted on this poll.")
-
     try:
         option = AnnouncementPollOption.objects.get(id=option_id, poll=poll)
     except AnnouncementPollOption.DoesNotExist:
         raise PollOptionNotFoundError("Poll option not found.")
 
-    AnnouncementPollVote.objects.create(poll=poll, user=user, option=option)
+    existing_vote = AnnouncementPollVote.objects.filter(poll=poll, user=user).select_related('option').first()
+
+    if existing_vote:
+        if str(existing_vote.option_id) == str(option.id):
+            # Same option — nothing to do
+            option.refresh_from_db()
+            return option
+        # Changing vote: decrement old option, update the vote record
+        AnnouncementPollOption.objects.filter(id=existing_vote.option_id).update(votes=F('votes') - 1)
+        existing_vote.option = option
+        existing_vote.save(update_fields=['option'])
+    else:
+        AnnouncementPollVote.objects.create(poll=poll, user=user, option=option)
+
     AnnouncementPollOption.objects.filter(id=option.id).update(votes=F('votes') + 1)
     option.refresh_from_db()
     return option
