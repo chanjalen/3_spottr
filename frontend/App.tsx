@@ -5,7 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 // Required for expo-auth-session (Google OAuth) to close the browser on redirect
 WebBrowser.maybeCompleteAuthSession();
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
-import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, createNavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -19,6 +19,8 @@ import {
 } from '@expo-google-fonts/inter';
 import { AuthProvider, useAuth } from './src/store/AuthContext';
 import { UnreadCountProvider } from './src/store/UnreadCountContext';
+import { ActiveWorkoutProvider } from './src/store/ActiveWorkoutContext';
+import ActiveWorkoutBanner from './src/components/navigation/ActiveWorkoutBanner';
 import MainTabs from './src/navigation/MainTabs';
 import LoginScreen from './src/screens/auth/LoginScreen';
 import SignupScreen from './src/screens/auth/SignupScreen';
@@ -31,7 +33,9 @@ import OnboardingStep3Screen from './src/screens/onboarding/OnboardingStep3Scree
 import OnboardingStep4Screen from './src/screens/onboarding/OnboardingStep4Screen';
 import OnboardingCompleteScreen from './src/screens/onboarding/OnboardingCompleteScreen';
 import { colors } from './src/theme';
-import { AuthStackParamList, OnboardingStackParamList } from './src/navigation/types';
+import { AuthStackParamList, OnboardingStackParamList, RootStackParamList } from './src/navigation/types';
+
+const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 const navTheme = {
   ...DefaultTheme,
@@ -153,12 +157,15 @@ export default function App() {
       <BottomSheetModalProvider>
         <SafeAreaProvider>
           <AuthProvider>
-            <UnreadCountProvider>
-              <NavigationContainer theme={navTheme}>
-                <RootNavigator />
-                <StatusBar style="dark" />
-              </NavigationContainer>
-            </UnreadCountProvider>
+            <ActiveWorkoutProvider>
+              <UnreadCountProvider>
+                <NavigationContainer theme={navTheme} ref={navigationRef}>
+                  <RootNavigator />
+                  <StatusBar style="dark" />
+                </NavigationContainer>
+                <ActiveWorkoutBanner navigationRef={navigationRef} />
+              </UnreadCountProvider>
+            </ActiveWorkoutProvider>
           </AuthProvider>
         </SafeAreaProvider>
       </BottomSheetModalProvider>

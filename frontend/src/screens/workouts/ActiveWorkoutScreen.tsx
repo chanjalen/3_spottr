@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -33,6 +34,7 @@ import {
 import { Workout, WorkoutExercise, ExerciseSet, ExerciseCatalogItem, NewPR } from '../../types/workout';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
+import { useActiveWorkout } from '../../store/ActiveWorkoutContext';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'ActiveWorkout'>;
@@ -79,6 +81,15 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
   // PR state
   const [pendingPRs, setPendingPRs] = useState<NewPR[]>([]);
 
+  // ─── Active workout context (banner) ─────────────────────────────────────────
+
+  const { beginWorkout, endWorkout, setIsOnScreen } = useActiveWorkout();
+
+  useFocusEffect(useCallback(() => {
+    setIsOnScreen(true);
+    return () => setIsOnScreen(false);
+  }, [setIsOnScreen]));
+
   // ─── Load workout ────────────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -89,10 +100,11 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
         if (w.started_at) {
           const elapsed = Math.floor((Date.now() - new Date(w.started_at).getTime()) / 1000);
           setSeconds(Math.max(0, elapsed));
+          beginWorkout(workoutId, new Date(w.started_at).getTime(), fromCheckin);
         }
       })
       .finally(() => setLoading(false));
-  }, [workoutId]);
+  }, [workoutId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ─── Timer ───────────────────────────────────────────────────────────────────
 
@@ -251,6 +263,7 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
         pr_data: pendingPRs.map((p) => ({ exercise_name: p.exercise_name, value: p.value, unit: p.unit })),
       });
       setShowFinish(false);
+      endWorkout();
       if (fromCheckin) {
         // Pop both ActiveWorkout and WorkoutLog off the stack — returns to CheckInReview
         navigation.pop(2);
@@ -272,6 +285,7 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
         style: 'destructive',
         onPress: async () => {
           await deleteWorkout(workoutId).catch(() => {});
+          endWorkout();
           navigation.goBack();
         },
       },
@@ -292,9 +306,23 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
     <View style={{ flex: 1, backgroundColor: colors.background.base }}>
       {/* Header */}
       <View style={[styles.headerBar, { paddingTop: insets.top }]}>
-        <Pressable onPress={handleDiscard} style={styles.headerBtn}>
-          <Text style={styles.discardText}>Discard</Text>
-        </Pressable>
+        {/* Left: browse + discard */}
+        <View style={styles.headerLeft}>
+          <Pressable
+            onPress={() => navigation.navigate('MainTabs')}
+            style={styles.headerBtn}
+            hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+          >
+            <View style={styles.browseRow}>
+              <Feather name="home" size={13} color={colors.textSecondary} />
+              <Text style={styles.browseText}>Browse</Text>
+            </View>
+          </Pressable>
+          <Pressable onPress={handleDiscard} style={styles.headerBtn} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+            <Text style={styles.discardText}>Discard</Text>
+          </Pressable>
+        </View>
+
         <View style={styles.timerWrap}>
           <Text style={styles.timer}>{formatTime(seconds)}</Text>
         </View>
@@ -713,7 +741,22 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border.subtle,
   },
+  headerLeft: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 8,
+  },
   headerBtn: { paddingHorizontal: spacing.sm },
+  browseRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  browseText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.medium,
+    color: colors.textSecondary,
+  },
   discardText: {
     fontSize: typography.size.sm,
     fontFamily: typography.family.semibold,
