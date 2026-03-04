@@ -119,7 +119,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
   const [catalogLoading, setCatalogLoading] = useState(false);
   const catalogSearchRef = useRef<TextInput>(null);
 
-  const CATALOG_CATEGORIES = ['All', 'Arms', 'Back', 'Chest', 'Core', 'Cardio', 'Legs', 'Shoulders'];
+  const CATALOG_CATEGORIES = ['All', 'Back', 'Biceps', 'Chest', 'Core', 'Cardio', 'Legs', 'Shoulders', 'Triceps'];
 
   const filteredCatalog = useMemo(() => {
     let items = catalogAllItems;
@@ -1511,7 +1511,7 @@ function CalendarTab({
           const day = parseInt(p.date.split('-')[2], 10);
           if (p.type === 'rest') {
             restNums.add(day);
-          } else {
+          } else if (p.type === 'checkin') {
             workoutNums.add(day);
           }
         }
@@ -2296,8 +2296,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md, paddingVertical: 10, marginBottom: spacing.sm,
   },
   catalogSearchInput: { flex: 1, marginLeft: 8, fontSize: typography.size.base, color: colors.textPrimary },
-  catalogCategoryScroll: { maxHeight: 44, marginBottom: spacing.sm },
-  catalogCategoryContent: { flexDirection: 'row', gap: 8, paddingRight: spacing.xl },
+  catalogCategoryScroll: { height: 48, marginBottom: spacing.sm },
+  catalogCategoryContent: { flexDirection: 'row', gap: 8, paddingRight: spacing.xl, alignItems: 'center' },
   catalogChip: {
     paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20,
     backgroundColor: colors.background.elevated,

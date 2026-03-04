@@ -17,7 +17,9 @@ import Animated, {
 } from 'react-native-reanimated';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../navigation/types';
-import { colors } from '../../theme';
+import { LinearGradient } from 'expo-linear-gradient';
+import { colors, spacing, typography } from '../../theme';
+import { fetchRecentWorkouts } from '../../api/workouts';
 import {
   CameraView,
   CameraType,
@@ -39,7 +41,13 @@ export default function CameraCaptureScreen({ navigation }: Props) {
   const [facing, setFacing] = useState<CameraType>('back');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [isCameraReady, setIsCameraReady] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const navigatedToWorkoutRef = useRef(false);
+  const [attachedWorkoutId, setAttachedWorkoutId] = useState<string | null>(null);
+
+  // Camera mode as state so we control when it changes
+  const [cameraMode, setCameraMode] = useState<'picture' | 'video'>('picture');
 
   const shutterScale = useSharedValue(1);
   const shutterRingScale = useSharedValue(1);
@@ -65,6 +73,36 @@ export default function CameraCaptureScreen({ navigation }: Props) {
     };
   }, []);
 
+  useEffect(() => {
+    const unsub = navigation.addListener('focus', async () => {
+      if (!navigatedToWorkoutRef.current) return;
+      navigatedToWorkoutRef.current = false;
+      try {
+        const workouts = await fetchRecentWorkouts();
+        const completed = workouts.filter((w) => !w.is_active);
+        if (completed.length > 0) {
+          const newest = completed[0];
+          if (Date.now() - new Date(newest.started_at).getTime() < 5 * 60 * 1000) {
+            setAttachedWorkoutId(newest.id);
+          }
+        }
+      } catch {
+        // Non-fatal
+      }
+    });
+    return unsub;
+  }, [navigation]);
+
+  // Reset camera-ready whenever facing changes (camera reinitializes)
+  const handleFacingChange = useCallback(() => {
+    setIsCameraReady(false);
+    setFacing((f) => (f === 'back' ? 'front' : 'back'));
+  }, []);
+
+  const handleCameraReady = useCallback(() => {
+    setIsCameraReady(true);
+  }, []);
+
   const stopRecordingTimer = useCallback(() => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -85,19 +123,27 @@ export default function CameraCaptureScreen({ navigation }: Props) {
   }, [stopRecordingTimer]);
 
   const handleTakePhoto = useCallback(async () => {
-    if (!cameraRef.current) return;
+    if (!cameraRef.current || !isCameraReady) return;
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.85 });
       if (photo?.uri) {
-        navigation.replace('CheckInReview', { mediaUri: photo.uri, mediaType: 'photo' });
+        navigation.replace('CheckInReview', {
+          mediaUri: photo.uri,
+          mediaType: 'photo',
+          workoutId: attachedWorkoutId ?? undefined,
+        });
       }
-    } catch {
+    } catch (err) {
+      console.error('[CameraCapture] takePictureAsync error:', err);
       Alert.alert('Error', 'Could not take photo. Please try again.');
     }
-  }, [navigation]);
+  }, [navigation, attachedWorkoutId, isCameraReady]);
 
   const handleStartRecording = useCallback(async () => {
-    if (!cameraRef.current || isRecording) return;
+    if (!cameraRef.current || isRecording || !isCameraReady) return;
+    // Switch to video mode, then wait for camera to be ready again
+    setIsCameraReady(false);
+    setCameraMode('video');
     setIsRecording(true);
     shutterScale.value = withSpring(0.75, { stiffness: 300, damping: 20 });
     shutterRingScale.value = withSpring(1.25, { stiffness: 300, damping: 20 });
@@ -106,13 +152,18 @@ export default function CameraCaptureScreen({ navigation }: Props) {
     try {
       const video = await cameraRef.current.recordAsync({ maxDuration: MAX_VIDEO_DURATION });
       if (video?.uri) {
-        navigation.replace('CheckInReview', { mediaUri: video.uri, mediaType: 'video' });
+        navigation.replace('CheckInReview', {
+          mediaUri: video.uri,
+          mediaType: 'video',
+          workoutId: attachedWorkoutId ?? undefined,
+        });
       }
-    } catch {
-      // Recording cancelled or error — silently reset
+    } catch (err) {
+      console.error('[CameraCapture] recordAsync error:', err);
       setIsRecording(false);
+      setCameraMode('picture');
     }
-  }, [isRecording, navigation, startRecordingTimer]);
+  }, [isRecording, navigation, startRecordingTimer, attachedWorkoutId, isCameraReady]);
 
   const handleStopRecording = useCallback(() => {
     if (!isRecording || !cameraRef.current) return;
@@ -122,11 +173,15 @@ export default function CameraCaptureScreen({ navigation }: Props) {
     shutterScale.value = withSpring(1);
     shutterRingScale.value = withSpring(1);
     progressAnim.value = 0;
+    // Switch back to picture mode (camera will call onCameraReady again)
+    setIsCameraReady(false);
+    setCameraMode('picture');
   }, [isRecording, stopRecordingTimer]);
 
-  const toggleFacing = useCallback(() => {
-    setFacing((f) => (f === 'back' ? 'front' : 'back'));
-  }, []);
+  const handleLogWorkout = useCallback(() => {
+    navigatedToWorkoutRef.current = true;
+    navigation.navigate('WorkoutLog', { fromCheckin: true });
+  }, [navigation]);
 
   if (!cameraPermission) return <View style={styles.container} />;
 
@@ -154,7 +209,8 @@ export default function CameraCaptureScreen({ navigation }: Props) {
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
         facing={facing}
-        mode={isRecording ? 'video' : 'picture'}
+        mode={cameraMode}
+        onCameraReady={handleCameraReady}
       />
 
       {/* Top bar */}
@@ -162,7 +218,8 @@ export default function CameraCaptureScreen({ navigation }: Props) {
         <Pressable onPress={() => navigation.goBack()} style={styles.topBtn} hitSlop={12}>
           <Feather name="x" size={26} color="#fff" />
         </Pressable>
-        {isRecording && (
+
+        {isRecording ? (
           <View style={styles.recordingBadge}>
             <View style={styles.recordingDot} />
             <Text style={styles.recordingText}>
@@ -170,8 +227,34 @@ export default function CameraCaptureScreen({ navigation }: Props) {
               {String(recordingSeconds % 60).padStart(2, '0')}
             </Text>
           </View>
+        ) : (
+          <Pressable
+            style={({ pressed }) => [
+              styles.logWorkoutBtn,
+              pressed && !attachedWorkoutId && styles.logWorkoutBtnPressed,
+              attachedWorkoutId ? styles.logWorkoutBtnAttached : undefined,
+            ]}
+            onPress={handleLogWorkout}
+            disabled={!!attachedWorkoutId}
+          >
+            <LinearGradient
+              colors={['#4FC3E0', '#2FA4C7']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.logWorkoutGradient}
+            >
+              <Feather name="plus-circle" size={18} color="#fff" />
+              <Text style={styles.logWorkoutTitle}>
+                {attachedWorkoutId ? 'Workout Attached ✓' : 'Log Full Workout'}
+              </Text>
+              {!attachedWorkoutId && (
+                <Feather name="chevron-right" size={16} color="rgba(255,255,255,0.75)" />
+              )}
+            </LinearGradient>
+          </Pressable>
         )}
-        <Pressable onPress={toggleFacing} style={styles.topBtn} hitSlop={12}>
+
+        <Pressable onPress={handleFacingChange} style={styles.topBtn} hitSlop={12}>
           <Feather name="refresh-cw" size={22} color="#fff" />
         </Pressable>
       </View>
@@ -179,13 +262,14 @@ export default function CameraCaptureScreen({ navigation }: Props) {
       {/* Hint label */}
       {!isRecording && (
         <View style={styles.hintWrap}>
-          <Text style={styles.hintText}>Tap for photo · Hold for video</Text>
+          <Text style={styles.hintText}>
+            {isCameraReady ? 'Tap for photo · Hold for video' : 'Camera starting…'}
+          </Text>
         </View>
       )}
 
       {/* Bottom controls */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 24 }]}>
-        {/* Flip (spacer on left) */}
         <View style={{ width: 48 }} />
 
         {/* Shutter */}
@@ -195,13 +279,17 @@ export default function CameraCaptureScreen({ navigation }: Props) {
               onPress={isRecording ? handleStopRecording : handleTakePhoto}
               onLongPress={handleStartRecording}
               delayLongPress={200}
-              style={[styles.shutter, isRecording && styles.shutterRecording]}
+              disabled={!isCameraReady && !isRecording}
+              style={[
+                styles.shutter,
+                isRecording && styles.shutterRecording,
+                !isCameraReady && !isRecording && styles.shutterNotReady,
+              ]}
               accessibilityLabel={isRecording ? 'Stop recording' : 'Take photo or hold to record video'}
             />
           </Animated.View>
         </Animated.View>
 
-        {/* Placeholder right side for balance */}
         <View style={{ width: 48 }} />
       </View>
     </View>
@@ -291,6 +379,30 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontVariant: ['tabular-nums'],
   },
+  logWorkoutBtn: {
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
+  logWorkoutBtnPressed: {
+    opacity: 0.8,
+    transform: [{ scale: 0.97 }],
+  },
+  logWorkoutBtnAttached: {
+    opacity: 0.75,
+  },
+  logWorkoutGradient: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+  },
+  logWorkoutTitle: {
+    fontSize: typography.size.sm,
+    fontWeight: '700',
+    color: '#fff',
+  },
+
   hintWrap: {
     position: 'absolute',
     bottom: 140,
@@ -338,5 +450,8 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 8,
     backgroundColor: '#EF4444',
+  },
+  shutterNotReady: {
+    opacity: 0.4,
   },
 });

@@ -80,8 +80,8 @@ export default function FeedScreen() {
 
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
-  // Solid white nav bar: paddingTop(2) + FAB height(50) + bottom safe area
-  const bottomNavHeight = 52 + Math.max(insets.bottom, 16);
+  // Floating pill: pill height(66) + gap from bottom(12) + safe area
+  const bottomNavHeight = insets.bottom + 78;
   const isImmersive = activeTab !== 'main';
 
   // Reset measured heights when switching between immersive ↔ main layouts
@@ -408,6 +408,7 @@ export default function FeedScreen() {
             renderItem={renderItem}
             contentContainerStyle={[
               styles.list,
+              { paddingBottom: insets.bottom + 96 },
               items.length === 0 && styles.emptyList,
             ]}
             ListEmptyComponent={<EmptyState tab={activeTab} />}
@@ -607,7 +608,6 @@ const styles = StyleSheet.create({
   list: {
     paddingHorizontal: spacing.xl,
     paddingTop: spacing.md,
-    paddingBottom: 120,
   },
   emptyList: {
     flex: 1,

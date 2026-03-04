@@ -39,7 +39,7 @@ type Props = {
   route: RouteProp<RootStackParamList, 'ActiveWorkout'>;
 };
 
-const CATEGORIES = ['All', 'Chest', 'Back', 'Shoulders', 'Arms', 'Legs', 'Core', 'Cardio'];
+const CATEGORIES = ['All', 'Chest', 'Back', 'Shoulders', 'Biceps', 'Triceps', 'Legs', 'Core', 'Cardio'];
 
 // Only show live PR notifications for major compound lifts.
 const BIG_LIFT_KEYWORDS = ['bench', 'squat', 'deadlift', 'run', 'clean', 'snatch'];
@@ -377,6 +377,7 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            style={styles.categoryChipScroll}
             contentContainerStyle={styles.categoryChips}
           >
             {CATEGORIES.map((cat) => (
@@ -922,14 +923,15 @@ const styles = StyleSheet.create({
     fontFamily: typography.family.regular,
     color: colors.textPrimary,
   },
+  categoryChipScroll: { height: 48, marginBottom: spacing.xs },
   categoryChips: {
     paddingHorizontal: spacing.base,
-    paddingBottom: spacing.sm,
     gap: spacing.xs,
+    alignItems: 'center',
   },
   chip: {
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
     borderRadius: 20,
     backgroundColor: colors.background.elevated,
     borderWidth: 1,
