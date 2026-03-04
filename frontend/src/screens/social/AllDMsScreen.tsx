@@ -43,6 +43,7 @@ export default function AllDMsScreen({ navigation }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [query, setQuery] = useState('');
   const [zapping, setZapping] = useState<string | null>(null);
+  const [zapCooldowns, setZapCooldowns] = useState<Record<string, number>>({});
 
   const load = useCallback(async () => {
     const cached = await staleCache.get<Conversation[]>('social:messages:dm');
@@ -75,7 +76,13 @@ export default function AllDMsScreen({ navigation }: Props) {
   const handleZap = async (partnerId: string) => {
     if (zapping) return;
     setZapping(partnerId);
-    try { await sendZap(partnerId); } catch {} finally { setZapping(null); }
+    try {
+      await sendZap(partnerId);
+      setZapCooldowns(prev => ({ ...prev, [partnerId]: Date.now() }));
+      setTimeout(() => {
+        setZapCooldowns(prev => { const n = { ...prev }; delete n[partnerId]; return n; });
+      }, 60_000);
+    } catch {} finally { setZapping(null); }
   };
 
   return (
@@ -155,7 +162,7 @@ export default function AllDMsScreen({ navigation }: Props) {
                   )}
                 </View>
                 <Text style={styles.rowLast} numberOfLines={1}>
-                  {msgPreview(item.latest_message)}
+                  {item.preview_text ?? msgPreview(item.latest_message)}
                 </Text>
               </View>
               {item.unread_count > 0 && (
@@ -163,7 +170,7 @@ export default function AllDMsScreen({ navigation }: Props) {
                   <Text style={styles.badgeText}>{item.unread_count}</Text>
                 </View>
               )}
-              {!item.partner_has_activity_today && (
+              {!item.partner_has_activity_today && !zapCooldowns[item.partner_id] && (
                 <Pressable
                   style={[styles.zapBtn, zapping === item.partner_id && styles.zapBtnDisabled]}
                   onPress={() => handleZap(item.partner_id)}

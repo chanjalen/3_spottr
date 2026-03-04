@@ -3,6 +3,7 @@ import {
   View,
   Text,
   ScrollView,
+  FlatList,
   Pressable,
   StyleSheet,
   ActivityIndicator,
@@ -36,10 +37,13 @@ import {
   joinOrg,
   joinOrgViaCode,
   requestJoinOrg,
+  fetchOrgMemberActivity,
   OrgDetail,
   OrgMember,
   OrgJoinRequest,
+  MemberActivityItem,
 } from '../../api/organizations';
+import RangeCalendar from '../../components/common/RangeCalendar';
 import { useAuth } from '../../store/AuthContext';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
@@ -49,8 +53,20 @@ type Props = {
   route: RouteProp<RootStackParamList, 'OrgProfile'>;
 };
 
-type ProfileTab = 'Info' | 'Admin';
+type ProfileTab = 'Info' | 'Admin' | 'Activity';
 type SettingsTab = 'info' | 'danger';
+
+function toDateStr(d: Date): string {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+const SHORT_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function fmtShortDate(d: Date): string {
+  return `${SHORT_MONTHS[d.getMonth()]} ${d.getDate()}`;
+}
 
 export default function OrgProfileScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
@@ -81,6 +97,17 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
     setCodeCopied(true);
     setTimeout(() => setCodeCopied(false), 2000);
   };
+
+  // ── Activity tab ─────────────────────────────────────────────────────────
+  const [activityData, setActivityData] = useState<MemberActivityItem[]>([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+  const [activityQuery, setActivityQuery] = useState('');
+  const [activitySort, setActivitySort] = useState<'desc' | 'asc'>('desc');
+  const [actStart, setActStart] = useState<Date | null>(null);
+  const [actEnd, setActEnd] = useState<Date | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [pendingStart, setPendingStart] = useState<Date | null>(null);
+  const [pendingEnd, setPendingEnd] = useState<Date | null>(null);
 
   // ── Join (public) / Request (private) ───────────────────────────────────
   const [requested, setRequested] = useState(false);
@@ -131,10 +158,27 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
-  // Load admin data when switching to Admin tab
+  const loadActivityData = useCallback(async (start: Date | null, end: Date | null) => {
+    setActivityLoading(true);
+    try {
+      const data = await fetchOrgMemberActivity(
+        orgId,
+        start ? toDateStr(start) : null,
+        end   ? toDateStr(end)   : null,
+      );
+      setActivityData(data);
+    } catch {
+      Alert.alert('Error', 'Could not load activity.');
+    } finally {
+      setActivityLoading(false);
+    }
+  }, [orgId]);
+
+  // Load admin data when switching to Admin/Activity tab
   const handleTabChange = (tab: ProfileTab) => {
     setActiveTab(tab);
     if (tab === 'Admin' && isAdmin) loadAdminData();
+    if (tab === 'Activity' && isAdmin) loadActivityData(actStart, actEnd);
   };
 
   // ── Join requests ────────────────────────────────────────────────────────
@@ -532,6 +576,170 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
   );
 
 
+  // ── Activity tab ─────────────────────────────────────────────────────────
+
+  const renderActivityTab = () => {
+    const q = activityQuery.toLowerCase();
+    const displayed = activityData
+      .filter(m =>
+        m.display_name.toLowerCase().includes(q) ||
+        m.username.toLowerCase().includes(q)
+      )
+      .sort((a, b) =>
+        activitySort === 'desc'
+          ? b.workout_count - a.workout_count
+          : a.workout_count - b.workout_count
+      );
+
+    const dateChipLabel =
+      actStart && actEnd
+        ? `${fmtShortDate(actStart)} – ${fmtShortDate(actEnd)}`
+        : actStart
+        ? `From ${fmtShortDate(actStart)}`
+        : 'All time';
+
+    return (
+      <View style={{ flex: 1 }}>
+        {/* Subtitle */}
+        <Text style={styles.actSubtitle}>
+          See how much {org?.name} has worked out!
+        </Text>
+
+        {/* Search bar */}
+        <View style={styles.actSearchRow}>
+          <Feather name="search" size={15} color={colors.textMuted} />
+          <TextInput
+            style={styles.actSearchInput}
+            placeholder="Search members..."
+            placeholderTextColor={colors.textMuted}
+            value={activityQuery}
+            onChangeText={setActivityQuery}
+            autoCorrect={false}
+          />
+        </View>
+
+        {/* Filter chips */}
+        <View style={styles.actChipRow}>
+          <Pressable
+            style={styles.actChip}
+            onPress={() => {
+              setPendingStart(actStart);
+              setPendingEnd(actEnd);
+              setCalendarOpen(true);
+            }}
+          >
+            <Feather name="calendar" size={13} color={colors.primary} />
+            <Text style={styles.actChipText}>{dateChipLabel}</Text>
+            <Feather name="chevron-down" size={13} color={colors.primary} />
+          </Pressable>
+
+          <Pressable
+            style={styles.actChip}
+            onPress={() => setActivitySort(s => s === 'desc' ? 'asc' : 'desc')}
+          >
+            <Feather name="arrow-up" size={13} color={colors.primary} />
+            <Text style={styles.actChipText}>
+              {activitySort === 'desc' ? 'Highest' : 'Lowest'}
+            </Text>
+          </Pressable>
+        </View>
+
+        {/* List */}
+        {activityLoading ? (
+          <ActivityIndicator color={colors.primary} style={{ marginTop: 32 }} />
+        ) : (
+          <FlatList
+            data={displayed}
+            keyExtractor={item => item.user_id}
+            contentContainerStyle={{ paddingHorizontal: spacing.base, paddingBottom: 120 }}
+            ListEmptyComponent={
+              <Text style={styles.actEmpty}>No members found.</Text>
+            }
+            renderItem={({ item }) => (
+              <Pressable
+                style={styles.actRow}
+                onPress={() => navigation.navigate('Profile', { username: item.username })}
+              >
+                <Avatar uri={item.avatar_url} name={item.display_name} size={40} />
+                <View style={styles.actInfo}>
+                  <Text style={styles.actName}>{item.display_name}</Text>
+                  <Text style={styles.actUsername}>@{item.username}</Text>
+                </View>
+                <View style={styles.actRight}>
+                  <View style={styles.actStreakRow}>
+                    <Text style={styles.actStreakText}>🔥 {item.current_streak}d</Text>
+                  </View>
+                  <Text style={styles.actCount}>Workouts: {item.workout_count}</Text>
+                </View>
+              </Pressable>
+            )}
+          />
+        )}
+
+        {/* Calendar modal */}
+        <Modal
+          visible={calendarOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setCalendarOpen(false)}
+        >
+          <Pressable style={styles.calOverlay} onPress={() => setCalendarOpen(false)}>
+            <Pressable style={styles.calCard} onPress={e => e.stopPropagation()}>
+              <View style={styles.calHeader}>
+                <Text style={styles.calTitle}>Select Date Range</Text>
+                <Pressable onPress={() => setCalendarOpen(false)}>
+                  <Feather name="x" size={18} color={colors.textSecondary} />
+                </Pressable>
+              </View>
+
+              <RangeCalendar
+                startDate={pendingStart}
+                endDate={pendingEnd}
+                onChange={(s, e) => {
+                  setPendingStart(s);
+                  setPendingEnd(e);
+                }}
+              />
+
+              <View style={styles.calActions}>
+                <Pressable
+                  style={[styles.calActionBtn, styles.calClearBtn]}
+                  onPress={() => {
+                    setActStart(null);
+                    setActEnd(null);
+                    setPendingStart(null);
+                    setPendingEnd(null);
+                    setCalendarOpen(false);
+                    loadActivityData(null, null);
+                  }}
+                >
+                  <Text style={styles.calClearText}>Clear</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.calActionBtn, styles.calCancelBtn]}
+                  onPress={() => setCalendarOpen(false)}
+                >
+                  <Text style={styles.calCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.calActionBtn, styles.calApplyBtn]}
+                  onPress={() => {
+                    setActStart(pendingStart);
+                    setActEnd(pendingEnd);
+                    setCalendarOpen(false);
+                    loadActivityData(pendingStart, pendingEnd);
+                  }}
+                >
+                  <Text style={styles.calApplyText}>Apply</Text>
+                </Pressable>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      </View>
+    );
+  };
+
   // ── Main render ──────────────────────────────────────────────────────────
 
   if (loading) {
@@ -542,7 +750,7 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
     );
   }
 
-  const tabs: ProfileTab[] = isAdmin ? ['Info', 'Admin'] : ['Info'];
+  const tabs: ProfileTab[] = isAdmin ? ['Info', 'Admin', 'Activity'] : ['Info'];
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background.base }}>
@@ -627,6 +835,7 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
       {/* Tab content */}
       {activeTab === 'Info' && renderInfoTab()}
       {activeTab === 'Admin' && renderAdminTab()}
+      {activeTab === 'Activity' && renderActivityTab()}
 
       {/* Organization Settings Modal */}
       <Modal
@@ -1348,4 +1557,132 @@ const styles = StyleSheet.create({
   },
   settingsDeleteBtnDisabled: { opacity: 0.6 },
   settingsDeleteBtnText: { fontSize: typography.size.base, fontWeight: '700', color: '#fff' },
+
+  // ── Activity tab ──────────────────────────────────────────────────────────
+  actSubtitle: {
+    fontSize: typography.size.sm,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.md,
+    marginHorizontal: spacing.base,
+    fontStyle: 'italic',
+  },
+  actSearchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.base,
+    marginTop: spacing.lg,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.sm,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.borderColor,
+    backgroundColor: colors.background.elevated,
+  },
+  actSearchInput: {
+    flex: 1,
+    fontSize: typography.size.sm,
+    color: colors.textPrimary,
+    padding: 0,
+  },
+  actChipRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.base,
+    marginBottom: spacing.sm,
+  },
+  actChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 6,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: colors.primary,
+    backgroundColor: 'rgba(79,195,224,0.07)',
+  },
+  actChipText: {
+    fontSize: typography.size.xs,
+    color: colors.primary,
+    fontWeight: '600',
+  },
+  actRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderColor,
+    gap: spacing.sm,
+  },
+  actInfo: { flex: 1 },
+  actName: { fontSize: typography.size.sm, fontWeight: '600', color: colors.textPrimary },
+  actUsername: { fontSize: typography.size.xs, color: colors.textMuted },
+  actRight: { alignItems: 'flex-end', gap: 2 },
+  actStreakRow: { flexDirection: 'row', alignItems: 'center' },
+  actStreakText: { fontSize: typography.size.xs, color: colors.textSecondary },
+  actCount: { fontSize: typography.size.sm, fontWeight: '700', color: colors.textPrimary },
+  actEmpty: {
+    fontSize: typography.size.sm,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xl,
+  },
+
+  // ── Calendar modal ────────────────────────────────────────────────────────
+  calOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  calCard: {
+    width: '100%',
+    backgroundColor: colors.background.card,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  calHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.borderColor,
+  },
+  calTitle: { fontSize: typography.size.base, fontWeight: '700', color: colors.textPrimary },
+  calActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    padding: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.borderColor,
+  },
+  calActionBtn: {
+    flex: 1,
+    alignItems: 'center',
+    paddingVertical: 9,
+    borderRadius: 10,
+  },
+  calClearBtn: {
+    borderWidth: 1,
+    borderColor: colors.borderColor,
+    backgroundColor: colors.background.elevated,
+  },
+  calClearText: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: '600' },
+  calCancelBtn: {
+    borderWidth: 1,
+    borderColor: colors.borderColor,
+    backgroundColor: colors.background.elevated,
+  },
+  calCancelText: { fontSize: typography.size.sm, color: colors.textSecondary, fontWeight: '600' },
+  calApplyBtn: {
+    backgroundColor: colors.primary,
+  },
+  calApplyText: { fontSize: typography.size.sm, color: '#fff', fontWeight: '700' },
 });

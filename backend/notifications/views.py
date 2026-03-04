@@ -451,3 +451,14 @@ def clear_all(request):
     """POST /api/notifications/clear-all/ — delete all notifications for the user."""
     Notification.objects.filter(recipient=request.user).delete()
     return JsonResponse({'success': True})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def dismiss(request):
+    """POST /api/notifications/dismiss/ — delete specific notifications by ID."""
+    data = request.data if hasattr(request, 'data') else json.loads(request.body)
+    ids = data.get('ids', [])
+    if ids:
+        Notification.objects.filter(recipient=request.user, id__in=ids).delete()
+    return JsonResponse({'success': True})

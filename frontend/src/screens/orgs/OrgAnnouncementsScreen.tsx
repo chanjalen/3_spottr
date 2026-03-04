@@ -332,6 +332,7 @@ function AnnouncementBubble({
   onRetry,
   onVideoPress,
   onMentionPress,
+  onAuthorPress,
 }: {
   item: OptimisticAnnouncement;
   orgId: string;
@@ -343,6 +344,7 @@ function AnnouncementBubble({
   onRetry: (item: OptimisticAnnouncement) => void;
   onVideoPress: (url: string) => void;
   onMentionPress?: (username: string) => void;
+  onAuthorPress?: (username: string) => void;
 }) {
   const isPending = item._status === 'pending';
   const isFailed = item._status === 'failed';
@@ -362,13 +364,19 @@ function AnnouncementBubble({
       delayLongPress={400}
     >
       <View style={styles.bubbleHeader}>
-        <Avatar uri={item.author_avatar_url} name={item.author_display_name} size={32} />
-        <View style={{ marginLeft: 8, flex: 1 }}>
-          <Text style={styles.bubbleAuthor}>{item.author_display_name}</Text>
-          {!isPending && (
-            <Text style={styles.bubbleTime}>{timeAgo(item.created_at)}</Text>
-          )}
-        </View>
+        <Pressable
+          style={styles.bubbleAuthorRow}
+          onPress={() => item.author_username && onAuthorPress?.(item.author_username)}
+          disabled={!item.author_username || isPending}
+        >
+          <Avatar uri={item.author_avatar_url} name={item.author_display_name} size={32} />
+          <View style={{ marginLeft: 8, flex: 1 }}>
+            <Text style={styles.bubbleAuthor}>{item.author_display_name}</Text>
+            {!isPending && (
+              <Text style={styles.bubbleTime}>{timeAgo(item.created_at)}</Text>
+            )}
+          </View>
+        </Pressable>
         {isPending && (
           <ActivityIndicator size="small" color={colors.textMuted} />
         )}
@@ -487,12 +495,12 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
 
   const detectMention = useCallback((value: string) => {
-    const match = value.match(/@(\w*)$/);
+    const match = value.match(/@([\w.\-]*)$/);
     setMentionQuery(match ? match[1] : null);
   }, []);
 
   const handleMentionSelect = useCallback((user: MentionableUser) => {
-    setDraftText(prev => prev.replace(/@(\w*)$/, `@${user.username} `));
+    setDraftText(prev => prev.replace(/@([\w.\-]*)$/, `@${user.username} `));
     setMentionQuery(null);
   }, []);
 
@@ -631,6 +639,29 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
       // ignore
     }
   };
+
+  useEffect(() => {
+    const myId = me?.id ? String(me.id) : null;
+    const handler = (data: { announcement_id: string; org_id: string; reactions: Array<{ emoji: string; count: number; reactor_ids: string[] }> }) => {
+      if (data.org_id !== orgId) return;
+      setAnnouncements(prev =>
+        prev.map(a =>
+          isAnn(a) && a.id === data.announcement_id
+            ? {
+                ...a,
+                reactions: data.reactions.map(r => ({
+                  emoji: r.emoji,
+                  count: r.count,
+                  user_reacted: myId ? r.reactor_ids.includes(myId) : false,
+                })),
+              }
+            : a,
+        ),
+      );
+    };
+    wsManager.on('announcement_reaction_update', handler);
+    return () => wsManager.off('announcement_reaction_update', handler);
+  }, [orgId, me?.id]);
 
   // ── Poll voted ───────────────────────────────────────────────────────────
 
@@ -855,6 +886,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
         onRetry={handleRetry}
         onVideoPress={setVideoPlayerUrl}
         onMentionPress={(u) => navigation.navigate('Profile', { username: u })}
+        onAuthorPress={(u) => navigation.navigate('Profile', { username: u })}
       />
     );
   };
@@ -871,11 +903,16 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
           <Pressable style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Feather name="arrow-left" size={22} color={colors.textPrimary} />
           </Pressable>
-          <Avatar uri={orgAvatar} name={orgName} size={34} />
-          <View style={{ marginLeft: 10, flex: 1 }}>
-            <Text style={styles.headerTitle} numberOfLines={1}>{orgName}</Text>
-            <Text style={styles.headerSubtitle}>Announcements</Text>
-          </View>
+          <Pressable
+            style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+            onPress={() => navigation.navigate('OrgProfile', { orgId })}
+          >
+            <Avatar uri={orgAvatar} name={orgName} size={34} />
+            <View style={{ marginLeft: 10, flex: 1 }}>
+              <Text style={styles.headerTitle} numberOfLines={1}>{orgName}</Text>
+              <Text style={styles.headerSubtitle}>Announcements</Text>
+            </View>
+          </Pressable>
           <Pressable
             style={styles.profileBtn}
             onPress={() => navigation.navigate('OrgProfile', { orgId })}
@@ -1307,6 +1344,7 @@ const styles = StyleSheet.create({
     borderColor: '#ef444440',
   },
   bubbleHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  bubbleAuthorRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   bubbleAuthor: { fontSize: typography.size.sm, fontWeight: '700', color: colors.textPrimary },
   bubbleTime: { fontSize: typography.size.xs, color: colors.textMuted },
   bubbleContent: { fontSize: typography.size.sm, color: colors.textPrimary, lineHeight: 20 },

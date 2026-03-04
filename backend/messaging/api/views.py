@@ -157,8 +157,10 @@ def _build_avatar_map(user_ids):
     """
     Bulk-fetch user avatar URLs for all user_ids in one query.
     Returns a dict mapping str(user_id) → url string.
+    Falls back to legacy User.avatar ImageField for users without a MediaLink.
     """
     from media.models import MediaLink
+    from media.utils import build_media_url
     ids = [str(uid) for uid in user_ids if uid is not None]
     if not ids:
         return {}
@@ -167,7 +169,16 @@ def _build_avatar_map(user_ids):
         .filter(destination_type='user', destination_id__in=ids, type='avatar')
         .select_related('asset')
     )
-    return {link.destination_id: link.asset.url for link in links}
+    result = {link.destination_id: link.asset.url for link in links}
+    # Fall back to legacy User.avatar ImageField for users not covered by MediaLink.
+    missing_ids = [uid for uid in ids if uid not in result]
+    if missing_ids:
+        from accounts.models import User
+        for u in User.objects.filter(id__in=missing_ids).exclude(avatar='').exclude(avatar__isnull=True).only('id', 'avatar'):
+            url = build_media_url(u.avatar.name)
+            if url:
+                result[str(u.id)] = url
+    return result
 
 
 def _build_media_map(destination_type, items):
@@ -203,6 +214,43 @@ def _build_media_map(destination_type, items):
 # ---------------------------------------------------------------------------
 # Conversations
 # ---------------------------------------------------------------------------
+
+def _compute_preview_text(entry, user):
+    """
+    Return a special preview string when the most recent activity is a reaction
+    or a mention of the viewer.  Returns None otherwise (frontend falls back to
+    its own msgPreview() / groupMsgPreview() helpers).
+
+    Priority:
+      1. Reaction preview — wins if latest_reaction_at is set AND it is more
+         recent than latest_message_at (so it isn't stale after a new message).
+      2. Mention preview  — the latest message content contains @{username}.
+      3. None             — frontend renders the normal message preview.
+    """
+    # 1. Reaction preview
+    react_at = entry.latest_reaction_at
+    msg_at = entry.latest_message_at
+    if react_at and (msg_at is None or react_at > msg_at):
+        actor = entry.latest_reaction_actor
+        if actor:
+            msg_sender_id = entry.latest_reaction_message_sender_id
+            is_self = actor == user.username
+            if is_self:
+                if msg_sender_id and str(msg_sender_id) == str(user.id):
+                    return "You reacted to your message"
+                return "You reacted to a message"
+            if msg_sender_id and str(msg_sender_id) == str(user.id):
+                return f"{actor} reacted to your message"
+            return f"{actor} reacted to a message"
+
+    # 2. Mention preview
+    msg = entry.latest_message
+    if msg and msg.content and f'@{user.username}' in msg.content:
+        sender_username = msg.sender.username if msg.sender else None
+        if sender_username:
+            return f"{sender_username} mentioned you"
+
+    return None
 
 def _get_activity_map(partner_ids):
     """
@@ -247,6 +295,7 @@ def dm_conversations(request):
             'latest_message': entry.latest_message,
             'unread_count': entry.unread_count,
             'partner_has_activity_today': activity_map.get(str(entry.partner_id), False),
+            'preview_text': _compute_preview_text(entry, request.user),
         })
 
     serializer = ConversationSerializer(
@@ -274,6 +323,7 @@ def group_conversations(request):
             'member_count': entry.member_count,
             'latest_message': entry.latest_message,
             'unread_count': entry.unread_count,
+            'preview_text': _compute_preview_text(entry, request.user),
         })
 
     serializer = GroupConversationSerializer(
@@ -488,6 +538,8 @@ def react_to_message(request, message_id):
         from messaging.models import Message
         message = Message.objects.get(id=message_id)
         reactions = services.get_message_reactions(message, request.user)
+        services.broadcast_reaction_update(message)
+        services.update_reaction_inbox_preview(message, request.user)
     except MessageNotFoundError as e:
         return Response({"error": str(e)}, status=status.HTTP_404_NOT_FOUND)
     except ConversationNotFoundError as e:

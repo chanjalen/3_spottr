@@ -135,6 +135,16 @@ class InboxEntry(BaseModel):
     latest_message_at = models.DateTimeField(null=True, blank=True, db_index=False)
     unread_count = models.PositiveIntegerField(default=0)
 
+    # Reaction preview — set when a reaction is the most recent event in the conversation.
+    # latest_reaction_actor: username of who reacted (for display)
+    # latest_reaction_message_sender_id: UUID of the message's sender (so each client can
+    #   compute "your message" vs "a message" from their own perspective)
+    # latest_reaction_at: when the reaction happened (compared against latest_message_at
+    #   to decide which preview wins)
+    latest_reaction_actor = models.CharField(max_length=30, blank=True, default='')
+    latest_reaction_message_sender_id = models.CharField(max_length=36, blank=True, default='')
+    latest_reaction_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         indexes = [
             models.Index(fields=['user', '-latest_message_at'], name='idx_inbox_user_time'),

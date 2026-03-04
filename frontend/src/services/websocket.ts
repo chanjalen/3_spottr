@@ -10,10 +10,12 @@ const WS_BASE_URL = API_BASE_URL.replace(/^http/, 'ws');
 const QUEUE_TTL_MS = 60_000;
 
 // ── Minimal event emitter ─────────────────────────────────────────────────
-type EventMap = {
+export type EventMap = {
   new_message: Message;
   new_announcement: Announcement;
   unread_update: UnreadCount;
+  reaction_update: { message_id: string; reactions: Array<{ emoji: string; count: number; reactor_ids: string[] }> };
+  announcement_reaction_update: { announcement_id: string; org_id: string; reactions: Array<{ emoji: string; count: number; reactor_ids: string[] }> };
   connected: null;
   disconnected: null;
   send_error: { code: string; detail: string; client_msg_id?: string };
@@ -89,6 +91,10 @@ class WebSocketManager extends SimpleEmitter {
           this.emit('new_announcement', data.announcement as Announcement);
         } else if (data.type === 'unread_update') {
           this.emit('unread_update', data.counts as UnreadCount);
+        } else if (data.type === 'reaction_update') {
+          this.emit('reaction_update', data as EventMap['reaction_update']);
+        } else if (data.type === 'announcement_reaction_update') {
+          this.emit('announcement_reaction_update', data as EventMap['announcement_reaction_update']);
         } else if (data.type === 'error') {
           this.emit('send_error', {
             code: data.code,

@@ -115,6 +115,10 @@ export async function kickMember(groupId: string, userId: string): Promise<void>
   await apiClient.delete(`/api/groups/${groupId}/members/${userId}/remove/`);
 }
 
+export async function addMember(groupId: string, userId: string): Promise<void> {
+  await apiClient.post(`/api/groups/${groupId}/members/${userId}/add/`);
+}
+
 export async function generateInviteCode(groupId: string): Promise<{ code: string }> {
   const { data } = await apiClient.post(`/api/groups/${groupId}/invite-codes/`);
   return data;

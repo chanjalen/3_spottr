@@ -22,7 +22,7 @@ import type BottomSheet from '@gorhom/bottom-sheet';
 
 const TAB_ICONS: Record<string, React.ComponentProps<typeof Feather>['name']> = {
   Feed: 'home',
-  Gyms: 'activity',
+  Gyms: 'map-pin',
   Social: 'message-circle',
   Ranks: 'award',
 };

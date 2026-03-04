@@ -336,6 +336,7 @@ class ConversationSerializer(serializers.Serializer):
     latest_message = MessageListSerializer()
     unread_count = serializers.IntegerField()
     partner_has_activity_today = serializers.BooleanField()
+    preview_text = serializers.CharField(allow_null=True)
 
 
 class GroupConversationSerializer(serializers.Serializer):
@@ -347,6 +348,7 @@ class GroupConversationSerializer(serializers.Serializer):
     member_count = serializers.IntegerField()
     latest_message = MessageListSerializer(allow_null=True)
     unread_count = serializers.IntegerField()
+    preview_text = serializers.CharField(allow_null=True)
 
 
 class UnreadCountSerializer(serializers.Serializer):

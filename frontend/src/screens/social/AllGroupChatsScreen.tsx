@@ -154,7 +154,7 @@ export default function AllGroupChatsScreen({ navigation }: Props) {
                   )}
                 </View>
                 <Text style={styles.rowLast} numberOfLines={1}>
-                  {groupMsgPreview(item.latest_message)}
+                  {item.preview_text ?? groupMsgPreview(item.latest_message)}
                 </Text>
               </View>
               {item.unread_count > 0 && (
