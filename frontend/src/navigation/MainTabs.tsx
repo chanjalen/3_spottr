@@ -33,6 +33,7 @@ import CheckInSelectionScreen from '../screens/social/CheckInSelectionScreen';
 import CameraCaptureScreen from '../screens/social/CameraCaptureScreen';
 import CheckInReviewScreen from '../screens/social/CheckInReviewScreen';
 import FindFriendsScreen from '../screens/FindFriendsScreen';
+import PostDetailScreen from '../screens/feed/PostDetailScreen';
 import { staleCache } from '../utils/staleCache';
 import { fetchGyms } from '../api/gyms';
 import { fetchDMConversations, fetchGroupConversations } from '../api/messaging';
@@ -144,6 +145,7 @@ export default function MainTabs() {
       <Root.Screen name="CameraCapture" component={CameraCaptureScreen} options={{ presentation: 'card', gestureEnabled: false }} />
       <Root.Screen name="CheckInReview" component={CheckInReviewScreen} options={{ presentation: 'card', gestureEnabled: true }} />
       <Root.Screen name="FindFriends" component={FindFriendsScreen} options={{ presentation: 'card' }} />
+      <Root.Screen name="PostDetail" component={PostDetailScreen} options={{ presentation: 'card' }} />
     </Root.Navigator>
   );
 }

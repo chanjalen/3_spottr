@@ -39,6 +39,8 @@ const DISMISS_Y = SCREEN_H * 0.52;
 interface ShareSheetProps {
   item: FeedItem | null;
   onClose: () => void;
+  /** Pass when there is no tab bar (e.g. PostDetailScreen) so the sheet extends to the screen edge. */
+  bottomOffset?: number;
 }
 
 type SelectionKey = string; // `type:id`
@@ -50,10 +52,12 @@ interface SelectionEntry {
   label: string;
 }
 
-export default function ShareSheet({ item, onClose }: ShareSheetProps) {
+export default function ShareSheet({ item, onClose, bottomOffset }: ShareSheetProps) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  const bottomNavHeight = 52 + Math.max(insets.bottom, 16);
+  const noTabBar = bottomOffset !== undefined;
+  const bottomNavHeight = noTabBar ? 0 : 52 + Math.max(insets.bottom, 16);
+  const contentBottomPad = noTabBar ? Math.max(insets.bottom, 8) : 0;
   const isOwner = !!item && !!user && String(item.user.id) === String(user.id);
   const hasMedia = !!item && !!(item.photo_url || item.video_url);
 
@@ -261,7 +265,7 @@ export default function ShareSheet({ item, onClose }: ShareSheetProps) {
 
       {/* Sheet */}
       <Animated.View pointerEvents="auto" style={[styles.sheet, sheetStyle]}>
-        {/* Drag handle + header */}
+        {/* Drag handle + header — only this area is the pan target */}
         <GestureDetector gesture={panGesture}>
           <View style={styles.handleArea}>
             <View style={styles.handle} />
@@ -271,21 +275,24 @@ export default function ShareSheet({ item, onClose }: ShareSheetProps) {
                 <Feather name="x" size={20} color={colors.textMuted} />
               </Pressable>
             </View>
-            {/* Search bar */}
-            <View style={styles.searchRow}>
-              <Feather name="search" size={15} color={colors.textMuted} style={styles.searchIcon} />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="Search all friends, groups, organizations..."
-                placeholderTextColor={colors.textMuted}
-                value={query}
-                onChangeText={handleQueryChange}
-                autoCorrect={false}
-                autoCapitalize="none"
-              />
-            </View>
           </View>
         </GestureDetector>
+
+        {/* Search bar — outside GestureDetector so touches reach the TextInput */}
+        <View style={styles.searchBarArea}>
+          <View style={styles.searchRow}>
+            <Feather name="search" size={15} color={colors.textMuted} style={styles.searchIcon} />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search all friends, groups, organizations..."
+              placeholderTextColor={colors.textMuted}
+              value={query}
+              onChangeText={handleQueryChange}
+              autoCorrect={false}
+              autoCapitalize="none"
+            />
+          </View>
+        </View>
 
         {/* Content */}
         <View style={{ flex: 1 }}>
@@ -345,42 +352,44 @@ export default function ShareSheet({ item, onClose }: ShareSheetProps) {
         </View>
 
         {/* Bottom fixed area — only renders when there's something to show */}
-        {(selectedIds.size > 0 || (isOwner && hasMedia)) && (
-        <View style={styles.bottomBar}>
-          {selectedIds.size > 0 ? (
-            // Send bar
-            <>
-              <TextInput
-                style={styles.messageInput}
-                placeholder="Add a message..."
-                placeholderTextColor={colors.textMuted}
-                value={message}
-                onChangeText={setMessage}
-                returnKeyType="done"
-              />
+        {(selectedIds.size > 0 || (isOwner && hasMedia)) ? (
+          <View style={[styles.bottomBar, contentBottomPad > 0 && { paddingBottom: spacing.md + contentBottomPad }]}>
+            {selectedIds.size > 0 ? (
+              // Send bar
+              <>
+                <TextInput
+                  style={styles.messageInput}
+                  placeholder="Add a message..."
+                  placeholderTextColor={colors.textMuted}
+                  value={message}
+                  onChangeText={setMessage}
+                  returnKeyType="done"
+                />
+                <Pressable
+                  style={({ pressed }) => [styles.sendBtn, pressed && { opacity: 0.8 }, isSending && { opacity: 0.6 }]}
+                  onPress={handleSend}
+                  disabled={isSending}
+                >
+                  {isSending ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Text style={styles.sendBtnText}>Send ({selectedIds.size})</Text>
+                  )}
+                </Pressable>
+              </>
+            ) : isOwner && hasMedia ? (
+              // Download button — centered cyan pill
               <Pressable
-                style={({ pressed }) => [styles.sendBtn, pressed && { opacity: 0.8 }, isSending && { opacity: 0.6 }]}
-                onPress={handleSend}
-                disabled={isSending}
+                style={({ pressed }) => [styles.downloadBtn, pressed && { opacity: 0.8 }]}
+                onPress={handleDownload}
               >
-                {isSending ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <Text style={styles.sendBtnText}>Send ({selectedIds.size})</Text>
-                )}
+                <Feather name="download-cloud" size={16} color="#fff" />
+                <Text style={styles.downloadBtnText}>Save photos &amp; videos</Text>
               </Pressable>
-            </>
-          ) : isOwner && hasMedia ? (
-            // Download button — centered cyan pill
-            <Pressable
-              style={({ pressed }) => [styles.downloadBtn, pressed && { opacity: 0.8 }]}
-              onPress={handleDownload}
-            >
-              <Feather name="download-cloud" size={16} color="#fff" />
-              <Text style={styles.downloadBtnText}>Save photos &amp; videos</Text>
-            </Pressable>
-          ) : null}
-        </View>
+            ) : null}
+          </View>
+        ) : (
+          contentBottomPad > 0 && <View style={{ height: contentBottomPad }} />
         )}
       </Animated.View>
     </View>
@@ -411,12 +420,17 @@ const styles = StyleSheet.create({
   handleArea: {
     paddingTop: spacing.sm,
     paddingHorizontal: spacing.base,
-    paddingBottom: spacing.md,
+    paddingBottom: spacing.sm,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     backgroundColor: colors.surface,
+  },
+  searchBarArea: {
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.subtle,
+    backgroundColor: colors.surface,
   },
   handle: {
     width: 36,

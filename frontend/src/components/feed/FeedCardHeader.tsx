@@ -34,37 +34,41 @@ export default function FeedCardHeader({
       <Avatar
         uri={user.avatar_url}
         name={user.display_name}
-        size={36}
+        size={40}
         onPress={onPressUser}
       />
 
-      {/* Name · @handle · time — all on one compact line */}
+      {/* Name stacked above @handle · time */}
       <Pressable
         onPress={onPressUser}
         disabled={!onPressUser}
-        style={styles.nameLine}
+        style={styles.nameBlock}
       >
         <Text style={styles.displayName} numberOfLines={1}>
           {user.display_name}
         </Text>
-        <Text style={styles.handle} numberOfLines={1}>
-          @{user.username}
-        </Text>
-        <Text style={styles.dot}>·</Text>
-        <Text style={styles.time} numberOfLines={1}>
-          {timeAgo(createdAt)}
-        </Text>
+        <View style={styles.subLine}>
+          <Text style={styles.handle} numberOfLines={1}>
+            @{user.username}
+          </Text>
+          <Text style={styles.dot}>·</Text>
+          <Text style={styles.time} numberOfLines={1}>
+            {timeAgo(createdAt)}
+          </Text>
+        </View>
       </Pressable>
 
-      {/* More button */}
-      <Pressable
-        style={({ pressed }) => [styles.moreBtn, pressed && { opacity: 0.5 }]}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        accessibilityLabel="More options"
-        onPress={onMore}
-      >
-        <Feather name="more-horizontal" size={18} color={colors.textMuted} />
-      </Pressable>
+      {/* More button — only shown for own posts */}
+      {onMore && (
+        <Pressable
+          style={({ pressed }) => [styles.moreBtn, pressed && { opacity: 0.5 }]}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          accessibilityLabel="More options"
+          onPress={onMore}
+        >
+          <Feather name="more-horizontal" size={18} color={colors.textMuted} />
+        </Pressable>
+      )}
 
       {/* Context tag (workout type / location) below name row */}
       {contextTag && (
@@ -90,36 +94,38 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     marginBottom: spacing.xs,
     gap: spacing.sm,
+    paddingHorizontal: spacing.md,
   },
-  nameLine: {
+  nameBlock: {
     flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'nowrap',
-    gap: 4,
+    flexDirection: 'column',
+    justifyContent: 'center',
     minWidth: 0,
   },
+  subLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
   displayName: {
-    fontSize: typography.size.sm,
+    fontSize: typography.size.base,
     fontFamily: typography.family.semibold,
     color: colors.textPrimary,
-    flexShrink: 1,
   },
   handle: {
-    fontSize: typography.size.sm,
+    fontSize: typography.size.xs,
     fontFamily: typography.family.regular,
     color: colors.textMuted,
     flexShrink: 1,
   },
   dot: {
-    fontSize: typography.size.sm,
+    fontSize: typography.size.xs,
     color: colors.textMuted,
   },
   time: {
-    fontSize: typography.size.sm,
+    fontSize: typography.size.xs,
     fontFamily: typography.family.regular,
     color: colors.textMuted,
-    flexShrink: 0,
   },
   moreBtn: {
     marginLeft: spacing.xs,

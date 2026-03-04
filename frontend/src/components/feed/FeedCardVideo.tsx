@@ -6,9 +6,10 @@ import { colors, spacing } from '../../theme';
 
 interface FeedCardVideoProps {
   uri: string;
+  onExpand?: () => void;
 }
 
-export default function FeedCardVideo({ uri }: FeedCardVideoProps) {
+export default function FeedCardVideo({ uri, onExpand }: FeedCardVideoProps) {
   const [isPlaying, setIsPlaying] = useState(false);
 
   const player = useVideoPlayer(uri, (p) => {
@@ -46,6 +47,11 @@ export default function FeedCardVideo({ uri }: FeedCardVideoProps) {
           </View>
         )}
       </Pressable>
+      {onExpand && (
+        <Pressable style={styles.expandBtn} onPress={onExpand} hitSlop={8}>
+          <Feather name="maximize-2" size={16} color="#fff" />
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -73,6 +79,17 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: 28,
     backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  expandBtn: {
+    position: 'absolute',
+    bottom: 10,
+    right: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 6,
+    backgroundColor: 'rgba(0,0,0,0.45)',
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -56,6 +56,15 @@ function adaptFeedItem(raw: any): FeedItem {
   };
 }
 
+export async function fetchPostById(
+  postId: string,
+  itemType?: 'post' | 'workout' | 'checkin',
+): Promise<FeedItem> {
+  const url = ENDPOINTS.postDetail(postId, itemType === 'checkin' ? 'checkin' : undefined);
+  const response = await apiClient.get(url);
+  return adaptFeedItem(response.data);
+}
+
 export async function fetchFeed(
   tab: 'main' | 'friends' | 'gym' | 'org',
   cursor?: string,

@@ -117,6 +117,10 @@ export function useFeed() {
     );
   }, []);
 
+  const removeItem = useCallback((id: string) => {
+    setItems((prev) => prev.filter((item) => item.id !== id));
+  }, []);
+
   // Debounced search — fires 300ms after typing stops (matches web)
   const handleSearchChange = useCallback((q: string) => {
     setSearchQuery(q);
@@ -167,6 +171,7 @@ export function useFeed() {
     refresh,
     changeTab,
     updateItem,
+    removeItem,
     loadMore,
     handleSearchChange,
     clearSearch,

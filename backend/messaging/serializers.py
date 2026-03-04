@@ -21,6 +21,7 @@ class SharedPostSerializer(serializers.Serializer):
     comment_count = serializers.SerializerMethodField()
     workout = serializers.SerializerMethodField()
     personal_record = serializers.SerializerMethodField()
+    poll = serializers.SerializerMethodField()
 
     def get_item_type(self, obj):
         if hasattr(obj, 'workout_id') and obj.workout_id:
@@ -93,6 +94,28 @@ class SharedPostSerializer(serializers.Serializer):
                 'unit': pr.unit,
             }
         return None
+
+    def get_poll(self, obj):
+        try:
+            poll = obj.poll
+        except Exception:
+            return None
+        if not poll:
+            return None
+        total_votes = poll.get_total_votes()
+        return {
+            'question': poll.question,
+            'total_votes': total_votes,
+            'is_active': poll.is_active,
+            'options': [
+                {
+                    'id': opt.id,
+                    'text': opt.text,
+                    'votes': opt.votes,
+                }
+                for opt in poll.options.all()
+            ],
+        }
 
 
 class SharedCheckinSerializer(serializers.Serializer):

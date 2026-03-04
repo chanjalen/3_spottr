@@ -38,4 +38,7 @@ export const ENDPOINTS = {
 
   shareRecipients: '/api/social/share/recipients/',
   sendShare: '/api/social/share/send/',
+
+  postDetail: (id: ID, type?: string) =>
+    `/api/social/posts/${id}/${type ? `?type=${type}` : ''}`,
 } as const;
