@@ -956,6 +956,45 @@ def streak_api_view(request):
     return DRFResponse(details)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def user_achievements_api_view(request, username):
+    """Return earned achievements for any user (for profile display)."""
+    from django.contrib.auth import get_user_model
+    from workouts.models import UserAchievement, AchievementStat
+    from workouts.services.achievements_service import ACHIEVEMENTS
+    from django.core.cache import cache
+
+    User = get_user_model()
+    try:
+        target = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return DRFResponse({'error': 'User not found'}, status=404)
+
+    earned_ids = set(
+        UserAchievement.objects.filter(user=target).values_list('achievement_id', flat=True)
+    )
+
+    total_users = cache.get('achievement_total_users')
+    if total_users is None:
+        total_users = max(User.objects.count(), 1)
+        cache.set('achievement_total_users', total_users, 300)
+
+    stat_map = cache.get('achievement_stat_map')
+    if stat_map is None:
+        stat_map = {s.achievement_id: s.earned_count for s in AchievementStat.objects.all()}
+        cache.set('achievement_stat_map', stat_map, 300)
+
+    result = []
+    for a in ACHIEVEMENTS:
+        if a['id'] in earned_ids:
+            count = stat_map.get(a['id'], 0)
+            pct = round(count / total_users * 100, 1)
+            result.append({**a, 'earned': True, 'user_pct': pct})
+
+    return DRFResponse(result)
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def update_workout_goal_view(request):

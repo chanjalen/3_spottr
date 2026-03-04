@@ -41,6 +41,23 @@ export async function fetchShareRecipients(
   };
 }
 
+export async function sendShareProfile(params: {
+  username: string;
+  recipientIds: string[];
+  groupIds: string[];
+  orgIds: string[];
+  message?: string;
+}): Promise<{ sent_count: number; errors: string[] }> {
+  const response = await apiClient.post(ENDPOINTS.sendShareProfile, {
+    username: params.username,
+    recipient_ids: params.recipientIds,
+    group_ids: params.groupIds,
+    org_ids: params.orgIds,
+    message: params.message ?? '',
+  });
+  return response.data;
+}
+
 export async function sendShare(params: {
   postId: string;
   itemType: 'post' | 'checkin';

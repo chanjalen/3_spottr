@@ -154,6 +154,28 @@ class SharedCheckinSerializer(serializers.Serializer):
         return Comment.objects.filter(quick_workout=obj).count()
 
 
+class SharedProfileSerializer(serializers.Serializer):
+    """Serializer for a shared user profile card displayed in chat."""
+    item_type = serializers.SerializerMethodField()
+    username = serializers.CharField()
+    display_name = serializers.CharField()
+    avatar_url = serializers.SerializerMethodField()
+    current_streak = serializers.SerializerMethodField()
+    total_workouts = serializers.SerializerMethodField()
+
+    def get_item_type(self, obj):
+        return 'profile'
+
+    def get_avatar_url(self, obj):
+        return obj.avatar_url if obj else None
+
+    def get_current_streak(self, obj):
+        return getattr(obj, 'current_streak', 0) or 0
+
+    def get_total_workouts(self, obj):
+        return getattr(obj, 'total_workouts', 0) or 0
+
+
 class MessageListSerializer(serializers.ModelSerializer):
     """
     Serializer for message lists. Returns full shared post/check-in data inline
@@ -207,6 +229,8 @@ class MessageListSerializer(serializers.ModelSerializer):
 
     def get_shared_post(self, obj):
         try:
+            if obj.shared_profile_id and obj.shared_profile:
+                return SharedProfileSerializer(obj.shared_profile).data
             if obj.post:
                 return SharedPostSerializer(obj.post).data
             if obj.quick_workout:
@@ -318,6 +342,8 @@ class MessageSerializer(serializers.ModelSerializer):
 
     def get_shared_post(self, obj):
         try:
+            if obj.shared_profile_id and obj.shared_profile:
+                return SharedProfileSerializer(obj.shared_profile).data
             if obj.post:
                 return SharedPostSerializer(obj.post).data
             if obj.quick_workout:

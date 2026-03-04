@@ -43,6 +43,12 @@ def _user_brief(user):
         'workout_frequency': user.workout_frequency,
         'is_email_verified': user.is_email_verified,
         'onboarding_step': user.onboarding_step,
+        'weight_unit': user.weight_unit,
+        'distance_unit': user.distance_unit,
+        'checkin_visible_friends': user.checkin_visible_friends,
+        'checkin_visible_following': user.checkin_visible_following,
+        'checkin_visible_orgs': user.checkin_visible_orgs,
+        'checkin_visible_gyms': user.checkin_visible_gyms,
     }
 
 
@@ -475,6 +481,43 @@ def api_update_profile_view(request):
     return Response(_user_brief(user))
 
 
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def api_preferences_view(request):
+    """GET or PATCH weight_unit / distance_unit."""
+    user = request.user
+    if request.method == 'GET':
+        return Response({'weight_unit': user.weight_unit, 'distance_unit': user.distance_unit})
+    changed = []
+    if request.data.get('weight_unit') in ('lbs', 'kg'):
+        user.weight_unit = request.data['weight_unit']
+        changed.append('weight_unit')
+    if request.data.get('distance_unit') in ('miles', 'km'):
+        user.distance_unit = request.data['distance_unit']
+        changed.append('distance_unit')
+    if changed:
+        user.save(update_fields=changed)
+    return Response(_user_brief(user))
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def api_privacy_settings_view(request):
+    """GET or PATCH checkin visibility toggles."""
+    user = request.user
+    FIELDS = ['checkin_visible_friends', 'checkin_visible_following', 'checkin_visible_orgs', 'checkin_visible_gyms']
+    if request.method == 'GET':
+        return Response({f: getattr(user, f) for f in FIELDS})
+    changed = []
+    for f in FIELDS:
+        if f in request.data:
+            setattr(user, f, bool(request.data[f]))
+            changed.append(f)
+    if changed:
+        user.save(update_fields=changed)
+    return Response({f: getattr(user, f) for f in FIELDS})
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def api_profile_view(request, username):
@@ -485,7 +528,14 @@ def api_profile_view(request, username):
         return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
 
     from social.models import Follow, QuickWorkout
+    from social.models import Block
     from django.utils import timezone as tz
+
+    # If the target has blocked the requester, act as if the user doesn't exist
+    if Block.objects.filter(blocker=target, blocked=request.user).exists():
+        return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    is_blocked = Block.objects.filter(blocker=request.user, blocked=target).exists()
     is_following = Follow.objects.filter(follower=request.user, following=target).exists()
     is_followed_by = Follow.objects.filter(follower=target, following=request.user).exists()
     follower_count = Follow.objects.filter(following=target).count()
@@ -509,12 +559,49 @@ def api_profile_view(request, username):
         'total_workouts': target.total_workouts,
         'is_following': is_following,
         'is_followed_by': is_followed_by,
+        'is_blocked': is_blocked,
         'follower_count': follower_count,
         'following_count': following_count,
         'friend_count': friend_count,
         'member_since': target.member_since,
         'has_checkin_today': has_checkin_today,
     })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_block_toggle_view(request):
+    """Block or unblock a user. On block, removes follows in both directions."""
+    from social.models import Follow, Block
+
+    username = request.data.get('username')
+    user_id = request.data.get('user_id')
+
+    if username:
+        try:
+            target = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+    elif user_id:
+        try:
+            target = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+    else:
+        return Response({'error': 'username or user_id required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if target == request.user:
+        return Response({'error': 'Cannot block yourself.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    block, created = Block.objects.get_or_create(blocker=request.user, blocked=target)
+    if not created:
+        block.delete()
+        return Response({'blocked': False})
+
+    # Remove follows in both directions
+    Follow.objects.filter(follower=request.user, following=target).delete()
+    Follow.objects.filter(follower=target, following=request.user).delete()
+    return Response({'blocked': True})
 
 
 @api_view(['GET'])
@@ -581,7 +668,7 @@ def api_user_post_thumbnails_view(request, username):
     except (ValueError, TypeError):
         limit, offset = 9, 0
 
-    from social.models import Post
+    from social.models import Post, Poll, PollVote
     from social.views import _bulk_media_urls, build_media_url
     from workouts.models import PersonalRecord
 
@@ -601,10 +688,46 @@ def api_user_post_thumbnails_view(request, username):
     ):
         pr_map[pr['post_id']] = pr
 
+    # Bulk-fetch full poll data (options + votes) so results appear in Phase 1
+    polls_by_post = {}
+    if post_ids:
+        for poll in Poll.objects.filter(post_id__in=post_ids).prefetch_related('options'):
+            polls_by_post[poll.post_id] = poll
+
+    user_vote_map = {}
+    if polls_by_post:
+        poll_ids = [p.id for p in polls_by_post.values()]
+        for v in PollVote.objects.filter(poll_id__in=poll_ids, user=request.user).select_related('option'):
+            user_vote_map[v.poll_id] = v
+
     items = []
     for p in posts:
         photo_url = post_photos.get(str(p.id)) or (build_media_url(p.photo.name) if p.photo else None)
         pr = pr_map.get(p.id)
+        poll = polls_by_post.get(p.id)
+        if poll:
+            vote = user_vote_map.get(poll.id)
+            total_votes = sum(opt.votes for opt in poll.options.all())
+            poll_data = {
+                'id': str(poll.id),
+                'question': poll.question,
+                'options': [
+                    {
+                        'id': str(opt.id),
+                        'text': opt.text,
+                        'votes': opt.votes,
+                        'order': opt.order,
+                        'percentage': round((opt.votes / total_votes * 100) if total_votes > 0 else 0),
+                    }
+                    for opt in poll.options.all().order_by('order')
+                ],
+                'total_votes': total_votes,
+                'is_active': poll.is_active,
+                'user_voted': vote is not None,
+                'user_vote_option': str(vote.option_id) if vote else None,
+            }
+        else:
+            poll_data = None
         items.append({
             'id': p.id,
             'type': 'post',
@@ -623,6 +746,7 @@ def api_user_post_thumbnails_view(request, username):
                 'value': pr['value'],
                 'unit': pr['unit'],
             } if pr else None,
+            'poll': poll_data,
         })
 
     total = len(items)

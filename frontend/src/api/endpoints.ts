@@ -38,4 +38,5 @@ export const ENDPOINTS = {
 
   shareRecipients: '/api/social/share/recipients/',
   sendShare: '/api/social/share/send/',
+  sendShareProfile: '/api/social/share/send-profile/',
 } as const;

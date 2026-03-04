@@ -169,7 +169,38 @@ function MessageRowInner({
                 )}
               </View>
             )}
-            {item.shared_post && (
+            {item.shared_post?.item_type === 'profile' ? (
+              <Pressable
+                onPress={() => item.shared_post?.username && onNavigateToProfile(item.shared_post.username)}
+                style={[
+                  styles.bubble,
+                  isOwn ? styles.bubbleOwn : styles.bubbleOther,
+                  styles.sharedProfileBubble,
+                ]}
+              >
+                <Avatar
+                  uri={item.shared_post.avatar_url ?? null}
+                  name={item.shared_post.display_name ?? item.shared_post.username ?? '?'}
+                  size={40}
+                />
+                <View style={styles.sharedProfileBody}>
+                  <Text style={[styles.sharedProfileName, isOwn && styles.sharedProfileNameOwn]} numberOfLines={1}>
+                    {item.shared_post.display_name}
+                  </Text>
+                  <Text style={[styles.sharedProfileUsername, isOwn && styles.sharedProfileUsernameOwn]} numberOfLines={1}>
+                    @{item.shared_post.username}
+                  </Text>
+                  {(!!item.shared_post.current_streak || !!item.shared_post.total_workouts) && (
+                    <Text style={[styles.sharedProfileMeta, isOwn && styles.sharedProfileMetaOwn]}>
+                      {item.shared_post.current_streak ? `🔥 ${item.shared_post.current_streak}` : ''}
+                      {item.shared_post.current_streak && item.shared_post.total_workouts ? ' · ' : ''}
+                      {item.shared_post.total_workouts ? `${item.shared_post.total_workouts} workouts` : ''}
+                    </Text>
+                  )}
+                </View>
+                <Feather name="chevron-right" size={16} color={isOwn ? 'rgba(255,255,255,0.55)' : colors.textMuted} />
+              </Pressable>
+            ) : item.shared_post ? (
               <View style={[styles.sharedPostCard, isOwn ? styles.sharedPostCardOwn : styles.sharedPostCardOther]}>
                 {item.shared_post.photo_url && (
                   <Image
@@ -192,7 +223,7 @@ function MessageRowInner({
                   </Text>
                 </View>
               </View>
-            )}
+            ) : null}
             {!!item.content && (
               <View
                 style={[
@@ -404,4 +435,35 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 4,
     borderTopRightRadius: 4,
   },
+
+  // ── Shared profile card (rendered inside a standard bubble) ─────────────
+  sharedProfileBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    width: Dimensions.get('window').width * 0.62,
+  },
+  sharedProfileBody: {
+    flex: 1,
+    gap: 1,
+  },
+  sharedProfileName: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.semibold,
+    color: colors.textPrimary,
+  },
+  sharedProfileNameOwn: { color: '#fff' },
+  sharedProfileUsername: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.textSecondary,
+  },
+  sharedProfileUsernameOwn: { color: 'rgba(255,255,255,0.75)' },
+  sharedProfileMeta: {
+    fontSize: 10,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  sharedProfileMetaOwn: { color: 'rgba(255,255,255,0.6)' },
 });
