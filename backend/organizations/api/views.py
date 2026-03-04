@@ -907,8 +907,6 @@ def announcement_vote(request, org_id, announcement_id):
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     except PollExpiredError as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-    except AlreadyVotedError as e:
-        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     except PollOptionNotFoundError as e:
         return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
     return Response({'poll': poll_data})
