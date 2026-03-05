@@ -598,14 +598,59 @@ def get_announcement_reactions(announcement, user):
     ]
 
 
+def broadcast_announcement_reaction_update(announcement):
+    """
+    Broadcast updated reaction state for an announcement to all org members.
+    Payload includes reactor_ids so each client computes its own user_reacted flag.
+    Sent to the org channel (org_{org_id_no_hyphens}).
+    """
+    import logging
+    from collections import defaultdict
+
+    logger = logging.getLogger(__name__)
+
+    reactor_map = defaultdict(list)
+    for r in AnnouncementReaction.objects.filter(announcement=announcement).values('emoji', 'user_id'):
+        reactor_map[r['emoji']].append(str(r['user_id']))
+
+    rows = (
+        AnnouncementReaction.objects
+        .filter(announcement=announcement)
+        .values('emoji')
+        .annotate(count=Count('id'))
+        .order_by('-count', 'emoji')
+    )
+    reactions = [
+        {'emoji': r['emoji'], 'count': r['count'], 'reactor_ids': reactor_map[r['emoji']]}
+        for r in rows
+    ]
+
+    payload = {
+        'type': 'announcement_reaction_update',
+        'announcement_id': str(announcement.id),
+        'org_id': str(announcement.org_id),
+        'reactions': reactions,
+    }
+
+    try:
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            org_id_clean = str(announcement.org_id).replace('-', '')
+            async_to_sync(channel_layer.group_send)(f"org_{org_id_clean}", payload)
+    except Exception as exc:
+        logger.warning("WS announcement reaction broadcast for %s failed: %s", announcement.id, exc)
+
+
 # ---------------------------------------------------------------------------
 # Poll Voting
 # ---------------------------------------------------------------------------
 
 def vote_on_poll(user, org_id, announcement_id, option_id):
     """
-    Cast a vote on a poll. One vote per user per poll, no changing votes.
-    Returns the voted AnnouncementPollOption.
+    Cast or change a vote on a poll. One vote per user per poll; users may
+    change their vote to a different option. Returns the selected option.
     """
     org = _get_org(org_id)
 
@@ -625,15 +670,25 @@ def vote_on_poll(user, org_id, announcement_id, option_id):
     if not poll.is_active:
         raise PollExpiredError("This poll has ended.")
 
-    if AnnouncementPollVote.objects.filter(poll=poll, user=user).exists():
-        raise AlreadyVotedError("You have already voted on this poll.")
-
     try:
         option = AnnouncementPollOption.objects.get(id=option_id, poll=poll)
     except AnnouncementPollOption.DoesNotExist:
         raise PollOptionNotFoundError("Poll option not found.")
 
-    AnnouncementPollVote.objects.create(poll=poll, user=user, option=option)
+    existing_vote = AnnouncementPollVote.objects.filter(poll=poll, user=user).select_related('option').first()
+
+    if existing_vote:
+        if str(existing_vote.option_id) == str(option.id):
+            # Same option — nothing to do
+            option.refresh_from_db()
+            return option
+        # Changing vote: decrement old option, update the vote record
+        AnnouncementPollOption.objects.filter(id=existing_vote.option_id).update(votes=F('votes') - 1)
+        existing_vote.option = option
+        existing_vote.save(update_fields=['option'])
+    else:
+        AnnouncementPollVote.objects.create(poll=poll, user=user, option=option)
+
     AnnouncementPollOption.objects.filter(id=option.id).update(votes=F('votes') + 1)
     option.refresh_from_db()
     return option

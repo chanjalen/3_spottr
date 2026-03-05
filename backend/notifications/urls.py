@@ -10,4 +10,5 @@ urlpatterns = [
     path('mark-read/', views.mark_read, name='mark-read'),
     path('mark-all-read/', views.mark_all_read, name='mark-all-read'),
     path('clear-all/', views.clear_all, name='clear-all'),
+    path('dismiss/', views.dismiss, name='dismiss'),
 ]

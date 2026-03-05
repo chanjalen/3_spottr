@@ -16,14 +16,16 @@ import Animated, {
   withTiming,
   withSpring,
 } from 'react-native-reanimated';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
-import * as Clipboard from 'expo-clipboard';
 import Avatar from '../common/Avatar';
 import PersonalRecordCard from './PersonalRecordCard';
 import LinkPreview from './LinkPreview';
 import PollCard from './PollCard';
 import WorkoutDetailModal from './WorkoutDetailModal';
 import { FeedItem } from '../../types/feed';
+import { RootStackParamList } from '../../navigation/types';
 import { timeAgo } from '../../utils/timeAgo';
 import { colors, spacing, typography } from '../../theme';
 
@@ -53,6 +55,7 @@ interface ImmersivePostCardProps {
   bottomInset: number;
   onLike: () => void;
   onComment: () => void;
+  onShare: () => void;
   onPollVote: (optionId: number | string) => void;
 }
 
@@ -63,11 +66,14 @@ export default function ImmersivePostCard({
   bottomInset,
   onLike,
   onComment,
+  onShare,
   onPollVote,
 }: ImmersivePostCardProps) {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const goToProfile = () => navigation.navigate('Profile', { username: item.user.username });
+
   const likeScale = useSharedValue(1);
   const [workoutDetailId, setWorkoutDetailId] = useState<string | null>(null);
-  const shareUrl = `https://spottr.app/${item.type}/${item.id}`;
   const hasPhoto = !!item.photo_url;
   // Use formatted activity label if available, otherwise fall back to location
   const activityLabel = item.workout_type ? (ACTIVITY_LABELS[item.workout_type] ?? item.workout_type) : null;
@@ -86,9 +92,9 @@ export default function ImmersivePostCard({
     onLike();
   };
 
-  const handleShare = async () => {
-    await Clipboard.setStringAsync(shareUrl);
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+  const handleShare = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onShare();
   };
 
   // ─── Photo card ──────────────────────────────────────────────────────────────
@@ -157,13 +163,13 @@ export default function ImmersivePostCard({
               accessibilityLabel="Share"
               accessibilityRole="button"
             >
-              <Feather name="share" size={26} color="#FFFFFF" />
+              <Feather name="send" size={26} color="#FFFFFF" />
             </Pressable>
           </View>
 
           {/* Bottom-left: user info + caption + meta — sits above the nav bar */}
           <View style={[styles.bottomInfo, { bottom: bottomInset + spacing.base }]}>
-            <View style={styles.userRow}>
+            <Pressable style={styles.userRow} onPress={goToProfile}>
               <Avatar uri={item.user.avatar_url} name={item.user.display_name} size={36} />
               <View style={styles.userText}>
                 <Text style={styles.displayNamePhoto} numberOfLines={1}>
@@ -175,7 +181,7 @@ export default function ImmersivePostCard({
                   </Text>
                 )}
               </View>
-            </View>
+            </Pressable>
 
             <View style={styles.metaRow}>
               {postedIn && (
@@ -284,7 +290,7 @@ export default function ImmersivePostCard({
             accessibilityLabel="Share"
             accessibilityRole="button"
           >
-            <Feather name="share" size={24} color={colors.textMuted} />
+            <Feather name="send" size={24} color={colors.textMuted} />
           </Pressable>
         </View>
 
@@ -302,7 +308,7 @@ export default function ImmersivePostCard({
           keyboardShouldPersistTaps="handled"
         >
           {/* User header */}
-          <View style={styles.lightHeader}>
+          <Pressable style={styles.lightHeader} onPress={goToProfile}>
             <Avatar uri={item.user.avatar_url} name={item.user.display_name} size={44} />
             <View style={styles.lightHeaderText}>
               <Text style={styles.displayNameLight} numberOfLines={1}>
@@ -312,7 +318,7 @@ export default function ImmersivePostCard({
                 {postedIn ? `${postedIn} · ` : ''}{timeAgo(item.created_at)}
               </Text>
             </View>
-          </View>
+          </Pressable>
 
           {/* Activity + context tags */}
           {(activityLabel || (item.shared_context && item.shared_context.length > 0)) && (

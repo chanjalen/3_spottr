@@ -37,6 +37,7 @@ export default function InactiveStreakSheet({
   const insets = useSafeAreaInsets();
   const { user: me } = useAuth();
   const [zapping, setZapping] = useState<string | null>(null);
+  const [zapCooldowns, setZapCooldowns] = useState<Record<string, number>>({});
 
   const hasActiveStreak = groupStreak > 0;
 
@@ -47,21 +48,26 @@ export default function InactiveStreakSheet({
     : members.filter((m) => m.current_streak === 0);
 
   const handleZap = useCallback(async (member: GroupStreakMember) => {
-    if (zapping) return;
+    if (zapping || zapCooldowns[member.user_id]) return;
     setZapping(member.user_id);
     try {
       await sendGroupZap(groupId, member.user_id);
+      setZapCooldowns(prev => ({ ...prev, [member.user_id]: Date.now() }));
+      setTimeout(() => {
+        setZapCooldowns(prev => { const n = { ...prev }; delete n[member.user_id]; return n; });
+      }, 60_000);
     } catch (err: any) {
       Alert.alert('Error', 'Could not send zap to the group chat.');
     } finally {
       setZapping(null);
     }
-  }, [zapping, groupId]);
+  }, [zapping, zapCooldowns, groupId]);
 
   const renderMember = useCallback(
     ({ item }: { item: GroupStreakMember }) => {
       const isMe = String(item.user_id) === String(me?.id);
       const isZapping = zapping === item.user_id;
+      const onCooldown = !!zapCooldowns[item.user_id];
 
       return (
         <View style={styles.row}>
@@ -74,7 +80,7 @@ export default function InactiveStreakSheet({
             <Feather name="zap" size={13} color={colors.text.muted} />
             <Text style={styles.streakCount}>{item.current_streak}d</Text>
           </View>
-          {!isMe && (
+          {!isMe && !onCooldown && (
             <Pressable
               style={[styles.zapBtn, (isZapping || !!zapping) && styles.zapBtnDisabled]}
               onPress={() => handleZap(item)}
@@ -93,7 +99,7 @@ export default function InactiveStreakSheet({
         </View>
       );
     },
-    [zapping, me?.id, handleZap],
+    [zapping, zapCooldowns, me?.id, handleZap],
   );
 
   const title = hasActiveStreak ? 'Not Checked In Today' : 'Missing Individual Streaks';

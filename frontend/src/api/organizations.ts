@@ -377,3 +377,124 @@ export async function voteOnPoll(
 export async function markAnnouncementsRead(orgId: string): Promise<void> {
   await apiClient.post(`/api/organizations/${orgId}/announcements/read/`);
 }
+
+// ---------------------------------------------------------------------------
+// Member Activity (admin only)
+// ---------------------------------------------------------------------------
+
+export interface MemberActivityItem {
+  user_id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  current_streak: number;
+  workout_count: number;
+}
+
+export async function fetchOrgMemberActivity(
+  orgId: string,
+  startDate: string | null,
+  endDate: string | null,
+): Promise<MemberActivityItem[]> {
+  const { data } = await apiClient.get(`/api/organizations/${orgId}/member-activity/`, {
+    params: {
+      ...(startDate && { start_date: startDate }),
+      ...(endDate   && { end_date:   endDate   }),
+    },
+  });
+  return data;
+}
+
+// ── Org member logs ──────────────────────────────────────────────────────────
+
+export type OrgLogType = 'all' | 'checkin' | 'workout' | 'post';
+
+export type OrgLogItem =
+  | {
+      id: string;
+      type: 'checkin';
+      created_at: string;
+      user_id: string;
+      username: string;
+      display_name: string;
+      avatar_url: string | null;
+      description: string;
+      location_name: string;
+      workout_type: string;
+      photo_url: string | null;
+    }
+  | {
+      id: string;
+      type: 'workout';
+      created_at: string;
+      user_id: string;
+      username: string;
+      display_name: string;
+      avatar_url: string | null;
+      workout_name: string;
+      duration_minutes: number | null;
+    }
+  | {
+      id: string;
+      type: 'post';
+      created_at: string;
+      user_id: string;
+      username: string;
+      display_name: string;
+      avatar_url: string | null;
+      description: string;
+      photo_url: string | null;
+    };
+
+export async function fetchOrgMemberLogs(
+  orgId: string,
+  before?: string,
+  startDate?: string,
+  endDate?: string,
+  type?: string,
+): Promise<{ items: OrgLogItem[]; next_cursor: string | null }> {
+  const { data } = await apiClient.get(`/api/organizations/${orgId}/member-logs/`, {
+    params: {
+      limit: 20,
+      ...(before && { before }),
+      ...(startDate && { start_date: startDate }),
+      ...(endDate && { end_date: endDate }),
+      ...(type && type !== 'all' && { type }),
+    },
+  });
+  return data;
+}
+
+// ── Org member status (today) ─────────────────────────────────────────────────
+
+export interface TodayCheckin {
+  id: string;
+  description: string;
+  location_name: string;
+  workout_type: string;
+  photo_url: string | null;
+  created_at: string;
+}
+
+export interface TodayWorkout {
+  id: string;
+  name: string;
+  duration_minutes: number | null;
+  created_at: string;
+}
+
+export interface MemberStatusItem {
+  user_id: string;
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  checked_in_today: boolean;
+  logged_workout_today: boolean;
+  checkin_today: TodayCheckin | null;
+  workout_today: TodayWorkout | null;
+}
+
+export async function fetchOrgMemberStatus(orgId: string): Promise<MemberStatusItem[]> {
+  const { data } = await apiClient.get(`/api/organizations/${orgId}/member-status/`);
+  return data;
+}

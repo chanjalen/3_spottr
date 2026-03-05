@@ -14,7 +14,6 @@ class ExerciseCatalog(BaseModel):
         SHOULDERS = 'shoulders', 'Shoulders'
         BICEPS = 'biceps', 'Biceps'
         TRICEPS = 'triceps', 'Triceps'
-        ARMS = 'arms', 'Arms'
         LEGS = 'legs', 'Legs'
         CORE = 'core', 'Core'
         CARDIO = 'cardio', 'Cardio'

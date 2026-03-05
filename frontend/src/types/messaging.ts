@@ -43,6 +43,19 @@ export interface Message {
 }
 
 /** Embedded shared post/checkin card in a chat message. */
+export interface SharedPostPollOption {
+  id: number;
+  text: string;
+  votes: number;
+}
+
+export interface SharedPostPoll {
+  question: string;
+  total_votes: number;
+  is_active: boolean;
+  options: SharedPostPollOption[];
+}
+
 export interface SharedPost {
   id: string;
   item_type: 'post' | 'workout' | 'checkin';
@@ -59,6 +72,7 @@ export interface SharedPost {
   personal_record?: object | null;
   workout_type?: string;
   location_name?: string;
+  poll?: SharedPostPoll | null;
 }
 
 /**
@@ -73,6 +87,7 @@ export interface Conversation {
   latest_message: Message;
   unread_count: number;
   partner_has_activity_today: boolean;
+  preview_text?: string | null;
 }
 
 /**
@@ -87,6 +102,7 @@ export interface GroupConversation {
   member_count: number;
   latest_message: Message | null;
   unread_count: number;
+  preview_text?: string | null;
 }
 
 /**

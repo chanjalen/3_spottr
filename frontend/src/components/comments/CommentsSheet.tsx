@@ -41,12 +41,18 @@ interface CommentsSheetProps {
   item: FeedItem | null;
   onClose: () => void;
   onCommentCountChange?: (delta: number) => void;
+  /** Override the default bottom offset (nav bar height). Pass insets.bottom when there is no tab bar. */
+  bottomOffset?: number;
 }
 
-export default function CommentsSheet({ item, onClose, onCommentCountChange }: CommentsSheetProps) {
+export default function CommentsSheet({ item, onClose, onCommentCountChange, bottomOffset }: CommentsSheetProps) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
-  const bottomNavHeight = 52 + Math.max(insets.bottom, 16);
+  // When bottomOffset is passed (no tab bar), sheet extends to screen edge and
+  // uses internal padding for the safe area instead.
+  const noTabBar = bottomOffset !== undefined;
+  const bottomNavHeight = noTabBar ? 0 : 52 + Math.max(insets.bottom, 16);
+  const contentBottomPad = noTabBar ? Math.max(insets.bottom, 8) : 0;
   const [visible, setVisible] = useState(false);
   const [replyingTo, setReplyingTo] = useState<{ commentId: string; username: string } | null>(null);
   const [baseMentionUsers, setBaseMentionUsers] = useState<MentionableUser[]>([]);
@@ -275,7 +281,8 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange }: C
           )}
 
           <CommentInput
-            placeholder={replyingTo ? `Reply to @${replyingTo.username}...` : 'Add a comment...'}
+            placeholder="Add a comment..."
+            prefill={replyingTo ? `@${replyingTo.username} ` : ''}
             onSubmit={(text, photo) => {
               const currentItem = itemRef.current;
               if (!currentItem) return;
@@ -289,6 +296,7 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange }: C
             mentionableUsers={[...baseMentionUsers, ...searchedMentionUsers]}
             onMentionQueryChange={handleMentionQueryChange}
           />
+          {contentBottomPad > 0 && <View style={{ height: contentBottomPad }} />}
           <Animated.View style={keyboardSpacerStyle} />
         </View>
       </Animated.View>

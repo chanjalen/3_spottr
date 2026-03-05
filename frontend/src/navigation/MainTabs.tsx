@@ -33,6 +33,7 @@ import CheckInSelectionScreen from '../screens/social/CheckInSelectionScreen';
 import CameraCaptureScreen from '../screens/social/CameraCaptureScreen';
 import CheckInReviewScreen from '../screens/social/CheckInReviewScreen';
 import FindFriendsScreen from '../screens/FindFriendsScreen';
+import PostDetailScreen from '../screens/feed/PostDetailScreen';
 import { staleCache } from '../utils/staleCache';
 import { fetchGyms } from '../api/gyms';
 import { fetchDMConversations, fetchGroupConversations } from '../api/messaging';
@@ -126,7 +127,7 @@ export default function MainTabs() {
       <Root.Screen name="Profile" component={ProfileScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="Notifications" component={NotificationsScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="WorkoutLog" component={WorkoutLogScreen} options={{ presentation: 'card' }} />
-      <Root.Screen name="ActiveWorkout" component={ActiveWorkoutScreen} options={{ presentation: 'card', gestureEnabled: false }} />
+      <Root.Screen name="ActiveWorkout" component={ActiveWorkoutScreen} options={{ presentation: 'card', gestureEnabled: true }} />
       <Root.Screen name="StreakDetails" component={StreakDetailsScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="EditProfile" component={EditProfileScreen} options={{ presentation: 'modal' }} />
       <Root.Screen name="GroupProfile" component={GroupProfileScreen} options={{ presentation: 'card' }} />
@@ -141,9 +142,10 @@ export default function MainTabs() {
       <Root.Screen name="AllGroupChats" component={AllGroupChatsScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="AllOrgs" component={AllOrgsScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="CheckInSelection" component={CheckInSelectionScreen} options={{ presentation: 'modal', gestureEnabled: true }} />
-      <Root.Screen name="CameraCapture" component={CameraCaptureScreen} options={{ presentation: 'fullScreenModal', gestureEnabled: false }} />
+      <Root.Screen name="CameraCapture" component={CameraCaptureScreen} options={{ presentation: 'card', gestureEnabled: false }} />
       <Root.Screen name="CheckInReview" component={CheckInReviewScreen} options={{ presentation: 'card', gestureEnabled: true }} />
       <Root.Screen name="FindFriends" component={FindFriendsScreen} options={{ presentation: 'card' }} />
+      <Root.Screen name="PostDetail" component={PostDetailScreen} options={{ presentation: 'card' }} />
     </Root.Navigator>
   );
 }

@@ -1,12 +1,23 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, Pressable, Alert } from 'react-native';
-import Animated, { FadeIn } from 'react-native-reanimated';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
+import { View, StyleSheet, Alert } from 'react-native';
+import Animated, {
+  FadeIn,
+  useSharedValue,
+  useAnimatedStyle,
+  withSequence,
+  withSpring,
+  withTiming,
+  withDelay,
+} from 'react-native-reanimated';
+import { GestureDetector, Gesture } from 'react-native-gesture-handler';
+import * as Haptics from 'expo-haptics';
+import { Feather } from '@expo/vector-icons';
 import { FeedItem } from '../../types/feed';
 import FeedCardHeader from './FeedCardHeader';
 import FeedCardBody from './FeedCardBody';
 import FeedCardActions from './FeedCardActions';
 import WorkoutDetailModal from './WorkoutDetailModal';
-import Avatar from '../common/Avatar';
+import MediaViewerModal from './MediaViewerModal';
 import { colors, spacing } from '../../theme';
 
 interface FeedCardProps {
@@ -14,6 +25,7 @@ interface FeedCardProps {
   index: number;
   onLike: () => void;
   onComment: () => void;
+  onShare?: () => void;
   onPollVote: (optionId: number | string) => void;
   onPressUser?: () => void;
   onDelete?: () => void;
@@ -24,12 +36,56 @@ export default function FeedCard({
   index,
   onLike,
   onComment,
+  onShare,
   onPollVote,
   onPressUser,
   onDelete,
 }: FeedCardProps) {
-  const shareUrl = `https://spottr.app/${item.type}/${item.id}`;
   const [workoutDetailId, setWorkoutDetailId] = useState<string | null>(null);
+  const [mediaViewer, setMediaViewer] = useState<{ uri: string; kind: 'image' | 'video' } | null>(null);
+
+  // Heart overlay animation
+  const heartScale = useSharedValue(0);
+  const heartOpacity = useSharedValue(0);
+
+  const heartAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: heartScale.value }],
+    opacity: heartOpacity.value,
+  }));
+
+  // Ref so rapid double-taps never fire multiple API calls, even before re-render
+  const hasLikedRef = useRef(item.user_liked);
+  useEffect(() => { hasLikedRef.current = item.user_liked; }, [item.user_liked]);
+
+  const triggerHeart = useCallback(() => {
+    heartScale.value = 0;
+    heartOpacity.value = 1;
+    heartScale.value = withSequence(
+      withSpring(1.15, { damping: 8, stiffness: 260 }),
+      withTiming(1, { duration: 80 }),
+      withDelay(480, withTiming(0, { duration: 220 })),
+    );
+    heartOpacity.value = withDelay(580, withTiming(0, { duration: 220 }));
+  }, [heartScale, heartOpacity]);
+
+  const handleDoubleTap = useCallback(() => {
+    triggerHeart();
+    if (!hasLikedRef.current) {
+      hasLikedRef.current = true;
+      onLike();
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }, [onLike, triggerHeart]);
+
+  const doubleTap = useMemo(
+    () =>
+      Gesture.Tap()
+        .numberOfTaps(2)
+        .maxDuration(250)
+        .runOnJS(true)
+        .onEnd(handleDoubleTap),
+    [handleDoubleTap],
+  );
 
   const handleMore = onDelete
     ? () => {
@@ -46,34 +102,50 @@ export default function FeedCard({
         entering={FadeIn.delay(index * 40).duration(300)}
         style={styles.card}
       >
-        <FeedCardHeader
-          user={item.user}
-          createdAt={item.created_at}
-          locationName={item.location_name}
-          workoutType={item.workout_type}
-          sharedContext={item.shared_context}
-          onPressUser={onPressUser}
-          onMore={handleMore}
-        />
-        <FeedCardBody
-          item={item}
-          onPollVote={onPollVote}
-          onWorkoutPress={item.workout ? () => setWorkoutDetailId(item.workout!.id) : undefined}
-        />
+        {/* Double-tap zone covers the header + body (not the action bar) */}
+        <GestureDetector gesture={doubleTap}>
+          <View>
+            <FeedCardHeader
+              user={item.user}
+              createdAt={item.created_at}
+              locationName={item.location_name}
+              workoutType={item.workout_type}
+              sharedContext={item.shared_context}
+              onPressUser={onPressUser}
+              onMore={handleMore}
+            />
+            <FeedCardBody
+              item={item}
+              onPollVote={onPollVote}
+              onWorkoutPress={item.workout ? () => setWorkoutDetailId(item.workout!.id) : undefined}
+              onMediaPress={(uri, kind) => setMediaViewer({ uri, kind })}
+              onDoubleTap={handleDoubleTap}
+            />
+            {/* Heart overlay — centered, sits above content but passes touches through */}
+            <Animated.View style={[styles.heartOverlay, heartAnimStyle]} pointerEvents="none">
+              <Feather name="heart" size={90} color="#FF3B6B" />
+            </Animated.View>
+          </View>
+        </GestureDetector>
+
         <FeedCardActions
           likeCount={item.like_count}
           commentCount={item.comment_count}
           userLiked={item.user_liked}
           onLike={onLike}
           onComment={onComment}
-          shareUrl={shareUrl}
-          shareTitle={item.description ? `${item.user.display_name}: ${item.description.slice(0, 60)}` : `${item.user.display_name}'s post`}
+          onShare={onShare}
         />
       </Animated.View>
 
       <WorkoutDetailModal
         workoutId={workoutDetailId}
         onClose={() => setWorkoutDetailId(null)}
+      />
+      <MediaViewerModal
+        uri={mediaViewer?.uri ?? null}
+        kind={mediaViewer?.kind ?? 'image'}
+        onClose={() => setMediaViewer(null)}
       />
     </>
   );
@@ -82,23 +154,15 @@ export default function FeedCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderColor,
+    borderBottomWidth: 8,
+    borderBottomColor: '#F2F2F2',
     paddingTop: spacing.base,
     paddingBottom: spacing.sm,
-    paddingHorizontal: spacing.base,
   },
-  row: {
-    flexDirection: 'row',
-    gap: spacing.md,
-  },
-  avatarCol: {
-    // Fixed width for the avatar column
-    width: 44,
+  heartOverlay: {
+    ...StyleSheet.absoluteFillObject,
     alignItems: 'center',
-  },
-  contentCol: {
-    flex: 1,
-    minWidth: 0,
+    justifyContent: 'center',
+    zIndex: 99,
   },
 });

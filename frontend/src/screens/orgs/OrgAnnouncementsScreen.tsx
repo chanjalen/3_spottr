@@ -14,6 +14,7 @@ import {
   Image,
   ScrollView,
   Dimensions,
+  Animated,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as MediaLibrary from 'expo-media-library';
@@ -112,6 +113,60 @@ function formatTimeRemaining(endsAt: string | null): string {
   return `${minutes}m remaining`;
 }
 
+function PollOptionBar({
+  text,
+  pct,
+  isVoted,
+  showResult,
+  isActive,
+  voting,
+  onPress,
+}: {
+  text: string;
+  pct: number;
+  isVoted: boolean;
+  showResult: boolean;
+  isActive: boolean;
+  voting: boolean;
+  onPress: () => void;
+}) {
+  const [containerWidth, setContainerWidth] = useState(0);
+  // Pixel-based animation — avoids percentage interpolation quirks
+  const animWidth = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (containerWidth === 0) return;
+    const target = showResult ? (pct / 100) * containerWidth : 0;
+    Animated.timing(animWidth, {
+      toValue: target,
+      duration: showResult ? 300 : 0,
+      useNativeDriver: false,
+    }).start();
+  }, [pct, showResult, containerWidth]);
+
+  return (
+    <Pressable
+      style={[
+        pollStyles.option,
+        isVoted && pollStyles.optionVoted,
+        !isActive && pollStyles.optionInactive,
+      ]}
+      onLayout={e => setContainerWidth(e.nativeEvent.layout.width)}
+      onPress={onPress}
+      disabled={!isActive || voting}
+    >
+      {showResult && (
+        <Animated.View style={[pollStyles.bar, { width: animWidth }]} />
+      )}
+      <Text style={[pollStyles.optionText, isVoted && pollStyles.optionTextVoted]}>
+        {text}
+      </Text>
+      {showResult && <Text style={pollStyles.pct}>{pct}%</Text>}
+      {isVoted && <Feather name="check" size={12} color={colors.primary} style={{ marginLeft: 4 }} />}
+    </Pressable>
+  );
+}
+
 function PollCard({
   poll,
   orgId,
@@ -123,19 +178,71 @@ function PollCard({
   announcementId: string;
   onVoted: (updatedPoll: AnnouncementPoll) => void;
 }) {
+  // localVotedId: tracks which option this user voted for.
+  // Initialized from server data and NEVER goes back to null once set,
+  // so results stay visible even if server response is slow or errors out.
+  const [localVotedId, setLocalVotedId] = useState<string | null>(
+    poll.user_voted_option_id,
+  );
   const [voting, setVoting] = useState(false);
+  // useRef guard: prevents double-taps before React batches the state update.
+  // Unlike useState, setting this is synchronous and takes effect immediately.
+  const votingRef = useRef(false);
 
+  // If the component mounts with an already-voted poll (e.g. navigating back),
+  // sync local state. Only ever transitions null → value, never value → null.
+  useEffect(() => {
+    if (poll.user_voted_option_id && !localVotedId) {
+      setLocalVotedId(poll.user_voted_option_id);
+    }
+  }, [poll.user_voted_option_id]);
+
+  // showResult stays true permanently once the user has ever voted
+  const showResult = localVotedId !== null || !poll.is_active;
   const totalVotes = poll.total_votes;
 
   const handleVote = async (optionId: string) => {
-    if (!poll.is_active || poll.user_voted_option_id || voting) return;
+    if (!poll.is_active) return;
+    if (votingRef.current) return;        // Synchronous guard — blocks double-taps instantly
+    if (optionId === localVotedId) return; // Already voted for this option
+
+    votingRef.current = true; // Lock immediately — before any await or setState
+
+    const prevVotedId = localVotedId;
+    const isChangingVote = prevVotedId !== null;
+
+    // 1. Lock in the selection locally — results are now permanently visible
+    setLocalVotedId(optionId);
+
+    // 2. Optimistic parent update so vote counts update instantly
+    const optimisticPoll: AnnouncementPoll = {
+      ...poll,
+      user_voted_option_id: optionId,
+      total_votes: isChangingVote ? poll.total_votes : poll.total_votes + 1,
+      options: poll.options.map(opt => {
+        let votes = opt.votes;
+        if (opt.id === optionId) votes += 1;
+        if (isChangingVote && opt.id === prevVotedId) votes = Math.max(0, votes - 1);
+        return { ...opt, votes, user_voted: opt.id === optionId };
+      }),
+    };
+    onVoted(optimisticPoll);
+
     setVoting(true);
     try {
       const res = await voteOnPoll(orgId, announcementId, optionId);
+      // Reconcile with server — but only update localVotedId if server confirms a vote
+      if (res.poll.user_voted_option_id) {
+        setLocalVotedId(res.poll.user_voted_option_id);
+      }
       onVoted(res.poll);
     } catch {
-      Alert.alert('Error', 'Failed to cast vote.');
+      // Don't revert localVotedId — keep results showing.
+      // Revert the parent counts to avoid phantom count changes.
+      onVoted({ ...poll, user_voted_option_id: localVotedId } as AnnouncementPoll);
+      Alert.alert('Error', 'Failed to cast vote. Please try again.');
     } finally {
+      votingRef.current = false;
       setVoting(false);
     }
   };
@@ -145,30 +252,17 @@ function PollCard({
       <Text style={pollStyles.question}>{poll.question}</Text>
       {poll.options.map((opt) => {
         const pct = totalVotes > 0 ? Math.round((opt.votes / totalVotes) * 100) : 0;
-        const isVoted = opt.user_voted;
-        const showResult = !!poll.user_voted_option_id || !poll.is_active;
         return (
-          <Pressable
+          <PollOptionBar
             key={opt.id}
-            style={[
-              pollStyles.option,
-              isVoted && pollStyles.optionVoted,
-              !poll.is_active && pollStyles.optionInactive,
-            ]}
+            text={opt.text}
+            pct={pct}
+            isVoted={opt.id === localVotedId}
+            showResult={showResult}
+            isActive={poll.is_active}
+            voting={voting}
             onPress={() => handleVote(opt.id)}
-            disabled={showResult || voting}
-          >
-            {showResult && (
-              <View style={[pollStyles.bar, { width: `${pct}%` as any }]} />
-            )}
-            <Text style={[pollStyles.optionText, isVoted && pollStyles.optionTextVoted]}>
-              {opt.text}
-            </Text>
-            {showResult && (
-              <Text style={pollStyles.pct}>{pct}%</Text>
-            )}
-            {isVoted && <Feather name="check" size={12} color={colors.primary} style={{ marginLeft: 4 }} />}
-          </Pressable>
+          />
         );
       })}
       <Text style={pollStyles.meta}>
@@ -332,6 +426,7 @@ function AnnouncementBubble({
   onRetry,
   onVideoPress,
   onMentionPress,
+  onAuthorPress,
 }: {
   item: OptimisticAnnouncement;
   orgId: string;
@@ -343,6 +438,7 @@ function AnnouncementBubble({
   onRetry: (item: OptimisticAnnouncement) => void;
   onVideoPress: (url: string) => void;
   onMentionPress?: (username: string) => void;
+  onAuthorPress?: (username: string) => void;
 }) {
   const isPending = item._status === 'pending';
   const isFailed = item._status === 'failed';
@@ -362,13 +458,19 @@ function AnnouncementBubble({
       delayLongPress={400}
     >
       <View style={styles.bubbleHeader}>
-        <Avatar uri={item.author_avatar_url} name={item.author_display_name} size={32} />
-        <View style={{ marginLeft: 8, flex: 1 }}>
-          <Text style={styles.bubbleAuthor}>{item.author_display_name}</Text>
-          {!isPending && (
-            <Text style={styles.bubbleTime}>{timeAgo(item.created_at)}</Text>
-          )}
-        </View>
+        <Pressable
+          style={styles.bubbleAuthorRow}
+          onPress={() => item.author_username && onAuthorPress?.(item.author_username)}
+          disabled={!item.author_username || isPending}
+        >
+          <Avatar uri={item.author_avatar_url} name={item.author_display_name} size={32} />
+          <View style={{ marginLeft: 8, flex: 1 }}>
+            <Text style={styles.bubbleAuthor}>{item.author_display_name}</Text>
+            {!isPending && (
+              <Text style={styles.bubbleTime}>{timeAgo(item.created_at)}</Text>
+            )}
+          </View>
+        </Pressable>
         {isPending && (
           <ActivityIndicator size="small" color={colors.textMuted} />
         )}
@@ -487,12 +589,12 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
 
   const detectMention = useCallback((value: string) => {
-    const match = value.match(/@(\w*)$/);
+    const match = value.match(/@([\w.\-]*)$/);
     setMentionQuery(match ? match[1] : null);
   }, []);
 
   const handleMentionSelect = useCallback((user: MentionableUser) => {
-    setDraftText(prev => prev.replace(/@(\w*)$/, `@${user.username} `));
+    setDraftText(prev => prev.replace(/@([\w.\-]*)$/, `@${user.username} `));
     setMentionQuery(null);
   }, []);
 
@@ -631,6 +733,29 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
       // ignore
     }
   };
+
+  useEffect(() => {
+    const myId = me?.id ? String(me.id) : null;
+    const handler = (data: { announcement_id: string; org_id: string; reactions: Array<{ emoji: string; count: number; reactor_ids: string[] }> }) => {
+      if (data.org_id !== orgId) return;
+      setAnnouncements(prev =>
+        prev.map(a =>
+          isAnn(a) && a.id === data.announcement_id
+            ? {
+                ...a,
+                reactions: data.reactions.map(r => ({
+                  emoji: r.emoji,
+                  count: r.count,
+                  user_reacted: myId ? r.reactor_ids.includes(myId) : false,
+                })),
+              }
+            : a,
+        ),
+      );
+    };
+    wsManager.on('announcement_reaction_update', handler);
+    return () => wsManager.off('announcement_reaction_update', handler);
+  }, [orgId, me?.id]);
 
   // ── Poll voted ───────────────────────────────────────────────────────────
 
@@ -855,6 +980,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
         onRetry={handleRetry}
         onVideoPress={setVideoPlayerUrl}
         onMentionPress={(u) => navigation.navigate('Profile', { username: u })}
+        onAuthorPress={(u) => navigation.navigate('Profile', { username: u })}
       />
     );
   };
@@ -871,11 +997,16 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
           <Pressable style={styles.backBtn} onPress={() => navigation.goBack()}>
             <Feather name="arrow-left" size={22} color={colors.textPrimary} />
           </Pressable>
-          <Avatar uri={orgAvatar} name={orgName} size={34} />
-          <View style={{ marginLeft: 10, flex: 1 }}>
-            <Text style={styles.headerTitle} numberOfLines={1}>{orgName}</Text>
-            <Text style={styles.headerSubtitle}>Announcements</Text>
-          </View>
+          <Pressable
+            style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}
+            onPress={() => navigation.navigate('OrgProfile', { orgId })}
+          >
+            <Avatar uri={orgAvatar} name={orgName} size={34} />
+            <View style={{ marginLeft: 10, flex: 1 }}>
+              <Text style={styles.headerTitle} numberOfLines={1}>{orgName}</Text>
+              <Text style={styles.headerSubtitle}>Announcements</Text>
+            </View>
+          </Pressable>
           <Pressable
             style={styles.profileBtn}
             onPress={() => navigation.navigate('OrgProfile', { orgId })}
@@ -1307,6 +1438,7 @@ const styles = StyleSheet.create({
     borderColor: '#ef444440',
   },
   bubbleHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  bubbleAuthorRow: { flexDirection: 'row', alignItems: 'center', flex: 1 },
   bubbleAuthor: { fontSize: typography.size.sm, fontWeight: '700', color: colors.textPrimary },
   bubbleTime: { fontSize: typography.size.xs, color: colors.textMuted },
   bubbleContent: { fontSize: typography.size.sm, color: colors.textPrimary, lineHeight: 20 },

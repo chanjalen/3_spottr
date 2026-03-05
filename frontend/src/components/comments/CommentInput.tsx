@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { View, Pressable, Text, Image, TextInput, StyleSheet, Platform, Alert } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -7,6 +7,7 @@ import MentionAutocomplete, { MentionableUser } from '../messages/MentionAutocom
 
 interface CommentInputProps {
   placeholder?: string;
+  prefill?: string;
   onSubmit: (text: string, photo?: { uri: string; name: string; type: string }) => void;
   mentionableUsers?: MentionableUser[];
   onMentionQueryChange?: (query: string | null) => void;
@@ -14,11 +15,22 @@ interface CommentInputProps {
 
 export default function CommentInput({
   placeholder = 'Add a comment...',
+  prefill,
   onSubmit,
   mentionableUsers,
   onMentionQueryChange,
 }: CommentInputProps) {
   const [text, setText] = useState('');
+  const inputRef = useRef<TextInput>(null);
+
+  // When prefill changes (reply target set/cleared), seed the input and focus
+  useEffect(() => {
+    if (prefill === undefined) return;
+    setText(prefill);
+    if (prefill) {
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [prefill]);
   const [photo, setPhoto] = useState<{ uri: string; name: string; type: string } | null>(null);
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
 
@@ -96,6 +108,7 @@ export default function CommentInput({
           <Feather name="image" size={20} color={photo ? colors.primary : colors.textMuted} />
         </Pressable>
         <TextInput
+          ref={inputRef}
           style={styles.input}
           value={text}
           onChangeText={(v) => { detectMention(v); setText(v); }}
@@ -111,9 +124,7 @@ export default function CommentInput({
           accessibilityLabel="Post comment"
           accessibilityRole="button"
         >
-          <Text style={[styles.buttonText, !canSubmit && styles.buttonTextDisabled]}>
-            Post
-          </Text>
+          <Feather name="send" size={18} color="#fff" />
         </Pressable>
       </View>
     </View>
@@ -170,20 +181,15 @@ const styles = StyleSheet.create({
     borderColor: colors.border.default,
   },
   button: {
-    paddingHorizontal: spacing.base,
-    paddingVertical: spacing.sm + 2,
-    minHeight: 44,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
     justifyContent: 'center',
+    marginBottom: Platform.OS === 'ios' ? 4 : 6,
   },
   buttonDisabled: {
-    opacity: 0.4,
-  },
-  buttonText: {
-    fontSize: typography.size.sm,
-    fontFamily: typography.family.semibold,
-    color: colors.primary,
-  },
-  buttonTextDisabled: {
-    color: colors.textMuted,
+    backgroundColor: colors.border.default,
   },
 });

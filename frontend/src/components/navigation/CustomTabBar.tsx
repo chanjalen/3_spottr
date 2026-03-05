@@ -1,4 +1,4 @@
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
@@ -15,34 +15,36 @@ import Animated, {
   withSpring,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { BlurView } from 'expo-blur';
 import { colors } from '../../theme';
 import CreateMenuSheet from '../feed/CreateMenuSheet';
 import { useUnreadCount } from '../../store/UnreadCountContext';
-import type BottomSheet from '@gorhom/bottom-sheet';
 
 const TAB_ICONS: Record<string, React.ComponentProps<typeof Feather>['name']> = {
   Feed: 'home',
-  Gyms: 'activity',
+  Gyms: 'map-pin',
   Social: 'message-circle',
   Ranks: 'award',
 };
 
 export default function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const bottomPad = Math.max(insets.bottom, 16);
-  const sheetRef = useRef<BottomSheet>(null);
+  const [showCreateMenu, setShowCreateMenu] = useState(false);
   const { total: unreadTotal } = useUnreadCount();
 
   const openCreateMenu = useCallback(() => {
-    sheetRef.current?.expand();
+    setShowCreateMenu(true);
   }, []);
 
   return (
     <>
-      <View
-        style={[styles.wrapper, { paddingBottom: bottomPad }]}
-      >
-        {/* Pill nav bar */}
+      <View style={[styles.pill, { bottom: 14 }]}>
+        {/* Frosted glass background */}
+        <BlurView intensity={72} tint="dark" style={styles.blurBg} />
+        {/* Subtle border for definition */}
+        <View style={styles.pillBorder} />
+
+        {/* Nav items */}
         <View style={styles.navBar}>
           {state.routes.map((route, index) => {
             const isFocused = state.index === index;
@@ -76,7 +78,7 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
         <FabButton onPress={openCreateMenu} />
       </View>
 
-      <CreateMenuSheet sheetRef={sheetRef} />
+      <CreateMenuSheet visible={showCreateMenu} onClose={() => setShowCreateMenu(false)} />
     </>
   );
 }
@@ -179,26 +181,36 @@ function FabButton({ onPress }: FabButtonProps) {
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  wrapper: {
+  pill: {
     position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
+    left: 16,
+    right: 16,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     paddingHorizontal: 16,
-    paddingTop: 2,
-    backgroundColor: colors.surface,
+    paddingVertical: 8,
+    borderRadius: 36,
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: -4 },
-        shadowOpacity: 0.07,
-        shadowRadius: 12,
+        shadowOffset: { width: 0, height: 8 },
+        shadowOpacity: 0.28,
+        shadowRadius: 20,
       },
-      android: { elevation: 12 },
+      android: { elevation: 16 },
     }),
+  },
+  blurBg: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 36,
+    overflow: 'hidden',
+  },
+  pillBorder: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 36,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.09)',
   },
   navBar: {
     flex: 1,

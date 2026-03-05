@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, Image, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Avatar from '../common/Avatar';
 import ReplyItem from './ReplyItem';
 import MentionText from '../common/MentionText';
 import { Comment } from '../../types/feed';
+import { RootStackParamList } from '../../navigation/types';
 import { timeAgo } from '../../utils/timeAgo';
 import { colors, spacing, typography } from '../../theme';
 
@@ -25,11 +28,13 @@ export default function CommentItem({
   onLoadReplies,
   onStartReply,
 }: CommentItemProps) {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [showReplies, setShowReplies] = useState(false);
 
   if (!comment?.user) return null;
 
   const isOwn = currentUserId === comment.user.id;
+  const goToProfile = () => navigation.navigate('Profile', { username: comment.user.username });
 
   const handleToggleReplies = () => {
     if (!showReplies && (!comment.replies || comment.replies.length === 0)) {
@@ -46,6 +51,7 @@ export default function CommentItem({
           uri={comment.user.avatar_url}
           name={comment.user.display_name}
           size={34}
+          onPress={goToProfile}
         />
 
         {/* Content + like button */}
@@ -53,7 +59,7 @@ export default function CommentItem({
           <View style={styles.textWrap}>
             {/* Inline: bold username then comment text */}
             <Text style={styles.inlineText}>
-              <Text style={styles.username}>{comment.user.display_name}</Text>
+              <Text style={styles.username} onPress={goToProfile}>{comment.user.display_name}</Text>
               {!!comment.description && (
                 <MentionText
                   content={` ${comment.description}`}
@@ -133,6 +139,7 @@ export default function CommentItem({
             currentUserId={currentUserId}
             onLike={onLike}
             onDelete={onDelete}
+            onStartReply={(username) => onStartReply(comment.id, username)}
           />
         ))}
     </View>

@@ -867,9 +867,22 @@ def get_user_posts(user, viewer=None, thumbnail=False):
     thumbnail=True skips expensive per-item COUNT queries — returns minimal
     data needed to render grid thumbnails immediately (Phase 1).
     """
-    posts = Post.objects.filter(
-        user=user
-    ).select_related('location', 'workout').order_by('-created_at')
+    posts = list(
+        Post.objects.filter(
+            user=user
+        ).select_related('location', 'workout').prefetch_related(
+            'poll__options'
+        ).order_by('-created_at')
+    )
+
+    # Bulk-fetch the viewer's poll votes for all posts in one query
+    user_poll_vote_map: dict = {}
+    if viewer and viewer.is_authenticated and not thumbnail:
+        post_ids = [p.id for p in posts]
+        for vote in PollVote.objects.filter(
+            poll__post_id__in=post_ids, user=viewer
+        ).select_related('poll', 'option'):
+            user_poll_vote_map[vote.poll.post_id] = str(vote.option_id)
 
     user_posts = []
 
@@ -912,6 +925,31 @@ def get_user_posts(user, viewer=None, thumbnail=False):
                 'exercise_count': exercise_count,
                 'total_sets': total_sets,
             }
+
+        # Add poll data if this post has a poll
+        try:
+            poll = post.poll  # prefetched
+            total_votes = sum(opt.votes for opt in poll.options.all())
+            poll_options = [
+                {
+                    'id': str(opt.id),
+                    'text': opt.text,
+                    'votes': opt.votes,
+                    'order': opt.order,
+                }
+                for opt in poll.options.all()
+            ]
+            post_data['poll'] = {
+                'id': str(poll.id),
+                'question': poll.question,
+                'options': poll_options,
+                'total_votes': total_votes,
+                'is_active': poll.is_active,
+                'user_vote_option': user_poll_vote_map.get(post.id),
+                'ends_at': poll.ends_at.isoformat() if poll.ends_at else None,
+            }
+        except Poll.DoesNotExist:
+            post_data['poll'] = None
 
         user_posts.append(post_data)
 
@@ -1336,28 +1374,28 @@ def add_checkin_comment_view(request, checkin_id):
     })
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def delete_post_view(request, post_id):
     """Delete a post. Only the post owner can delete it."""
     post = get_object_or_404(Post, id=post_id)
     if post.user != request.user:
-        return JsonResponse({'success': False, 'error': 'You can only delete your own posts'}, status=403)
+        return DRFResponse({'success': False, 'error': 'You can only delete your own posts'}, status=403)
     post.delete()
     # Decrement total workouts (floor at 0)
     from accounts.models import User
     User.objects.filter(pk=request.user.pk, total_workouts__gt=0).update(total_workouts=F('total_workouts') - 1)
     request.user.refresh_from_db()
-    return JsonResponse({'success': True, 'total_workouts': request.user.total_workouts})
+    return DRFResponse({'success': True, 'total_workouts': request.user.total_workouts})
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def delete_checkin_view(request, checkin_id):
     """Delete a check-in. Only the owner can delete it."""
     checkin = get_object_or_404(QuickWorkout, id=checkin_id)
     if checkin.user != request.user:
-        return JsonResponse({'success': False, 'error': 'You can only delete your own check-ins'}, status=403)
+        return DRFResponse({'success': False, 'error': 'You can only delete your own check-ins'}, status=403)
     # Also remove the photo file and MediaAsset/MediaLink if they exist
     photo_path = f'checkins/{checkin.id}.jpg'
     if default_storage.exists(photo_path):
@@ -1374,7 +1412,7 @@ def delete_checkin_view(request, checkin_id):
     from accounts.models import User
     User.objects.filter(pk=request.user.pk, total_workouts__gt=0).update(total_workouts=F('total_workouts') - 1)
     request.user.refresh_from_db()
-    return JsonResponse({'success': True, 'total_workouts': request.user.total_workouts})
+    return DRFResponse({'success': True, 'total_workouts': request.user.total_workouts})
 
 
 @api_view(['POST'])
@@ -1467,9 +1505,18 @@ def add_comment_reply_view(request, comment_id):
             'error': 'You have reached the maximum number of replies (15) on this comment'
         }, status=400)
 
+    # Walk up to the root comment to inherit its post/quick_workout.
+    # Replies created without this would have post=NULL and be invisible
+    # to every comment_count query (which filters by post=<id>).
+    root = parent_comment
+    while root.parent_comment_id:
+        root = root.parent_comment
+
     # Create the reply
     reply = Comment.objects.create(
         parent_comment=parent_comment,
+        post=root.post,
+        quick_workout=root.quick_workout,
         user=request.user,
         description=text,
     )

@@ -32,6 +32,11 @@ urlpatterns = [
     path('requests/<str:request_id>/accept/', views.accept_join_request, name='accept-join-request'),
     path('requests/<str:request_id>/deny/', views.deny_join_request, name='deny-join-request'),
 
+    # Member activity / logs / status (admin only)
+    path('<str:org_id>/member-activity/', views.member_activity, name='member-activity'),
+    path('<str:org_id>/member-logs/', views.member_logs, name='member-logs'),
+    path('<str:org_id>/member-status/', views.member_status, name='member-status'),
+
     # Announcements
     path('<str:org_id>/announcements/', views.announcements, name='announcements'),
     path('<str:org_id>/announcements/read/', views.mark_announcements_read, name='announcements-read'),

@@ -421,6 +421,25 @@ def api_update_avatar_view(request):
     user = request.user
     user.avatar = avatar
     user.save(update_fields=['avatar'])
+
+    # Keep MediaLink in sync so _build_avatar_map can find the avatar.
+    from media.utils import create_media_asset
+    from media.models import MediaLink
+    old_links = MediaLink.objects.filter(
+        destination_type='user',
+        destination_id=str(user.pk),
+        type='avatar',
+    ).select_related('asset')
+    for ml in old_links:
+        ml.asset.delete()
+    asset = create_media_asset(user, avatar, user.avatar.name, 'image', already_saved=True)
+    MediaLink.objects.create(
+        asset=asset,
+        destination_type='user',
+        destination_id=str(user.pk),
+        type='avatar',
+    )
+
     return Response(_user_brief(user))
 
 
@@ -763,8 +782,38 @@ def api_user_checkins_view(request, username):
         limit, offset = 20, 0
 
     qs = QuickWorkout.objects.filter(user=target).select_related('location').order_by('-created_at')
+
+    try:
+        cal_year = int(request.GET.get('year', 0))
+        cal_month = int(request.GET.get('month', 0))
+        if cal_year and cal_month:
+            qs = qs.filter(created_at__year=cal_year, created_at__month=cal_month)
+    except (ValueError, TypeError):
+        pass
+
     total = qs.count()
-    page = qs[offset:offset + limit]
+    page = list(qs[offset:offset + limit])
+
+    # Batch-fetch social counts to avoid N+1 queries
+    from social.models import Reaction, Comment as SocialComment
+    from django.db.models import Count
+    page_ids = [qw.id for qw in page]
+    reaction_counts = {
+        r['quick_workout_id']: r['cnt']
+        for r in Reaction.objects.filter(quick_workout_id__in=page_ids)
+            .values('quick_workout_id').annotate(cnt=Count('id'))
+    }
+    comment_counts = {
+        c['quick_workout_id']: c['cnt']
+        for c in SocialComment.objects.filter(quick_workout_id__in=page_ids, parent_comment=None)
+            .values('quick_workout_id').annotate(cnt=Count('id'))
+    }
+    user_liked_ids = set()
+    if request.user.is_authenticated:
+        user_liked_ids = set(
+            Reaction.objects.filter(quick_workout_id__in=page_ids, user=request.user)
+                .values_list('quick_workout_id', flat=True)
+        )
 
     results = []
     for qw in page:
@@ -776,6 +825,9 @@ def api_user_checkins_view(request, username):
             'workout_type': qw.type.replace('_', ' ').title() if qw.type else '',
             'photo_url': get_checkin_photo(qw.id),
             'created_at': qw.created_at.isoformat(),
+            'like_count': reaction_counts.get(qw.id, 0),
+            'user_liked': qw.id in user_liked_ids,
+            'comment_count': comment_counts.get(qw.id, 0),
         })
 
     next_cursor = str(offset + limit) if (offset + limit) < total else ''

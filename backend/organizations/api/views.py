@@ -33,8 +33,10 @@ def _build_avatar_map(user_ids):
     """
     Bulk-fetch user avatar URLs for all user_ids in one query.
     Returns a dict mapping str(user_id) → url string.
+    Falls back to legacy User.avatar ImageField for users without a MediaLink.
     """
     from media.models import MediaLink
+    from media.utils import build_media_url
     ids = [str(uid) for uid in user_ids if uid is not None]
     if not ids:
         return {}
@@ -43,7 +45,16 @@ def _build_avatar_map(user_ids):
         .filter(destination_type='user', destination_id__in=ids, type='avatar')
         .select_related('asset')
     )
-    return {link.destination_id: link.asset.url for link in links}
+    result = {link.destination_id: link.asset.url for link in links}
+    # Fall back to legacy User.avatar ImageField for users not covered by MediaLink.
+    missing_ids = [uid for uid in ids if uid not in result]
+    if missing_ids:
+        from accounts.models import User
+        for u in User.objects.filter(id__in=missing_ids).exclude(avatar='').exclude(avatar__isnull=True).only('id', 'avatar'):
+            url = build_media_url(u.avatar.name)
+            if url:
+                result[str(u.id)] = url
+    return result
 
 
 def _build_media_map(destination_type, items):
@@ -550,6 +561,7 @@ def announcement_react(request, org_id, announcement_id):
         from organizations.models import Announcement
         announcement = Announcement.objects.get(id=announcement_id)
         reactions = services.get_announcement_reactions(announcement, request.user)
+        services.broadcast_announcement_reaction_update(announcement)
     except OrgNotFoundError as e:
         return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
     except NotOrgMemberError as e:
@@ -598,6 +610,279 @@ def announcement_reaction_details(request, org_id, announcement_id):
     return Response(data)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def member_activity(request, org_id):
+    """
+    GET /api/organizations/{org_id}/member-activity/?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD
+    Admin/creator only. Returns workout counts per member for optional date range (all-time if omitted).
+    """
+    try:
+        services.get_org(org_id)
+    except OrgNotFoundError as e:
+        return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+    membership = OrgMember.objects.filter(org_id=org_id, user=request.user).first()
+    if not membership or membership.role not in (OrgMember.Role.ADMIN, OrgMember.Role.CREATOR):
+        return Response({'error': 'You do not have admin permissions for this organization.'}, status=status.HTTP_403_FORBIDDEN)
+
+    start_date = request.query_params.get('start_date')
+    end_date = request.query_params.get('end_date')
+
+    members_qs = OrgMember.objects.filter(org_id=org_id).select_related('user')
+    member_ids = [m.user_id for m in members_qs]
+
+    from workouts.models import Workout
+    from django.db.models import Count
+    qs = Workout.objects.filter(user_id__in=member_ids)
+    if start_date:
+        qs = qs.filter(start_time__date__gte=start_date)
+    if end_date:
+        qs = qs.filter(start_time__date__lte=end_date)
+    count_map = {str(r['user_id']): r['count'] for r in qs.values('user_id').annotate(count=Count('id'))}
+
+    avatar_map = _build_avatar_map(member_ids)
+
+    data = [
+        {
+            'user_id': str(m.user_id),
+            'username': m.user.username,
+            'display_name': m.user.display_name or m.user.username,
+            'avatar_url': avatar_map.get(str(m.user_id)),
+            'current_streak': m.user.current_streak,
+            'workout_count': count_map.get(str(m.user_id), 0),
+        }
+        for m in members_qs
+    ]
+    return Response(data)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def member_logs(request, org_id):
+    """
+    GET /api/organizations/{org_id}/member-logs/
+    Query params: before (ISO cursor), limit, start_date, end_date, type (checkin|workout|post|all)
+    Admin/creator only. Paginated reverse-chron feed of member activity.
+    """
+    try:
+        services.get_org(org_id)
+    except OrgNotFoundError as e:
+        return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+    membership = OrgMember.objects.filter(org_id=org_id, user=request.user).first()
+    if not membership or membership.role not in (OrgMember.Role.ADMIN, OrgMember.Role.CREATOR):
+        return Response({'error': 'Admin permission required.'}, status=status.HTTP_403_FORBIDDEN)
+
+    member_ids = list(OrgMember.objects.filter(org_id=org_id).values_list('user_id', flat=True))
+    limit = min(int(request.query_params.get('limit', 20)), 50)
+    before_ts = request.query_params.get('before')
+    start_date = request.query_params.get('start_date')
+    end_date = request.query_params.get('end_date')
+    item_type = request.query_params.get('type', 'all')  # all | checkin | workout | post
+
+    from social.models import QuickWorkout, Post
+    from workouts.models import Workout
+
+    items = []
+
+    if item_type in ('all', 'checkin'):
+        qs = QuickWorkout.objects.filter(user_id__in=member_ids).select_related('user').order_by('-created_at')
+        if before_ts:
+            qs = qs.filter(created_at__lt=before_ts)
+        if start_date:
+            qs = qs.filter(created_at__date__gte=start_date)
+        if end_date:
+            qs = qs.filter(created_at__date__lte=end_date)
+        checkins = list(qs[:limit + 1])
+
+        photo_map = {}
+        if checkins:
+            from media.models import MediaLink
+            links = (
+                MediaLink.objects
+                .filter(destination_type='quick_workout', destination_id__in=[str(c.id) for c in checkins], type='inline')
+                .select_related('asset').order_by('destination_id', 'position')
+            )
+            for link in links:
+                if link.destination_id not in photo_map and link.asset.kind == 'image':
+                    photo_map[link.destination_id] = link.asset.url
+
+        for c in checkins:
+            items.append({
+                '_ts': c.created_at,
+                'id': str(c.id), 'type': 'checkin',
+                'created_at': c.created_at.isoformat(),
+                'user_id': str(c.user_id), 'username': c.user.username,
+                'display_name': c.user.display_name or c.user.username,
+                'avatar_url': None,  # filled below
+                'description': c.description or '',
+                'location_name': c.location_name or '',
+                'workout_type': c.type or '',
+                'photo_url': photo_map.get(str(c.id)),
+            })
+
+    if item_type in ('all', 'workout'):
+        qs = Workout.objects.filter(user_id__in=member_ids).select_related('user').order_by('-start_time')
+        if before_ts:
+            qs = qs.filter(start_time__lt=before_ts)
+        if start_date:
+            qs = qs.filter(start_time__date__gte=start_date)
+        if end_date:
+            qs = qs.filter(start_time__date__lte=end_date)
+        for w in list(qs[:limit + 1]):
+            dur_min = int(w.duration.total_seconds() / 60) if w.duration else None
+            items.append({
+                '_ts': w.start_time,
+                'id': str(w.id), 'type': 'workout',
+                'created_at': w.start_time.isoformat(),
+                'user_id': str(w.user_id), 'username': w.user.username,
+                'display_name': w.user.display_name or w.user.username,
+                'avatar_url': None,
+                'workout_name': w.name or 'Workout',
+                'duration_minutes': dur_min,
+            })
+
+    if item_type in ('all', 'post'):
+        qs = Post.objects.filter(user_id__in=member_ids).select_related('user').order_by('-created_at')
+        if before_ts:
+            qs = qs.filter(created_at__lt=before_ts)
+        if start_date:
+            qs = qs.filter(created_at__date__gte=start_date)
+        if end_date:
+            qs = qs.filter(created_at__date__lte=end_date)
+        for p in list(qs[:limit + 1]):
+            photo_url = None
+            if p.photo:
+                from media.utils import build_media_url
+                photo_url = build_media_url(p.photo.name)
+            items.append({
+                '_ts': p.created_at,
+                'id': str(p.id), 'type': 'post',
+                'created_at': p.created_at.isoformat(),
+                'user_id': str(p.user_id), 'username': p.user.username,
+                'display_name': p.user.display_name or p.user.username,
+                'avatar_url': None,
+                'description': p.description or '',
+                'photo_url': photo_url,
+            })
+
+    # Fill avatar_url for all items in one bulk query
+    all_user_ids = list({item['user_id'] for item in items})
+    avatar_map = _build_avatar_map(all_user_ids)
+    for item in items:
+        item['avatar_url'] = avatar_map.get(item['user_id'])
+
+    items.sort(key=lambda x: x['_ts'], reverse=True)
+    has_more = len(items) > limit
+    items = items[:limit]
+    for item in items:
+        del item['_ts']
+
+    next_cursor = items[-1]['created_at'] if has_more and items else None
+    return Response({'items': items, 'next_cursor': next_cursor})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def member_status(request, org_id):
+    """
+    GET /api/organizations/{org_id}/member-status/
+    Admin/creator only. Returns all members with today's check-in and workout details.
+    """
+    try:
+        services.get_org(org_id)
+    except OrgNotFoundError as e:
+        return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
+
+    membership = OrgMember.objects.filter(org_id=org_id, user=request.user).first()
+    if not membership or membership.role not in (OrgMember.Role.ADMIN, OrgMember.Role.CREATOR):
+        return Response({'error': 'Admin permission required.'}, status=status.HTTP_403_FORBIDDEN)
+
+    today = timezone.now().date()
+    members_qs = OrgMember.objects.filter(org_id=org_id).select_related('user')
+    member_ids = [m.user_id for m in members_qs]
+
+    from social.models import QuickWorkout
+    from workouts.models import Workout
+
+    # Most-recent today's check-in per user
+    today_checkins: dict = {}
+    for c in (
+        QuickWorkout.objects
+        .filter(user_id__in=member_ids, created_at__date=today)
+        .order_by('user_id', '-created_at')
+        .select_related('user')
+    ):
+        if c.user_id not in today_checkins:
+            today_checkins[c.user_id] = c
+
+    # Most-recent today's workout per user
+    today_workouts: dict = {}
+    for w in (
+        Workout.objects
+        .filter(user_id__in=member_ids, start_time__date=today)
+        .order_by('user_id', '-start_time')
+        .select_related('user')
+    ):
+        if w.user_id not in today_workouts:
+            today_workouts[w.user_id] = w
+
+    # Photos for today's check-ins
+    checkin_photo_map: dict = {}
+    checkin_ids = [str(c.id) for c in today_checkins.values()]
+    if checkin_ids:
+        from media.models import MediaLink
+        for link in (
+            MediaLink.objects
+            .filter(destination_type='quick_workout', destination_id__in=checkin_ids, type='inline')
+            .select_related('asset').order_by('destination_id')
+        ):
+            if link.destination_id not in checkin_photo_map and link.asset.kind == 'image':
+                checkin_photo_map[link.destination_id] = link.asset.url
+
+    avatar_map = _build_avatar_map(member_ids)
+
+    data = []
+    for m in members_qs:
+        uid = m.user_id
+        checkin = today_checkins.get(uid)
+        workout = today_workouts.get(uid)
+
+        checkin_data = None
+        if checkin:
+            checkin_data = {
+                'id': str(checkin.id),
+                'description': checkin.description or '',
+                'location_name': checkin.location_name or '',
+                'workout_type': checkin.type or '',
+                'photo_url': checkin_photo_map.get(str(checkin.id)),
+                'created_at': checkin.created_at.isoformat(),
+            }
+
+        workout_data = None
+        if workout:
+            dur_min = int(workout.duration.total_seconds() / 60) if workout.duration else None
+            workout_data = {
+                'id': str(workout.id),
+                'name': workout.name or 'Workout',
+                'duration_minutes': dur_min,
+                'created_at': workout.start_time.isoformat(),
+            }
+
+        data.append({
+            'user_id': str(uid),
+            'username': m.user.username,
+            'display_name': m.user.display_name or m.user.username,
+            'avatar_url': avatar_map.get(str(uid)),
+            'checked_in_today': checkin is not None,
+            'logged_workout_today': workout is not None,
+            'checkin_today': checkin_data,
+            'workout_today': workout_data,
+        })
+    return Response(data)
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def announcement_vote(request, org_id, announcement_id):
@@ -621,8 +906,6 @@ def announcement_vote(request, org_id, announcement_id):
     except PollNotFoundError as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     except PollExpiredError as e:
-        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
-    except AlreadyVotedError as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     except PollOptionNotFoundError as e:
         return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)

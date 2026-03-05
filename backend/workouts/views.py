@@ -978,7 +978,7 @@ def update_workout_goal_view(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def calendar_posts_view(request):
-    """Return posts, check-ins, and rest days for a user for a given month.
+    """Return check-ins and rest days for a user for a given month.
     Accepts an optional `username` query param to view another user's calendar."""
     from social.models import QuickWorkout, Reaction, Comment
     from media.utils import get_media_url, build_media_url
@@ -1014,29 +1014,6 @@ def calendar_posts_view(request):
         user_liked=Exists(Reaction.objects.filter(quick_workout=OuterRef('pk'), user=user)),
     ).select_related('location').order_by('-created_at')
 
-    posts = Post.objects.filter(
-        user=user,
-        created_at__year=year,
-        created_at__month=month,
-    ).annotate(
-        like_count=Count('reactions', distinct=True),
-        comment_count=Count('comments', distinct=True),
-        user_liked=Exists(Reaction.objects.filter(post=OuterRef('pk'), user=user)),
-    ).select_related('location', 'workout').order_by('-created_at')
-
-    # Prefetch workout details
-    workout_ids = [p.workout_id for p in posts if p.workout_id]
-    exercise_counts = {}
-    set_counts = {}
-    if workout_ids:
-        from django.db.models import Count as DjCount
-        ex_rows = Exercise.objects.filter(workout_id__in=workout_ids).values('workout_id').annotate(cnt=DjCount('id'))
-        for r in ex_rows:
-            exercise_counts[r['workout_id']] = r['cnt']
-        s_rows = ExerciseSet.objects.filter(exercise__workout_id__in=workout_ids).values('exercise__workout_id').annotate(cnt=DjCount('id'))
-        for r in s_rows:
-            set_counts[r['exercise__workout_id']] = r['cnt']
-
     items = []
 
     for qw in checkins:
@@ -1064,33 +1041,6 @@ def calendar_posts_view(request):
             'workout_exercises': None,
             'workout_sets': None,
             'emoji': qw.type.replace('_', ' ').title() if qw.type else '',
-        })
-
-    for post in posts:
-        photo_url = get_media_url('post', str(post.id)) or (build_media_url(post.photo.name) if post.photo else None)
-        video_url = build_media_url(post.video.name) if post.video else None
-        workout_name = None
-        workout_exercises = None
-        workout_sets = None
-        if post.workout_id and post.workout:
-            workout_name = post.workout.name
-            workout_exercises = exercise_counts.get(post.workout_id, 0)
-            workout_sets = set_counts.get(post.workout_id, 0)
-        items.append({
-            'id': str(post.id),
-            'type': 'workout' if post.workout_id else 'post',
-            'date': post.created_at.strftime('%Y-%-m-%-d'),
-            'description': post.description or '',
-            'photo_url': photo_url,
-            'video_url': video_url,
-            'location_name': post.location.name if post.location else '',
-            'like_count': post.like_count,
-            'comment_count': post.comment_count,
-            'user_liked': post.user_liked,
-            'workout_name': workout_name,
-            'workout_exercises': workout_exercises,
-            'workout_sets': workout_sets,
-            'emoji': None,
         })
 
     # Append rest days for the month

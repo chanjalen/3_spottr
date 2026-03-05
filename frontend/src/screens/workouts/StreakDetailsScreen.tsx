@@ -89,7 +89,7 @@ export default function StreakDetailsScreen({ navigation }: Props) {
       for (const p of res.posts) {
         const day = parseInt(p.date.split('-')[2], 10);
         if (p.type === 'rest') restNums.add(day);
-        else workoutNums.add(day);
+        else if (p.type === 'checkin') workoutNums.add(day);
       }
       setWorkoutDayNums(workoutNums);
       setRestDayNums(restNums);

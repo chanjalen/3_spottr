@@ -56,6 +56,15 @@ function adaptFeedItem(raw: any): FeedItem {
   };
 }
 
+export async function fetchPostById(
+  postId: string,
+  itemType?: 'post' | 'workout' | 'checkin',
+): Promise<FeedItem> {
+  const url = ENDPOINTS.postDetail(postId, itemType === 'checkin' ? 'checkin' : undefined);
+  const response = await apiClient.get(url);
+  return adaptFeedItem(response.data);
+}
+
 export async function fetchFeed(
   tab: 'main' | 'friends' | 'gym' | 'org',
   cursor?: string,
@@ -204,14 +213,21 @@ export interface CheckinItem {
   workout_type: string;
   photo_url: string | null;
   created_at: string;
+  like_count: number;
+  comment_count: number;
+  user_liked: boolean;
 }
 
 export async function fetchUserCheckins(
   username: string,
   cursor?: string,
+  month?: number,
+  year?: number,
 ): Promise<{ items: CheckinItem[]; nextCursor: string }> {
-  const params: Record<string, string> = { limit: '20' };
+  const params: Record<string, string> = { limit: month && year ? '100' : '20' };
   if (cursor) params.cursor = cursor;
+  if (month) params.month = String(month);
+  if (year) params.year = String(year);
   const response = await apiClient.get(ENDPOINTS.userCheckins(username), { params });
   const raw: any[] = Array.isArray(response.data)
     ? response.data
@@ -224,8 +240,16 @@ export async function fetchUserCheckins(
     workout_type: r.workout_type ?? '',
     photo_url: r.photo_url ?? null,
     created_at: r.created_at ?? new Date().toISOString(),
+    like_count: r.like_count ?? 0,
+    comment_count: r.comment_count ?? 0,
+    user_liked: r.user_liked ?? false,
   }));
   return { items, nextCursor: response.data?.next_cursor ?? '' };
+}
+
+export async function toggleLikeCheckin(id: string): Promise<{ liked: boolean; like_count: number }> {
+  const response = await apiClient.post(ENDPOINTS.likeCheckin(id));
+  return { liked: response.data.liked as boolean, like_count: response.data.like_count as number };
 }
 
 export async function createCheckin(params: {

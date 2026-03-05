@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -9,17 +9,22 @@ import {
   RefreshControl,
   Alert,
   Image,
+  Animated,
+  PanResponder,
+  Dimensions,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useFocusEffect } from '@react-navigation/native';
 import Avatar from '../components/common/Avatar';
 import {
   fetchNotifications,
   markAllRead,
   markRead,
   clearAllNotifications,
+  dismissNotification,
   acceptWorkoutInvite,
   declineWorkoutInvite,
   acceptGroupJoinRequest,
@@ -35,6 +40,9 @@ import { RootStackParamList } from '../navigation/types';
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'Notifications'>;
 };
+
+const SCREEN_WIDTH = Dimensions.get('window').width;
+const SWIPE_THRESHOLD = SCREEN_WIDTH * 0.35;
 
 // ─── Avatar Stack ─────────────────────────────────────────────────────────────
 
@@ -229,7 +237,7 @@ function ActionButtons({ notification, onDone }: { notification: Notification; o
   return null;
 }
 
-// ─── Notification Row ─────────────────────────────────────────────────────────
+// ─── Notification Row (inner content) ────────────────────────────────────────
 
 function NotifRow({
   item,
@@ -265,6 +273,123 @@ function NotifRow({
   );
 }
 
+// ─── Swipable Row (swipe-left-to-delete wrapper) ──────────────────────────────
+
+function SwipableNotifRow({
+  item,
+  onPress,
+  onActionDone,
+  onDismiss,
+}: {
+  item: Notification;
+  onPress: (n: Notification) => void;
+  onActionDone: (id: string, remove?: boolean) => void;
+  onDismiss: (ids: string[]) => void;
+}) {
+  const translateX = useRef(new Animated.Value(0)).current;
+  // Track the current animated value so we can read it on release
+  // without accessing the private _value property
+  const currentX = useRef(0);
+
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      // Activate when clearly swiping left (horizontal dominates)
+      onMoveShouldSetPanResponder: (_, gs) =>
+        gs.dx < -8 && Math.abs(gs.dx) > Math.abs(gs.dy) * 1.5,
+      onPanResponderGrant: () => {
+        // Stop any in-progress spring/timing before a new gesture begins,
+        // and capture the current position as the new offset so the row
+        // doesn't jump to 0 on re-capture.
+        translateX.stopAnimation();
+        translateX.setOffset(currentX.current);
+        translateX.setValue(0);
+      },
+      onPanResponderMove: (_, gs) => {
+        // Only allow leftward movement
+        translateX.setValue(Math.min(0, gs.dx));
+      },
+      onPanResponderRelease: () => {
+        // flattenOffset folds the offset into the base value so currentX
+        // correctly reflects the true position after this point.
+        translateX.flattenOffset();
+        if (currentX.current < -SWIPE_THRESHOLD) {
+          // Swipe far enough — fly off then delete
+          Animated.timing(translateX, {
+            toValue: -SCREEN_WIDTH,
+            duration: 220,
+            useNativeDriver: true,
+          }).start(() => {
+            const ids = item.ids?.length ? item.ids : [item.id];
+            onDismiss(ids);
+          });
+        } else {
+          // Not far enough — spring back
+          Animated.spring(translateX, {
+            toValue: 0,
+            useNativeDriver: true,
+            overshootClamping: true,
+          }).start();
+        }
+      },
+      // Critical: don't let the FlatList (ScrollView) steal the gesture
+      // once we've captured it — this was causing the freeze.
+      onPanResponderTerminationRequest: () => false,
+      onPanResponderTerminate: () => {
+        // Safety net: if somehow terminated, spring back cleanly
+        translateX.flattenOffset();
+        currentX.current = 0;
+        Animated.spring(translateX, {
+          toValue: 0,
+          useNativeDriver: true,
+          overshootClamping: true,
+        }).start();
+      },
+    })
+  ).current;
+
+  // Keep currentX in sync via listener (set up once on mount)
+  useRef((() => {
+    const id = translateX.addListener(({ value }) => {
+      currentX.current = value;
+    });
+    return id;
+  })());
+
+  // Red bg fades in as you drag left
+  const deleteOpacity = translateX.interpolate({
+    inputRange: [-SCREEN_WIDTH, -SWIPE_THRESHOLD * 0.3, 0],
+    outputRange: [1, 0.7, 0],
+    extrapolate: 'clamp',
+  });
+
+  // Trash icon scales up as you approach / pass the threshold
+  const iconScale = translateX.interpolate({
+    inputRange: [-SCREEN_WIDTH, -SWIPE_THRESHOLD, 0],
+    outputRange: [1.2, 1.0, 0.7],
+    extrapolate: 'clamp',
+  });
+
+  return (
+    <View style={styles.swipeContainer}>
+      {/* Red delete background — revealed as row slides left */}
+      <Animated.View style={[styles.swipeDeleteBg, { opacity: deleteOpacity }]}>
+        <Animated.View style={{ transform: [{ scale: iconScale }] }}>
+          <Feather name="trash-2" size={22} color="#fff" />
+        </Animated.View>
+      </Animated.View>
+
+      {/* Row content that slides */}
+      <Animated.View
+        style={[styles.swipeRowContent, { transform: [{ translateX }] }]}
+        {...panResponder.panHandlers}
+      >
+        <NotifRow item={item} onPress={onPress} onActionDone={onActionDone} />
+      </Animated.View>
+    </View>
+  );
+}
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function NotificationsScreen({ navigation }: Props) {
@@ -285,7 +410,19 @@ export default function NotificationsScreen({ navigation }: Props) {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  // Auto-read: when screen comes into focus, load notifications so the user
+  // briefly sees which ones are new (bold/unread styling), then after 1.5s
+  // mark them all as read so the unread indicator clears.
+  useFocusEffect(useCallback(() => {
+    load();
+    const timer = setTimeout(async () => {
+      try {
+        await markAllRead();
+        setNotifications(ns => ns.map(n => ({ ...n, is_read: true })));
+      } catch {}
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, [load]));
 
   const handleMarkAll = async () => {
     await markAllRead();
@@ -310,8 +447,17 @@ export default function NotificationsScreen({ navigation }: Props) {
     );
   };
 
+  const handleDismiss = useCallback(async (ids: string[]) => {
+    // Optimistically remove from list immediately
+    setNotifications(ns => ns.filter(n => n.id !== ids[0]));
+    try {
+      await dismissNotification(ids);
+    } catch {
+      // Silent fail — row is already gone from view
+    }
+  }, []);
+
   const handlePress = async (item: Notification) => {
-    // Mark as read
     const ids = item.ids?.length ? item.ids : [item.id];
     if (!item.is_read) {
       markRead(ids).catch(() => {});
@@ -320,7 +466,6 @@ export default function NotificationsScreen({ navigation }: Props) {
       );
     }
 
-    // Navigate
     const actor = item.actors[0];
     if (item.type === 'follow' && actor) {
       navigation.navigate('Profile', { username: actor.username });
@@ -375,7 +520,12 @@ export default function NotificationsScreen({ navigation }: Props) {
           data={notifications}
           keyExtractor={(item) => item.id}
           renderItem={({ item }) => (
-            <NotifRow item={item} onPress={handlePress} onActionDone={handleActionDone} />
+            <SwipableNotifRow
+              item={item}
+              onPress={handlePress}
+              onActionDone={handleActionDone}
+              onDismiss={handleDismiss}
+            />
           )}
           contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
           refreshControl={
@@ -414,6 +564,22 @@ const styles = StyleSheet.create({
   clearText: { fontSize: typography.size.sm, color: colors.error, fontWeight: '600' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, paddingTop: spacing['2xl'] },
   emptyText: { fontSize: typography.size.base, color: colors.textMuted },
+
+  // Swipe container
+  swipeContainer: {
+    position: 'relative',
+    overflow: 'hidden',
+  },
+  swipeDeleteBg: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#ef4444',
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+    paddingRight: spacing.xl,
+  },
+  swipeRowContent: {
+    backgroundColor: colors.background.base,
+  },
 
   // Row
   notifRow: {

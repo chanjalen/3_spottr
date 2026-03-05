@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { wsManager } from '../../services/websocket';
+import { wsManager, EventMap } from '../../services/websocket';
 import {
   Alert,
   Dimensions,
@@ -159,12 +159,12 @@ export default function GroupChatScreen({ navigation, route }: Props) {
   // ── Mention helpers ────────────────────────────────────────────────────────
 
   const detectMention = useCallback((value: string) => {
-    const match = value.match(/@(\w*)$/);
+    const match = value.match(/@([\w.\-]*)$/);
     setMentionQuery(match ? match[1] : null);
   }, []);
 
   const handleMentionSelect = useCallback((user: MentionableUser) => {
-    const newText = text.replace(/@(\w*)$/, `@${user.username} `);
+    const newText = text.replace(/@([\w.\-]*)$/, `@${user.username} `);
     setText(newText);
     setMentionQuery(null);
   }, [text]);
@@ -426,6 +426,29 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     wsManager.on('queue_item_flushed', handler);
     return () => wsManager.off('queue_item_flushed', handler);
   }, []);
+
+  // ── WS: reaction updates ──────────────────────────────────────────────────
+
+  useEffect(() => {
+    const handler = (data: EventMap['reaction_update']) => {
+      setMessages(prev =>
+        prev.map(m =>
+          !('isDivider' in m) && String(m.id) === data.message_id
+            ? {
+                ...m,
+                reactions: data.reactions.map(r => ({
+                  emoji: r.emoji,
+                  count: r.count,
+                  user_reacted: r.reactor_ids.includes(myId),
+                })),
+              }
+            : m,
+        ),
+      );
+    };
+    wsManager.on('reaction_update', handler);
+    return () => wsManager.off('reaction_update', handler);
+  }, [myId]);
 
   // ── Keyboard visibility + scroll-to-bottom ───────────────────────────────
   useEffect(() => {
@@ -749,6 +772,10 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     navigation.navigate('Profile', { username });
   }, [navigation]);
 
+  const handleSharedPostPress = useCallback((postId: string, itemType: 'post' | 'workout' | 'checkin') => {
+    navigation.navigate('PostDetail', { postId, itemType });
+  }, [navigation]);
+
   const keyExtractor = useCallback((item: ListItem) => String(item.id), []);
 
   const ItemSeparator = useCallback(() => <View style={{ height: spacing.sm }} />, []);
@@ -781,8 +808,9 @@ export default function GroupChatScreen({ navigation, route }: Props) {
       onVideoPress={setVideoPlayerUrl}
       onImagePress={setImageViewerUrl}
       onMentionPress={handleMentionPress}
+      onSharedPostPress={handleSharedPostPress}
     />
-  ), [myId, handleNavigateToProfile, handleRetry, handleLongPress, handleTapReaction, handleLongPressReaction, handleMentionPress]);
+  ), [myId, handleNavigateToProfile, handleRetry, handleLongPress, handleTapReaction, handleLongPressReaction, handleMentionPress, handleSharedPostPress]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 

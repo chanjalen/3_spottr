@@ -30,6 +30,24 @@ def _clean_id(value):
     return str(value).replace('-', '')
 
 
+def _serialize_shared_post(message):
+    """Return the nested shared_post dict for WebSocket payloads, or None."""
+    try:
+        if message.post_id:
+            post = message.post
+            if post:
+                from messaging.serializers import SharedPostSerializer
+                return SharedPostSerializer(post).data
+        if message.quick_workout_id:
+            qw = message.quick_workout
+            if qw:
+                from messaging.serializers import SharedCheckinSerializer
+                return SharedCheckinSerializer(qw).data
+    except Exception:
+        pass
+    return None
+
+
 def _serialize_for_ws(message, recipient_id, client_msg_id=None):
     """
     Build a minimal message dict for WebSocket delivery.
@@ -72,7 +90,7 @@ def _serialize_for_ws(message, recipient_id, client_msg_id=None):
         'is_read': False,
         'is_system': message.is_system,
         'is_request': message.is_request,
-        'shared_post': None,
+        'shared_post': _serialize_shared_post(message),
         'join_request_id': None,
         'join_request_status': None,
         # Routing fields — used by the client to decide which chat to update.
@@ -849,3 +867,101 @@ def get_message_reactions(message, user):
         {'emoji': r['emoji'], 'count': r['count'], 'user_reacted': r['emoji'] in user_emojis}
         for r in rows
     ]
+
+
+def update_reaction_inbox_preview(message, reactor):
+    """
+    Update the reaction preview fields on InboxEntry rows for all conversation participants.
+    Called after every reaction toggle (add or remove).
+
+    If at least one reaction still exists on the message, store the reactor's username,
+    the message sender's ID, and now() as the reaction timestamp so the serializer can
+    show "alice reacted to your message" / "alice reacted to a message".
+
+    If no reactions remain (user toggled off the last one), clear all three fields so the
+    conversation preview falls back to the normal latest_message preview.
+    """
+    from django.utils import timezone
+
+    has_reactions = MessageReaction.objects.filter(message=message).exists()
+
+    if has_reactions:
+        actor = reactor.username
+        msg_sender_id = str(message.sender_id) if message.sender_id else ''
+        reacted_at = timezone.now()
+
+        update_kwargs = {
+            'latest_reaction_actor': actor,
+            'latest_reaction_message_sender_id': msg_sender_id,
+            'latest_reaction_at': reacted_at,
+        }
+    else:
+        update_kwargs = {
+            'latest_reaction_actor': '',
+            'latest_reaction_message_sender_id': '',
+            'latest_reaction_at': None,
+        }
+
+    if message.group_id:
+        InboxEntry.objects.filter(
+            conversation_type='group', group_id=message.group_id
+        ).update(**update_kwargs)
+    elif message.sender_id and message.recipient_id:
+        InboxEntry.objects.filter(
+            conversation_type='dm',
+        ).filter(
+            Q(user_id=message.sender_id, partner_id=message.recipient_id)
+            | Q(user_id=message.recipient_id, partner_id=message.sender_id)
+        ).update(**update_kwargs)
+
+
+def broadcast_reaction_update(message):
+    """
+    Broadcast updated reaction state for a message to all conversation participants.
+    Includes reactor_ids so each client can compute its own user_reacted flag.
+    """
+    from collections import defaultdict
+    from django.db.models import Count
+
+    # Build per-emoji reactor ID lists in a single query
+    reactor_map = defaultdict(list)
+    for r in MessageReaction.objects.filter(message=message).values('emoji', 'user_id'):
+        reactor_map[r['emoji']].append(str(r['user_id']))
+
+    rows = (
+        MessageReaction.objects
+        .filter(message=message)
+        .values('emoji')
+        .annotate(count=Count('id'))
+        .order_by('-count', 'emoji')
+    )
+    reactions = [
+        {'emoji': r['emoji'], 'count': r['count'], 'reactor_ids': reactor_map[r['emoji']]}
+        for r in rows
+    ]
+
+    payload = {
+        'type': 'reaction_update',
+        'message_id': str(message.id),
+        'reactions': reactions,
+    }
+
+    try:
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        channel_layer = get_channel_layer()
+        if not channel_layer:
+            return
+        if message.group_id:
+            async_to_sync(channel_layer.group_send)(
+                f"group_{_clean_id(message.group_id)}", payload
+            )
+        elif message.sender_id and message.recipient_id:
+            async_to_sync(channel_layer.group_send)(
+                f"dm_{_clean_id(message.sender_id)}", payload
+            )
+            async_to_sync(channel_layer.group_send)(
+                f"dm_{_clean_id(message.recipient_id)}", payload
+            )
+    except Exception as exc:
+        logger.warning("WS reaction broadcast for message %s failed: %s", message.id, exc)

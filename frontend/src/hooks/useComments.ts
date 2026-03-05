@@ -107,8 +107,9 @@ export function useComments(onCommentCountChange?: (delta: number) => void) {
             : c,
         ),
       );
+      onCommentCountChange?.(1);
     },
-    [],
+    [onCommentCountChange],
   );
 
   return {

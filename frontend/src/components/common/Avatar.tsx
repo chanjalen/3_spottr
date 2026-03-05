@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { colors, typography } from '../../theme';
 
@@ -7,9 +7,10 @@ interface AvatarProps {
   uri: string | null;
   name: string;
   size?: number;
+  onPress?: () => void;
 }
 
-export default function Avatar({ uri, name, size = 40 }: AvatarProps) {
+export default function Avatar({ uri, name, size = 40, onPress }: AvatarProps) {
   const safeName = name || '';
   const initials =
     safeName
@@ -19,25 +20,21 @@ export default function Avatar({ uri, name, size = 40 }: AvatarProps) {
       .toUpperCase()
       .slice(0, 2) || '?';
 
-  if (uri) {
-    return (
-      <Image
-        source={{ uri }}
-        style={[
-          styles.image,
-          {
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-          },
-        ]}
-        contentFit="cover"
-        transition={200}
-      />
-    );
-  }
-
-  return (
+  const content = uri ? (
+    <Image
+      source={{ uri }}
+      style={[
+        styles.image,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+        },
+      ]}
+      contentFit="cover"
+      transition={200}
+    />
+  ) : (
     <View
       style={[
         styles.fallback,
@@ -58,6 +55,16 @@ export default function Avatar({ uri, name, size = 40 }: AvatarProps) {
       </Text>
     </View>
   );
+
+  if (onPress) {
+    return (
+      <Pressable onPress={onPress} hitSlop={8}>
+        {content}
+      </Pressable>
+    );
+  }
+
+  return content;
 }
 
 const styles = StyleSheet.create({

@@ -36,6 +36,9 @@ export const ENDPOINTS = {
   postLikers: (id: ID) => `${BASE}/post/${id}/likers/`,
   checkinLikers: (id: ID) => `${BASE}/checkin/${id}/likers/`,
 
-  shareRecipients: `${BASE}/share/recipients/`,
-  sendShare: `${BASE}/share/send/`,
+  shareRecipients: '/api/social/share/recipients/',
+  sendShare: '/api/social/share/send/',
+
+  postDetail: (id: ID, type?: string) =>
+    `/api/social/posts/${id}/${type ? `?type=${type}` : ''}`,
 } as const;
