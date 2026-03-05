@@ -177,6 +177,28 @@ class SharedCheckinSerializer(serializers.Serializer):
         return Comment.objects.filter(quick_workout=obj).count()
 
 
+class SharedProfileSerializer(serializers.Serializer):
+    """Serializer for a shared user profile card displayed in chat."""
+    item_type = serializers.SerializerMethodField()
+    username = serializers.CharField()
+    display_name = serializers.CharField()
+    avatar_url = serializers.SerializerMethodField()
+    current_streak = serializers.SerializerMethodField()
+    total_workouts = serializers.SerializerMethodField()
+
+    def get_item_type(self, obj):
+        return 'profile'
+
+    def get_avatar_url(self, obj):
+        return obj.avatar_url if obj else None
+
+    def get_current_streak(self, obj):
+        return getattr(obj, 'current_streak', 0) or 0
+
+    def get_total_workouts(self, obj):
+        return getattr(obj, 'total_workouts', 0) or 0
+
+
 class MessageListSerializer(serializers.ModelSerializer):
     """
     Serializer for message lists. Returns full shared post/check-in data inline
@@ -187,6 +209,7 @@ class MessageListSerializer(serializers.ModelSerializer):
     is_read = serializers.SerializerMethodField()
     shared_post_id = serializers.CharField(source='post_id', read_only=True)
     shared_post = serializers.SerializerMethodField()
+    shared_profile_card = serializers.SerializerMethodField()
     join_request_id = serializers.SerializerMethodField()
     join_request_status = serializers.SerializerMethodField()
     media = serializers.SerializerMethodField()
@@ -197,7 +220,7 @@ class MessageListSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'sender', 'sender_username', 'sender_avatar_url',
             'content', 'is_request', 'is_system', 'is_read',
-            'created_at', 'shared_post_id', 'shared_post',
+            'created_at', 'shared_post_id', 'shared_post', 'shared_profile_card',
             'join_request_id', 'join_request_status',
             'media', 'reactions',
         ]
@@ -234,6 +257,14 @@ class MessageListSerializer(serializers.ModelSerializer):
                 return SharedPostSerializer(obj.post).data
             if obj.quick_workout:
                 return SharedCheckinSerializer(obj.quick_workout).data
+        except Exception:
+            return None
+        return None
+
+    def get_shared_profile_card(self, obj):
+        try:
+            if obj.shared_profile_id and obj.shared_profile:
+                return SharedProfileSerializer(obj.shared_profile).data
         except Exception:
             return None
         return None
@@ -313,6 +344,7 @@ class MessageSerializer(serializers.ModelSerializer):
     is_read = serializers.SerializerMethodField()
     shared_post_id = serializers.CharField(source='post_id', read_only=True)
     shared_post = serializers.SerializerMethodField()
+    shared_profile_card = serializers.SerializerMethodField()
 
     class Meta:
         model = Message
@@ -320,7 +352,7 @@ class MessageSerializer(serializers.ModelSerializer):
             'id', 'sender', 'sender_username', 'sender_avatar_url',
             'recipient', 'recipient_username',
             'group', 'group_name',
-            'content', 'shared_post_id', 'shared_post',
+            'content', 'shared_post_id', 'shared_post', 'shared_profile_card',
             'is_request', 'is_read', 'created_at',
         ]
 
@@ -345,6 +377,14 @@ class MessageSerializer(serializers.ModelSerializer):
                 return SharedPostSerializer(obj.post).data
             if obj.quick_workout:
                 return SharedCheckinSerializer(obj.quick_workout).data
+        except Exception:
+            return None
+        return None
+
+    def get_shared_profile_card(self, obj):
+        try:
+            if obj.shared_profile_id and obj.shared_profile:
+                return SharedProfileSerializer(obj.shared_profile).data
         except Exception:
             return None
         return None

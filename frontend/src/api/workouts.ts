@@ -8,6 +8,7 @@ import {
   WorkoutLogStats,
   CalendarPost,
   RecentWorkout,
+  Achievement,
 } from '../types/workout';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -183,6 +184,11 @@ export async function saveWorkoutAsTemplate(workoutId: string): Promise<{ templa
 
 export async function fetchStreakInfo(): Promise<StreakInfo> {
   const res = await apiClient.get('/workouts/api/streak/');
+  return res.data;
+}
+
+export async function fetchUserAchievements(username: string): Promise<Achievement[]> {
+  const res = await apiClient.get(`/workouts/api/user/${username}/achievements/`);
   return res.data;
 }
 

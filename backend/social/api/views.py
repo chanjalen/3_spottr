@@ -948,3 +948,51 @@ class SharePostView(APIView):
                 errors.append(str(e))
 
         return Response({'sent_count': sent_count, 'errors': errors})
+
+
+class ShareProfileView(APIView):
+    """
+    POST /api/social/share/send-profile/
+    Body: { username, recipient_ids, group_ids, message }
+    Sends a text DM to selected friends/groups mentioning the user's profile.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from messaging.services import send_dm, send_group_message
+        from accounts.models import User
+
+        username = (request.data.get('username') or '').strip()
+        recipient_ids = request.data.get('recipient_ids') or []
+        group_ids = request.data.get('group_ids') or []
+        message = (request.data.get('message') or '').strip()
+
+        if not username:
+            return Response({'error': 'username is required'}, status=400)
+
+        try:
+            profile_user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=404)
+
+        content = message  # optional accompanying text
+        profile_id = str(profile_user.id)
+
+        sent_count = 0
+        errors = []
+
+        for rid in recipient_ids:
+            try:
+                send_dm(sender=request.user, recipient_id=rid, content=content, profile_id=profile_id)
+                sent_count += 1
+            except Exception as e:
+                errors.append(str(e))
+
+        for gid in group_ids:
+            try:
+                send_group_message(sender=request.user, group_id=gid, content=content, profile_id=profile_id)
+                sent_count += 1
+            except Exception as e:
+                errors.append(str(e))
+
+        return Response({'sent_count': sent_count, 'errors': errors})
