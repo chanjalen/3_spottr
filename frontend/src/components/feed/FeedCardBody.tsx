@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { FeedItem } from '../../types/feed';
 import FeedCardImage from './FeedCardImage';
 import FeedCardVideo from './FeedCardVideo';
+import FeedCardCarousel from './FeedCardCarousel';
 import WorkoutSummaryCard from './WorkoutSummaryCard';
 import PersonalRecordCard from './PersonalRecordCard';
 import LinkPreview from './LinkPreview';
@@ -14,7 +15,7 @@ interface FeedCardBodyProps {
   item: FeedItem;
   onPollVote: (optionId: number | string) => void;
   onWorkoutPress?: () => void;
-  onMediaPress?: (uri: string, kind: 'image' | 'video') => void;
+  onMediaPress?: (uri: string, kind: 'image' | 'video', allUris?: string[], index?: number) => void;
   onDoubleTap?: () => void;
 }
 
@@ -32,9 +33,15 @@ export default function FeedCardBody({ item, onPollVote, onWorkoutPress, onMedia
 
       {item.video_url
         ? <FeedCardVideo uri={item.video_url} onExpand={onMediaPress ? () => onMediaPress(item.video_url!, 'video') : undefined} />
-        : item.photo_url
-          ? <FeedCardImage uri={item.photo_url} onPress={onMediaPress ? () => onMediaPress(item.photo_url!, 'image') : undefined} onDoubleTap={onDoubleTap} />
-          : null}
+        : item.photo_urls.length > 1
+          ? <FeedCardCarousel
+              uris={item.photo_urls}
+              onPress={(i) => onMediaPress?.(item.photo_urls[i], 'image', item.photo_urls, i)}
+              onDoubleTap={onDoubleTap}
+            />
+          : item.photo_urls.length === 1
+            ? <FeedCardImage uri={item.photo_urls[0]} onPress={onMediaPress ? () => onMediaPress(item.photo_urls[0], 'image') : undefined} onDoubleTap={onDoubleTap} />
+            : null}
 
       {hasPaddedContent && (
         <View style={styles.paddedContent}>

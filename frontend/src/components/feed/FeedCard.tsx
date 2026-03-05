@@ -42,7 +42,12 @@ export default function FeedCard({
   onDelete,
 }: FeedCardProps) {
   const [workoutDetailId, setWorkoutDetailId] = useState<string | null>(null);
-  const [mediaViewer, setMediaViewer] = useState<{ uri: string; kind: 'image' | 'video' } | null>(null);
+  const [mediaViewer, setMediaViewer] = useState<{
+    uri: string;
+    kind: 'image' | 'video';
+    uris?: string[];
+    initialIndex?: number;
+  } | null>(null);
 
   // Heart overlay animation
   const heartScale = useSharedValue(0);
@@ -118,7 +123,7 @@ export default function FeedCard({
               item={item}
               onPollVote={onPollVote}
               onWorkoutPress={item.workout ? () => setWorkoutDetailId(item.workout!.id) : undefined}
-              onMediaPress={(uri, kind) => setMediaViewer({ uri, kind })}
+              onMediaPress={(uri, kind, allUris, index) => setMediaViewer({ uri, kind, uris: allUris, initialIndex: index })}
               onDoubleTap={handleDoubleTap}
             />
             {/* Heart overlay — centered, sits above content but passes touches through */}
@@ -146,6 +151,8 @@ export default function FeedCard({
         uri={mediaViewer?.uri ?? null}
         kind={mediaViewer?.kind ?? 'image'}
         onClose={() => setMediaViewer(null)}
+        uris={mediaViewer?.uris}
+        initialIndex={mediaViewer?.initialIndex ?? 0}
       />
     </>
   );

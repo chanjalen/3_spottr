@@ -81,6 +81,26 @@ class Post(BaseModel):
         return re.findall(r'#(\w+)', self.description)
 
 
+class PostPhoto(BaseModel):
+    """
+    Additional photos attached to a post (index 1+).
+    The primary photo lives on Post.photo; extras go here ordered by `order`.
+    """
+    post = models.ForeignKey(
+        Post,
+        on_delete=models.CASCADE,
+        related_name='extra_photos',
+    )
+    photo = models.ImageField(upload_to='posts/photos/')
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f"Photo {self.order} for post {self.post_id}"
+
+
 class Poll(BaseModel):
     """
     A poll attached to a post.

@@ -18,6 +18,11 @@ function adaptFeedItem(raw: any): FeedItem {
     description: raw.description ?? '',
     location_name: raw.location_name ?? raw.location?.name ?? null,
     photo_url: raw.photo_url ?? null,
+    photo_urls: Array.isArray(raw.photo_urls)
+      ? raw.photo_urls
+      : raw.photo_url
+        ? [raw.photo_url]
+        : [],
     video_url: raw.video_url ?? null,
     link_url: raw.link_url ?? null,
     like_count: raw.like_count ?? 0,
@@ -150,7 +155,8 @@ export async function createPost(params: {
   linkUrl?: string;
   visibility?: 'main' | 'friends';
   replyRestriction?: 'everyone' | 'friends' | 'mentions';
-  photo?: { uri: string; name: string; type: string };
+  /** Multiple photos — first becomes primary, rest go to PostPhoto table */
+  photos?: Array<{ uri: string; name: string; type: string }>;
   video?: { uri: string; name: string; type: string };
   poll?: { question: string; options: string[]; duration: number };
   pr?: { exerciseName: string; value: string; unit: string };
@@ -162,7 +168,9 @@ export async function createPost(params: {
   if (params.linkUrl) formData.append('link_url', params.linkUrl);
   formData.append('visibility', params.visibility ?? 'main');
   formData.append('reply_restriction', params.replyRestriction ?? 'everyone');
-  if (params.photo) formData.append('photo', params.photo as any);
+  if (params.photos) {
+    params.photos.forEach(p => formData.append('photos[]', p as any));
+  }
   if (params.video) formData.append('video', params.video as any);
   if (params.workoutId) formData.append('workout_id', params.workoutId);
   if (params.poll) {
