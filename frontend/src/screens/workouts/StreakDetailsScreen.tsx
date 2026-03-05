@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -21,15 +21,15 @@ import {
   Platform,
   Modal,
   Dimensions,
-  TouchableWithoutFeedback,
 } from 'react-native';
 import { Image } from 'expo-image';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { fetchStreakInfo, updateWorkoutGoal, fetchCalendarPosts } from '../../api/workouts';
-import { StreakDetails, CalendarPost, Achievement } from '../../types/workout';
+import { fetchStreakInfo, updateWorkoutGoal } from '../../api/workouts';
+import { StreakDetails, Achievement } from '../../types/workout';
+import CheckinCalendarCard from '../../components/profile/CheckinCalendarCard';
 import { useAuth } from '../../store/AuthContext';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
@@ -38,17 +38,11 @@ type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'StreakDetails'>;
 };
 
-const MONTH_NAMES = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-];
-const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
-const POPUP_WIDTH = SCREEN_WIDTH - 48;
 
 export default function StreakDetailsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
-  const { setCurrentStreak } = useAuth();
+  const { setCurrentStreak, user } = useAuth();
 
   const [streakData, setStreakData] = useState<StreakDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,16 +51,6 @@ export default function StreakDetailsScreen({ navigation }: Props) {
   const [showGoalPicker, setShowGoalPicker] = useState(false);
   const [selectedAchievement, setSelectedAchievement] = useState<Achievement | null>(null);
 
-  // Calendar state
-  const now = new Date();
-  const [calYear, setCalYear] = useState(now.getFullYear());
-  const [calMonth, setCalMonth] = useState(now.getMonth() + 1); // 1-indexed
-  const [workoutDayNums, setWorkoutDayNums] = useState<Set<number>>(new Set());
-  const [restDayNums, setRestDayNums] = useState<Set<number>>(new Set());
-  const [calPosts, setCalPosts] = useState<CalendarPost[]>([]);
-  const [dayModalVisible, setDayModalVisible] = useState(false);
-  const [currentModalDay, setCurrentModalDay] = useState(1);
-  const dayListRef = useRef<FlatList>(null);
 
   const loadStreak = useCallback(async () => {
     try {
@@ -81,28 +65,7 @@ export default function StreakDetailsScreen({ navigation }: Props) {
     }
   }, [setCurrentStreak]);
 
-  const loadCalendar = useCallback(async (year: number, month: number) => {
-    try {
-      const res = await fetchCalendarPosts(year, month);
-      const workoutNums = new Set<number>();
-      const restNums = new Set<number>();
-      for (const p of res.posts) {
-        const day = parseInt(p.date.split('-')[2], 10);
-        if (p.type === 'rest') restNums.add(day);
-        else if (p.type === 'checkin') workoutNums.add(day);
-      }
-      setWorkoutDayNums(workoutNums);
-      setRestDayNums(restNums);
-      setCalPosts(res.posts);
-    } catch {
-      setWorkoutDayNums(new Set());
-      setRestDayNums(new Set());
-      setCalPosts([]);
-    }
-  }, []);
-
   useEffect(() => { loadStreak(); }, [loadStreak]);
-  useEffect(() => { loadCalendar(calYear, calMonth); }, [loadCalendar, calYear, calMonth]);
 
   const handleGoalChange = () => setShowGoalPicker(true);
 
@@ -110,37 +73,6 @@ export default function StreakDetailsScreen({ navigation }: Props) {
     setShowGoalPicker(false);
     await updateWorkoutGoal(n).catch(() => {});
     loadStreak();
-  };
-
-  const prevMonth = () => {
-    if (calMonth === 1) { setCalYear(y => y - 1); setCalMonth(12); }
-    else setCalMonth(m => m - 1);
-  };
-
-  const nextMonth = () => {
-    const today = new Date();
-    if (calYear > today.getFullYear() || (calYear === today.getFullYear() && calMonth >= today.getMonth() + 1)) return;
-    if (calMonth === 12) { setCalYear(y => y + 1); setCalMonth(1); }
-    else setCalMonth(m => m + 1);
-  };
-
-  const isNextDisabled = () => {
-    const today = new Date();
-    return calYear >= today.getFullYear() && calMonth >= today.getMonth() + 1;
-  };
-
-  // Must be before any early returns — Hook rules
-  const sortedWorkoutDays = useMemo(
-    () => Array.from(workoutDayNums).sort((a, b) => a - b),
-    [workoutDayNums],
-  );
-  const calFirstDay = new Date(calYear, calMonth - 1, 1).getDay();
-  const calDaysInMonth = new Date(calYear, calMonth, 0).getDate();
-
-  const handleDayPress = (day: number) => {
-    if (!workoutDayNums.has(day)) return;
-    setCurrentModalDay(day);
-    setDayModalVisible(true);
   };
 
   if (loading) {
@@ -268,60 +200,7 @@ export default function StreakDetailsScreen({ navigation }: Props) {
         </View>
 
         {/* Calendar */}
-        <View style={styles.card}>
-          <View style={calStyles.calNav}>
-            <Pressable style={calStyles.calNavBtn} onPress={prevMonth}>
-              <Feather name="chevron-left" size={18} color={colors.textSecondary} />
-            </Pressable>
-            <Text style={styles.cardTitle}>{MONTH_NAMES[calMonth - 1]} {calYear}</Text>
-            <Pressable
-              style={[calStyles.calNavBtn, isNextDisabled() && { opacity: 0.3 }]}
-              onPress={nextMonth}
-              disabled={isNextDisabled()}
-            >
-              <Feather name="chevron-right" size={18} color={colors.textSecondary} />
-            </Pressable>
-          </View>
-
-          <View style={calStyles.calWeekdays}>
-            {WEEKDAYS.map((d, i) => (
-              <Text key={i} style={calStyles.calWeekday}>{d}</Text>
-            ))}
-          </View>
-
-          <View style={calStyles.calDays}>
-            {Array.from({ length: calFirstDay }).map((_, i) => (
-              <View key={`e-${i}`} style={calStyles.calDay} />
-            ))}
-            {Array.from({ length: calDaysInMonth }).map((_, i) => {
-              const day = i + 1;
-              const hasWorkout = workoutDayNums.has(day);
-              const isRest = !hasWorkout && restDayNums.has(day);
-              return (
-                <Pressable
-                  key={day}
-                  style={calStyles.calDay}
-                  onPress={() => handleDayPress(day)}
-                  disabled={!hasWorkout}
-                >
-                  <View style={[
-                    calStyles.calDayBubble,
-                    hasWorkout && calStyles.calDayBubbleWorkout,
-                    isRest && calStyles.calDayBubbleRest,
-                  ]}>
-                    <Text style={[
-                      calStyles.calDayText,
-                      hasWorkout && calStyles.calDayTextWorkout,
-                      isRest && calStyles.calDayTextRest,
-                    ]}>
-                      {day}
-                    </Text>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
-        </View>
+        {user?.username ? <CheckinCalendarCard username={user.username} /> : null}
 
         {/* Achievements */}
         {streak.achievements && streak.achievements.length > 0 && (() => {
@@ -373,133 +252,6 @@ export default function StreakDetailsScreen({ navigation }: Props) {
         </Pressable>
       </Modal>
 
-      {/* Day workout modal */}
-      <Modal
-        visible={dayModalVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setDayModalVisible(false)}
-      >
-        <TouchableWithoutFeedback onPress={() => setDayModalVisible(false)}>
-          <View style={calStyles.calModalOverlay} />
-        </TouchableWithoutFeedback>
-        <View style={calStyles.calModalCenter} pointerEvents="box-none">
-          <View style={calStyles.calModalPopup}>
-            <View style={calStyles.calModalHeader}>
-              <Pressable
-                style={calStyles.calModalNavBtn}
-                onPress={() => {
-                  const idx = sortedWorkoutDays.indexOf(currentModalDay);
-                  if (idx > 0) {
-                    dayListRef.current?.scrollToIndex({ index: idx - 1, animated: true });
-                    setCurrentModalDay(sortedWorkoutDays[idx - 1]);
-                  }
-                }}
-                disabled={sortedWorkoutDays.indexOf(currentModalDay) === 0}
-              >
-                <Feather
-                  name="chevron-left"
-                  size={20}
-                  color={sortedWorkoutDays.indexOf(currentModalDay) === 0 ? colors.textMuted : colors.textPrimary}
-                />
-              </Pressable>
-              <View style={{ alignItems: 'center', flex: 1 }}>
-                <Text style={calStyles.calModalDate}>{MONTH_NAMES[calMonth - 1]} {currentModalDay}</Text>
-                <Text style={calStyles.calModalYear}>{calYear}</Text>
-              </View>
-              <Pressable
-                style={calStyles.calModalNavBtn}
-                onPress={() => {
-                  const idx = sortedWorkoutDays.indexOf(currentModalDay);
-                  if (idx < sortedWorkoutDays.length - 1) {
-                    dayListRef.current?.scrollToIndex({ index: idx + 1, animated: true });
-                    setCurrentModalDay(sortedWorkoutDays[idx + 1]);
-                  }
-                }}
-                disabled={sortedWorkoutDays.indexOf(currentModalDay) === sortedWorkoutDays.length - 1}
-              >
-                <Feather
-                  name="chevron-right"
-                  size={20}
-                  color={sortedWorkoutDays.indexOf(currentModalDay) === sortedWorkoutDays.length - 1 ? colors.textMuted : colors.textPrimary}
-                />
-              </Pressable>
-              <Pressable style={calStyles.calModalNavBtn} onPress={() => setDayModalVisible(false)}>
-                <Feather name="x" size={18} color={colors.textMuted} />
-              </Pressable>
-            </View>
-
-            <FlatList
-              ref={dayListRef}
-              style={calStyles.calModalScroll}
-              data={sortedWorkoutDays}
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              keyExtractor={(day) => String(day)}
-              initialScrollIndex={
-                sortedWorkoutDays.indexOf(currentModalDay) >= 0
-                  ? sortedWorkoutDays.indexOf(currentModalDay)
-                  : 0
-              }
-              getItemLayout={(_, index) => ({
-                length: POPUP_WIDTH,
-                offset: POPUP_WIDTH * index,
-                index,
-              })}
-              onMomentumScrollEnd={(e) => {
-                const idx = Math.round(e.nativeEvent.contentOffset.x / POPUP_WIDTH);
-                if (idx >= 0 && idx < sortedWorkoutDays.length) {
-                  setCurrentModalDay(sortedWorkoutDays[idx]);
-                }
-              }}
-              renderItem={({ item: day }) => {
-                const dayPosts = calPosts.filter(
-                  p => parseInt(p.date.split('-')[2], 10) === day
-                );
-                return (
-                  <ScrollView
-                    style={{ width: POPUP_WIDTH }}
-                    contentContainerStyle={{ padding: spacing.md, paddingBottom: 20 }}
-                    showsVerticalScrollIndicator={false}
-                    nestedScrollEnabled
-                  >
-                    {dayPosts.map((item) => (
-                      <View key={item.id} style={calStyles.calDayCard}>
-                        {item.photo_url && (
-                          <Image
-                            source={{ uri: item.photo_url }}
-                            style={calStyles.calDayCardImage}
-                            contentFit="cover"
-                          />
-                        )}
-                        <View style={calStyles.calDayCardBody}>
-                          <Text style={calStyles.calPostType}>
-                            {item.type === 'checkin' ? 'Check-In' : item.type === 'workout' ? 'Workout' : 'Post'}
-                          </Text>
-                          {!!item.description && (
-                            <Text style={calStyles.calDayCardDesc}>{item.description}</Text>
-                          )}
-                          {item.workout_name && (
-                            <Text style={calStyles.calDayCardMeta}>
-                              {item.workout_name}
-                              {item.workout_exercises ? ` · ${item.workout_exercises} exercises` : ''}
-                              {item.workout_sets ? ` · ${item.workout_sets} sets` : ''}
-                            </Text>
-                          )}
-                          {item.location_name ? (
-                            <Text style={calStyles.calDayCardMeta}>📍 {item.location_name}</Text>
-                          ) : null}
-                        </View>
-                      </View>
-                    ))}
-                  </ScrollView>
-                );
-              }}
-            />
-          </View>
-        </View>
-      </Modal>
 
       {/* Info modal */}
       <Modal visible={showInfo} transparent animationType="fade" onRequestClose={() => setShowInfo(false)}>
@@ -979,85 +731,6 @@ const styles = StyleSheet.create({
   infoCloseText: { fontSize: typography.size.base, fontWeight: '700', color: '#fff' },
 });
 
-const calStyles = StyleSheet.create({
-  // Grid
-  calNav: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'space-between', marginBottom: spacing.md,
-  },
-  calNavBtn: {
-    width: 36, height: 36, backgroundColor: colors.background.elevated,
-    borderRadius: 8, borderWidth: 1, borderColor: colors.border.subtle,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  calWeekdays: { flexDirection: 'row', marginBottom: spacing.sm },
-  calWeekday: {
-    flex: 1, textAlign: 'center',
-    fontSize: 12, fontWeight: '500', color: colors.textMuted, paddingVertical: 4,
-  },
-  calDays: { flexDirection: 'row', flexWrap: 'wrap' },
-  calDay: {
-    width: `${100 / 7}%` as any,
-    aspectRatio: 1,
-    padding: 2,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  calDayBubble: {
-    flex: 1, width: '100%',
-    alignItems: 'center', justifyContent: 'center',
-    borderRadius: 999,
-    backgroundColor: 'rgba(120,120,128,0.15)',
-  },
-  calDayBubbleWorkout: { backgroundColor: colors.primary },
-  calDayBubbleRest: { backgroundColor: '#F59E0B' },
-  calDayText: { fontSize: 14, fontWeight: '500', color: colors.textSecondary },
-  calDayTextWorkout: { color: '#fff', fontWeight: '700' },
-  calDayTextRest: { color: '#fff', fontWeight: '700' },
-
-  // Modal
-  calModalOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-  },
-  calModalCenter: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: 'center', alignItems: 'center', padding: 24,
-  },
-  calModalPopup: {
-    width: '100%',
-    height: Dimensions.get('window').height * 0.55,
-    backgroundColor: colors.background.base,
-    borderRadius: 20, overflow: 'hidden',
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 20 },
-      android: { elevation: 12 },
-    }),
-  },
-  calModalHeader: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingHorizontal: spacing.sm, paddingVertical: spacing.md,
-    borderBottomWidth: 1, borderBottomColor: colors.border.subtle,
-  },
-  calModalNavBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  calModalDate: { fontSize: 17, fontWeight: '700', color: colors.textPrimary },
-  calModalYear: { fontSize: 13, color: colors.textMuted, marginTop: 1 },
-  calModalScroll: { flex: 1 },
-
-  // Day cards inside modal
-  calDayCard: {
-    backgroundColor: colors.background.elevated, borderRadius: 12,
-    borderWidth: 1, borderColor: colors.border.subtle, overflow: 'hidden',
-    marginBottom: 10,
-  },
-  calDayCardImage: { width: '100%', height: 160 },
-  calDayCardBody: { padding: spacing.md, gap: 4 },
-  calDayCardDesc: { fontSize: 14, color: colors.textPrimary, lineHeight: 19 },
-  calDayCardMeta: { fontSize: 12, color: colors.textSecondary, marginTop: 2 },
-  calPostType: {
-    fontSize: 11, fontWeight: '600', color: colors.primary,
-    marginBottom: 2, textTransform: 'uppercase', letterSpacing: 0.5,
-  },
-});
 
 const badgeStyles = StyleSheet.create({
   badge: {
