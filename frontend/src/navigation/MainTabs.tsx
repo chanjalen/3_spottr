@@ -25,7 +25,6 @@ import OrgAnnouncementsScreen from '../screens/orgs/OrgAnnouncementsScreen';
 import OrgProfileScreen from '../screens/orgs/OrgProfileScreen';
 import UserListScreen from '../screens/profile/UserListScreen';
 import CreatePostScreen from '../screens/social/CreatePostScreen';
-import QuickCheckinScreen from '../screens/social/QuickCheckinScreen';
 import AllDMsScreen from '../screens/social/AllDMsScreen';
 import AllGroupChatsScreen from '../screens/social/AllGroupChatsScreen';
 import AllOrgsScreen from '../screens/social/AllOrgsScreen';
@@ -137,7 +136,6 @@ export default function MainTabs() {
       <Root.Screen name="OrgProfile" component={OrgProfileScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="UserList" component={UserListScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="CreatePost" component={CreatePostScreen} options={{ presentation: 'modal', gestureEnabled: true }} />
-      <Root.Screen name="QuickCheckin" component={QuickCheckinScreen} options={{ presentation: 'modal', gestureEnabled: true }} />
       <Root.Screen name="AllDMs" component={AllDMsScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="AllGroupChats" component={AllGroupChatsScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="AllOrgs" component={AllOrgsScreen} options={{ presentation: 'card' }} />

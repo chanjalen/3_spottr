@@ -2164,12 +2164,15 @@ def leaderboard_view(request):
 
     active_tab = request.GET.get('tab', 'friends')
 
-    # --- Friends leaderboard ---
-    following_ids = list(
-        Follow.objects.filter(follower=request.user)
-        .values_list('following_id', flat=True)
+    # --- Friends leaderboard (mutual follows only) ---
+    following_ids = set(
+        Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
     )
-    all_ids = following_ids + [request.user.id]
+    follower_ids = set(
+        Follow.objects.filter(following=request.user).values_list('follower_id', flat=True)
+    )
+    mutual_ids = following_ids & follower_ids
+    all_ids = list(mutual_ids) + [request.user.id]
     friends_qs = (
         User.objects.filter(id__in=all_ids)
         .order_by('-current_streak', '-total_workouts')

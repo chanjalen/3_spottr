@@ -9,9 +9,11 @@ import {
   Image,
   Alert,
   ActivityIndicator,
+  Modal,
   Platform,
   KeyboardAvoidingView,
 } from 'react-native';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -20,7 +22,7 @@ import { RouteProp } from '@react-navigation/native';
 import { RootStackParamList } from '../../navigation/types';
 import { colors, spacing, typography } from '../../theme';
 import { createCheckin } from '../../api/feed';
-import { fetchMyGyms } from '../../api/gyms';
+import { fetchMyGyms, submitBusyLevel } from '../../api/gyms';
 import { fetchRecentWorkouts } from '../../api/workouts';
 import { GymListItem } from '../../types/gym';
 import { RecentWorkout } from '../../types/workout';
@@ -28,6 +30,22 @@ import { RecentWorkout } from '../../types/workout';
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'CheckInReview'>;
   route: RouteProp<RootStackParamList, 'CheckInReview'>;
+};
+
+const BUSY_OPTIONS: { label: string; value: number }[] = [
+  { label: 'Not crowded',        value: 1 },
+  { label: 'Not too crowded',    value: 2 },
+  { label: 'Moderately crowded', value: 3 },
+  { label: 'Crowded',            value: 4 },
+  { label: 'Very crowded',       value: 5 },
+];
+
+const BUSY_COLORS: Record<number, string> = {
+  1: '#4CAF50',
+  2: '#8BC34A',
+  3: '#FFC107',
+  4: '#FF9800',
+  5: '#F44336',
 };
 
 const ACTIVITY_TYPES = [
@@ -46,16 +64,18 @@ const ACTIVITY_TYPES = [
 
 export default function CheckInReviewScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { mediaUri: initialMediaUri, mediaType: initialMediaType, workoutId: incomingWorkoutId } = route.params;
+  const { mediaUri: initialMediaUri, mediaType: initialMediaType, workoutId: incomingWorkoutId, isFrontCamera: initialIsFrontCamera } = route.params;
 
   // Local media state — can be filled later by navigating to CameraCapture
   const [localMediaUri, setLocalMediaUri] = useState<string | null>(initialMediaUri ?? null);
   const [localMediaType, setLocalMediaType] = useState<'photo' | 'video' | null>(initialMediaType ?? null);
+  const [isFrontCamera, setIsFrontCamera] = useState(initialIsFrontCamera ?? false);
 
   // Sync when CameraCapture navigates back with new media params
   useEffect(() => {
-    if (route.params?.mediaUri) setLocalMediaUri(route.params.mediaUri);
+    if (route.params?.mediaUri) { setLocalMediaUri(route.params.mediaUri); setIsVideoPlaying(false); }
     if (route.params?.mediaType) setLocalMediaType(route.params.mediaType);
+    if (route.params?.isFrontCamera !== undefined) setIsFrontCamera(route.params.isFrontCamera);
   }, [route.params?.mediaUri, route.params?.mediaType]);
 
   const [activity, setActivity] = useState('');
@@ -66,6 +86,24 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
   const [customLocation, setCustomLocation] = useState('');
   const [attachedWorkout, setAttachedWorkout] = useState<RecentWorkout | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showBusyModal, setShowBusyModal] = useState(false);
+  const [submittingBusy, setSubmittingBusy] = useState(false);
+
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const videoPlayer = useVideoPlayer(
+    localMediaType === 'video' && localMediaUri ? localMediaUri : null,
+    (player) => { player.pause(); },
+  );
+
+  const handleVideoTap = () => {
+    if (isVideoPlaying) {
+      videoPlayer.pause();
+      setIsVideoPlaying(false);
+    } else {
+      videoPlayer.play();
+      setIsVideoPlaying(true);
+    }
+  };
   // Only auto-attach when explicitly returning from WorkoutLog
   const navigatedToWorkoutRef = useRef(false);
 
@@ -157,8 +195,11 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
         },
         workoutId: attachedWorkout?.id,
       });
-      // Pop the full check-in stack (CameraCapture + CheckInReview) back to tabs
-      navigation.popToTop();
+      if (selectedGymId) {
+        setShowBusyModal(true);
+      } else {
+        navigation.navigate('MainTabs');
+      }
     } catch (err: any) {
       const msg = err?.response?.data?.error ?? 'Could not post check-in.';
       Alert.alert('Error', msg);
@@ -167,7 +208,27 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
     }
   };
 
+  const handleBusySubmit = async (level: number) => {
+    if (!selectedGymId) return;
+    setSubmittingBusy(true);
+    try {
+      await submitBusyLevel(selectedGymId, level);
+    } catch {
+      // not critical
+    } finally {
+      setSubmittingBusy(false);
+      setShowBusyModal(false);
+      navigation.navigate('MainTabs');
+    }
+  };
+
+  const handleBusySkip = () => {
+    setShowBusyModal(false);
+    navigation.navigate('MainTabs');
+  };
+
   return (
+    <>
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: colors.background.base }}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -203,16 +264,28 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
         <View style={styles.mediaWrap}>
           {localMediaUri ? (
             <>
-              <Image
-                source={{ uri: localMediaUri }}
-                style={styles.mediaPreview}
-                resizeMode="cover"
-              />
-              {localMediaType === 'video' && (
-                <View style={styles.videoOverlay}>
-                  <Feather name="film" size={14} color="#fff" />
-                  <Text style={styles.videoLabel}>Video</Text>
-                </View>
+              {localMediaType === 'video' ? (
+                <Pressable onPress={handleVideoTap} style={{ position: 'relative' }}>
+                  <VideoView
+                    player={videoPlayer}
+                    style={[styles.mediaPreview, isFrontCamera && { transform: [{ scaleX: -1 }] }]}
+                    contentFit="cover"
+                    nativeControls={false}
+                  />
+                  {!isVideoPlaying && (
+                    <View style={styles.playButtonOverlay}>
+                      <View style={styles.playButton}>
+                        <Feather name="play" size={28} color="#fff" />
+                      </View>
+                    </View>
+                  )}
+                </Pressable>
+              ) : (
+                <Image
+                  source={{ uri: localMediaUri }}
+                  style={[styles.mediaPreview, isFrontCamera && { transform: [{ scaleX: -1 }] }]}
+                  resizeMode="cover"
+                />
               )}
               <Pressable
                 style={styles.retakeBtn}
@@ -363,6 +436,36 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
         )}
       </ScrollView>
     </KeyboardAvoidingView>
+
+    <Modal visible={showBusyModal} transparent animationType="slide">
+      <Pressable style={styles.modalOverlay} onPress={handleBusySkip}>
+        <View style={styles.modalSheet}>
+          <View style={styles.modalHandle} />
+          <Text style={styles.modalTitle}>
+            How busy is {gyms.find(g => g.id === selectedGymId)?.name ?? 'the gym'}?
+          </Text>
+          <Text style={styles.modalSub}>Help others know what to expect right now.</Text>
+          {BUSY_OPTIONS.map(opt => (
+            <Pressable
+              key={opt.value}
+              style={({ pressed }) => [styles.busyOption, pressed && styles.busyOptionPressed]}
+              onPress={() => handleBusySubmit(opt.value)}
+              disabled={submittingBusy}
+            >
+              <View style={[styles.busyDot, { backgroundColor: BUSY_COLORS[opt.value] }]} />
+              <Text style={styles.busyOptionText}>{opt.label}</Text>
+            </Pressable>
+          ))}
+          {submittingBusy && (
+            <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: spacing.sm }} />
+          )}
+          <Pressable style={styles.skipBtn} onPress={handleBusySkip}>
+            <Text style={styles.skipText}>Skip</Text>
+          </Pressable>
+        </View>
+      </Pressable>
+    </Modal>
+    </>
   );
 }
 
@@ -436,6 +539,24 @@ const styles = StyleSheet.create({
   mediaPlaceholderSub: {
     fontSize: typography.size.xs,
     color: colors.textMuted,
+  },
+  playButtonOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  playButton: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: 4, // optical center for play icon
   },
   videoOverlay: {
     position: 'absolute',
@@ -566,5 +687,65 @@ const styles = StyleSheet.create({
     fontSize: typography.size.xs,
     color: 'rgba(255,255,255,0.8)',
     marginTop: 2,
+  },
+
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    justifyContent: 'flex-end',
+  },
+  modalSheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing['2xl'],
+  },
+  modalHandle: {
+    width: 36,
+    height: 4,
+    backgroundColor: colors.border.default,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: spacing.lg,
+  },
+  modalTitle: {
+    fontSize: typography.size.lg,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  modalSub: {
+    fontSize: typography.size.sm,
+    color: colors.textMuted,
+    marginBottom: spacing.lg,
+  },
+  busyOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.sm,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    marginBottom: spacing.xs,
+  },
+  busyOptionPressed: { backgroundColor: colors.background.elevated },
+  busyDot: { width: 12, height: 12, borderRadius: 6 },
+  busyOptionText: {
+    fontSize: typography.size.base,
+    color: colors.textPrimary,
+  },
+  skipBtn: {
+    alignItems: 'center',
+    paddingVertical: spacing.md,
+    marginTop: spacing.xs,
+  },
+  skipText: {
+    fontSize: typography.size.sm,
+    fontWeight: '500',
+    color: colors.textMuted,
   },
 });

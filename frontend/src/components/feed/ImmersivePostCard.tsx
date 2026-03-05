@@ -125,10 +125,8 @@ export default function ImmersivePostCard({
               style={[styles.actionBtn, likeAnimatedStyle]}
               onPress={handleLike}
               onLongPress={() => {
-                if (item.like_count > 0) {
-                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                  setLikersVisible(true);
-                }
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                setLikersVisible(true);
               }}
               delayLongPress={300}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -253,7 +251,7 @@ export default function ImmersivePostCard({
         <LikersSheet
           visible={likersVisible}
           itemId={item.id}
-          itemType="checkin"
+          itemType={item.type}
           likeCount={item.like_count}
           onClose={() => setLikersVisible(false)}
         />
@@ -278,6 +276,11 @@ export default function ImmersivePostCard({
           <AnimatedPressable
             style={[styles.actionBtn, likeAnimatedStyle]}
             onPress={handleLike}
+            onLongPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              setLikersVisible(true);
+            }}
+            delayLongPress={300}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             accessibilityLabel={`Like, ${item.like_count} likes`}
             accessibilityRole="button"
@@ -414,6 +417,13 @@ export default function ImmersivePostCard({
       <WorkoutDetailModal
         workoutId={workoutDetailId}
         onClose={() => setWorkoutDetailId(null)}
+      />
+      <LikersSheet
+        visible={likersVisible}
+        itemId={item.id}
+        itemType={item.type}
+        likeCount={item.like_count}
+        onClose={() => setLikersVisible(false)}
       />
     </>
   );

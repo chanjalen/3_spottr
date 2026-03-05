@@ -167,6 +167,7 @@ export default function FindFriendsScreen({ navigation }: Props) {
             data={searchResults}
             keyExtractor={(item) => item.id}
             renderItem={renderSearchResult}
+            extraData={followedIds}
             contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
             ListEmptyComponent={
               <View style={styles.center}>
@@ -184,6 +185,7 @@ export default function FindFriendsScreen({ navigation }: Props) {
           data={suggestions}
           keyExtractor={(item) => item.id}
           renderItem={renderSuggestion}
+          extraData={followedIds}
           contentContainerStyle={{ paddingBottom: insets.bottom + 20 }}
           refreshControl={
             <RefreshControl
