@@ -204,7 +204,7 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange, bot
 
   const sheetStyle = useAnimatedStyle(() => ({
     top: sheetY.value,
-    bottom: bottomNavHeight,
+    bottom: 0,
   }));
 
   const keyboardSpacerStyle = useAnimatedStyle(() => ({
@@ -296,7 +296,7 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange, bot
             mentionableUsers={[...baseMentionUsers, ...searchedMentionUsers]}
             onMentionQueryChange={handleMentionQueryChange}
           />
-          {contentBottomPad > 0 && <View style={{ height: contentBottomPad }} />}
+          <View style={{ height: noTabBar ? contentBottomPad : bottomNavHeight }} />
           <Animated.View style={keyboardSpacerStyle} />
         </View>
       </Animated.View>

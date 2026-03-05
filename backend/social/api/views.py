@@ -306,38 +306,23 @@ def vote_poll(request, poll_id):
     except PollOption.DoesNotExist:
         return Response({'error': 'Option not found'}, status=404)
 
-    existing_vote = PollVote.objects.filter(poll=poll, user=request.user).first()
+    if PollVote.objects.filter(poll=poll, user=request.user).exists():
+        return Response({'error': 'You have already voted on this poll.'}, status=400)
 
-    if existing_vote:
-        if str(existing_vote.option.id) != str(option_id):
-            old_option = existing_vote.option
-            old_option.votes = max(0, old_option.votes - 1)
-            old_option.save()
-            existing_vote.option = option
-            existing_vote.save()
-            option.votes += 1
-            option.save()
-    else:
-        PollVote.objects.create(poll=poll, user=request.user, option=option)
-        option.votes += 1
-        option.save()
+    PollVote.objects.create(poll=poll, user=request.user, option=option)
+    option.votes += 1
+    option.save()
 
     total_votes = poll.get_total_votes()
-    options_data = []
-    for opt in poll.options.all().order_by('order'):
-        options_data.append({
-            'id': opt.id,
-            'text': opt.text,
-            'votes': opt.votes,
-            'order': opt.order,
-        })
-
+    options_data = [
+        {'id': opt.id, 'text': opt.text, 'votes': opt.votes, 'order': opt.order}
+        for opt in poll.options.all().order_by('order')
+    ]
     return Response({
         'id': poll.id,
         'question': poll.question,
         'options': options_data,
         'total_votes': total_votes,
-        'user_voted': option.id,
         'user_vote_id': option.id,
         'is_active': poll.is_active,
         'ends_at': poll.ends_at.isoformat() if poll.ends_at else None,
@@ -553,20 +538,12 @@ def vote_poll(request, poll_id):
     except PollOption.DoesNotExist:
         return Response({'error': 'Option not found'}, status=404)
 
-    existing_vote = PollVote.objects.filter(poll=poll, user=request.user).first()
-    if existing_vote:
-        if str(existing_vote.option.id) != str(option_id):
-            old_option = existing_vote.option
-            old_option.votes = max(0, old_option.votes - 1)
-            old_option.save()
-            existing_vote.option = option
-            existing_vote.save()
-            option.votes += 1
-            option.save()
-    else:
-        PollVote.objects.create(poll=poll, user=request.user, option=option)
-        option.votes += 1
-        option.save()
+    if PollVote.objects.filter(poll=poll, user=request.user).exists():
+        return Response({'error': 'You have already voted on this poll.'}, status=400)
+
+    PollVote.objects.create(poll=poll, user=request.user, option=option)
+    option.votes += 1
+    option.save()
 
     total_votes = poll.get_total_votes()
     options_data = [
@@ -759,6 +736,7 @@ def post_detail(request, post_id):
             'created_at': checkin.created_at.isoformat(),
             'description': checkin.description or '',
             'location_name': checkin.location_name or (checkin.location.name if checkin.location else None),
+            'gym_id': str(checkin.location.id) if checkin.location else None,
             'photo_url': photo_url,
             'video_url': None,
             'link_url': None,
@@ -964,6 +942,54 @@ class SharePostView(APIView):
                 sent_count += 1
             except OrgMember.DoesNotExist:
                 errors.append(f'Not an admin of org {oid}')
+            except Exception as e:
+                errors.append(str(e))
+
+        return Response({'sent_count': sent_count, 'errors': errors})
+
+
+class ShareProfileView(APIView):
+    """
+    POST /api/social/share/send-profile/
+    Body: { username, recipient_ids, group_ids, message }
+    Sends a text DM to selected friends/groups mentioning the user's profile.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from messaging.services import send_dm, send_group_message
+        from accounts.models import User
+
+        username = (request.data.get('username') or '').strip()
+        recipient_ids = request.data.get('recipient_ids') or []
+        group_ids = request.data.get('group_ids') or []
+        message = (request.data.get('message') or '').strip()
+
+        if not username:
+            return Response({'error': 'username is required'}, status=400)
+
+        try:
+            profile_user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=404)
+
+        content = message  # optional accompanying text
+        profile_id = str(profile_user.id)
+
+        sent_count = 0
+        errors = []
+
+        for rid in recipient_ids:
+            try:
+                send_dm(sender=request.user, recipient_id=rid, content=content, profile_id=profile_id)
+                sent_count += 1
+            except Exception as e:
+                errors.append(str(e))
+
+        for gid in group_ids:
+            try:
+                send_group_message(sender=request.user, group_id=gid, content=content, profile_id=profile_id)
+                sent_count += 1
             except Exception as e:
                 errors.append(str(e))
 

@@ -241,32 +241,57 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
     # Main tab           → public posts (visibility='main') from everyone.
     #                      friends-only posts are NOT shown here.
     # ─────────────────────────────────────────────────────────────────────────
+    # Compute blocked user IDs for the current user (both directions)
+    blocked_user_ids: set = set()
+    if user:
+        from social.models.block import Block
+        i_blocked = set(Block.objects.filter(blocker=user).values_list('blocked_id', flat=True))
+        blocked_me = set(Block.objects.filter(blocked=user).values_list('blocker_id', flat=True))
+        blocked_user_ids = i_blocked | blocked_me
+
     if tab == 'friends' and user:
         from groups.models import GroupMember
+        from accounts.models import User as AccUser
         following_ids = set(Follow.objects.filter(follower=user).values_list('following_id', flat=True))
+        follower_ids = set(Follow.objects.filter(following=user).values_list('follower_id', flat=True))
+        mutual_ids = following_ids & follower_ids  # both follow each other
+        one_way_ids = following_ids - mutual_ids   # viewer follows them, not mutual
         my_group_ids = GroupMember.objects.filter(user=user).values_list('group_id', flat=True)
         group_peer_ids = set(GroupMember.objects.filter(group_id__in=my_group_ids).values_list('user_id', flat=True))
-        visible_user_ids = following_ids | group_peer_ids | {user.id}
+
+        # Apply checkin privacy: exclude authors who've disabled visibility for this audience
+        blocked_mutual = set(AccUser.objects.filter(id__in=mutual_ids, checkin_visible_friends=False).values_list('id', flat=True))
+        blocked_oneway = set(AccUser.objects.filter(id__in=one_way_ids, checkin_visible_following=False).values_list('id', flat=True))
+        allowed_social = (mutual_ids - blocked_mutual) | (one_way_ids - blocked_oneway)
+
+        visible_user_ids = (allowed_social | group_peer_ids | {user.id}) - blocked_user_ids
         qw_qs = QuickWorkout.objects.filter(user_id__in=visible_user_ids)
         post_qs = Post.objects.none()
     elif tab == 'gym' and user:
         from accounts.models import User as AccUser
         my_gym_ids = list(user.enrolled_gyms.values_list('id', flat=True))
         gym_user_ids = set(AccUser.objects.filter(enrolled_gyms__id__in=my_gym_ids).values_list('id', flat=True))
-        visible_user_ids = gym_user_ids | {user.id}
+        # Exclude users who've disabled gym feed visibility
+        blocked_gym = set(AccUser.objects.filter(id__in=gym_user_ids, checkin_visible_gyms=False).values_list('id', flat=True))
+        visible_user_ids = ((gym_user_ids - blocked_gym) | {user.id}) - blocked_user_ids
         qw_qs = QuickWorkout.objects.filter(user_id__in=visible_user_ids)
         post_qs = Post.objects.none()
     elif tab == 'org' and user:
         from organizations.models import OrgMember
+        from accounts.models import User as AccUser
         my_org_ids = list(OrgMember.objects.filter(user=user).values_list('org_id', flat=True))
         org_user_ids = set(OrgMember.objects.filter(org_id__in=my_org_ids).values_list('user_id', flat=True))
-        visible_user_ids = org_user_ids | {user.id}
+        # Exclude users who've disabled org feed visibility
+        blocked_org = set(AccUser.objects.filter(id__in=org_user_ids, checkin_visible_orgs=False).values_list('id', flat=True))
+        visible_user_ids = ((org_user_ids - blocked_org) | {user.id}) - blocked_user_ids
         qw_qs = QuickWorkout.objects.filter(user_id__in=visible_user_ids)
         post_qs = Post.objects.none()
     else:
         # Main tab: only truly public posts — no follower-gated content here.
         qw_qs = QuickWorkout.objects.none()
         post_qs = Post.objects.filter(visibility='main')
+        if blocked_user_ids:
+            post_qs = post_qs.exclude(user_id__in=blocked_user_ids)
 
     # Filter by hashtag if tag is provided
     if tag:
@@ -472,6 +497,7 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
                 'user': obj.user,
                 'location': obj.location,
                 'location_name': obj.location_name or (obj.location.name if obj.location else ''),
+                'gym_id': str(obj.location.id) if obj.location else None,
                 'workout_type': obj.type.replace('_', ' ').title() if obj.type else '',
                 'description': obj.description,
                 'created_at': created_at,
@@ -2074,6 +2100,53 @@ def share_post_view(request):
         'sent_count': sent_count,
         'errors': errors,
     })
+
+
+@login_required
+@require_POST
+def share_profile_view(request):
+    """
+    Share a user profile to one or more friends/groups via DM.
+    Body JSON: { username, recipient_ids: [], group_ids: [], message: '' }
+    """
+    data = json.loads(request.body)
+    username = data.get('username', '').strip()
+    user_message = data.get('message', '').strip()
+    recipient_ids = data.get('recipient_ids', [])
+    group_ids = data.get('group_ids', [])
+
+    if not username:
+        return JsonResponse({'success': False, 'error': 'username is required'}, status=400)
+
+    if not recipient_ids and not group_ids:
+        return JsonResponse({'success': False, 'error': 'Select at least one recipient'}, status=400)
+
+    from accounts.models import User as AccUser
+    try:
+        profile_user = AccUser.objects.get(username=username)
+    except AccUser.DoesNotExist:
+        return JsonResponse({'success': False, 'error': 'User not found'}, status=404)
+
+    content = user_message if user_message else f'Check out @{profile_user.username} on Spottr!'
+
+    sent_count = 0
+    errors = []
+
+    for rid in recipient_ids:
+        try:
+            send_dm(request.user, rid, content)
+            sent_count += 1
+        except (NotMutualFollowError, UserBlockedError) as e:
+            errors.append(str(e))
+
+    for gid in group_ids:
+        try:
+            send_group_message(request.user, gid, content)
+            sent_count += 1
+        except (NotGroupMemberError, PostNotFoundError) as e:
+            errors.append(str(e))
+
+    return JsonResponse({'success': True, 'sent_count': sent_count, 'errors': errors})
 
 
 @login_required
