@@ -16,4 +16,5 @@ urlpatterns = [
     path('poll/<str:poll_id>/voters/', views.poll_voters, name='poll-voters'),
     path('share/recipients/', views.ShareRecipientsView.as_view(), name='share-recipients'),
     path('share/send/', views.SharePostView.as_view(), name='share-send'),
+    path('share/send-profile/', views.ShareProfileView.as_view(), name='share-send-profile'),
 ]

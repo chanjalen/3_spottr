@@ -43,6 +43,13 @@ class Message(BaseModel):
         blank=True,
         related_name='shared_messages',
     )
+    shared_profile = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='profile_shares',
+    )
     join_request = models.ForeignKey(
         'groups.GroupJoinRequest',
         on_delete=models.SET_NULL,
