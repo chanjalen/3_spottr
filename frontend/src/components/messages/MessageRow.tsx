@@ -11,7 +11,7 @@ import { Feather } from '@expo/vector-icons';
 import Avatar from '../common/Avatar';
 import VideoThumbnail from '../common/VideoThumbnail';
 import MentionText from '../common/MentionText';
-import { Message, MessageReaction, SharedPost, SharedPostPoll } from '../../types/messaging';
+import { Message, MessageReaction, SharedPost, SharedPostPoll, SharedProfileCard } from '../../types/messaging';
 import { colors, spacing, typography } from '../../theme';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -182,6 +182,43 @@ function SharedPostCard({ post, onPress }: Omit<SharedPostCardProps, 'isOwn'> & 
   );
 }
 
+// ── Profile card ─────────────────────────────────────────────────────────────
+
+function SharedProfileCardView({
+  profile,
+  isOwn,
+  onPress,
+}: {
+  profile: SharedProfileCard;
+  isOwn: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther, styles.sharedProfileBubble]}
+    >
+      <Avatar uri={profile.avatar_url} name={profile.display_name ?? profile.username ?? '?'} size={40} />
+      <View style={styles.sharedProfileBody}>
+        <Text style={[styles.sharedProfileName, isOwn && styles.sharedProfileNameOwn]} numberOfLines={1}>
+          {profile.display_name}
+        </Text>
+        <Text style={[styles.sharedProfileUsername, isOwn && styles.sharedProfileUsernameOwn]} numberOfLines={1}>
+          @{profile.username}
+        </Text>
+        {(!!profile.current_streak || !!profile.total_workouts) && (
+          <Text style={[styles.sharedProfileMeta, isOwn && styles.sharedProfileMetaOwn]}>
+            {profile.current_streak ? `🔥 ${profile.current_streak}` : ''}
+            {profile.current_streak && profile.total_workouts ? ' · ' : ''}
+            {profile.total_workouts ? `${profile.total_workouts} workouts` : ''}
+          </Text>
+        )}
+      </View>
+      <Feather name="chevron-right" size={16} color={isOwn ? 'rgba(255,255,255,0.6)' : colors.textMuted} />
+    </Pressable>
+  );
+}
+
 // ── Row ───────────────────────────────────────────────────────────────────────
 
 function MessageRowInner({
@@ -303,6 +340,13 @@ function MessageRowInner({
                   )
                 )}
               </View>
+            )}
+            {item.shared_profile_card && (
+              <SharedProfileCardView
+                profile={item.shared_profile_card}
+                isOwn={isOwn}
+                onPress={() => onNavigateToProfile(item.shared_profile_card!.username)}
+              />
             )}
             {item.shared_post && (
               <SharedPostCard
@@ -662,4 +706,35 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 4,
     borderTopRightRadius: 4,
   },
+
+  // ── Shared profile card (rendered inside a standard bubble) ─────────────
+  sharedProfileBubble: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    width: Dimensions.get('window').width * 0.62,
+  },
+  sharedProfileBody: {
+    flex: 1,
+    gap: 1,
+  },
+  sharedProfileName: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.semibold,
+    color: colors.textPrimary,
+  },
+  sharedProfileNameOwn: { color: '#fff' },
+  sharedProfileUsername: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.textSecondary,
+  },
+  sharedProfileUsernameOwn: { color: 'rgba(255,255,255,0.75)' },
+  sharedProfileMeta: {
+    fontSize: 10,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  sharedProfileMetaOwn: { color: 'rgba(255,255,255,0.6)' },
 });

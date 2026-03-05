@@ -27,7 +27,7 @@ import * as MediaLibrary from 'expo-media-library';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Haptics from 'expo-haptics';
 import Avatar from '../common/Avatar';
-import { fetchShareRecipients, sendShare, ShareRecipient, ShareGroup, ShareOrg } from '../../api/share';
+import { fetchShareRecipients, sendShare, sendShareProfile, ShareRecipient, ShareGroup, ShareOrg } from '../../api/share';
 import { FeedItem } from '../../types/feed';
 import { useAuth } from '../../store/AuthContext';
 import { colors, spacing, typography } from '../../theme';
@@ -39,6 +39,8 @@ const DISMISS_Y = SCREEN_H * 0.52;
 interface ShareSheetProps {
   item: FeedItem | null;
   onClose: () => void;
+  /** When set, switches to profile-share mode instead of post-share mode. */
+  profileUsername?: string;
   /** Pass when there is no tab bar (e.g. PostDetailScreen) so the sheet extends to the screen edge. */
   bottomOffset?: number;
 }
@@ -52,14 +54,15 @@ interface SelectionEntry {
   label: string;
 }
 
-export default function ShareSheet({ item, onClose, bottomOffset }: ShareSheetProps) {
+export default function ShareSheet({ item, onClose, profileUsername, bottomOffset }: ShareSheetProps) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const noTabBar = bottomOffset !== undefined;
   const bottomNavHeight = noTabBar ? 0 : 52 + Math.max(insets.bottom, 16);
   const contentBottomPad = noTabBar ? Math.max(insets.bottom, 8) : 0;
-  const isOwner = !!item && !!user && String(item.user.id) === String(user.id);
-  const hasMedia = !!item && !!(item.photo_url || item.video_url);
+  const isProfileMode = !!profileUsername;
+  const isOwner = !isProfileMode && !!item && !!user && String(item.user.id) === String(user.id);
+  const hasMedia = !isProfileMode && !!item && !!(item.photo_url || item.video_url);
 
   const [visible, setVisible] = useState(false);
   const [query, setQuery] = useState('');
@@ -125,9 +128,9 @@ export default function ShareSheet({ item, onClose, bottomOffset }: ShareSheetPr
     });
   }, [onClose, sheetY, backdropOpacity]);
 
-  // ── Open / close on item change ───────────────────────────────────────────
+  // ── Open / close on item/profile change ──────────────────────────────────
   useEffect(() => {
-    if (item) {
+    if (item || profileUsername) {
       setQuery('');
       setSelectedIds(new Set());
       setSelectedList([]);
@@ -141,7 +144,7 @@ export default function ShareSheet({ item, onClose, bottomOffset }: ShareSheetPr
     } else {
       animateClose();
     }
-  }, [item]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [item, profileUsername]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Search debounce ───────────────────────────────────────────────────────
   const handleQueryChange = (text: string) => {
@@ -221,25 +224,24 @@ export default function ShareSheet({ item, onClose, bottomOffset }: ShareSheetPr
 
   // ── Send ──────────────────────────────────────────────────────────────────
   const handleSend = async () => {
-    const current = itemRef.current;
-    if (!current || isSending) return;
+    if (isSending) return;
     setIsSending(true);
     try {
       const friendIds = selectedList.filter((e) => e.type === 'user').map((e) => e.id);
       const groupIds = selectedList.filter((e) => e.type === 'group').map((e) => e.id);
       const orgIds = selectedList.filter((e) => e.type === 'org').map((e) => e.id);
-      await sendShare({
-        postId: current.id,
-        itemType: current.type,
-        recipientIds: friendIds,
-        groupIds,
-        orgIds,
-        message,
-      });
+      if (isProfileMode && profileUsername) {
+        await sendShareProfile({ username: profileUsername, recipientIds: friendIds, groupIds, orgIds, message });
+      } else {
+        const current = itemRef.current;
+        if (!current) return;
+        await sendShare({ postId: current.id, itemType: current.type, recipientIds: friendIds, groupIds, orgIds, message });
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       animateClose();
-    } catch {
-      Alert.alert('Error', 'Failed to send. Please try again.');
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || e?.response?.status || e?.message || 'Unknown error';
+      Alert.alert('Send failed', `${msg}`);
     } finally {
       setIsSending(false);
     }
@@ -270,7 +272,7 @@ export default function ShareSheet({ item, onClose, bottomOffset }: ShareSheetPr
           <View style={styles.handleArea}>
             <View style={styles.handle} />
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Send to</Text>
+              <Text style={styles.sheetTitle}>{isProfileMode ? `Share @${profileUsername}` : 'Send to'}</Text>
               <Pressable onPress={animateClose} hitSlop={12}>
                 <Feather name="x" size={20} color={colors.textMuted} />
               </Pressable>

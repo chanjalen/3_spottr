@@ -20,7 +20,7 @@ import { useAuth } from '../../store/AuthContext';
 import Avatar from '../../components/common/Avatar';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
-import { updateUserAvatar, apiDeleteAccount, apiUpdateProfile } from '../../api/accounts';
+import { updateUserAvatar, apiDeleteAccount, apiUpdateProfile, apiUpdatePreferences, apiUpdatePrivacy } from '../../api/accounts';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'EditProfile'>;
@@ -83,25 +83,54 @@ export default function EditProfileScreen({ navigation, route }: Props) {
     }
   };
 
-  // Preferences
-  const [weightUnit, setWeightUnit] = useState<'lbs' | 'kg'>('lbs');
-  const [distanceUnit, setDistanceUnit] = useState<'miles' | 'km'>('miles');
+  // Preferences — seeded from user account, saved on change
+  const [weightUnit, setWeightUnit] = useState<'lbs' | 'kg'>(user?.weight_unit ?? 'lbs');
+  const [distanceUnit, setDistanceUnit] = useState<'miles' | 'km'>(user?.distance_unit ?? 'miles');
+  const [prefSaving, setPrefSaving] = useState(false);
 
-  // Privacy toggles
-  const [showStreak, setShowStreak] = useState(true);
-  const [showPRs, setShowPRs] = useState(true);
-  const [allowFriendReqs, setAllowFriendReqs] = useState(true);
-  const [showOnlineStatus, setShowOnlineStatus] = useState(true);
+  const handlePrefChange = async (field: 'weight_unit' | 'distance_unit', value: string) => {
+    if (field === 'weight_unit') setWeightUnit(value as 'lbs' | 'kg');
+    else setDistanceUnit(value as 'miles' | 'km');
+    if (prefSaving) return;
+    setPrefSaving(true);
+    try {
+      const updated = await apiUpdatePreferences({ [field]: value });
+      await updateUser(updated);
+    } catch {
+      // revert on failure
+      if (field === 'weight_unit') setWeightUnit(user?.weight_unit ?? 'lbs');
+      else setDistanceUnit(user?.distance_unit ?? 'miles');
+    } finally {
+      setPrefSaving(false);
+    }
+  };
 
-  // Notification toggles
-  const [notifyFriendWorkouts, setNotifyFriendWorkouts] = useState(true);
-  const [notifyZaps, setNotifyZaps] = useState(true);
-  const [notifyComments, setNotifyComments] = useState(true);
-  const [notifyReactions, setNotifyReactions] = useState(true);
-  const [notifyFriendReqs, setNotifyFriendReqs] = useState(true);
-  const [notifyReminders, setNotifyReminders] = useState(true);
-  const [notifyInvites, setNotifyInvites] = useState(true);
-  const [notifyGroupMsg, setNotifyGroupMsg] = useState(true);
+  // Privacy — checkin audience visibility, auto-saved on toggle
+  const [checkinFriends, setCheckinFriends] = useState(user?.checkin_visible_friends ?? true);
+  const [checkinFollowing, setCheckinFollowing] = useState(user?.checkin_visible_following ?? true);
+  const [checkinOrgs, setCheckinOrgs] = useState(user?.checkin_visible_orgs ?? true);
+  const [checkinGyms, setCheckinGyms] = useState(user?.checkin_visible_gyms ?? true);
+
+  const handlePrivacyToggle = async (
+    field: 'checkin_visible_friends' | 'checkin_visible_following' | 'checkin_visible_orgs' | 'checkin_visible_gyms',
+    value: boolean,
+  ) => {
+    // Optimistic update
+    if (field === 'checkin_visible_friends') setCheckinFriends(value);
+    else if (field === 'checkin_visible_following') setCheckinFollowing(value);
+    else if (field === 'checkin_visible_orgs') setCheckinOrgs(value);
+    else setCheckinGyms(value);
+    try {
+      await apiUpdatePrivacy({ [field]: value });
+    } catch {
+      // rollback
+      if (field === 'checkin_visible_friends') setCheckinFriends(!value);
+      else if (field === 'checkin_visible_following') setCheckinFollowing(!value);
+      else if (field === 'checkin_visible_orgs') setCheckinOrgs(!value);
+      else setCheckinGyms(!value);
+    }
+  };
+
 
   const handleSignOut = () => {
     Alert.alert('Log Out', 'Are you sure you want to log out?', [
@@ -230,44 +259,59 @@ export default function EditProfileScreen({ navigation, route }: Props) {
           {activeTab === 'Preferences' && (
             <View style={styles.section}>
               <Text style={styles.sectionHeading}>Units</Text>
+              <Text style={styles.sectionSubheading}>Used as defaults when logging workouts and PRs.</Text>
               <ToggleRow
                 label="Weight Unit"
                 left="lbs"
                 right="kg"
                 value={weightUnit}
-                onChange={(v) => setWeightUnit(v as 'lbs' | 'kg')}
+                onChange={(v) => handlePrefChange('weight_unit', v)}
               />
               <ToggleRow
                 label="Distance Unit"
                 left="miles"
                 right="km"
                 value={distanceUnit}
-                onChange={(v) => setDistanceUnit(v as 'miles' | 'km')}
+                onChange={(v) => handlePrefChange('distance_unit', v)}
               />
             </View>
           )}
 
           {activeTab === 'Privacy' && (
             <View style={styles.section}>
-              <Text style={styles.sectionHeading}>Visibility</Text>
-              <SwitchRow label="Show Streak" value={showStreak} onChange={setShowStreak} />
-              <SwitchRow label="Show Personal Records" value={showPRs} onChange={setShowPRs} />
-              <SwitchRow label="Allow Friend Requests" value={allowFriendReqs} onChange={setAllowFriendReqs} />
-              <SwitchRow label="Show Online Status" value={showOnlineStatus} onChange={setShowOnlineStatus} />
+              <Text style={styles.sectionHeading}>Check-ins</Text>
+              <Text style={styles.sectionSubheading}>Choose who can see your check-ins in their feed. Changes save instantly.</Text>
+              <SwitchRow
+                label="Friends"
+                sublabel="Mutual followers"
+                value={checkinFriends}
+                onChange={(v) => handlePrivacyToggle('checkin_visible_friends', v)}
+              />
+              <SwitchRow
+                label="Friends & Following"
+                sublabel="People you follow but who don't follow back"
+                value={checkinFollowing}
+                onChange={(v) => handlePrivacyToggle('checkin_visible_following', v)}
+              />
+              <SwitchRow
+                label="Organizations"
+                sublabel="Members of your organizations"
+                value={checkinOrgs}
+                onChange={(v) => handlePrivacyToggle('checkin_visible_orgs', v)}
+              />
+              <SwitchRow
+                label="Gyms"
+                sublabel="Members of your gyms"
+                value={checkinGyms}
+                onChange={(v) => handlePrivacyToggle('checkin_visible_gyms', v)}
+              />
             </View>
           )}
 
           {activeTab === 'Notifications' && (
             <View style={styles.section}>
-              <Text style={styles.sectionHeading}>Activity</Text>
-              <SwitchRow label="Friend Workouts" value={notifyFriendWorkouts} onChange={setNotifyFriendWorkouts} />
-              <SwitchRow label="Zaps" value={notifyZaps} onChange={setNotifyZaps} />
-              <SwitchRow label="Comments" value={notifyComments} onChange={setNotifyComments} />
-              <SwitchRow label="Reactions" value={notifyReactions} onChange={setNotifyReactions} />
-              <SwitchRow label="Friend Requests" value={notifyFriendReqs} onChange={setNotifyFriendReqs} />
-              <SwitchRow label="Workout Reminders" value={notifyReminders} onChange={setNotifyReminders} />
-              <SwitchRow label="Workout Invites" value={notifyInvites} onChange={setNotifyInvites} />
-              <SwitchRow label="Group Messages" value={notifyGroupMsg} onChange={setNotifyGroupMsg} />
+              <Text style={styles.sectionHeading}>Notifications</Text>
+              <Text style={styles.sectionSubheading}>Push notifications are not yet enabled. These settings will take effect when notifications are activated.</Text>
             </View>
           )}
         </ScrollView>
@@ -310,10 +354,13 @@ function FieldInput({
   );
 }
 
-function SwitchRow({ label, value, onChange }: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+function SwitchRow({ label, sublabel, value, onChange }: { label: string; sublabel?: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
     <View style={styles.switchRow}>
-      <Text style={styles.switchLabel}>{label}</Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.switchLabel}>{label}</Text>
+        {sublabel ? <Text style={styles.switchSublabel}>{sublabel}</Text> : null}
+      </View>
       <Switch
         value={value}
         onValueChange={onChange}
@@ -454,6 +501,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border.subtle,
   },
   switchLabel: { fontSize: typography.size.sm, color: colors.textPrimary },
+  switchSublabel: { fontSize: typography.size.xs, color: colors.textMuted, marginTop: 2 },
+  sectionSubheading: { fontSize: typography.size.sm, color: colors.textSecondary, marginBottom: spacing.xs },
   toggleWrap: { flexDirection: 'row', borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: colors.borderColor },
   toggleOption: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2 },
   toggleOptionActive: { backgroundColor: colors.primary },
