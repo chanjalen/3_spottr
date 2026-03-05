@@ -252,8 +252,11 @@ CELERY_BEAT_SCHEDULE = {
 # Switch back to 'Spottr <noreply@spottr.app>' after DNS verification.
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'Spottr <onboarding@resend.dev>')
 
-# Google OAuth — set GOOGLE_CLIENT_ID in your environment (Web client ID from Google Cloud Console)
-GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')
+# Google OAuth client IDs — the token's `aud` claim matches whichever platform
+# credential was used, so all three are needed for multi-platform support.
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')          # Web client ID
+GOOGLE_IOS_CLIENT_ID = os.getenv('GOOGLE_IOS_CLIENT_ID', '')  # iOS client ID
+GOOGLE_ANDROID_CLIENT_ID = os.getenv('GOOGLE_ANDROID_CLIENT_ID', '')  # Android client ID
 
 # Logging
 LOGGING = {

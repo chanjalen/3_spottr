@@ -34,8 +34,10 @@ function formatTimeRemaining(endsAt: string): string {
 function useCountdown(endsAt: string, isActive: boolean) {
   const [label, setLabel] = useState(() => formatTimeRemaining(endsAt));
   useEffect(() => {
+    // Recompute immediately whenever endsAt or isActive changes
+    setLabel(formatTimeRemaining(endsAt));
     if (!isActive) return;
-    const id = setInterval(() => setLabel(formatTimeRemaining(endsAt)), 30_000);
+    const id = setInterval(() => setLabel(formatTimeRemaining(endsAt)), 60_000);
     return () => clearInterval(id);
   }, [endsAt, isActive]);
   return label;

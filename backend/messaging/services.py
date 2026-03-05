@@ -48,6 +48,17 @@ def _serialize_shared_post(message):
     return None
 
 
+def _serialize_shared_profile(message):
+    """Return the nested shared_profile_card dict for WebSocket payloads, or None."""
+    try:
+        if message.shared_profile_id and message.shared_profile:
+            from messaging.serializers import SharedProfileSerializer
+            return SharedProfileSerializer(message.shared_profile).data
+    except Exception:
+        pass
+    return None
+
+
 def _serialize_for_ws(message, recipient_id, client_msg_id=None):
     """
     Build a minimal message dict for WebSocket delivery.
@@ -91,6 +102,7 @@ def _serialize_for_ws(message, recipient_id, client_msg_id=None):
         'is_system': message.is_system,
         'is_request': message.is_request,
         'shared_post': _serialize_shared_post(message),
+        'shared_profile_card': _serialize_shared_profile(message),
         'join_request_id': None,
         'join_request_status': None,
         # Routing fields — used by the client to decide which chat to update.
@@ -323,7 +335,7 @@ def _is_mutual_follow(user_a, user_b):
     return count == 2
 
 
-def send_dm(sender, recipient_id, content, post_id=None, quick_workout_id=None, media_id=None):
+def send_dm(sender, recipient_id, content, post_id=None, quick_workout_id=None, media_id=None, profile_id=None):
     """
     Send a direct message to another user.
     If users mutually follow each other, message is sent normally.
@@ -340,12 +352,21 @@ def send_dm(sender, recipient_id, content, post_id=None, quick_workout_id=None, 
     post = _get_post(post_id) if post_id else None
     quick_workout = _get_quick_workout(quick_workout_id) if quick_workout_id else None
 
+    shared_profile = None
+    if profile_id:
+        from accounts.models import User as AccountUser
+        try:
+            shared_profile = AccountUser.objects.get(id=profile_id)
+        except AccountUser.DoesNotExist:
+            pass
+
     message = Message.objects.create(
         sender=sender,
         recipient=recipient,
         content=content,
         post=post,
         quick_workout=quick_workout,
+        shared_profile=shared_profile,
         is_request=is_request,
     )
 
@@ -363,6 +384,19 @@ def send_dm(sender, recipient_id, content, post_id=None, quick_workout_id=None, 
 
     # Push updated unread count to the recipient.
     _push_unread_update(recipient)
+
+    # Push notification to recipient.
+    try:
+        from accounts.push import send_push_to_user
+        preview = (content or '')[:80] or '📎 Attachment'
+        send_push_to_user(
+            recipient,
+            title=f'@{sender.username}',
+            body=preview,
+            data={'type': 'dm', 'sender_id': str(sender.id)},
+        )
+    except Exception:
+        pass
 
     return message
 
@@ -496,7 +530,7 @@ def ws_send_group_message(sender, group_id, content, client_msg_id=None):
     return payload, group_channel, member_dm_groups
 
 
-def send_group_message(sender, group_id, content, post_id=None, quick_workout_id=None, media_id=None):
+def send_group_message(sender, group_id, content, post_id=None, quick_workout_id=None, media_id=None, profile_id=None):
     """
     Send a message in a group chat.
     Sender must be a group member.
@@ -515,12 +549,21 @@ def send_group_message(sender, group_id, content, post_id=None, quick_workout_id
     post = _get_post(post_id) if post_id else None
     quick_workout = _get_quick_workout(quick_workout_id) if quick_workout_id else None
 
+    shared_profile = None
+    if profile_id:
+        from accounts.models import User as AccountUser
+        try:
+            shared_profile = AccountUser.objects.get(id=profile_id)
+        except AccountUser.DoesNotExist:
+            pass
+
     message = Message.objects.create(
         sender=sender,
         group=group,
         content=content,
         post=post,
         quick_workout=quick_workout,
+        shared_profile=shared_profile,
     )
 
     _attach_media_to_message(message, media_id, owner=sender)
@@ -535,6 +578,21 @@ def send_group_message(sender, group_id, content, post_id=None, quick_workout_id
 
     from messaging.tasks import fanout_group_inbox
     fanout_group_inbox.delay(str(message.id), str(group.id), str(sender.id))
+
+    # Push notification to all group members except sender.
+    try:
+        from accounts.push import send_push_to_user
+        preview = (content or '')[:80] or '📎 Attachment'
+        members = group.members.exclude(id=sender.id)
+        for member in members:
+            send_push_to_user(
+                member,
+                title=f'{group.name}: @{sender.username}',
+                body=preview,
+                data={'type': 'group_message', 'group_id': str(group.id)},
+            )
+    except Exception:
+        pass
 
     return message
 
@@ -552,7 +610,8 @@ def list_dm_conversations(user):
         InboxEntry.objects
         .filter(user=user, conversation_type='dm', latest_message__isnull=False)
         .select_related('partner', 'latest_message__sender',
-                        'latest_message__post', 'latest_message__quick_workout')
+                        'latest_message__post', 'latest_message__quick_workout',
+                        'latest_message__shared_profile')
         .order_by('-latest_message_at')
     )
 
@@ -621,7 +680,7 @@ def get_dm_messages(user, partner_id, limit=50, before_id=None, after_id=None):
 
     base_qs = Message.objects.filter(
         Q(sender=user, recipient=partner) | Q(sender=partner, recipient=user)
-    ).select_related('sender', 'post__user', 'quick_workout__user', 'quick_workout__location').prefetch_related(
+    ).select_related('sender', 'post__user', 'quick_workout__user', 'quick_workout__location', 'shared_profile').prefetch_related(
         Prefetch(
             'read_receipts',
             queryset=MessageRead.objects.filter(user=user),
@@ -689,7 +748,7 @@ def get_group_messages(user, group_id, limit=50, before_id=None, after_id=None):
 
     _check_group_member(group, user)
 
-    base_qs = Message.objects.filter(group=group).select_related('sender', 'post__user', 'quick_workout__user', 'quick_workout__location', 'join_request').prefetch_related(
+    base_qs = Message.objects.filter(group=group).select_related('sender', 'post__user', 'quick_workout__user', 'quick_workout__location', 'shared_profile', 'join_request').prefetch_related(
         Prefetch(
             'read_receipts',
             queryset=MessageRead.objects.filter(user=user),

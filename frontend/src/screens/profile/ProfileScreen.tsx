@@ -20,7 +20,7 @@ import {
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import * as ImagePicker from 'expo-image-picker';
+import { pickMedia } from '../../utils/pickMedia';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { RouteProp } from '@react-navigation/native';
@@ -31,8 +31,9 @@ import FeedCardBody from '../../components/feed/FeedCardBody';
 import FeedCardActions from '../../components/feed/FeedCardActions';
 import CommentsSheet from '../../components/comments/CommentsSheet';
 import { useAuth } from '../../store/AuthContext';
-import { fetchProfile, toggleFollow, fetchUserPRs, savePR, deletePR, fetchMutualFollowers } from '../../api/accounts';
-import { fetchExerciseCatalog } from '../../api/workouts';
+import { fetchProfile, toggleFollow, fetchUserPRs, savePR, deletePR, fetchMutualFollowers, apiBlockToggle, apiRemoveFollower } from '../../api/accounts';
+import ShareSheet from '../../components/feed/ShareSheet';
+import { fetchExerciseCatalog, fetchUserAchievements } from '../../api/workouts';
 import { fetchUserPostThumbnails, fetchUserPosts, fetchUserCheckins, toggleLikeCheckin, CheckinItem, deletePost } from '../../api/feed';
 import CheckinViewer from '../../components/profile/CheckinViewer';
 import { fetchMyGyms, fetchUserGyms } from '../../api/gyms';
@@ -40,10 +41,20 @@ import { listMyOrgs, fetchUserOrgs, OrgListItem } from '../../api/organizations'
 import { useToggleLike } from '../../hooks/useToggleLike';
 import { usePollVote } from '../../hooks/usePollVote';
 import { UserProfile, PersonalRecord, UserBrief } from '../../types/user';
-import { ExerciseCatalogItem } from '../../types/workout';
+import { ExerciseCatalogItem, Achievement } from '../../types/workout';
 import { FeedItem } from '../../types/feed';
 import { Gym } from '../../types/gym';
 import { colors, spacing, typography } from '../../theme';
+import RNAnimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withRepeat,
+  withSequence,
+  withTiming,
+  withDelay,
+  cancelAnimation,
+} from 'react-native-reanimated';
 
 type Props = {
   navigation: any;
@@ -105,12 +116,24 @@ export default function ProfileScreen({ navigation, route }: Props) {
   const [gyms, setGyms] = useState<Gym[]>([]);
   const [orgs, setOrgs] = useState<OrgListItem[]>([]);
 
+  // Calendar pre-load: keyed by "YYYY-M" (0-indexed month), fetched eagerly so dots appear instantly
+  const [calPreloaded, setCalPreloaded] = useState<Record<string, CheckinItem[]>>({});
+
+  // Achievements (own profile only)
+  const [achievements, setAchievements] = useState<Achievement[]>([]);
+  const [selectedAchievement, setSelectedAchievement] = useState<Achievement | null>(null);
+
   // Mutual connections (non-own profile only)
   const [mutualFollowers, setMutualFollowers] = useState<UserBrief[]>([]);
   const [myGyms, setMyGyms] = useState<Gym[]>([]);
   const [myOrgs, setMyOrgs] = useState<OrgListItem[]>([]);
   const [mutualModalVisible, setMutualModalVisible] = useState(false);
   const [mutualSearch, setMutualSearch] = useState('');
+
+  // 3-dot menu for other users
+  const [menuVisible, setMenuVisible] = useState(false);
+  const [blockLoading, setBlockLoading] = useState(false);
+  const [shareProfileVisible, setShareProfileVisible] = useState(false);
 
   // View toggles
   const [showAllPRs, setShowAllPRs] = useState(false);
@@ -194,6 +217,26 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
   // Load gyms + orgs; for non-own profiles also load mutual connection data
   useEffect(() => {
+    fetchUserAchievements(username).then(setAchievements).catch(() => {});
+    // Pre-fetch current + previous 2 months in parallel so calendar dots appear instantly
+    const now = new Date();
+    const monthsToPreload = [0, 1, 2].map(offset => {
+      const d = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+      return { year: d.getFullYear(), month: d.getMonth() }; // month is 0-indexed
+    });
+    Promise.all(
+      monthsToPreload.map(({ year, month }) =>
+        fetchUserCheckins(username, undefined, month + 1, year)
+          .then(res => ({ key: `${year}-${month}`, items: res.items }))
+          .catch(() => null)
+      )
+    ).then(results => {
+      const map: Record<string, CheckinItem[]> = {};
+      for (const r of results) {
+        if (r) map[r.key] = r.items;
+      }
+      setCalPreloaded(map);
+    });
     if (isOwn) {
       fetchMyGyms().then(setGyms).catch(() => {});
       listMyOrgs().then(setOrgs).catch(() => {});
@@ -339,11 +382,8 @@ export default function ProfileScreen({ navigation, route }: Props) {
       p ? { ...p, is_following: !prevFollowing, follower_count: prevCount + (prevFollowing ? -1 : 1) } : p,
     );
     try {
-      const res = await toggleFollow(username);
-      // Sync with server truth
-      setProfile((p) =>
-        p ? { ...p, is_following: res.following, follower_count: prevCount + (res.following ? 1 : 0) } : p,
-      );
+      await toggleFollow(username);
+      // Optimistic state is already correct — no overwrite needed
     } catch {
       // Rollback on error
       setProfile((p) => p ? { ...p, is_following: prevFollowing, follower_count: prevCount } : p);
@@ -351,6 +391,85 @@ export default function ProfileScreen({ navigation, route }: Props) {
       followLoadingRef.current = false;
       setFollowLoading(false);
     }
+  };
+
+  // ── Block / Remove follower ───────────────────────────────────────────────────
+
+  const handleBlock = async () => {
+    if (!profile || blockLoading) return;
+    setMenuVisible(false);
+    Alert.alert(
+      `Block @${profile.username}?`,
+      'They won\'t be able to see your profile. This also removes the follow in both directions.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Block',
+          style: 'destructive',
+          onPress: async () => {
+            setBlockLoading(true);
+            try {
+              await apiBlockToggle(username);
+              setProfile((p) => p ? { ...p, is_blocked: true, is_following: false, is_followed_by: false } : p);
+            } catch (e: any) {
+              const msg = e?.response?.data?.error || e?.response?.data?.detail || e?.message || 'Unknown error';
+              Alert.alert('Block failed', msg);
+            } finally {
+              setBlockLoading(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleUnblock = async () => {
+    if (!profile || blockLoading) return;
+    setBlockLoading(true);
+    try {
+      await apiBlockToggle(username);
+      setProfile((p) => p ? { ...p, is_blocked: false } : p);
+    } catch {
+      Alert.alert('Error', 'Could not unblock this user. Please try again.');
+    } finally {
+      setBlockLoading(false);
+    }
+  };
+
+  const handleRemoveFollower = async () => {
+    if (!profile) return;
+    setMenuVisible(false);
+    Alert.alert(
+      `Remove @${profile.username}?`,
+      'They will no longer follow you. They won\'t be notified.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await apiRemoveFollower(username);
+              setProfile((p) => p ? { ...p, is_followed_by: false, following_count: Math.max(0, (p.following_count ?? 1) - 1) } : p);
+            } catch {
+              Alert.alert('Error', 'Could not remove follower. Please try again.');
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleShareNative = () => {
+    setMenuVisible(false);
+    // Wait for modal dismiss animation before opening native share sheet
+    setTimeout(async () => {
+      try {
+        await Share.share({ message: `Check out @${username} on Spottr!` });
+      } catch {
+        // dismissed
+      }
+    }, 350);
   };
 
   // ── Post viewer ───────────────────────────────────────────────────────────────
@@ -413,19 +532,9 @@ export default function ProfileScreen({ navigation, route }: Props) {
   // ── Video picker ──────────────────────────────────────────────────────────────
 
   const pickVideo = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Please allow access to your media library.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'videos',
-      allowsEditing: false,
-      preferredAssetRepresentationMode:
-        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
-    });
-    if (!result.canceled && result.assets?.[0]) {
-      setPrVideoUri(result.assets[0].uri);
+    const picked = await pickMedia({ allowsMultiple: false, maxVideoBytes: 50 * 1024 * 1024, mediaTypes: ['videos'] });
+    if (picked?.[0]?.kind === 'video') {
+      setPrVideoUri(picked[0].uri);
     }
   };
 
@@ -668,7 +777,9 @@ export default function ProfileScreen({ navigation, route }: Props) {
             <Feather name="settings" size={20} color={colors.textPrimary} />
           </Pressable>
         ) : (
-          <View style={{ width: 40 }} />
+          <Pressable onPress={() => setMenuVisible(true)} style={styles.iconBtn}>
+            <Feather name="more-vertical" size={20} color={colors.textPrimary} />
+          </Pressable>
         )}
       </View>
 
@@ -747,6 +858,24 @@ export default function ProfileScreen({ navigation, route }: Props) {
           {profile.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
         </View>
 
+        {/* ── Blocked overlay (when I've blocked this user) ───────────────────── */}
+        {profile.is_blocked ? (
+          <View style={styles.blockedCard}>
+            <Feather name="slash" size={36} color={colors.textMuted} style={{ marginBottom: spacing.md }} />
+            <Text style={styles.blockedTitle}>You've blocked this user</Text>
+            <Text style={styles.blockedSub}>Unblock to see their profile and posts.</Text>
+            <Pressable
+              style={[styles.actionBtn, { marginTop: spacing.lg, alignSelf: 'center', paddingHorizontal: spacing.xl }]}
+              onPress={handleUnblock}
+              disabled={blockLoading}
+            >
+              {blockLoading
+                ? <ActivityIndicator size="small" color="#fff" />
+                : <Text style={styles.actionBtnText}>Unblock</Text>}
+            </Pressable>
+          </View>
+        ) : (
+          <>
         {/* ── Mutual connections (other profiles only) ─────────────────────────── */}
         {!isOwn && mutualFollowers.length > 0 && (
           <MutualConnectionsSection
@@ -775,13 +904,10 @@ export default function ProfileScreen({ navigation, route }: Props) {
             <Pressable
               style={[styles.actionBtn, styles.actionBtnFlex, profile.is_following && styles.actionBtnOutline]}
               onPress={handleFollow}
-              disabled={followLoading}
             >
-              {followLoading
-                ? <ActivityIndicator size="small" color={profile.is_following ? colors.textPrimary : colors.textOnPrimary} />
-                : <Text style={[styles.actionBtnText, profile.is_following && styles.actionBtnTextOutline]}>
-                    {profile.is_following ? 'Following' : 'Follow'}
-                  </Text>}
+              <Text style={[styles.actionBtnText, profile.is_following && styles.actionBtnTextOutline]}>
+                {profile.is_following ? 'Following' : 'Follow'}
+              </Text>
             </Pressable>
             {profile.is_following && profile.is_followed_by && (
             <Pressable
@@ -830,6 +956,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
           {activeTab === 'Calendar' && (
             <CalendarTab
               profileUsername={username}
+              preloadedMonths={calPreloaded}
               onOpenViewer={(days, index) => {
                 // Seed loaded-months so we don't re-fetch what CalendarTab already loaded
                 calViewerLoadedMonths.current.clear();
@@ -863,11 +990,68 @@ export default function ProfileScreen({ navigation, route }: Props) {
         {/* ── Orgs section ──────────────────────────────────────────────────────── */}
         <OrgsSection orgs={orgs} isOwn={isOwn} navigation={navigation} />
 
+        {/* ── Achievements section ──────────────────────────────────────────────── */}
+        {achievements.length > 0 && (
+          <AchievementsSection achievements={achievements} onSelect={setSelectedAchievement} />
+        )}
+
         {/* ── In common (non-own profiles only) ────────────────────────────────── */}
         {!isOwn && (mutualGyms.length > 0 || mutualOrgs.length > 0) && (
           <InCommonSection mutualGyms={mutualGyms} mutualOrgs={mutualOrgs} navigation={navigation} />
         )}
+          </>
+        )}
       </ScrollView>
+
+      {/* ── Achievement detail modal ────────────────────────────────────────── */}
+      <AchievementModal achievement={selectedAchievement} onClose={() => setSelectedAchievement(null)} />
+
+      {/* ── 3-dot action menu (other users) ──────────────────────────────────── */}
+      <Modal
+        visible={menuVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setMenuVisible(false)}
+      >
+        <Pressable style={styles.menuBackdrop} onPress={() => setMenuVisible(false)}>
+          <View style={[styles.menuSheet, { paddingBottom: insets.bottom + 8 }]}>
+            <View style={styles.menuHandle} />
+            {profile.is_followed_by && (
+              <Pressable style={styles.menuItem} onPress={handleRemoveFollower}>
+                <Feather name="user-x" size={20} color={colors.textPrimary} />
+                <Text style={styles.menuItemText}>Remove as Follower</Text>
+              </Pressable>
+            )}
+            {profile.is_blocked ? (
+              <Pressable style={styles.menuItem} onPress={() => { setMenuVisible(false); handleUnblock(); }}>
+                <Feather name="user-check" size={20} color={colors.textPrimary} />
+                <Text style={styles.menuItemText}>Unblock</Text>
+              </Pressable>
+            ) : (
+              <Pressable style={styles.menuItem} onPress={handleBlock}>
+                <Feather name="slash" size={20} color={colors.error} />
+                <Text style={[styles.menuItemText, { color: colors.error }]}>Block</Text>
+              </Pressable>
+            )}
+            <View style={styles.menuDivider} />
+            <Pressable style={styles.menuItem} onPress={() => { setMenuVisible(false); setShareProfileVisible(true); }}>
+              <Feather name="send" size={20} color={colors.textPrimary} />
+              <Text style={styles.menuItemText}>Share via Messages</Text>
+            </Pressable>
+            <Pressable style={styles.menuItem} onPress={handleShareNative}>
+              <Feather name="share" size={20} color={colors.textPrimary} />
+              <Text style={styles.menuItemText}>Share via...</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+
+      {/* ── Profile ShareSheet ────────────────────────────────────────────────── */}
+      <ShareSheet
+        item={null}
+        profileUsername={shareProfileVisible ? username : undefined}
+        onClose={() => setShareProfileVisible(false)}
+      />
 
       {/* ── Mutual followers modal ───────────────────────────────────────────── */}
       <Modal
@@ -1466,6 +1650,254 @@ function OrgsSection({ orgs, isOwn, navigation }: { orgs: OrgListItem[]; isOwn: 
   );
 }
 
+// ─── Achievements Section ─────────────────────────────────────────────────────
+
+const RARITY_COLORS: Record<Achievement['rarity'], string> = {
+  common: '#6B7280',
+  rare: '#3B82F6',
+  epic: '#8B5CF6',
+  legendary: '#F59E0B',
+};
+
+const RARITY_LABELS: Record<Achievement['rarity'], string> = {
+  common: 'COMMON',
+  rare: 'RARE',
+  epic: 'EPIC',
+  legendary: 'LEGENDARY',
+};
+
+const RARITY_GRADIENTS: Record<Achievement['rarity'], [string, string]> = {
+  common:    ['#4B5563', '#1F2937'],
+  rare:      ['#2563EB', '#1E3A8A'],
+  epic:      ['#7C3AED', '#3B0764'],
+  legendary: ['#D97706', '#78350F'],
+};
+
+function AchievementsSection({ achievements, onSelect }: { achievements: Achievement[]; onSelect: (a: Achievement) => void }) {
+  return (
+    <View style={styles.experienceSection}>
+      <View style={styles.experienceSectionHeader}>
+        <Text style={{ fontSize: 15 }}>🏆</Text>
+        <Text style={styles.experienceSectionTitle}>Achievements</Text>
+        <Text style={achievStyles.countLabel}>{achievements.length} earned</Text>
+      </View>
+      <FlatList
+        data={achievements}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{ paddingHorizontal: spacing.xl, paddingVertical: spacing.md, gap: 10 }}
+        renderItem={({ item }) => (
+          <AchievementBadge item={item} onPress={() => onSelect(item)} />
+        )}
+      />
+    </View>
+  );
+}
+
+function AchievementBadge({ item, onPress }: { item: Achievement; onPress: () => void }) {
+  const color = RARITY_COLORS[item.rarity];
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => pressed && { opacity: 0.75 }}>
+      <View style={[achievStyles.badge, { borderColor: color }, Platform.OS === 'ios' ? { shadowColor: color } : {}]}>
+        <Text style={achievStyles.badgeEmoji}>{item.emoji}</Text>
+        <Text style={achievStyles.badgeName} numberOfLines={2}>{item.name}</Text>
+        <Text style={achievStyles.badgeDesc} numberOfLines={2}>{item.desc}</Text>
+        <View style={[achievStyles.rarityPill, { backgroundColor: color }]}>
+          <Text style={achievStyles.rarityText}>{RARITY_LABELS[item.rarity]}</Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+const ACHIEV_MODAL_CARD_WIDTH = SCREEN_WIDTH * 0.88;
+const ACHIEV_PROGRESS_BAR_WIDTH = ACHIEV_MODAL_CARD_WIDTH - 56;
+
+function AchievementModal({ achievement, onClose }: { achievement: Achievement | null; onClose: () => void }) {
+  const emojiY      = useSharedValue(0);
+  const emojiScale  = useSharedValue(0);
+  const cardScale   = useSharedValue(0.82);
+  const cardOpacity = useSharedValue(0);
+  const progressW   = useSharedValue(0);
+
+  useEffect(() => {
+    if (achievement) {
+      cardScale.value   = withSpring(1, { damping: 16, stiffness: 200 });
+      cardOpacity.value = withTiming(1, { duration: 200 });
+      emojiScale.value  = withDelay(120, withSpring(1, { damping: 5, stiffness: 100 }));
+      emojiY.value = withDelay(450, withRepeat(
+        withSequence(
+          withTiming(-22, { duration: 520 }),
+          withTiming(0,   { duration: 520 }),
+        ),
+        -1,
+        true,
+      ));
+      const targetW = Math.min(achievement.user_pct, 100) * ACHIEV_PROGRESS_BAR_WIDTH / 100;
+      progressW.value = withDelay(650, withTiming(targetW, { duration: 900 }));
+    } else {
+      cancelAnimation(emojiY);
+      cancelAnimation(emojiScale);
+      cancelAnimation(progressW);
+      emojiY.value      = 0;
+      emojiScale.value  = 0;
+      cardScale.value   = 0.82;
+      cardOpacity.value = 0;
+      progressW.value   = 0;
+    }
+  }, [achievement?.id]);
+
+  const cardStyle     = useAnimatedStyle(() => ({ transform: [{ scale: cardScale.value }], opacity: cardOpacity.value }));
+  const emojiStyle    = useAnimatedStyle(() => ({ transform: [{ translateY: emojiY.value }, { scale: emojiScale.value }] }));
+  const progressStyle = useAnimatedStyle(() => ({ width: progressW.value }));
+
+  if (!achievement) return null;
+
+  const gradColors  = RARITY_GRADIENTS[achievement.rarity];
+  const rarityColor = RARITY_COLORS[achievement.rarity];
+  const pctText     = achievement.user_pct < 1
+    ? '< 1% of Spotters have this'
+    : `${achievement.user_pct.toFixed(1)}% of Spotters have this`;
+
+  return (
+    <Modal visible transparent animationType="fade" onRequestClose={onClose}>
+      <Pressable style={achievModalStyles.overlay} onPress={onClose}>
+        <Pressable onPress={() => {}} style={achievModalStyles.cardWrapper}>
+          <RNAnimated.View style={[achievModalStyles.cardShadow, cardStyle]}>
+            <LinearGradient
+              colors={gradColors}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={achievModalStyles.gradient}
+            >
+              <Pressable style={achievModalStyles.closeBtn} onPress={onClose} hitSlop={14}>
+                <Feather name="x" size={22} color="rgba(255,255,255,0.65)" />
+              </Pressable>
+              <RNAnimated.View style={emojiStyle}>
+                <Text style={achievModalStyles.bigEmoji}>{achievement.emoji}</Text>
+              </RNAnimated.View>
+              <Text style={achievModalStyles.achievName}>{achievement.name}</Text>
+              <View style={achievModalStyles.rarityPill}>
+                <Text style={achievModalStyles.rarityPillText}>★  {RARITY_LABELS[achievement.rarity]}</Text>
+              </View>
+              <Text style={achievModalStyles.achievDesc}>{achievement.desc}</Text>
+              <View style={achievModalStyles.divider} />
+              <Text style={achievModalStyles.pctLabel}>{pctText}</Text>
+              <View style={achievModalStyles.progressTrack}>
+                <RNAnimated.View style={[achievModalStyles.progressFill, { backgroundColor: rarityColor }, progressStyle]} />
+              </View>
+              <View style={achievModalStyles.statusRow}>
+                <Feather name="check-circle" size={16} color="rgba(255,255,255,0.95)" />
+                <Text style={achievModalStyles.statusText}>You earned this!</Text>
+              </View>
+            </LinearGradient>
+          </RNAnimated.View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
+
+const achievStyles = StyleSheet.create({
+  badge: {
+    width: 112,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    backgroundColor: colors.surface,
+    padding: 10,
+    alignItems: 'center',
+    gap: 5,
+    ...Platform.select({
+      ios: { shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.25, shadowRadius: 8 },
+      android: { elevation: 4 },
+    }),
+  },
+  badgeEmoji: { fontSize: 30 },
+  badgeName: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    textAlign: 'center',
+    lineHeight: 15,
+  },
+  badgeDesc: {
+    fontSize: 10,
+    color: colors.textMuted,
+    textAlign: 'center',
+    lineHeight: 13,
+  },
+  rarityPill: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    marginTop: 2,
+  },
+  rarityText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: '#fff',
+    letterSpacing: 0.6,
+  },
+  countLabel: {
+    fontSize: typography.size.sm,
+    color: colors.textMuted,
+    fontWeight: '500',
+    marginLeft: 'auto' as any,
+  },
+});
+
+const achievModalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  cardWrapper: {
+    width: ACHIEV_MODAL_CARD_WIDTH,
+    alignItems: 'center',
+  },
+  cardShadow: {
+    width: ACHIEV_MODAL_CARD_WIDTH,
+    borderRadius: 28,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios:     { shadowColor: '#000', shadowOffset: { width: 0, height: 16 }, shadowOpacity: 0.45, shadowRadius: 28 },
+      android: { elevation: 20 },
+    }),
+  },
+  gradient: {
+    padding: 28,
+    alignItems: 'center',
+    gap: 12,
+  },
+  closeBtn: { alignSelf: 'flex-end', marginBottom: 4 },
+  bigEmoji: { fontSize: 76, lineHeight: 90 },
+  achievName: { fontSize: 26, fontWeight: '800', color: '#fff', textAlign: 'center' },
+  rarityPill: {
+    paddingHorizontal: 18,
+    paddingVertical: 6,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+  },
+  rarityPillText: { fontSize: 13, fontWeight: '700', color: '#fff', letterSpacing: 0.8 },
+  achievDesc: { fontSize: 15, color: 'rgba(255,255,255,0.82)', textAlign: 'center', lineHeight: 22 },
+  divider: { height: 1, width: '100%', backgroundColor: 'rgba(255,255,255,0.18)', marginVertical: 2 },
+  pctLabel: { fontSize: 13, color: 'rgba(255,255,255,0.7)', fontWeight: '600' },
+  progressTrack: {
+    width: ACHIEV_PROGRESS_BAR_WIDTH,
+    height: 7,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  progressFill: { height: 7, borderRadius: 4 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 4 },
+  statusText: { fontSize: 14, color: 'rgba(255,255,255,0.9)', fontWeight: '600' },
+});
+
 // ─── Posts Tab ────────────────────────────────────────────────────────────────
 
 type CarouselItem = FeedItem | 'view-all';
@@ -1698,22 +2130,36 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 
 function CalendarTab({
   profileUsername,
+  preloadedMonths,
   onOpenViewer,
 }: {
   profileUsername: string;
+  preloadedMonths: Record<string, CheckinItem[]>;
   onOpenViewer: (days: CalViewerDay[], initialIndex: number) => void;
 }) {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth());
-  const [checkins, setCheckins] = useState<CheckinItem[]>([]);
+  const currentKey = `${year}-${month}`;
 
+  // Seed from pre-loaded map if available, otherwise empty
+  const [checkins, setCheckins] = useState<CheckinItem[]>(
+    () => preloadedMonths[`${now.getFullYear()}-${now.getMonth()}`] ?? []
+  );
+
+  // When pre-loaded map arrives (or month changes), sync in pre-loaded data or fetch
   useEffect(() => {
-    setCheckins([]);
-    fetchUserCheckins(profileUsername, undefined, month + 1, year)
-      .then((res) => setCheckins(res.items))
-      .catch(() => {});
-  }, [year, month, profileUsername]);
+    const preloaded = preloadedMonths[currentKey];
+    if (preloaded !== undefined) {
+      // Data already available — show immediately, no network call
+      setCheckins(preloaded);
+    } else {
+      // Not pre-loaded — fetch without clearing first so old dots stay visible
+      fetchUserCheckins(profileUsername, undefined, month + 1, year)
+        .then((res) => setCheckins(res.items))
+        .catch(() => {});
+    }
+  }, [year, month, profileUsername, preloadedMonths]);
 
   // Group check-ins by day number
   const dayMap = useMemo(() => {
@@ -2002,6 +2448,53 @@ const styles = StyleSheet.create({
   actionBtnText: { fontSize: typography.size.sm, fontWeight: '600', color: colors.textOnPrimary },
   actionBtnTextOutline: { fontSize: typography.size.sm, fontWeight: '600', color: colors.textPrimary },
 
+  // ── Blocked overlay ──
+  blockedCard: {
+    margin: spacing.xl,
+    padding: spacing.xl,
+    borderRadius: 16,
+    backgroundColor: colors.background.elevated,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+  },
+  blockedTitle: { fontSize: typography.size.base, fontWeight: '700', color: colors.textPrimary, textAlign: 'center' },
+  blockedSub: { fontSize: typography.size.sm, color: colors.textMuted, textAlign: 'center', marginTop: spacing.xs },
+
+  // ── 3-dot action menu ──
+  menuBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    justifyContent: 'flex-end',
+  },
+  menuSheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingTop: spacing.sm,
+    paddingHorizontal: spacing.base,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -3 }, shadowOpacity: 0.12, shadowRadius: 12 },
+      android: { elevation: 8 },
+    }),
+  },
+  menuHandle: {
+    width: 36,
+    height: 4,
+    backgroundColor: colors.border.default,
+    borderRadius: 2,
+    alignSelf: 'center',
+    marginBottom: spacing.md,
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.md,
+  },
+  menuItemText: { fontSize: typography.size.base, color: colors.textPrimary },
+  menuDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border.subtle, marginVertical: spacing.xs },
+
   // ── LinkedIn-style experience sections ──
   experienceSection: {
     marginBottom: spacing.md,
@@ -2087,23 +2580,17 @@ const styles = StyleSheet.create({
 
   // ── Mutual connections ──
   mutualSection: {
-    marginHorizontal: spacing.xl,
-    marginTop: spacing.sm,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border.subtle,
-    backgroundColor: colors.background.elevated,
-    overflow: 'hidden',
+    marginTop: spacing.xs,
   },
   mutualFollowedRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    paddingHorizontal: spacing.base,
-    paddingVertical: 10,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: 6,
   },
   mutualAvatarStack: { flexDirection: 'row', alignItems: 'center' },
-  mutualAvatarWrap: { borderRadius: 11, borderWidth: 1.5, borderColor: colors.background.elevated },
+  mutualAvatarWrap: { borderRadius: 11, borderWidth: 1.5, borderColor: colors.background.base },
   mutualFollowedText: { flex: 1, fontSize: typography.size.sm, color: colors.textSecondary },
   mutualFollowedLabel: { color: colors.textMuted },
   mutualInCommonRow: {

@@ -27,13 +27,17 @@ import {
   useMicrophonePermissions,
 } from 'expo-camera';
 
+import { RouteProp, useFocusEffect } from '@react-navigation/native';
+
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'CameraCapture'>;
+  route: RouteProp<RootStackParamList, 'CameraCapture'>;
 };
 
 const MAX_VIDEO_DURATION = 30; // seconds
 
-export default function CameraCaptureScreen({ navigation }: Props) {
+export default function CameraCaptureScreen({ navigation, route }: Props) {
+  const fromCheckinReview = route.params?.fromCheckinReview ?? false;
   const insets = useSafeAreaInsets();
   const [cameraPermission, requestCameraPermission] = useCameraPermissions();
   const [micPermission, requestMicPermission] = useMicrophonePermissions();
@@ -44,10 +48,22 @@ export default function CameraCaptureScreen({ navigation }: Props) {
   const [isCameraReady, setIsCameraReady] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const navigatedToWorkoutRef = useRef(false);
-  const [attachedWorkoutId, setAttachedWorkoutId] = useState<string | null>(null);
 
   // Camera mode as state so we control when it changes
   const [cameraMode, setCameraMode] = useState<'picture' | 'video'>('picture');
+
+  // Mount/unmount CameraView on focus so it always initializes fresh
+  const [isFocused, setIsFocused] = useState(false);
+  useFocusEffect(
+    useCallback(() => {
+      setIsFocused(true);
+      setIsCameraReady(false);
+      return () => {
+        setIsFocused(false);
+        setIsCameraReady(false);
+      };
+    }, []),
+  );
 
   const shutterScale = useSharedValue(1);
   const shutterRingScale = useSharedValue(1);
@@ -83,7 +99,8 @@ export default function CameraCaptureScreen({ navigation }: Props) {
         if (completed.length > 0) {
           const newest = completed[0];
           if (Date.now() - new Date(newest.started_at).getTime() < 5 * 60 * 1000) {
-            setAttachedWorkoutId(newest.id);
+            // Skip the camera step — go directly to review with workout attached, no photo yet
+            navigation.navigate('CheckInReview', { workoutId: newest.id });
           }
         }
       } catch {
@@ -122,22 +139,39 @@ export default function CameraCaptureScreen({ navigation }: Props) {
     }, 1000);
   }, [stopRecordingTimer]);
 
+  // When returning to an existing CheckInReview (fromCheckinReview mode), preserve
+  // any workoutId that was already in its params so it doesn't get dropped on navigate.
+  const getCheckinParams = useCallback(
+    (mediaUri: string, mediaType: 'photo' | 'video') => {
+      const existingWorkoutId = (
+        navigation.getState().routes.find((r) => r.name === 'CheckInReview')
+          ?.params as { workoutId?: string } | undefined
+      )?.workoutId;
+      return {
+        mediaUri,
+        mediaType,
+        ...(existingWorkoutId ? { workoutId: existingWorkoutId } : {}),
+      };
+    },
+    [navigation],
+  );
+
   const handleTakePhoto = useCallback(async () => {
     if (!cameraRef.current || !isCameraReady) return;
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.85 });
       if (photo?.uri) {
-        navigation.replace('CheckInReview', {
-          mediaUri: photo.uri,
-          mediaType: 'photo',
-          workoutId: attachedWorkoutId ?? undefined,
-        });
+        if (fromCheckinReview) {
+          navigation.navigate('CheckInReview', getCheckinParams(photo.uri, 'photo'));
+        } else {
+          navigation.replace('CheckInReview', { mediaUri: photo.uri, mediaType: 'photo' });
+        }
       }
     } catch (err) {
       console.error('[CameraCapture] takePictureAsync error:', err);
       Alert.alert('Error', 'Could not take photo. Please try again.');
     }
-  }, [navigation, attachedWorkoutId, isCameraReady]);
+  }, [navigation, fromCheckinReview, isCameraReady, getCheckinParams]);
 
   const handleStartRecording = useCallback(async () => {
     if (!cameraRef.current || isRecording || !isCameraReady) return;
@@ -152,18 +186,18 @@ export default function CameraCaptureScreen({ navigation }: Props) {
     try {
       const video = await cameraRef.current.recordAsync({ maxDuration: MAX_VIDEO_DURATION });
       if (video?.uri) {
-        navigation.replace('CheckInReview', {
-          mediaUri: video.uri,
-          mediaType: 'video',
-          workoutId: attachedWorkoutId ?? undefined,
-        });
+        if (fromCheckinReview) {
+          navigation.navigate('CheckInReview', getCheckinParams(video.uri, 'video'));
+        } else {
+          navigation.replace('CheckInReview', { mediaUri: video.uri, mediaType: 'video' });
+        }
       }
     } catch (err) {
       console.error('[CameraCapture] recordAsync error:', err);
       setIsRecording(false);
       setCameraMode('picture');
     }
-  }, [isRecording, navigation, startRecordingTimer, attachedWorkoutId, isCameraReady]);
+  }, [isRecording, navigation, fromCheckinReview, startRecordingTimer, isCameraReady, getCheckinParams]);
 
   const handleStopRecording = useCallback(() => {
     if (!isRecording || !cameraRef.current) return;
@@ -182,6 +216,8 @@ export default function CameraCaptureScreen({ navigation }: Props) {
     navigatedToWorkoutRef.current = true;
     navigation.navigate('WorkoutLog', { fromCheckin: true });
   }, [navigation]);
+
+
 
   if (!cameraPermission) return <View style={styles.container} />;
 
@@ -205,13 +241,15 @@ export default function CameraCaptureScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
-      <CameraView
-        ref={cameraRef}
-        style={StyleSheet.absoluteFill}
-        facing={facing}
-        mode={cameraMode}
-        onCameraReady={handleCameraReady}
-      />
+      {isFocused && (
+        <CameraView
+          ref={cameraRef}
+          style={StyleSheet.absoluteFill}
+          facing={facing}
+          mode={cameraMode}
+          onCameraReady={handleCameraReady}
+        />
+      )}
 
       {/* Top bar */}
       <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
@@ -227,15 +265,10 @@ export default function CameraCaptureScreen({ navigation }: Props) {
               {String(recordingSeconds % 60).padStart(2, '0')}
             </Text>
           </View>
-        ) : (
+        ) : !fromCheckinReview ? (
           <Pressable
-            style={({ pressed }) => [
-              styles.logWorkoutBtn,
-              pressed && !attachedWorkoutId && styles.logWorkoutBtnPressed,
-              attachedWorkoutId ? styles.logWorkoutBtnAttached : undefined,
-            ]}
+            style={({ pressed }) => [styles.logWorkoutBtn, pressed && styles.logWorkoutBtnPressed]}
             onPress={handleLogWorkout}
-            disabled={!!attachedWorkoutId}
           >
             <LinearGradient
               colors={['#4FC3E0', '#2FA4C7']}
@@ -244,14 +277,12 @@ export default function CameraCaptureScreen({ navigation }: Props) {
               style={styles.logWorkoutGradient}
             >
               <Feather name="plus-circle" size={18} color="#fff" />
-              <Text style={styles.logWorkoutTitle}>
-                {attachedWorkoutId ? 'Workout Attached ✓' : 'Log Full Workout'}
-              </Text>
-              {!attachedWorkoutId && (
-                <Feather name="chevron-right" size={16} color="rgba(255,255,255,0.75)" />
-              )}
+              <Text style={styles.logWorkoutTitle}>Log Full Workout</Text>
+              <Feather name="chevron-right" size={16} color="rgba(255,255,255,0.75)" />
             </LinearGradient>
           </Pressable>
+        ) : (
+          <View style={{ width: 44 }} />
         )}
 
         <Pressable onPress={handleFacingChange} style={styles.topBtn} hitSlop={12}>
@@ -386,9 +417,6 @@ const styles = StyleSheet.create({
   logWorkoutBtnPressed: {
     opacity: 0.8,
     transform: [{ scale: 0.97 }],
-  },
-  logWorkoutBtnAttached: {
-    opacity: 0.75,
   },
   logWorkoutGradient: {
     flexDirection: 'row',

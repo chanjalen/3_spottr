@@ -39,7 +39,7 @@ from gyms.exceptions import (
 
 
 BUSY_LABELS = {1: 'Not crowded', 2: 'Not too crowded', 3: 'Moderately crowded', 4: 'Crowded', 5: 'Very crowded'}
-LEADERBOARD_TTL = 15 * 60  # 15 minutes
+LEADERBOARD_TTL = 5 * 60  # 5 minutes
 
 
 @api_view(['GET'])
@@ -497,10 +497,12 @@ def gym_leaderboard(request, gym_id):
     if not Gym.objects.filter(id=gym_id).exists():
         return Response({"error": "Gym not found."}, status=status.HTTP_404_NOT_FOUND)
     lift = request.query_params.get('lift', 'total')
+    force_refresh = request.query_params.get('refresh') == '1'
     cache_key = f'gym:leaderboard:{gym_id}:{lift}'
-    cached = cache.get(cache_key)
-    if cached is not None:
-        return Response(cached)
+    if not force_refresh:
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return Response(cached)
     entries = services.get_top_lifters(gym_id, lift=lift)
     data = TopLifterSerializer(entries, many=True).data
     cache.set(cache_key, data, LEADERBOARD_TTL)

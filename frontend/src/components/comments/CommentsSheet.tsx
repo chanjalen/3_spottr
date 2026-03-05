@@ -43,9 +43,11 @@ interface CommentsSheetProps {
   onCommentCountChange?: (delta: number) => void;
   /** Override the default bottom offset (nav bar height). Pass insets.bottom when there is no tab bar. */
   bottomOffset?: number;
+  /** When set, the sheet will scroll to and briefly highlight this comment ID after loading. */
+  highlightCommentId?: string;
 }
 
-export default function CommentsSheet({ item, onClose, onCommentCountChange, bottomOffset }: CommentsSheetProps) {
+export default function CommentsSheet({ item, onClose, onCommentCountChange, bottomOffset, highlightCommentId }: CommentsSheetProps) {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   // When bottomOffset is passed (no tab bar), sheet extends to screen edge and
@@ -55,6 +57,8 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange, bot
   const contentBottomPad = noTabBar ? Math.max(insets.bottom, 8) : 0;
   const [visible, setVisible] = useState(false);
   const [replyingTo, setReplyingTo] = useState<{ commentId: string; username: string } | null>(null);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const flatListRef = useRef<FlatList>(null);
   const [baseMentionUsers, setBaseMentionUsers] = useState<MentionableUser[]>([]);
   const [searchedMentionUsers, setSearchedMentionUsers] = useState<MentionableUser[]>([]);
   const mentionSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -162,9 +166,24 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange, bot
     return () => { show.remove(); hide.remove(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Scroll to & highlight a specific comment after comments load ───────────
+  useEffect(() => {
+    if (!highlightCommentId || isLoading || comments.length === 0) return;
+    const index = comments.findIndex((c) => String(c.id) === highlightCommentId);
+    if (index === -1) return;
+    setHighlightedId(highlightCommentId);
+    setTimeout(() => {
+      flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.3 });
+    }, 300);
+    // Clear highlight after 2 seconds so it doesn't stay forever
+    const timer = setTimeout(() => setHighlightedId(null), 2200);
+    return () => clearTimeout(timer);
+  }, [comments, isLoading, highlightCommentId]);
+
   // ── Open / close on item change ────────────────────────────────────────────
   useEffect(() => {
     if (item) {
+      setHighlightedId(null);
       loadComments(item);
       setVisible(true);
       sheetY.value = SCREEN_H;
@@ -204,7 +223,7 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange, bot
 
   const sheetStyle = useAnimatedStyle(() => ({
     top: sheetY.value,
-    bottom: bottomNavHeight,
+    bottom: 0,
   }));
 
   const keyboardSpacerStyle = useAnimatedStyle(() => ({
@@ -247,6 +266,7 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange, bot
             </View>
           ) : (
             <FlatList
+              ref={flatListRef}
               style={{ flex: 1 }}
               data={comments}
               keyExtractor={(c) => String(c.id)}
@@ -254,6 +274,7 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange, bot
                 <CommentItem
                   comment={comment}
                   currentUserId={user?.id}
+                  highlighted={String(comment.id) === highlightedId}
                   onLike={likeComment}
                   onDelete={removeComment}
                   onLoadReplies={loadReplies}
@@ -268,6 +289,7 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange, bot
               }
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
+              onScrollToIndexFailed={() => {}}
             />
           )}
 
@@ -296,7 +318,7 @@ export default function CommentsSheet({ item, onClose, onCommentCountChange, bot
             mentionableUsers={[...baseMentionUsers, ...searchedMentionUsers]}
             onMentionQueryChange={handleMentionQueryChange}
           />
-          {contentBottomPad > 0 && <View style={{ height: contentBottomPad }} />}
+          <View style={{ height: noTabBar ? contentBottomPad : bottomNavHeight }} />
           <Animated.View style={keyboardSpacerStyle} />
         </View>
       </Animated.View>

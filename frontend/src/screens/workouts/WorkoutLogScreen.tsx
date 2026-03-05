@@ -32,6 +32,8 @@ type Props = {
 
 export default function WorkoutLogScreen({ navigation, route }: Props) {
   const fromCheckin = route.params?.fromCheckin ?? false;
+  const checkinMediaUri = route.params?.checkinMediaUri;
+  const checkinMediaType = route.params?.checkinMediaType;
   const insets = useSafeAreaInsets();
   const [stats, setStats] = useState<WorkoutLogStats | null>(null);
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
@@ -62,7 +64,7 @@ export default function WorkoutLogScreen({ navigation, route }: Props) {
     setStartLoading(true);
     try {
       const workout = await startWorkout();
-      navigation.navigate('ActiveWorkout', { workoutId: workout.id, fromCheckin });
+      navigation.navigate('ActiveWorkout', { workoutId: workout.id, fromCheckin, checkinMediaUri, checkinMediaType });
     } catch {
       Alert.alert('Error', 'Could not start workout.');
     } finally {
@@ -73,7 +75,7 @@ export default function WorkoutLogScreen({ navigation, route }: Props) {
   const handleStartTemplate = async (template: WorkoutTemplate) => {
     try {
       const workout = await startFromTemplate(template.id);
-      navigation.navigate('ActiveWorkout', { workoutId: workout.id, fromCheckin });
+      navigation.navigate('ActiveWorkout', { workoutId: workout.id, fromCheckin, checkinMediaUri, checkinMediaType });
     } catch {
       Alert.alert('Error', 'Could not start workout from template.');
     }

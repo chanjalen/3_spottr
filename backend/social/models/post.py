@@ -47,6 +47,8 @@ class Post(BaseModel):
         null=True,
         blank=True,
     )
+    video_width = models.PositiveIntegerField(null=True, blank=True)
+    video_height = models.PositiveIntegerField(null=True, blank=True)
     link_url = models.URLField(
         max_length=500,
         blank=True,
@@ -79,6 +81,26 @@ class Post(BaseModel):
         if not self.description:
             return []
         return re.findall(r'#(\w+)', self.description)
+
+
+class PostPhoto(BaseModel):
+    """
+    Additional photos attached to a post (index 1+).
+    The primary photo lives on Post.photo; extras go here ordered by `order`.
+    """
+    post = models.ForeignKey(
+        Post,
+        on_delete=models.CASCADE,
+        related_name='extra_photos',
+    )
+    photo = models.ImageField(upload_to='posts/photos/')
+    order = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f"Photo {self.order} for post {self.post_id}"
 
 
 class Poll(BaseModel):

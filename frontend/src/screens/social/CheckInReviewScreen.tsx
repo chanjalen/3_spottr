@@ -46,7 +46,17 @@ const ACTIVITY_TYPES = [
 
 export default function CheckInReviewScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { mediaUri, mediaType, workoutId: incomingWorkoutId } = route.params;
+  const { mediaUri: initialMediaUri, mediaType: initialMediaType, workoutId: incomingWorkoutId } = route.params;
+
+  // Local media state — can be filled later by navigating to CameraCapture
+  const [localMediaUri, setLocalMediaUri] = useState<string | null>(initialMediaUri ?? null);
+  const [localMediaType, setLocalMediaType] = useState<'photo' | 'video' | null>(initialMediaType ?? null);
+
+  // Sync when CameraCapture navigates back with new media params
+  useEffect(() => {
+    if (route.params?.mediaUri) setLocalMediaUri(route.params.mediaUri);
+    if (route.params?.mediaType) setLocalMediaType(route.params.mediaType);
+  }, [route.params?.mediaUri, route.params?.mediaType]);
 
   const [activity, setActivity] = useState('');
   const [description, setDescription] = useState('');
@@ -115,20 +125,24 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
 
   const handleLogFullWorkout = () => {
     navigatedToWorkoutRef.current = true;
-    navigation.navigate('WorkoutLog', { fromCheckin: true });
+    navigation.navigate('WorkoutLog', {
+      fromCheckin: true,
+      checkinMediaUri: localMediaUri ?? undefined,
+      checkinMediaType: localMediaType ?? undefined,
+    });
   };
 
   const locationValid =
     !!selectedGymId || (otherSelected && customLocation.trim().length > 0);
 
-  const canSubmit = !!activity && locationValid && !submitting;
+  const canSubmit = !!activity && locationValid && !submitting && !!localMediaUri;
 
   const handleSubmit = async () => {
-    if (!canSubmit) return;
+    if (!canSubmit || !localMediaUri || !localMediaType) return;
     setSubmitting(true);
 
-    const filename = mediaUri.split('/').pop() ?? (mediaType === 'video' ? 'video.mp4' : 'photo.jpg');
-    const mimeType = mediaType === 'video' ? 'video/mp4' : 'image/jpeg';
+    const filename = localMediaUri.split('/').pop() ?? (localMediaType === 'video' ? 'video.mp4' : 'photo.jpg');
+    const mimeType = localMediaType === 'video' ? 'video/mp4' : 'image/jpeg';
 
     try {
       await createCheckin({
@@ -136,8 +150,8 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
         locationName: otherSelected ? customLocation.trim() : undefined,
         activity,
         description: description.trim() || undefined,
-        [mediaType === 'video' ? 'video' : 'photo']: {
-          uri: mediaUri,
+        [localMediaType === 'video' ? 'video' : 'photo']: {
+          uri: localMediaUri,
           name: filename,
           type: mimeType,
         },
@@ -187,21 +201,37 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
       >
         {/* Media Preview */}
         <View style={styles.mediaWrap}>
-          <Image
-            source={{ uri: mediaUri }}
-            style={styles.mediaPreview}
-            resizeMode="cover"
-          />
-          {mediaType === 'video' && (
-            <View style={styles.videoOverlay}>
-              <Feather name="film" size={14} color="#fff" />
-              <Text style={styles.videoLabel}>Video</Text>
-            </View>
+          {localMediaUri ? (
+            <>
+              <Image
+                source={{ uri: localMediaUri }}
+                style={styles.mediaPreview}
+                resizeMode="cover"
+              />
+              {localMediaType === 'video' && (
+                <View style={styles.videoOverlay}>
+                  <Feather name="film" size={14} color="#fff" />
+                  <Text style={styles.videoLabel}>Video</Text>
+                </View>
+              )}
+              <Pressable
+                style={styles.retakeBtn}
+                onPress={() => navigation.navigate('CameraCapture', { fromCheckinReview: true })}
+              >
+                <Feather name="camera" size={13} color="#fff" />
+                <Text style={styles.retakeBtnText}>Retake</Text>
+              </Pressable>
+            </>
+          ) : (
+            <Pressable
+              style={styles.mediaPlaceholder}
+              onPress={() => navigation.navigate('CameraCapture', { fromCheckinReview: true })}
+            >
+              <Feather name="camera" size={36} color={colors.textMuted} />
+              <Text style={styles.mediaPlaceholderTitle}>Add a Photo or Video</Text>
+              <Text style={styles.mediaPlaceholderSub}>Tap to take one — required to post</Text>
+            </Pressable>
           )}
-          <Pressable style={styles.retakeBtn} onPress={() => navigation.goBack()}>
-            <Feather name="camera" size={13} color="#fff" />
-            <Text style={styles.retakeBtnText}>Retake</Text>
-          </Pressable>
         </View>
 
         {/* Activity Type */}
@@ -385,6 +415,27 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 4 / 3,
     backgroundColor: colors.surface,
+  },
+  mediaPlaceholder: {
+    width: '100%',
+    aspectRatio: 4 / 3,
+    backgroundColor: colors.background.elevated,
+    borderWidth: 2,
+    borderColor: colors.border.default,
+    borderStyle: 'dashed',
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  mediaPlaceholderTitle: {
+    fontSize: typography.size.base,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  mediaPlaceholderSub: {
+    fontSize: typography.size.xs,
+    color: colors.textMuted,
   },
   videoOverlay: {
     position: 'absolute',

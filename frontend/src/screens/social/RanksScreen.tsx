@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -62,6 +63,8 @@ export default function RanksScreen() {
   }, [activeTab, selectedGymId]);
 
   useEffect(() => { load(); }, [load]);
+
+  useFocusEffect(useCallback(() => { load(); }, [activeTab]));
 
   const handleGymSelect = (gymId: string) => {
     setSelectedGymId(gymId);
@@ -244,7 +247,13 @@ export default function RanksScreen() {
       ) : noGym ? (
         <View style={styles.center}>
           <Feather name="award" size={40} color={colors.textMuted} />
-          <Text style={styles.emptyText}>Enroll in a gym to see gym rankings</Text>
+          <Pressable
+            style={styles.enrollBtn}
+            onPress={() => navigation.navigate('Gyms' as never)}
+          >
+            <Feather name="map-pin" size={15} color="#fff" />
+            <Text style={styles.enrollBtnText}>Enroll in a gym to see gym rankings</Text>
+          </Pressable>
         </View>
       ) : leaderboard.length === 0 ? (
         <View style={styles.center}>
@@ -362,6 +371,20 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: typography.size.base, color: colors.textMuted,
     textAlign: 'center', paddingHorizontal: spacing.xl, lineHeight: 22,
+  },
+  enrollBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    backgroundColor: colors.primary,
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: 24,
+  },
+  enrollBtnText: {
+    fontSize: typography.size.base,
+    fontWeight: '600',
+    color: '#fff',
   },
 
   // Podium

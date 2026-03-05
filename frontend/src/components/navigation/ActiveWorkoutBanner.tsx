@@ -16,6 +16,7 @@ import { BlurView } from 'expo-blur';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import type { NavigationContainerRef } from '@react-navigation/native';
+import { CommonActions } from '@react-navigation/native';
 import { useActiveWorkout } from '../../store/ActiveWorkoutContext';
 import { deleteWorkout } from '../../api/workouts';
 import { colors, spacing, typography } from '../../theme';
@@ -34,9 +35,10 @@ function formatTime(seconds: number): string {
 }
 
 export default function ActiveWorkoutBanner({ navigationRef }: Props) {
-  const { workoutId, startedAt, fromCheckin, showBanner, endWorkout } = useActiveWorkout();
+  const { workoutId, startedAt, fromCheckin, checkinMedia, showBanner, endWorkout } = useActiveWorkout();
   const [seconds, setSeconds] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const returningRef = useRef(false);
 
   // Slide-in animation
   const translateY = useSharedValue(120);
@@ -67,8 +69,33 @@ export default function ActiveWorkoutBanner({ navigationRef }: Props) {
   }, [showBanner, startedAt]);
 
   const handleReturn = () => {
+    if (returningRef.current || !workoutId) return;
+    returningRef.current = true;
+    setTimeout(() => { returningRef.current = false; }, 1000);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    if (workoutId) {
+
+    if (fromCheckin && checkinMedia) {
+      // Restore the full checkin stack so pop(2) on finish correctly returns to CheckInReview
+      navigationRef.dispatch(CommonActions.reset({
+        index: 3,
+        routes: [
+          { name: 'MainTabs' },
+          { name: 'CheckInReview', params: { mediaUri: checkinMedia.uri, mediaType: checkinMedia.type } },
+          { name: 'WorkoutLog', params: { fromCheckin: true, checkinMediaUri: checkinMedia.uri, checkinMediaType: checkinMedia.type } },
+          { name: 'ActiveWorkout', params: { workoutId, fromCheckin: true, checkinMediaUri: checkinMedia.uri, checkinMediaType: checkinMedia.type } },
+        ],
+      }));
+    } else if (fromCheckin) {
+      // No media yet — restore stack so finishing still lands on CheckInReview (blank placeholder)
+      navigationRef.dispatch(CommonActions.reset({
+        index: 2,
+        routes: [
+          { name: 'MainTabs' },
+          { name: 'CheckInReview', params: { workoutId } },
+          { name: 'ActiveWorkout', params: { workoutId, fromCheckin: true } },
+        ],
+      }));
+    } else {
       navigationRef.navigate('ActiveWorkout', { workoutId, fromCheckin });
     }
   };

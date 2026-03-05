@@ -24,6 +24,7 @@ import PersonalRecordCard from './PersonalRecordCard';
 import LinkPreview from './LinkPreview';
 import PollCard from './PollCard';
 import WorkoutDetailModal from './WorkoutDetailModal';
+import LikersSheet from './LikersSheet';
 import { FeedItem } from '../../types/feed';
 import { RootStackParamList } from '../../navigation/types';
 import { timeAgo } from '../../utils/timeAgo';
@@ -74,10 +75,11 @@ export default function ImmersivePostCard({
 
   const likeScale = useSharedValue(1);
   const [workoutDetailId, setWorkoutDetailId] = useState<string | null>(null);
+  const [likersVisible, setLikersVisible] = useState(false);
   const hasPhoto = !!item.photo_url;
-  // Use formatted activity label if available, otherwise fall back to location
   const activityLabel = item.workout_type ? (ACTIVITY_LABELS[item.workout_type] ?? item.workout_type) : null;
-  const postedIn = activityLabel ?? item.location_name;
+  const gymName = item.location_name ?? null;
+  const gymId = item.gym_id ?? null;
 
   const likeAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: likeScale.value }],
@@ -122,6 +124,13 @@ export default function ImmersivePostCard({
             <AnimatedPressable
               style={[styles.actionBtn, likeAnimatedStyle]}
               onPress={handleLike}
+              onLongPress={() => {
+                if (item.like_count > 0) {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  setLikersVisible(true);
+                }
+              }}
+              delayLongPress={300}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityLabel={`Like, ${item.like_count} likes`}
               accessibilityRole="button"
@@ -184,11 +193,24 @@ export default function ImmersivePostCard({
             </Pressable>
 
             <View style={styles.metaRow}>
-              {postedIn && (
-                <View style={styles.metaBadge}>
-                  <Feather name="map-pin" size={11} color="rgba(255,255,255,0.7)" />
-                  <Text style={styles.metaText}>{postedIn}</Text>
-                </View>
+              {(gymName || activityLabel) && (
+                <Feather name="map-pin" size={11} color="rgba(255,255,255,0.7)" />
+              )}
+              {gymName && gymId ? (
+                <Pressable onPress={() => navigation.navigate('GymDetail', { gymId, gymName })} hitSlop={8}>
+                  <Text style={[styles.metaText, styles.metaLink]}>{gymName}</Text>
+                </Pressable>
+              ) : gymName ? (
+                <Text style={styles.metaText}>{gymName}</Text>
+              ) : null}
+              {gymName && activityLabel && (
+                <Text style={styles.metaSep}>·</Text>
+              )}
+              {activityLabel && (
+                <Text style={styles.metaText}>{activityLabel}</Text>
+              )}
+              {(gymName || activityLabel) && (
+                <Text style={styles.metaSep}>·</Text>
               )}
               <Text style={styles.metaTime}>{timeAgo(item.created_at)}</Text>
             </View>
@@ -227,6 +249,13 @@ export default function ImmersivePostCard({
         <WorkoutDetailModal
           workoutId={workoutDetailId}
           onClose={() => setWorkoutDetailId(null)}
+        />
+        <LikersSheet
+          visible={likersVisible}
+          itemId={item.id}
+          itemType="checkin"
+          likeCount={item.like_count}
+          onClose={() => setLikersVisible(false)}
         />
       </>
     );
@@ -308,17 +337,30 @@ export default function ImmersivePostCard({
           keyboardShouldPersistTaps="handled"
         >
           {/* User header */}
-          <Pressable style={styles.lightHeader} onPress={goToProfile}>
-            <Avatar uri={item.user.avatar_url} name={item.user.display_name} size={44} />
-            <View style={styles.lightHeaderText}>
+          <View style={styles.lightHeader}>
+            <Pressable style={styles.lightHeaderMain} onPress={goToProfile}>
+              <Avatar uri={item.user.avatar_url} name={item.user.display_name} size={44} />
               <Text style={styles.displayNameLight} numberOfLines={1}>
                 {item.user.display_name}
               </Text>
-              <Text style={styles.metaLight} numberOfLines={1}>
-                {postedIn ? `${postedIn} · ` : ''}{timeAgo(item.created_at)}
-              </Text>
+            </Pressable>
+            <View style={styles.metaLightRow}>
+              {(gymName || activityLabel) && (
+                <Feather name="map-pin" size={11} color={colors.textSecondary} />
+              )}
+              {gymName && gymId ? (
+                <Pressable onPress={() => navigation.navigate('GymDetail', { gymId, gymName })} hitSlop={8}>
+                  <Text style={[styles.metaLight, styles.metaLightLink]}>{gymName}</Text>
+                </Pressable>
+              ) : gymName ? (
+                <Text style={styles.metaLight}>{gymName}</Text>
+              ) : null}
+              {gymName && activityLabel && <Text style={styles.metaLight}> · </Text>}
+              {activityLabel && <Text style={styles.metaLight}>{activityLabel}</Text>}
+              {(gymName || activityLabel) && <Text style={styles.metaLight}> · </Text>}
+              <Text style={styles.metaLight}>{timeAgo(item.created_at)}</Text>
             </View>
-          </Pressable>
+          </View>
 
           {/* Activity + context tags */}
           {(activityLabel || (item.shared_context && item.shared_context.length > 0)) && (
@@ -469,6 +511,14 @@ const styles = StyleSheet.create({
     fontFamily: typography.family.regular,
     color: 'rgba(255,255,255,0.6)',
   },
+  metaSep: {
+    fontSize: typography.size.xs,
+    color: 'rgba(255,255,255,0.45)',
+  },
+  metaLink: {
+    color: '#FFFFFF',
+    textDecorationLine: 'underline',
+  },
   tagsRow: {
     flexDirection: 'row',
     gap: spacing.xs,
@@ -506,23 +556,33 @@ const styles = StyleSheet.create({
     gap: spacing.base,
   },
   lightHeader: {
+    gap: spacing.xs,
+  },
+  lightHeaderMain: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-  },
-  lightHeaderText: {
-    flex: 1,
   },
   displayNameLight: {
     fontSize: typography.size.md,
     fontFamily: typography.family.semibold,
     color: colors.textPrimary,
   },
+  metaLightRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 3,
+    marginTop: 2,
+  },
   metaLight: {
     fontSize: typography.size.sm,
     fontFamily: typography.family.regular,
     color: colors.textSecondary,
-    marginTop: 2,
+  },
+  metaLightLink: {
+    color: colors.primary,
+    textDecorationLine: 'underline',
   },
   tagsRowLight: {
     flexDirection: 'row',

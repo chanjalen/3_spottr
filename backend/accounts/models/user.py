@@ -101,6 +101,12 @@ class User(AbstractBaseUser, PermissionsMixin):
     allow_friend_requests = models.BooleanField(default=True)
     show_online_status = models.BooleanField(default=True)
 
+    # Check-in audience visibility — each controls a feed context
+    checkin_visible_friends = models.BooleanField(default=True)   # mutual follows
+    checkin_visible_following = models.BooleanField(default=True) # one-way follows
+    checkin_visible_orgs = models.BooleanField(default=True)
+    checkin_visible_gyms = models.BooleanField(default=True)
+
     # ── Notifications ──
     notify_friend_workouts = models.BooleanField(default=True)
     notify_zaps = models.BooleanField(default=True)
@@ -113,6 +119,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     notify_leaderboard_updates = models.BooleanField(default=False)
     push_notifications = models.BooleanField(default=True)
     email_notifications = models.BooleanField(default=True)
+    expo_push_token = models.CharField(max_length=200, blank=True, default='')
 
     # Required by AbstractBaseUser
     is_active = models.BooleanField(default=True)

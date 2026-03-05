@@ -25,6 +25,7 @@ import { RecentWorkout } from '../../types/workout';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 import Avatar from '../../components/common/Avatar';
+import MediaViewerModal from '../../components/feed/MediaViewerModal';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'CreatePost'>;
@@ -47,8 +48,12 @@ export default function CreatePostScreen({ navigation }: Props) {
   // Text
   const [text, setText] = useState('');
 
-  // Media
-  const [media, setMedia] = useState<{ uri: string; name: string; type: string; isVideo: boolean } | null>(null);
+  // Media — photos array (up to 10) and optional single video (mutually exclusive)
+  type PhotoItem = { uri: string; name: string; type: string };
+  const [photos, setPhotos] = useState<PhotoItem[]>([]);
+  const [video, setVideo] = useState<PhotoItem | null>(null);
+  const [previewViewerIndex, setPreviewViewerIndex] = useState<number | null>(null);
+  const MAX_PHOTOS = 10;
 
   // Workout
   const [attachedWorkout, setAttachedWorkout] = useState<RecentWorkout | null>(null);
@@ -79,7 +84,8 @@ export default function CreatePostScreen({ navigation }: Props) {
   const hasPoll = showPoll && pollQuestion.trim().length > 0 && validPollOptions.length >= 2;
   const hasContent =
     text.trim().length > 0 ||
-    !!media ||
+    photos.length > 0 ||
+    !!video ||
     !!attachedWorkout ||
     (showPR && prExercise.trim() && prValue.trim()) ||
     hasPoll;
@@ -92,26 +98,41 @@ export default function CreatePostScreen({ navigation }: Props) {
       Alert.alert('Permission needed', 'Please allow access to your photos and videos.');
       return;
     }
+
+    // If we already have photos and there's room, only allow picking one more photo (no video)
+    const addingToExisting = photos.length > 0;
+
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
+      mediaTypes: addingToExisting
+        ? ImagePicker.MediaTypeOptions.Images
+        : ImagePicker.MediaTypeOptions.All,
       allowsEditing: false,
       quality: 0.85,
       videoMaxDuration: 120,
       preferredAssetRepresentationMode:
         ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
     });
+
     if (!result.canceled && result.assets[0]) {
       const asset = result.assets[0];
       const isVideo = asset.type === 'video';
+
       if (isVideo) {
-        // iOS Compatible mode exports H.264 MP4 — always use mp4 mime type
+        // Video clears any existing photos
         const mimeType = Platform.OS === 'ios' ? 'video/mp4' : (asset.mimeType ?? 'video/mp4');
         const ext = Platform.OS === 'ios' ? 'mp4' : (asset.uri.split('.').pop()?.toLowerCase() ?? 'mp4');
-        setMedia({ uri: asset.uri, name: `video.${ext}`, type: mimeType, isVideo: true });
+        setPhotos([]);
+        setVideo({ uri: asset.uri, name: `video.${ext}`, type: mimeType });
       } else {
+        // Photo — clear video, add to photos array (up to MAX_PHOTOS)
         const mimeType = asset.mimeType ?? 'image/jpeg';
         const ext = mimeType === 'image/png' ? 'png' : 'jpg';
-        setMedia({ uri: asset.uri, name: `photo.${ext}`, type: mimeType, isVideo: false });
+        const newPhoto: PhotoItem = { uri: asset.uri, name: `photo_${Date.now()}.${ext}`, type: mimeType };
+        setVideo(null);
+        setPhotos(prev => {
+          if (prev.length >= MAX_PHOTOS) return prev;
+          return [...prev, newPhoto];
+        });
       }
     }
   };
@@ -168,7 +189,8 @@ export default function CreatePostScreen({ navigation }: Props) {
     // omit the incomplete poll (hasPoll will be false → poll: undefined is sent).
     const hasNonPollContent =
       text.trim().length > 0 ||
-      !!media ||
+      photos.length > 0 ||
+      !!video ||
       !!attachedWorkout ||
       (showPR && prExercise.trim() && prValue.trim());
     if (showPoll && pollQuestion.trim() && validPollOptions.length < 2 && !hasNonPollContent) {
@@ -179,8 +201,8 @@ export default function CreatePostScreen({ navigation }: Props) {
     try {
       await createPost({
         text: text.trim() || undefined,
-        photo: media && !media.isVideo ? { uri: media.uri, name: media.name, type: media.type } : undefined,
-        video: media?.isVideo ? { uri: media.uri, name: media.name, type: media.type } : undefined,
+        photos: photos.length > 0 ? photos : undefined,
+        video: video ?? undefined,
         workoutId: attachedWorkout?.id,
         pr: showPR && prExercise.trim() && prValue.trim()
           ? { exerciseName: prExercise.trim(), value: prValue.trim(), unit: prUnit }
@@ -270,21 +292,47 @@ export default function CreatePostScreen({ navigation }: Props) {
           </View>
         )}
 
-        {/* ── Media preview ──────────────────────────────────────────── */}
-        {media && (
-          <View style={styles.mediaPreviewWrap}>
-            <Image source={{ uri: media.uri }} style={styles.mediaPreview} resizeMode="cover" />
-            {media.isVideo && (
-              <View style={styles.videoOverlay}>
-                <View style={styles.videoPlayIcon}>
-                  <Feather name="play" size={22} color="#fff" style={{ marginLeft: 2 }} />
-                </View>
+        {/* ── Media preview strip ────────────────────────────────────── */}
+        {(photos.length > 0 || video) && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={styles.mediaStrip}
+            contentContainerStyle={styles.mediaStripContent}
+          >
+            {photos.map((p, i) => (
+              <View key={p.uri + i} style={styles.mediaTile}>
+                <Pressable onPress={() => setPreviewViewerIndex(i)}>
+                  <Image source={{ uri: p.uri }} style={styles.mediaTileImg} resizeMode="cover" />
+                </Pressable>
+                <Pressable
+                  style={styles.mediaTileRemove}
+                  onPress={() => setPhotos(prev => prev.filter((_, idx) => idx !== i))}
+                >
+                  <Feather name="x" size={11} color="#fff" />
+                </Pressable>
+              </View>
+            ))}
+            {video && (
+              <View style={styles.mediaTile}>
+                <Pressable style={styles.mediaTileInner} onPress={() => setPreviewViewerIndex(-1)}>
+                  <View style={styles.videoTileBg}>
+                    <Feather name="video" size={22} color="#fff" />
+                    <Text style={styles.videoTileLabel}>Video</Text>
+                  </View>
+                </Pressable>
+                <Pressable style={styles.mediaTileRemove} onPress={() => setVideo(null)}>
+                  <Feather name="x" size={11} color="#fff" />
+                </Pressable>
               </View>
             )}
-            <Pressable style={styles.mediaRemove} onPress={() => setMedia(null)}>
-              <Feather name="x" size={14} color="#fff" />
-            </Pressable>
-          </View>
+            {/* Add more photos button */}
+            {photos.length > 0 && photos.length < MAX_PHOTOS && (
+              <Pressable style={styles.mediaTileAdd} onPress={handlePickMedia}>
+                <Feather name="plus" size={22} color={colors.textMuted} />
+              </Pressable>
+            )}
+          </ScrollView>
         )}
 
         {/* ── Poll builder ───────────────────────────────────────────── */}
@@ -390,7 +438,7 @@ export default function CreatePostScreen({ navigation }: Props) {
           <ToolbarBtn
             icon="image"
             label="Media"
-            active={!!media}
+            active={photos.length > 0 || !!video}
             onPress={handlePickMedia}
           />
           <ToolbarBtn
@@ -413,6 +461,17 @@ export default function CreatePostScreen({ navigation }: Props) {
           />
         </View>
       </ScrollView>
+
+      {/* Fullscreen preview of picked media */}
+      {previewViewerIndex !== null && (
+        <MediaViewerModal
+          uri={previewViewerIndex === -1 ? (video?.uri ?? null) : (photos[previewViewerIndex]?.uri ?? null)}
+          kind={previewViewerIndex === -1 ? 'video' : 'image'}
+          onClose={() => setPreviewViewerIndex(null)}
+          uris={previewViewerIndex >= 0 ? photos.map(p => p.uri) : undefined}
+          initialIndex={previewViewerIndex >= 0 ? previewViewerIndex : 0}
+        />
+      )}
 
       {/* Workout Picker Bottom Sheet */}
       <BottomSheet
@@ -562,22 +621,65 @@ const styles = StyleSheet.create({
   hashtagChip: { backgroundColor: colors.primary + '18', borderRadius: 12, paddingHorizontal: spacing.sm, paddingVertical: 3 },
   hashtagText: { fontSize: typography.size.xs, color: colors.primary, fontFamily: typography.family.semibold },
 
-  mediaPreviewWrap: { position: 'relative', borderRadius: 14, overflow: 'hidden', marginHorizontal: spacing.base, marginBottom: spacing.sm },
-  mediaPreview: { width: '100%', height: 200, borderRadius: 14 },
-  videoOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: 'rgba(0,0,0,0.3)',
+  mediaStrip: {
+    marginHorizontal: spacing.base,
+    marginBottom: spacing.sm,
   },
-  videoPlayIcon: {
-    width: 48, height: 48, borderRadius: 24,
-    backgroundColor: 'rgba(0,0,0,0.55)',
-    alignItems: 'center', justifyContent: 'center',
+  mediaStripContent: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    paddingRight: spacing.xs,
   },
-  mediaRemove: {
-    position: 'absolute', top: 8, right: 8,
-    backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 12,
-    width: 26, height: 26, alignItems: 'center', justifyContent: 'center',
+  mediaTile: {
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+    overflow: 'hidden',
+    backgroundColor: colors.background.elevated,
+    position: 'relative',
+  },
+  mediaTileImg: {
+    width: 80,
+    height: 80,
+  },
+  mediaTileInner: {
+    width: 80,
+    height: 80,
+  },
+  videoTileBg: {
+    width: 80,
+    height: 80,
+    backgroundColor: '#1a1a2e',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  videoTileLabel: {
+    fontSize: 10,
+    color: '#fff',
+    fontFamily: typography.family.semibold,
+  },
+  mediaTileRemove: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    borderRadius: 9,
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mediaTileAdd: {
+    width: 80,
+    height: 80,
+    borderRadius: 10,
+    borderWidth: 1.5,
+    borderColor: colors.borderColor,
+    borderStyle: 'dashed',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.background.elevated,
   },
 
   attachedSection: { paddingHorizontal: spacing.base, marginBottom: spacing.sm },

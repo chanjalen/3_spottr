@@ -956,6 +956,45 @@ def streak_api_view(request):
     return DRFResponse(details)
 
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def user_achievements_api_view(request, username):
+    """Return earned achievements for any user (for profile display)."""
+    from django.contrib.auth import get_user_model
+    from workouts.models import UserAchievement, AchievementStat
+    from workouts.services.achievements_service import ACHIEVEMENTS
+    from django.core.cache import cache
+
+    User = get_user_model()
+    try:
+        target = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return DRFResponse({'error': 'User not found'}, status=404)
+
+    earned_ids = set(
+        UserAchievement.objects.filter(user=target).values_list('achievement_id', flat=True)
+    )
+
+    total_users = cache.get('achievement_total_users')
+    if total_users is None:
+        total_users = max(User.objects.count(), 1)
+        cache.set('achievement_total_users', total_users, 300)
+
+    stat_map = cache.get('achievement_stat_map')
+    if stat_map is None:
+        stat_map = {s.achievement_id: s.earned_count for s in AchievementStat.objects.all()}
+        cache.set('achievement_stat_map', stat_map, 300)
+
+    result = []
+    for a in ACHIEVEMENTS:
+        if a['id'] in earned_ids:
+            count = stat_map.get(a['id'], 0)
+            pct = round(count / total_users * 100, 1)
+            result.append({**a, 'earned': True, 'user_pct': pct})
+
+    return DRFResponse(result)
+
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def update_workout_goal_view(request):
@@ -1004,10 +1043,30 @@ def calendar_posts_view(request):
     else:
         user = request.user
 
+    # Build timezone-aware filter range in the user's local timezone.
+    # Extend +3 hours past month-end to capture 12am–2:59am local posts that
+    # the 3AM rule assigns to the last day of the requested month.
+    import zoneinfo as _zi
+    from datetime import datetime as _dt, time as _time, timedelta as _td
+    from workouts.services.streak_service import get_streak_date as _get_streak_date
+    _tz_str = getattr(user, 'timezone', None) or 'UTC'
+    try:
+        _user_tz = _zi.ZoneInfo(_tz_str)
+    except Exception:
+        _user_tz = _zi.ZoneInfo('UTC')
+
+    _month_start = _dt(year, month, 1, 0, 0, 0, tzinfo=_user_tz)
+    # First day of next month at 02:59:59 local — covers late-night posts that
+    # belong to the last day of the requested month via the 3AM rule.
+    if month == 12:
+        _next_month_start = _dt(year + 1, 1, 1, 2, 59, 59, tzinfo=_user_tz)
+    else:
+        _next_month_start = _dt(year, month + 1, 1, 2, 59, 59, tzinfo=_user_tz)
+
     checkins = QuickWorkout.objects.filter(
         user=user,
-        created_at__year=year,
-        created_at__month=month,
+        created_at__gte=_month_start,
+        created_at__lte=_next_month_start,
     ).annotate(
         like_count=Count('reactions', distinct=True),
         comment_count=Count('comments', distinct=True),
@@ -1017,6 +1076,15 @@ def calendar_posts_view(request):
     items = []
 
     for qw in checkins:
+        # Apply the 3AM rule in the user's local timezone — same logic as
+        # update_streak — so a 9pm CST check-in stays on the correct local day
+        # instead of shifting to the next UTC day.
+        _local_dt = qw.created_at.astimezone(_user_tz)
+        _streak_date = _get_streak_date(_local_dt)
+        # Skip if the 3AM rule shifted this into a different month
+        if _streak_date.year != year or _streak_date.month != month:
+            continue
+
         photo_url = get_media_url('quick_workout', str(qw.id))
         if not photo_url:
             path = f'checkins/{qw.id}.jpg'
@@ -1029,7 +1097,7 @@ def calendar_posts_view(request):
         items.append({
             'id': str(qw.id),
             'type': 'checkin',
-            'date': qw.created_at.strftime('%Y-%-m-%-d'),
+            'date': f'{_streak_date.year}-{_streak_date.month}-{_streak_date.day}',
             'description': qw.description or '',
             'photo_url': photo_url,
             'video_url': None,

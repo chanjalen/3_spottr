@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { Feather } from '@expo/vector-icons';
+import { useIsFocused } from '@react-navigation/native';
 import { colors, spacing } from '../../theme';
 
 interface FeedCardVideoProps {
@@ -11,11 +12,19 @@ interface FeedCardVideoProps {
 
 export default function FeedCardVideo({ uri, onExpand }: FeedCardVideoProps) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const isFocused = useIsFocused();
 
   const player = useVideoPlayer(uri, (p) => {
     p.loop = true;
     p.muted = false;
   });
+
+  useEffect(() => {
+    if (!isFocused && isPlaying) {
+      player.pause();
+      setIsPlaying(false);
+    }
+  }, [isFocused]);
 
   const togglePlay = () => {
     if (isPlaying) {
@@ -32,7 +41,7 @@ export default function FeedCardVideo({ uri, onExpand }: FeedCardVideoProps) {
       <VideoView
         player={player}
         style={styles.video}
-        contentFit="cover"
+        contentFit="contain"
         nativeControls={false}
         allowsFullscreen={false}
       />
@@ -48,7 +57,17 @@ export default function FeedCardVideo({ uri, onExpand }: FeedCardVideoProps) {
         )}
       </Pressable>
       {onExpand && (
-        <Pressable style={styles.expandBtn} onPress={onExpand} hitSlop={8}>
+        <Pressable
+          style={styles.expandBtn}
+          onPress={() => {
+            if (isPlaying) {
+              player.pause();
+              setIsPlaying(false);
+            }
+            onExpand();
+          }}
+          hitSlop={8}
+        >
           <Feather name="maximize-2" size={16} color="#fff" />
         </Pressable>
       )}

@@ -45,6 +45,7 @@ interface ImmersiveFeedListProps {
   isRefreshing: boolean;
   onEndReached: () => void;
   isLoadingMore: boolean;
+  onAddFriends?: () => void;
 }
 
 const ImmersiveFeedList = forwardRef<ImmersiveFeedListHandle, ImmersiveFeedListProps>(function ImmersiveFeedList({
@@ -60,6 +61,7 @@ const ImmersiveFeedList = forwardRef<ImmersiveFeedListHandle, ImmersiveFeedListP
   isRefreshing,
   onEndReached,
   isLoadingMore,
+  onAddFriends,
 }, ref) {
   const [shareItem, setShareItem] = useState<FeedItem | null>(null);
 
@@ -68,7 +70,7 @@ const ImmersiveFeedList = forwardRef<ImmersiveFeedListHandle, ImmersiveFeedListP
   useImperativeHandle(ref, () => ({
     snapToCurrentItem: () => {
       const index = currentIndexRef.current;
-      if (flatListRef.current && index >= 0) {
+      if (flatListRef.current && index >= 0 && items.length > 0) {
         flatListRef.current.scrollToIndex({ index, animated: false });
       }
     },
@@ -202,7 +204,8 @@ const ImmersiveFeedList = forwardRef<ImmersiveFeedListHandle, ImmersiveFeedListP
             getItemLayout={getItemLayout}
             pagingEnabled
             showsVerticalScrollIndicator={false}
-            ListEmptyComponent={<EmptyState tab={activeTab} />}
+            contentContainerStyle={items.length === 0 ? styles.emptyContent : undefined}
+            ListEmptyComponent={<EmptyState tab={activeTab} onAddFriends={activeTab === 'friends' ? onAddFriends : undefined} />}
             ListFooterComponent={renderFooter}
             onEndReached={onEndReached}
             onEndReachedThreshold={0.5}
@@ -241,5 +244,8 @@ export default ImmersiveFeedList;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  emptyContent: {
+    flexGrow: 1,
   },
 });

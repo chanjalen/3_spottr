@@ -47,8 +47,8 @@ export default function PollOption({
 
   return (
     <Pressable
-      onPress={isActive ? onVote : undefined}
-      disabled={!isActive}
+      onPress={isActive && !hasVoted ? onVote : undefined}
+      disabled={!isActive || hasVoted}
       accessibilityRole="button"
       accessibilityLabel={`${text}${showResults ? `, ${percentage}%` : ''}`}
       accessibilityState={{ selected: isSelected }}

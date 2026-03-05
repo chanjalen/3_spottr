@@ -30,6 +30,17 @@ def like_post(request, post_id):
             notify_like_post(request.user, post)
         except Exception:
             pass
+        try:
+            if post.user and post.user != request.user:
+                from accounts.push import send_push_to_user
+                send_push_to_user(
+                    post.user,
+                    title='New like ❤️',
+                    body=f'@{request.user.username} liked your post',
+                    data={'type': 'like_post', 'post_id': str(post.id)},
+                )
+        except Exception:
+            pass
     like_count = Reaction.objects.filter(post=post).count()
     return Response({'liked': liked, 'like_count': like_count})
 
@@ -47,8 +58,67 @@ def like_checkin(request, checkin_id):
     else:
         Reaction.objects.create(quick_workout=checkin, user=request.user, type='like')
         liked = True
+        try:
+            if checkin.user and checkin.user != request.user:
+                from accounts.push import send_push_to_user
+                send_push_to_user(
+                    checkin.user,
+                    title='New like ❤️',
+                    body=f'@{request.user.username} liked your check-in',
+                    data={'type': 'like_checkin', 'checkin_id': str(checkin.id)},
+                )
+        except Exception:
+            pass
     like_count = Reaction.objects.filter(quick_workout=checkin).count()
     return Response({'liked': liked, 'like_count': like_count})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def post_likers(request, post_id):
+    """GET /api/social/post/<post_id>/likers/ — list of users who liked a post."""
+    from social.models import Post, Reaction
+    post = get_object_or_404(Post, id=post_id)
+    reactions = (
+        Reaction.objects
+        .filter(post=post)
+        .select_related('user')
+        .order_by('-created_at')
+    )
+    likers = [
+        {
+            'id': str(r.user.id),
+            'username': r.user.username,
+            'display_name': r.user.display_name or r.user.username,
+            'avatar_url': getattr(r.user, 'avatar_url', None) or None,
+        }
+        for r in reactions
+    ]
+    return Response({'likers': likers})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def checkin_likers(request, checkin_id):
+    """GET /api/social/checkin/<checkin_id>/likers/ — list of users who liked a check-in."""
+    from social.models import QuickWorkout, Reaction
+    checkin = get_object_or_404(QuickWorkout, id=checkin_id)
+    reactions = (
+        Reaction.objects
+        .filter(quick_workout=checkin)
+        .select_related('user')
+        .order_by('-created_at')
+    )
+    likers = [
+        {
+            'id': str(r.user.id),
+            'username': r.user.username,
+            'display_name': r.user.display_name or r.user.username,
+            'avatar_url': getattr(r.user, 'avatar_url', None) or None,
+        }
+        for r in reactions
+    ]
+    return Response({'likers': likers})
 
 
 @api_view(['POST'])
@@ -58,7 +128,7 @@ def create_post(request):
     """
     Create a post. Accepts multipart/form-data for photo/video uploads.
     Fields: text, workout_id (optional), pr_exercise_name, pr_value, pr_unit,
-            photo (file), video (file),
+            photos[] (multiple files), video (file),
             poll_question, poll_options[] (repeat), poll_duration (hours).
     """
     from social.models import Post
@@ -68,7 +138,10 @@ def create_post(request):
     pr_exercise_name = (request.data.get('pr_exercise_name') or '').strip()
     pr_value = (request.data.get('pr_value') or '').strip()
     pr_unit = (request.data.get('pr_unit') or 'lbs').strip()
-    photo = request.FILES.get('photo')
+    # Accept photos[] array (new multi-photo) or legacy single photo field
+    photos_list = request.FILES.getlist('photos[]') if hasattr(request.FILES, 'getlist') else []
+    photo = photos_list[0] if photos_list else request.FILES.get('photo')
+    extra_photos = photos_list[1:] if len(photos_list) > 1 else []
     video = request.FILES.get('video')
 
     # Poll fields
@@ -85,7 +158,7 @@ def create_post(request):
 
     has_pr = bool(pr_exercise_name and pr_value)
 
-    if not text and not photo and not video and not has_pr and not workout_id and not has_poll:
+    if not text and not photo and not photos_list and not video and not has_pr and not workout_id and not has_poll:
         return Response({'success': False, 'error': 'Post must have content'}, status=400)
 
     if len(text) > 500:
@@ -117,10 +190,29 @@ def create_post(request):
         except Exception:
             pass
 
+    if extra_photos:
+        try:
+            from social.models import PostPhoto
+            for idx, extra_file in enumerate(extra_photos):
+                pp = PostPhoto(post=post, order=idx)
+                pp.photo = extra_file
+                pp.save()
+        except Exception:
+            pass
+
     if video:
         try:
             post.video = video
-            post.save(update_fields=['video'])
+            # Store dimensions supplied by the client (avoids server-side ffprobe)
+            try:
+                vw = int(request.data.get('video_width') or 0)
+                vh = int(request.data.get('video_height') or 0)
+                if vw > 0 and vh > 0:
+                    post.video_width = vw
+                    post.video_height = vh
+            except (ValueError, TypeError):
+                pass
+            post.save(update_fields=['video', 'video_width', 'video_height'])
             try:
                 from media.utils import create_media_asset
                 from media.models import MediaLink
@@ -293,38 +385,23 @@ def vote_poll(request, poll_id):
     except PollOption.DoesNotExist:
         return Response({'error': 'Option not found'}, status=404)
 
-    existing_vote = PollVote.objects.filter(poll=poll, user=request.user).first()
+    if PollVote.objects.filter(poll=poll, user=request.user).exists():
+        return Response({'error': 'You have already voted on this poll.'}, status=400)
 
-    if existing_vote:
-        if str(existing_vote.option.id) != str(option_id):
-            old_option = existing_vote.option
-            old_option.votes = max(0, old_option.votes - 1)
-            old_option.save()
-            existing_vote.option = option
-            existing_vote.save()
-            option.votes += 1
-            option.save()
-    else:
-        PollVote.objects.create(poll=poll, user=request.user, option=option)
-        option.votes += 1
-        option.save()
+    PollVote.objects.create(poll=poll, user=request.user, option=option)
+    option.votes += 1
+    option.save()
 
     total_votes = poll.get_total_votes()
-    options_data = []
-    for opt in poll.options.all().order_by('order'):
-        options_data.append({
-            'id': opt.id,
-            'text': opt.text,
-            'votes': opt.votes,
-            'order': opt.order,
-        })
-
+    options_data = [
+        {'id': opt.id, 'text': opt.text, 'votes': opt.votes, 'order': opt.order}
+        for opt in poll.options.all().order_by('order')
+    ]
     return Response({
         'id': poll.id,
         'question': poll.question,
         'options': options_data,
         'total_votes': total_votes,
-        'user_voted': option.id,
         'user_vote_id': option.id,
         'is_active': poll.is_active,
         'ends_at': poll.ends_at.isoformat() if poll.ends_at else None,
@@ -382,7 +459,7 @@ def _lb_user(u):
 def leaderboard(request):
     """
     Streak-based leaderboard.
-    ?tab=friends (default) — following + self, ranked by -current_streak, -total_workouts
+    ?tab=friends (default) — mutual follows (friends) + self, ranked by -current_streak, -total_workouts
     ?tab=gym[&gym_id=<uuid>] — users enrolled in the selected gym
     """
     from accounts.models import User
@@ -427,11 +504,15 @@ def leaderboard(request):
             'my_rank': my_rank,
         })
 
-    # Friends: following + self
-    following_ids = list(
+    # Friends: mutual follows (friends) + self
+    following_ids = set(
         Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
     )
-    all_ids = following_ids + [request.user.id]
+    follower_ids = set(
+        Follow.objects.filter(following=request.user).values_list('follower_id', flat=True)
+    )
+    mutual_ids = following_ids & follower_ids
+    all_ids = list(mutual_ids) + [request.user.id]
     friends_qs = (
         User.objects.filter(id__in=all_ids)
         .order_by('-current_streak', '-total_workouts')
@@ -540,20 +621,12 @@ def vote_poll(request, poll_id):
     except PollOption.DoesNotExist:
         return Response({'error': 'Option not found'}, status=404)
 
-    existing_vote = PollVote.objects.filter(poll=poll, user=request.user).first()
-    if existing_vote:
-        if str(existing_vote.option.id) != str(option_id):
-            old_option = existing_vote.option
-            old_option.votes = max(0, old_option.votes - 1)
-            old_option.save()
-            existing_vote.option = option
-            existing_vote.save()
-            option.votes += 1
-            option.save()
-    else:
-        PollVote.objects.create(poll=poll, user=request.user, option=option)
-        option.votes += 1
-        option.save()
+    if PollVote.objects.filter(poll=poll, user=request.user).exists():
+        return Response({'error': 'You have already voted on this poll.'}, status=400)
+
+    PollVote.objects.create(poll=poll, user=request.user, option=option)
+    option.votes += 1
+    option.save()
 
     total_votes = poll.get_total_votes()
     options_data = [
@@ -655,6 +728,12 @@ def post_detail(request, post_id):
             if post.video:
                 from media.utils import build_media_url
                 video_url = build_media_url(post.video.name)
+            try:
+                from media.utils import build_media_url as _bmu
+                extra_photo_urls = [_bmu(pp.photo.name) for pp in post.extra_photos.all() if pp.photo]
+            except Exception:
+                extra_photo_urls = []
+            all_photo_urls = ([photo_url] if photo_url else []) + extra_photo_urls
 
             poll_data = None
             try:
@@ -703,6 +782,7 @@ def post_detail(request, post_id):
                 'description': post.description or '',
                 'location_name': None,
                 'photo_url': photo_url,
+                'photo_urls': all_photo_urls,
                 'video_url': video_url,
                 'link_url': getattr(post, 'link_url', None),
                 'like_count': like_count,
@@ -739,6 +819,7 @@ def post_detail(request, post_id):
             'created_at': checkin.created_at.isoformat(),
             'description': checkin.description or '',
             'location_name': checkin.location_name or (checkin.location.name if checkin.location else None),
+            'gym_id': str(checkin.location.id) if checkin.location else None,
             'photo_url': photo_url,
             'video_url': None,
             'link_url': None,
@@ -944,6 +1025,54 @@ class SharePostView(APIView):
                 sent_count += 1
             except OrgMember.DoesNotExist:
                 errors.append(f'Not an admin of org {oid}')
+            except Exception as e:
+                errors.append(str(e))
+
+        return Response({'sent_count': sent_count, 'errors': errors})
+
+
+class ShareProfileView(APIView):
+    """
+    POST /api/social/share/send-profile/
+    Body: { username, recipient_ids, group_ids, message }
+    Sends a text DM to selected friends/groups mentioning the user's profile.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from messaging.services import send_dm, send_group_message
+        from accounts.models import User
+
+        username = (request.data.get('username') or '').strip()
+        recipient_ids = request.data.get('recipient_ids') or []
+        group_ids = request.data.get('group_ids') or []
+        message = (request.data.get('message') or '').strip()
+
+        if not username:
+            return Response({'error': 'username is required'}, status=400)
+
+        try:
+            profile_user = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=404)
+
+        content = message  # optional accompanying text
+        profile_id = str(profile_user.id)
+
+        sent_count = 0
+        errors = []
+
+        for rid in recipient_ids:
+            try:
+                send_dm(sender=request.user, recipient_id=rid, content=content, profile_id=profile_id)
+                sent_count += 1
+            except Exception as e:
+                errors.append(str(e))
+
+        for gid in group_ids:
+            try:
+                send_group_message(sender=request.user, group_id=gid, content=content, profile_id=profile_id)
+                sent_count += 1
             except Exception as e:
                 errors.append(str(e))
 

@@ -67,7 +67,7 @@ export const colors = {
   textMuted: '#9CA3AF',
   textOnPrimary: '#FFFFFF',
 
-  iconActive: '#111827',
+  iconActive: '#FFFFFF',
   iconInactive: '#9CA3AF',
   iconOnPrimary: '#FFFFFF',
 

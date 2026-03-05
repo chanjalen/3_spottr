@@ -16,6 +16,7 @@ interface FeedCardActionsProps {
   commentCount: number;
   userLiked: boolean;
   onLike: () => void;
+  onLongPressLike?: () => void;
   onComment: () => void;
   onShare: () => void;
 }
@@ -27,6 +28,7 @@ export default function FeedCardActions({
   commentCount,
   userLiked,
   onLike,
+  onLongPressLike,
   onComment,
   onShare,
 }: FeedCardActionsProps) {
@@ -56,6 +58,13 @@ export default function FeedCardActions({
       <AnimatedPressable
         style={[styles.action, likeAnimatedStyle]}
         onPress={handleLike}
+        onLongPress={() => {
+          if (likeCount > 0 && onLongPressLike) {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            onLongPressLike();
+          }
+        }}
+        delayLongPress={300}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
         <Feather

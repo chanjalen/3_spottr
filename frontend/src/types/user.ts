@@ -11,6 +11,12 @@ export interface UserBrief {
   workout_frequency?: number;
   is_email_verified?: boolean;
   onboarding_step?: number;
+  weight_unit?: 'lbs' | 'kg';
+  distance_unit?: 'miles' | 'km';
+  checkin_visible_friends?: boolean;
+  checkin_visible_following?: boolean;
+  checkin_visible_orgs?: boolean;
+  checkin_visible_gyms?: boolean;
 }
 
 export interface UserProfile extends UserBrief {
@@ -19,6 +25,7 @@ export interface UserProfile extends UserBrief {
   total_workouts: number;
   is_following: boolean;
   is_followed_by: boolean;
+  is_blocked?: boolean;
   follower_count: number;
   following_count: number;
   friend_count?: number;
