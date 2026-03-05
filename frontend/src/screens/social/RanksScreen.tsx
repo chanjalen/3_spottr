@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -62,6 +63,8 @@ export default function RanksScreen() {
   }, [activeTab, selectedGymId]);
 
   useEffect(() => { load(); }, [load]);
+
+  useFocusEffect(useCallback(() => { load(); }, [activeTab]));
 
   const handleGymSelect = (gymId: string) => {
     setSelectedGymId(gymId);
