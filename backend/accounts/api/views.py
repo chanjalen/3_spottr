@@ -570,6 +570,69 @@ def api_profile_view(request, username):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+def api_follow_toggle_view(request):
+    """Toggle follow/unfollow for a user (Token auth for mobile)."""
+    from social.models import Follow
+    from common.utils import check_rate_limit
+
+    if not check_rate_limit(f'rl:follow:{request.user.id}', limit=60, period=60):
+        return Response({'error': 'Too many requests.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+    user_id = request.data.get('user_id')
+    username = request.data.get('username')
+    action_type = request.data.get('action', '')
+
+    if user_id:
+        try:
+            target = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+    elif username:
+        try:
+            target = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+    else:
+        return Response({'error': 'user_id or username required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if target.pk == request.user.pk:
+        return Response({'error': 'Cannot follow yourself'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if action_type == 'remove_follower':
+        Follow.objects.filter(follower=target, following=request.user).delete()
+        action = 'removed'
+    else:
+        follow, created = Follow.objects.get_or_create(
+            follower=request.user, following=target,
+        )
+        if not created:
+            follow.delete()
+            action = 'unfollowed'
+        else:
+            action = 'followed'
+            from notifications.dispatcher import notify_follow
+            notify_follow(request.user, target)
+
+    def friends_count(u):
+        return Follow.objects.filter(
+            follower=u,
+            following__in=Follow.objects.filter(following=u).values('follower'),
+        ).count()
+
+    return Response({
+        'action': action,
+        'following': action == 'followed',
+        'target_followers_count': Follow.objects.filter(following=target).count(),
+        'target_following_count': Follow.objects.filter(follower=target).count(),
+        'target_friends_count': friends_count(target),
+        'my_followers_count': Follow.objects.filter(following=request.user).count(),
+        'my_following_count': Follow.objects.filter(follower=request.user).count(),
+        'my_friends_count': friends_count(request.user),
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def api_block_toggle_view(request):
     """Block or unblock a user. On block, removes follows in both directions."""
     from social.models import Follow, Block

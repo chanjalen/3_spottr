@@ -36,6 +36,7 @@ export interface PickMediaOptions {
   allowsMultiple?: boolean;
   maxImageBytes?: number;
   maxVideoBytes?: number;
+  mediaTypes?: ('images' | 'videos')[];
 }
 
 const DEFAULT_MAX_IMAGE = 10 * 1024 * 1024;
@@ -48,6 +49,7 @@ export async function pickMedia(opts: PickMediaOptions = {}): Promise<PickedMedi
     allowsMultiple = false,
     maxImageBytes = DEFAULT_MAX_IMAGE,
     maxVideoBytes = DEFAULT_MAX_VIDEO,
+    mediaTypes = ['images', 'videos'],
   } = opts;
 
   // ── 1. Permissions ─────────────────────────────────────────────────────────
@@ -66,7 +68,7 @@ export async function pickMedia(opts: PickMediaOptions = {}): Promise<PickedMedi
 
   // ── 2. Build picker options ────────────────────────────────────────────────
   const pickerOptions: any = {
-    mediaTypes: ['images', 'videos'],
+    mediaTypes,
     allowsMultipleSelection: allowsMultiple,
     allowsEditing: false,
   };
@@ -92,7 +94,7 @@ export async function pickMedia(opts: PickMediaOptions = {}): Promise<PickedMedi
     const detail = err instanceof Error ? err.message : String(err);
     if (detail.includes('3164')) {
       console.warn('[pickMedia] iCloud-offloaded video — falling back to allowsEditing retry');
-      return handleICloudVideo(allowsMultiple, opts);
+      return handleICloudVideo(allowsMultiple, mediaTypes, opts);
     }
 
     console.error('[pickMedia] launchImageLibraryAsync threw:', detail, err);
@@ -121,6 +123,7 @@ export async function pickMedia(opts: PickMediaOptions = {}): Promise<PickedMedi
  */
 function handleICloudVideo(
   allowsMultiple: boolean,
+  mediaTypes: ('images' | 'videos')[],
   opts: PickMediaOptions,
 ): Promise<PickedMedia[] | null> {
   const { maxImageBytes = DEFAULT_MAX_IMAGE, maxVideoBytes = DEFAULT_MAX_VIDEO } = opts;
@@ -130,7 +133,7 @@ function handleICloudVideo(
   // picks one item at a time regardless of the original allowsMultiple setting.
   const doRetry = (resolve: (v: PickedMedia[] | null) => void) => {
     ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images', 'videos'],
+      mediaTypes,
       allowsEditing: true,
     } as any)
       .then(async (retryResult) => {
