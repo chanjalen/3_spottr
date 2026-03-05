@@ -68,8 +68,8 @@ export type RootStackParamList = {
   MainTabs: NavigatorScreenParams<MainTabParamList>;
   Profile: ProfileParams;
   Notifications: undefined;
-  WorkoutLog: { fromCheckin?: boolean } | undefined;
-  ActiveWorkout: { workoutId: string; fromCheckin?: boolean };
+  WorkoutLog: { fromCheckin?: boolean; checkinMediaUri?: string; checkinMediaType?: 'photo' | 'video' } | undefined;
+  ActiveWorkout: { workoutId: string; fromCheckin?: boolean; checkinMediaUri?: string; checkinMediaType?: 'photo' | 'video' };
   StreakDetails: undefined;
   EditProfile: { bio?: string; display_name?: string } | undefined;
   GroupProfile: { groupId: string };
@@ -84,8 +84,8 @@ export type RootStackParamList = {
   AllGroupChats: undefined;
   AllOrgs: undefined;
   CheckInSelection: undefined;
-  CameraCapture: undefined;
-  CheckInReview: { mediaUri: string; mediaType: 'photo' | 'video'; workoutId?: string };
+  CameraCapture: { fromCheckinReview?: boolean } | undefined;
+  CheckInReview: { mediaUri?: string; mediaType?: 'photo' | 'video'; workoutId?: string };
   FindFriends: undefined;
   PostDetail: { postId: string; itemType: 'post' | 'workout' | 'checkin' };
 };

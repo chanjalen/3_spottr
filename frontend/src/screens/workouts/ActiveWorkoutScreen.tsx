@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect, StackActions, CommonActions } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -53,7 +53,7 @@ function isBigLift(exerciseName: string): boolean {
 
 export default function ActiveWorkoutScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { workoutId, fromCheckin = false } = route.params;
+  const { workoutId, fromCheckin = false, checkinMediaUri, checkinMediaType } = route.params;
 
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [loading, setLoading] = useState(true);
@@ -100,7 +100,10 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
         if (w.started_at) {
           const elapsed = Math.floor((Date.now() - new Date(w.started_at).getTime()) / 1000);
           setSeconds(Math.max(0, elapsed));
-          beginWorkout(workoutId, new Date(w.started_at).getTime(), fromCheckin);
+          const media = checkinMediaUri && checkinMediaType
+            ? { uri: checkinMediaUri, type: checkinMediaType }
+            : undefined;
+          beginWorkout(workoutId, new Date(w.started_at).getTime(), fromCheckin, media);
         }
       })
       .finally(() => setLoading(false));
@@ -265,8 +268,21 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
       setShowFinish(false);
       endWorkout();
       if (fromCheckin) {
-        // Pop both ActiveWorkout and WorkoutLog off the stack — returns to CheckInReview
-        navigation.pop(2);
+        if (checkinMediaUri) {
+          // Has media: stack is [..., CheckInReview, WorkoutLog, ActiveWorkout] — pop back to CheckInReview
+          navigation.pop(2);
+        } else {
+          // No media: came from CameraCapture directly — navigate to CheckInReview with workout attached
+          navigation.dispatch(
+            CommonActions.reset({
+              index: 1,
+              routes: [
+                { name: 'MainTabs' },
+                { name: 'CheckInReview', params: { workoutId } },
+              ],
+            }),
+          );
+        }
       } else {
         navigation.goBack();
       }
@@ -309,7 +325,7 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
         {/* Left: browse + discard */}
         <View style={styles.headerLeft}>
           <Pressable
-            onPress={() => navigation.navigate('MainTabs')}
+            onPress={() => navigation.dispatch(StackActions.popToTop())}
             style={styles.headerBtn}
             hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
           >
