@@ -8,6 +8,7 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -94,9 +95,60 @@ export default function CheckinViewer({ visible, checkins, onClose }: Props) {
     setCurrentIndex(indexRef.current);
   }, [onClose]);
 
+  // ── Video playback ─────────────────────────────────────────────────────────
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [userPaused, setUserPaused] = useState(false);
+  const currentVideoUrl = checkins[currentIndex]?.video_url ?? null;
+
+  const videoPlayer = useVideoPlayer(currentVideoUrl, (p) => {
+    p.loop = true;
+    p.muted = false;
+  });
+
+  // Auto-play when the viewer opens or the current item changes
+  useEffect(() => {
+    if (!visible || !currentVideoUrl) {
+      videoPlayer.pause();
+      setIsVideoPlaying(false);
+      setUserPaused(false);
+      return;
+    }
+    videoPlayer.replaceAsync(currentVideoUrl).then(() => videoPlayer.play()).catch(() => {});
+    setIsVideoPlaying(true);
+    setUserPaused(false);
+  }, [visible, currentIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const lastVideoTapRef = useRef(0);
+  const videoTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleVideoTap = () => {
+    const now = Date.now();
+    if (now - lastVideoTapRef.current < 300) {
+      if (videoTapTimerRef.current) { clearTimeout(videoTapTimerRef.current); videoTapTimerRef.current = null; }
+      lastVideoTapRef.current = 0;
+      return;
+    }
+    lastVideoTapRef.current = now;
+    const playing = isVideoPlaying;
+    videoTapTimerRef.current = setTimeout(() => {
+      videoTapTimerRef.current = null;
+      if (playing) {
+        videoPlayer.pause();
+        setIsVideoPlaying(false);
+        setUserPaused(true);
+      } else {
+        videoPlayer.play();
+        setIsVideoPlaying(true);
+        setUserPaused(false);
+      }
+    }, 300);
+  };
+
   if (!visible || checkins.length === 0) return null;
   const item = checkins[currentIndex];
   if (!item) return null;
+
+  const hasVideo = !!item.video_url;
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
@@ -104,12 +156,28 @@ export default function CheckinViewer({ visible, checkins, onClose }: Props) {
         <GestureDetector gesture={dismissGesture}>
           <Animated.View style={[StyleSheet.absoluteFill, { backgroundColor: '#000' }, wrapStyle]}>
 
-            {/* Full-screen photo (or placeholder) */}
-            {item.photo_url ? (
+            {/* Full-screen media (video or photo or placeholder) */}
+            {hasVideo ? (
+              <View style={[StyleSheet.absoluteFill, { transform: [{ scaleX: -1 }] }]}>
+                <VideoView
+                  player={videoPlayer}
+                  style={StyleSheet.absoluteFill}
+                  contentFit="cover"
+                  nativeControls={false}
+                />
+              </View>
+            ) : item.photo_url ? (
               <Image source={{ uri: item.photo_url }} style={StyleSheet.absoluteFill} contentFit="cover" />
             ) : (
               <View style={[StyleSheet.absoluteFill, styles.noPhoto]}>
                 <Feather name="activity" size={60} color="rgba(255,255,255,0.15)" />
+              </View>
+            )}
+
+            {/* Pause indicator for video */}
+            {hasVideo && userPaused && (
+              <View style={styles.pauseIndicator} pointerEvents="none">
+                <Feather name="pause" size={40} color="rgba(255,255,255,0.85)" />
               </View>
             )}
 
@@ -121,9 +189,14 @@ export default function CheckinViewer({ visible, checkins, onClose }: Props) {
               <LinearGradient colors={['transparent', 'rgba(0,0,0,0.88)']} style={StyleSheet.absoluteFill} />
             </View>
 
-            {/* ── Tap zones (rendered before UI chrome so chrome sits on top) ── */}
+            {/* ── Tap zones: left=prev, center=pause/play (video), right=next ── */}
             <View style={[StyleSheet.absoluteFill, { flexDirection: 'row' }]}>
               <Pressable style={{ flex: 1 }} onPress={goPrev} />
+              {hasVideo ? (
+                <Pressable style={{ flex: 1 }} onPress={handleVideoTap} />
+              ) : (
+                <Pressable style={{ flex: 1 }} onPress={goNext} />
+              )}
               <Pressable style={{ flex: 1 }} onPress={goNext} />
             </View>
 
@@ -191,6 +264,13 @@ const styles = StyleSheet.create({
   noPhoto: {
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  pauseIndicator: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5,
   },
   topGrad: {
     position: 'absolute', top: 0, left: 0, right: 0, height: 240,

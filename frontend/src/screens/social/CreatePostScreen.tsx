@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
+import { pickMedia } from '../../utils/pickMedia';
 import BottomSheet, { BottomSheetFlatList, BottomSheetBackdrop } from '@gorhom/bottom-sheet';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../../store/AuthContext';
@@ -93,47 +93,27 @@ export default function CreatePostScreen({ navigation }: Props) {
   // ── Media picker ─────────────────────────────────────────────────────────────
 
   const handlePickMedia = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission needed', 'Please allow access to your photos and videos.');
-      return;
-    }
-
-    // If we already have photos and there's room, only allow picking one more photo (no video)
+    // If we already have photos and there's room, only allow picking more photos (no video)
     const addingToExisting = photos.length > 0;
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: addingToExisting
-        ? ImagePicker.MediaTypeOptions.Images
-        : ImagePicker.MediaTypeOptions.All,
-      allowsEditing: false,
-      quality: 0.85,
-      videoMaxDuration: 120,
-      preferredAssetRepresentationMode:
-        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
+    const picked = await pickMedia({
+      allowsMultiple: false,
+      mediaTypes: addingToExisting ? ['images'] : ['images', 'videos'],
     });
+    if (!picked) return;
 
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      const isVideo = asset.type === 'video';
-
-      if (isVideo) {
-        // Video clears any existing photos
-        const mimeType = Platform.OS === 'ios' ? 'video/mp4' : (asset.mimeType ?? 'video/mp4');
-        const ext = Platform.OS === 'ios' ? 'mp4' : (asset.uri.split('.').pop()?.toLowerCase() ?? 'mp4');
-        setPhotos([]);
-        setVideo({ uri: asset.uri, name: `video.${ext}`, type: mimeType });
-      } else {
-        // Photo — clear video, add to photos array (up to MAX_PHOTOS)
-        const mimeType = asset.mimeType ?? 'image/jpeg';
-        const ext = mimeType === 'image/png' ? 'png' : 'jpg';
-        const newPhoto: PhotoItem = { uri: asset.uri, name: `photo_${Date.now()}.${ext}`, type: mimeType };
-        setVideo(null);
-        setPhotos(prev => {
-          if (prev.length >= MAX_PHOTOS) return prev;
-          return [...prev, newPhoto];
-        });
-      }
+    const asset = picked[0];
+    if (asset.kind === 'video') {
+      // Video clears any existing photos
+      setPhotos([]);
+      setVideo({ uri: asset.uri, name: asset.filename, type: asset.mimeType });
+    } else {
+      // Photo — clear video, add to photos array (up to MAX_PHOTOS)
+      setVideo(null);
+      setPhotos(prev => {
+        if (prev.length >= MAX_PHOTOS) return prev;
+        return [...prev, { uri: asset.uri, name: asset.filename, type: asset.mimeType }];
+      });
     }
   };
 

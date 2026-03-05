@@ -86,13 +86,9 @@ export default function EditProfileScreen({ navigation, route }: Props) {
   // Preferences — seeded from user account, saved on change
   const [weightUnit, setWeightUnit] = useState<'lbs' | 'kg'>(user?.weight_unit ?? 'lbs');
   const [distanceUnit, setDistanceUnit] = useState<'miles' | 'km'>(user?.distance_unit ?? 'miles');
-  const [prefSaving, setPrefSaving] = useState(false);
-
   const handlePrefChange = async (field: 'weight_unit' | 'distance_unit', value: string) => {
     if (field === 'weight_unit') setWeightUnit(value as 'lbs' | 'kg');
     else setDistanceUnit(value as 'miles' | 'km');
-    if (prefSaving) return;
-    setPrefSaving(true);
     try {
       const updated = await apiUpdatePreferences({ [field]: value });
       await updateUser(updated);
@@ -100,8 +96,6 @@ export default function EditProfileScreen({ navigation, route }: Props) {
       // revert on failure
       if (field === 'weight_unit') setWeightUnit(user?.weight_unit ?? 'lbs');
       else setDistanceUnit(user?.distance_unit ?? 'miles');
-    } finally {
-      setPrefSaving(false);
     }
   };
 
@@ -120,6 +114,7 @@ export default function EditProfileScreen({ navigation, route }: Props) {
     else setCheckinGyms(value);
     try {
       await apiUpdatePrivacy({ [field]: value });
+      if (user) await updateUser({ ...user, [field]: value });
     } catch {
       // rollback
       if (field === 'checkin_visible_friends') setCheckinFriendsGroups(!value);
