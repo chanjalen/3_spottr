@@ -17,7 +17,7 @@ import FeedCardHeader from './FeedCardHeader';
 import FeedCardBody from './FeedCardBody';
 import FeedCardActions from './FeedCardActions';
 import WorkoutDetailModal from './WorkoutDetailModal';
-import ShareSheet from './ShareSheet';
+import MediaViewerModal from './MediaViewerModal';
 import { colors, spacing } from '../../theme';
 
 interface FeedCardProps {
@@ -25,6 +25,7 @@ interface FeedCardProps {
   index: number;
   onLike: () => void;
   onComment: () => void;
+  onShare?: () => void;
   onPollVote: (optionId: number | string) => void;
   onPressUser?: () => void;
   onDelete?: () => void;
@@ -35,12 +36,13 @@ export default function FeedCard({
   index,
   onLike,
   onComment,
+  onShare,
   onPollVote,
   onPressUser,
   onDelete,
 }: FeedCardProps) {
   const [workoutDetailId, setWorkoutDetailId] = useState<string | null>(null);
-  const [shareItem, setShareItem] = useState<FeedItem | null>(null);
+  const [mediaViewer, setMediaViewer] = useState<{ uri: string; kind: 'image' | 'video' } | null>(null);
 
   // Heart overlay animation
   const heartScale = useSharedValue(0);
@@ -66,21 +68,23 @@ export default function FeedCard({
     heartOpacity.value = withDelay(580, withTiming(0, { duration: 220 }));
   }, [heartScale, heartOpacity]);
 
+  const handleDoubleTap = useCallback(() => {
+    triggerHeart();
+    if (!hasLikedRef.current) {
+      hasLikedRef.current = true;
+      onLike();
+    }
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+  }, [onLike, triggerHeart]);
+
   const doubleTap = useMemo(
     () =>
       Gesture.Tap()
         .numberOfTaps(2)
         .maxDuration(250)
         .runOnJS(true)
-        .onEnd(() => {
-          triggerHeart();
-          if (!hasLikedRef.current) {
-            hasLikedRef.current = true; // synchronous lock — prevents re-entry before re-render
-            onLike();
-          }
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-        }),
-    [onLike, triggerHeart],
+        .onEnd(handleDoubleTap),
+    [handleDoubleTap],
   );
 
   const handleMore = onDelete
@@ -114,6 +118,8 @@ export default function FeedCard({
               item={item}
               onPollVote={onPollVote}
               onWorkoutPress={item.workout ? () => setWorkoutDetailId(item.workout!.id) : undefined}
+              onMediaPress={(uri, kind) => setMediaViewer({ uri, kind })}
+              onDoubleTap={handleDoubleTap}
             />
             {/* Heart overlay — centered, sits above content but passes touches through */}
             <Animated.View style={[styles.heartOverlay, heartAnimStyle]} pointerEvents="none">
@@ -128,7 +134,7 @@ export default function FeedCard({
           userLiked={item.user_liked}
           onLike={onLike}
           onComment={onComment}
-          onShare={() => setShareItem(item)}
+          onShare={onShare}
         />
       </Animated.View>
 
@@ -136,7 +142,11 @@ export default function FeedCard({
         workoutId={workoutDetailId}
         onClose={() => setWorkoutDetailId(null)}
       />
-      <ShareSheet item={shareItem} onClose={() => setShareItem(null)} />
+      <MediaViewerModal
+        uri={mediaViewer?.uri ?? null}
+        kind={mediaViewer?.kind ?? 'image'}
+        onClose={() => setMediaViewer(null)}
+      />
     </>
   );
 }
@@ -144,11 +154,10 @@ export default function FeedCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: colors.surface,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.borderColor,
+    borderBottomWidth: 8,
+    borderBottomColor: '#F2F2F2',
     paddingTop: spacing.base,
     paddingBottom: spacing.sm,
-    paddingHorizontal: spacing.base,
   },
   heartOverlay: {
     ...StyleSheet.absoluteFillObject,

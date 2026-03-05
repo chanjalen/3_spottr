@@ -11,6 +11,7 @@ import {
   ScrollView,
   Platform,
   Animated,
+  Alert,
   useWindowDimensions,
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
@@ -21,16 +22,19 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { FeedItem } from '../types/feed';
 import { UserSearchResult } from '../types/user';
 import FeedCard from '../components/feed/FeedCard';
-import ImmersiveFeedList from '../components/feed/ImmersiveFeedList';
+import ImmersiveFeedList, { ImmersiveFeedListHandle } from '../components/feed/ImmersiveFeedList';
 import FeedTabs from '../components/common/FeedTabs';
 import EmptyState from '../components/common/EmptyState';
 import AppHeader from '../components/navigation/AppHeader';
 import CommentsSheet from '../components/comments/CommentsSheet';
+import ShareSheet from '../components/feed/ShareSheet';
 import Avatar from '../components/common/Avatar';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFeed } from '../hooks/useFeed';
 import { useToggleLike } from '../hooks/useToggleLike';
 import { usePollVote } from '../hooks/usePollVote';
+import { useAuth } from '../store/AuthContext';
+import { deletePost, deleteCheckin } from '../api/feed';
 import { colors, spacing, typography } from '../theme';
 import { RootStackParamList } from '../navigation/types';
 
@@ -38,6 +42,7 @@ type RootNav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function FeedScreen() {
   const navigation = useNavigation<RootNav>();
+  const { user: currentUser } = useAuth();
   const {
     items,
     activeTab,
@@ -51,6 +56,7 @@ export default function FeedScreen() {
     refresh,
     changeTab,
     updateItem,
+    removeItem,
     loadMore,
     handleSearchChange,
     clearSearch,
@@ -58,6 +64,32 @@ export default function FeedScreen() {
 
   const handleLike = useToggleLike(updateItem);
   const handlePollVote = usePollVote(updateItem);
+
+  const handleDelete = useCallback((item: FeedItem) => {
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post? This cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              if (item.type === 'checkin') {
+                await deleteCheckin(item.id);
+              } else {
+                await deletePost(item.id);
+              }
+              removeItem(item.id);
+            } catch {
+              Alert.alert('Error', 'Could not delete the post. Please try again.');
+            }
+          },
+        },
+      ],
+    );
+  }, [removeItem]);
   // Refresh feed whenever this screen comes back into focus (e.g. after creating a post)
   const initialFocusHandled = useRef(false);
   useEffect(() => {
@@ -67,11 +99,20 @@ export default function FeedScreen() {
         return; // Skip initial mount — useFeed already loads on mount
       }
       refresh();
+      // Re-snap the immersive FlatList to the current item in case the scroll
+      // position drifted while the screen was inactive.
+      if (isImmersiveRef.current) {
+        immersiveListRef.current?.snapToCurrentItem();
+      }
     });
     return unsubscribe;
   }, [navigation, refresh]);
 
+  const immersiveListRef = useRef<ImmersiveFeedListHandle>(null);
+  const isImmersiveRef = useRef(false);
+
   const [commentItem, setCommentItem] = useState<FeedItem | null>(null);
+  const [shareItem, setShareItem] = useState<FeedItem | null>(null);
   const [containerHeight, setContainerHeight] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(0);
   const searchInputRef = useRef<TextInput>(null);
@@ -80,9 +121,10 @@ export default function FeedScreen() {
 
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
-  // Floating pill: pill height(66) + gap from bottom(12) + safe area
-  const bottomNavHeight = insets.bottom + 78;
+  // Floating pill sits at bottom:14, height:66 → clears at 80px. Add 10px breathing room.
+  const bottomNavHeight = 90;
   const isImmersive = activeTab !== 'main';
+  isImmersiveRef.current = isImmersive;
 
   // Reset measured heights when switching between immersive ↔ main layouts
   useEffect(() => {
@@ -110,11 +152,13 @@ export default function FeedScreen() {
         index={index}
         onLike={() => handleLike(item)}
         onComment={() => setCommentItem(item)}
+        onShare={() => setShareItem(item)}
         onPollVote={(optionId: number | string) => handlePollVote(item, optionId)}
         onPressUser={() => navigation.navigate('Profile', { username: item.user.username })}
+        onDelete={currentUser?.username === item.user.username ? () => handleDelete(item) : undefined}
       />
     ),
-    [handleLike, handlePollVote, navigation],
+    [handleLike, handlePollVote, handleDelete, navigation, currentUser],
   );
 
   const handleEndReached = useCallback(() => {
@@ -156,6 +200,7 @@ export default function FeedScreen() {
             </View>
           ) : (
             <ImmersiveFeedList
+              ref={immersiveListRef}
               items={items}
               itemHeight={containerHeight > 0 ? containerHeight : windowHeight}
               topInset={headerHeight}
@@ -271,6 +316,7 @@ export default function FeedScreen() {
                           clearSearch();
                           setCommentItem(item);
                         }}
+                        onShare={() => { clearSearch(); setShareItem(item); }}
                         onPollVote={(optionId: number | string) => handlePollVote(item, optionId)}
                         onPressUser={() => navigation.navigate('Profile', { username: item.user.username })}
                       />
@@ -339,6 +385,7 @@ export default function FeedScreen() {
             }
           }}
         />
+        <ShareSheet item={shareItem} onClose={() => setShareItem(null)} />
       </View>
     );
   }
@@ -408,7 +455,7 @@ export default function FeedScreen() {
             renderItem={renderItem}
             contentContainerStyle={[
               styles.list,
-              { paddingBottom: insets.bottom + 96 },
+              { paddingBottom: bottomNavHeight + 16 },
               items.length === 0 && styles.emptyList,
             ]}
             ListEmptyComponent={<EmptyState tab={activeTab} />}
@@ -550,6 +597,7 @@ export default function FeedScreen() {
           }
         }}
       />
+      <ShareSheet item={shareItem} onClose={() => setShareItem(null)} />
     </View>
   );
 }
@@ -606,7 +654,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   list: {
-    paddingHorizontal: spacing.xl,
     paddingTop: spacing.md,
   },
   emptyList: {

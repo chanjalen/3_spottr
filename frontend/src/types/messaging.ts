@@ -19,6 +19,15 @@ export interface MessageMedia {
   height: number | null;
 }
 
+/** Shared user profile card embedded in a chat message (separate from shared posts). */
+export interface SharedProfileCard {
+  username: string;
+  display_name: string;
+  avatar_url: string | null;
+  current_streak: number;
+  total_workouts: number;
+}
+
 export interface Message {
   id: string;
   sender: string;
@@ -31,6 +40,7 @@ export interface Message {
   is_system?: boolean;
   is_request?: boolean;
   shared_post?: SharedPost | null;
+  shared_profile_card?: SharedProfileCard | null;
   join_request_id?: string | null;
   join_request_status?: string | null;
   reactions?: MessageReaction[];
@@ -43,6 +53,19 @@ export interface Message {
 }
 
 /** Embedded shared post/checkin card in a chat message. */
+export interface SharedPostPollOption {
+  id: number;
+  text: string;
+  votes: number;
+}
+
+export interface SharedPostPoll {
+  question: string;
+  total_votes: number;
+  is_active: boolean;
+  options: SharedPostPollOption[];
+}
+
 export interface SharedPost {
   id?: string;
   item_type: 'post' | 'workout' | 'checkin' | 'profile';
@@ -59,12 +82,7 @@ export interface SharedPost {
   personal_record?: object | null;
   workout_type?: string;
   location_name?: string;
-  // Profile-specific fields (item_type === 'profile')
-  username?: string;
-  display_name?: string;
-  avatar_url?: string | null;
-  current_streak?: number;
-  total_workouts?: number;
+  poll?: SharedPostPoll | null;
 }
 
 /**

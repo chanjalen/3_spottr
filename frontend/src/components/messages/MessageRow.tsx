@@ -11,7 +11,7 @@ import { Feather } from '@expo/vector-icons';
 import Avatar from '../common/Avatar';
 import VideoThumbnail from '../common/VideoThumbnail';
 import MentionText from '../common/MentionText';
-import { Message, MessageReaction } from '../../types/messaging';
+import { Message, MessageReaction, SharedPost, SharedPostPoll, SharedProfileCard } from '../../types/messaging';
 import { colors, spacing, typography } from '../../theme';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -31,6 +31,7 @@ export interface MessageRowProps {
   onVideoPress: (url: string) => void;
   onImagePress: (url: string) => void;
   onMentionPress?: (username: string) => void;
+  onSharedPostPress?: (postId: string, itemType: 'post' | 'workout' | 'checkin') => void;
 }
 
 // ── Status icon ───────────────────────────────────────────────────────────────
@@ -48,6 +49,176 @@ function MsgStatusIcon({ status }: { status: NonNullable<Message['status']> }) {
   return null;
 }
 
+// ── Disabled poll preview (inside shared post card) ──────────────────────────
+
+function SharedPollPreview({ poll }: { poll: SharedPostPoll }) {
+  const total = poll.total_votes || 1; // avoid divide-by-zero
+  return (
+    <View style={styles.pollPreview}>
+      <Text style={styles.pollQuestion} numberOfLines={2}>{poll.question}</Text>
+      {poll.options.map((opt) => {
+        const pct = Math.round((opt.votes / total) * 100);
+        return (
+          <View key={opt.id} style={styles.pollOptionRow}>
+            <View style={styles.pollBarBg}>
+              <View style={[styles.pollBarFill, { width: `${pct}%` as any }]} />
+              <Text style={styles.pollOptionText} numberOfLines={1}>{opt.text}</Text>
+            </View>
+            <Text style={styles.pollPct}>{pct}%</Text>
+          </View>
+        );
+      })}
+      <Text style={styles.pollVoteHint}>Tap to vote · {poll.total_votes} votes</Text>
+    </View>
+  );
+}
+
+// ── Shared post cards ─────────────────────────────────────────────────────────
+
+interface SharedPostCardProps {
+  post: SharedPost;
+  isOwn: boolean;
+  onPress?: () => void;
+}
+
+// Shared post cards are always white/neutral — they're content preview cards,
+// not message bubbles. Text is always dark regardless of who sent the message.
+function SharedPostCard({ post, onPress }: Omit<SharedPostCardProps, 'isOwn'> & { isOwn?: boolean }) {
+  const isImmersive = post.item_type === 'workout' || post.item_type === 'checkin' || !!post.workout;
+
+  if (isImmersive) {
+    const subtitleParts: string[] = [];
+    if (post.item_type === 'checkin') {
+      if (post.workout_type) subtitleParts.push(post.workout_type);
+      if (post.location_name) subtitleParts.push(post.location_name);
+    } else if (post.workout) {
+      const w = post.workout as any;
+      if (w.name) subtitleParts.push(w.name);
+      if (w.exercise_count) subtitleParts.push(`${w.exercise_count} exercises`);
+      if (w.duration) subtitleParts.push(w.duration);
+    }
+
+    return (
+      <Pressable onPress={onPress} style={styles.sharedImmersiveCard} disabled={!onPress}>
+        {post.photo_url ? (
+          <Image source={{ uri: post.photo_url }} style={styles.sharedImmersiveThumb} contentFit="cover" />
+        ) : (
+          <View style={[styles.sharedImmersiveThumb, styles.sharedImmersivePlaceholder]}>
+            <Feather name={post.item_type === 'checkin' ? 'map-pin' : 'activity'} size={30} color={colors.textMuted} />
+          </View>
+        )}
+        {onPress && (
+          <View style={styles.sharedTapHint}>
+            <Feather name="external-link" size={11} color="#fff" />
+          </View>
+        )}
+        <View style={styles.sharedImmersiveBody}>
+          <View style={styles.sharedAuthorRow}>
+            <Avatar uri={post.author_avatar_url ?? null} name={post.author_display_name ?? post.author_username ?? '?'} size={20} />
+            <Text style={styles.sharedImmersiveAuthor} numberOfLines={1}>
+              {post.author_display_name ?? post.author_username ?? 'unknown'}
+            </Text>
+            <Text style={styles.sharedImmersiveHandle} numberOfLines={1}>
+              @{post.author_username ?? 'unknown'}
+            </Text>
+          </View>
+          {!!post.description && (
+            <Text style={styles.sharedCaption} numberOfLines={2}>{post.description}</Text>
+          )}
+          {subtitleParts.length > 0 && (
+            <Text style={styles.sharedImmersiveSubtitle} numberOfLines={1}>
+              {subtitleParts.join(' · ')}
+            </Text>
+          )}
+          <View style={styles.sharedMetaRow}>
+            <Feather name="heart" size={11} color={colors.textMuted} />
+            <Text style={styles.sharedMetaText}>{post.like_count}</Text>
+            <Feather name="message-circle" size={11} color={colors.textMuted} style={{ marginLeft: 6 }} />
+            <Text style={styles.sharedMetaText}>{post.comment_count}</Text>
+          </View>
+        </View>
+      </Pressable>
+    );
+  }
+
+  // Regular main-feed post — mini FeedCard style (photo on top, content below)
+  return (
+    <Pressable onPress={onPress} style={styles.sharedPostCard} disabled={!onPress}>
+      {/* Photo — full width, only shown when present */}
+      {post.photo_url ? (
+        <Image source={{ uri: post.photo_url }} style={styles.sharedPostThumb} contentFit="cover" />
+      ) : null}
+
+      {/* Body */}
+      <View style={styles.sharedPostBodyInner}>
+        {/* Author row */}
+        <View style={styles.sharedAuthorRow}>
+          <Avatar uri={post.author_avatar_url ?? null} name={post.author_display_name ?? post.author_username ?? '?'} size={18} />
+          <Text style={styles.sharedPostAuthor} numberOfLines={1}>
+            {post.author_display_name ?? post.author_username ?? 'unknown'}
+          </Text>
+          <Text style={styles.sharedImmersiveHandle} numberOfLines={1}>
+            @{post.author_username ?? 'unknown'}
+          </Text>
+        </View>
+
+        {/* Caption */}
+        {!!post.description && (
+          <Text style={styles.sharedPostDesc} numberOfLines={3}>{post.description}</Text>
+        )}
+
+        {/* Poll preview — disabled, tap-to-vote hint */}
+        {!!post.poll && <SharedPollPreview poll={post.poll} />}
+
+        {/* Meta row */}
+        <View style={styles.sharedMetaRow}>
+          <Feather name="heart" size={10} color={colors.textMuted} />
+          <Text style={styles.sharedMetaText}>{post.like_count}</Text>
+          <Feather name="message-circle" size={10} color={colors.textMuted} style={{ marginLeft: 5 }} />
+          <Text style={styles.sharedMetaText}>{post.comment_count}</Text>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+// ── Profile card ─────────────────────────────────────────────────────────────
+
+function SharedProfileCardView({
+  profile,
+  isOwn,
+  onPress,
+}: {
+  profile: SharedProfileCard;
+  isOwn: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.bubble, isOwn ? styles.bubbleOwn : styles.bubbleOther, styles.sharedProfileBubble]}
+    >
+      <Avatar uri={profile.avatar_url} name={profile.display_name ?? profile.username ?? '?'} size={40} />
+      <View style={styles.sharedProfileBody}>
+        <Text style={[styles.sharedProfileName, isOwn && styles.sharedProfileNameOwn]} numberOfLines={1}>
+          {profile.display_name}
+        </Text>
+        <Text style={[styles.sharedProfileUsername, isOwn && styles.sharedProfileUsernameOwn]} numberOfLines={1}>
+          @{profile.username}
+        </Text>
+        {(!!profile.current_streak || !!profile.total_workouts) && (
+          <Text style={[styles.sharedProfileMeta, isOwn && styles.sharedProfileMetaOwn]}>
+            {profile.current_streak ? `🔥 ${profile.current_streak}` : ''}
+            {profile.current_streak && profile.total_workouts ? ' · ' : ''}
+            {profile.total_workouts ? `${profile.total_workouts} workouts` : ''}
+          </Text>
+        )}
+      </View>
+      <Feather name="chevron-right" size={16} color={isOwn ? 'rgba(255,255,255,0.6)' : colors.textMuted} />
+    </Pressable>
+  );
+}
+
 // ── Row ───────────────────────────────────────────────────────────────────────
 
 function MessageRowInner({
@@ -62,6 +233,7 @@ function MessageRowInner({
   onVideoPress,
   onImagePress,
   onMentionPress,
+  onSharedPostPress,
 }: MessageRowProps) {
   // Guard prevents the outer Pressable from double-firing after the inner media Pressable
   // already handled the long press (both have onLongPress; inner fires first with correct coords,
@@ -169,61 +341,28 @@ function MessageRowInner({
                 )}
               </View>
             )}
-            {item.shared_post?.item_type === 'profile' ? (
-              <Pressable
-                onPress={() => item.shared_post?.username && onNavigateToProfile(item.shared_post.username)}
-                style={[
-                  styles.bubble,
-                  isOwn ? styles.bubbleOwn : styles.bubbleOther,
-                  styles.sharedProfileBubble,
-                ]}
-              >
-                <Avatar
-                  uri={item.shared_post.avatar_url ?? null}
-                  name={item.shared_post.display_name ?? item.shared_post.username ?? '?'}
-                  size={40}
-                />
-                <View style={styles.sharedProfileBody}>
-                  <Text style={[styles.sharedProfileName, isOwn && styles.sharedProfileNameOwn]} numberOfLines={1}>
-                    {item.shared_post.display_name}
-                  </Text>
-                  <Text style={[styles.sharedProfileUsername, isOwn && styles.sharedProfileUsernameOwn]} numberOfLines={1}>
-                    @{item.shared_post.username}
-                  </Text>
-                  {(!!item.shared_post.current_streak || !!item.shared_post.total_workouts) && (
-                    <Text style={[styles.sharedProfileMeta, isOwn && styles.sharedProfileMetaOwn]}>
-                      {item.shared_post.current_streak ? `🔥 ${item.shared_post.current_streak}` : ''}
-                      {item.shared_post.current_streak && item.shared_post.total_workouts ? ' · ' : ''}
-                      {item.shared_post.total_workouts ? `${item.shared_post.total_workouts} workouts` : ''}
-                    </Text>
-                  )}
-                </View>
-                <Feather name="chevron-right" size={16} color={isOwn ? 'rgba(255,255,255,0.55)' : colors.textMuted} />
-              </Pressable>
-            ) : item.shared_post ? (
-              <View style={[styles.sharedPostCard, isOwn ? styles.sharedPostCardOwn : styles.sharedPostCardOther]}>
-                {item.shared_post.photo_url && (
-                  <Image
-                    source={{ uri: item.shared_post.photo_url }}
-                    style={styles.sharedPostPhoto}
-                    contentFit="cover"
-                  />
-                )}
-                <View style={styles.sharedPostBody}>
-                  <Text style={[styles.sharedPostAuthor, isOwn && styles.sharedPostAuthorOwn]} numberOfLines={1}>
-                    @{item.shared_post.author_username ?? 'unknown'}
-                  </Text>
-                  {!!item.shared_post.description && (
-                    <Text style={[styles.sharedPostDesc, isOwn && styles.sharedPostDescOwn]} numberOfLines={2}>
-                      {item.shared_post.description}
-                    </Text>
-                  )}
-                  <Text style={[styles.sharedPostMeta, isOwn && styles.sharedPostMetaOwn]}>
-                    {item.shared_post.like_count} likes · {item.shared_post.comment_count} comments
-                  </Text>
-                </View>
-              </View>
-            ) : null}
+            {item.shared_profile_card && (
+              <SharedProfileCardView
+                profile={item.shared_profile_card}
+                isOwn={isOwn}
+                onPress={() => onNavigateToProfile(item.shared_profile_card!.username)}
+              />
+            )}
+            {item.shared_post && (
+              <SharedPostCard
+                post={item.shared_post}
+                isOwn={isOwn}
+                onPress={
+                  onSharedPostPress
+                    ? () => onSharedPostPress(
+                        item.shared_post!.id,
+                        item.shared_post!.item_type === 'checkin' ? 'checkin'
+                          : item.shared_post!.workout ? 'workout' : 'post',
+                      )
+                    : undefined
+                }
+              />
+            )}
             {!!item.content && (
               <View
                 style={[
@@ -275,7 +414,12 @@ function MessageRowInner({
 }
 
 function areEqual(prev: MessageRowProps, next: MessageRowProps): boolean {
-  return prev.item === next.item && prev.myId === next.myId && prev.onMentionPress === next.onMentionPress;
+  return (
+    prev.item === next.item &&
+    prev.myId === next.myId &&
+    prev.onMentionPress === next.onMentionPress &&
+    prev.onSharedPostPress === next.onSharedPostPress
+  );
 }
 
 const MessageRow = React.memo(MessageRowInner, areEqual);
@@ -387,50 +531,177 @@ const styles = StyleSheet.create({
   reactionCount: { fontSize: 11, color: colors.textMuted },
   reactionCountActive: { color: colors.primary, fontWeight: '600' },
 
-  // ── Shared post card ──────────────────────────────────────────────────────
-  sharedPostCard: {
-    width: Dimensions.get('window').width * 0.62,
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
+  // ── Shared card common ─────────────────────────────────────────────────────
+  sharedCardOwn: {
+    borderColor: 'rgba(255,255,255,0.25)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
   },
-  sharedPostCardOwn: {
-    borderColor: 'rgba(255,255,255,0.35)',
-    backgroundColor: 'rgba(255,255,255,0.15)',
-  },
-  sharedPostCardOther: {
+  sharedCardOther: {
     borderColor: colors.border.default,
     backgroundColor: colors.background.elevated,
   },
-  sharedPostPhoto: {
-    width: '100%',
-    height: 120,
+  sharedMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
   },
-  sharedPostBody: {
+  sharedMetaText: {
+    fontSize: 10,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+    marginLeft: 3,
+  },
+
+  // ── Immersive card (workout + checkin — TikTok/friends feed) ───────────────
+  sharedImmersiveCard: {
+    width: Dimensions.get('window').width * 0.65,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    backgroundColor: colors.surface,
+  },
+  sharedImmersiveThumb: {
+    width: '100%',
+    height: 150,
+  },
+  sharedImmersivePlaceholder: {
+    backgroundColor: colors.background.base,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sharedImmersiveBody: {
     paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.xs + 2,
-    gap: 2,
+    paddingTop: spacing.xs + 1,
+    paddingBottom: spacing.sm,
+  },
+  sharedAuthorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 3,
+    gap: 5,
+  },
+  sharedImmersiveAuthor: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.semibold,
+    color: colors.textSecondary,
+    flexShrink: 1,
+  },
+  sharedImmersiveHandle: {
+    fontSize: 10,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+    flexShrink: 1,
+  },
+  sharedCaption: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.textPrimary,
+    lineHeight: 16,
+    marginBottom: 2,
+  },
+  sharedImmersiveSubtitle: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+    marginTop: 1,
+  },
+  sharedTapHint: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.40)',
+    borderRadius: 10,
+    padding: 4,
+  },
+
+  // ── Poll preview (inside compact card) ────────────────────────────────────
+  pollPreview: {
+    marginTop: spacing.xs,
+    marginBottom: 2,
+    gap: 4,
+  },
+  pollQuestion: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.semibold,
+    color: colors.textPrimary,
+    marginBottom: 2,
+  },
+  pollOptionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  pollBarBg: {
+    flex: 1,
+    height: 22,
+    borderRadius: 4,
+    backgroundColor: colors.background.base,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
+  pollBarFill: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    backgroundColor: colors.primary + '28',
+    borderRadius: 4,
+  },
+  pollOptionText: {
+    fontSize: 10,
+    fontFamily: typography.family.regular,
+    color: colors.textPrimary,
+    paddingHorizontal: 6,
+  },
+  pollPct: {
+    fontSize: 10,
+    fontFamily: typography.family.semibold,
+    color: colors.textMuted,
+    width: 28,
+    textAlign: 'right',
+  },
+  pollVoteHint: {
+    fontSize: 9,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+    marginTop: 1,
+  },
+
+  // ── Compact card (regular post — mini FeedCard style) ─────────────────────
+  sharedPostCard: {
+    width: Dimensions.get('window').width * 0.65,
+    borderRadius: 12,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    backgroundColor: colors.surface,
+  },
+  sharedPostThumb: {
+    width: '100%',
+    height: 130,
+  },
+  sharedPostBodyInner: {
+    paddingHorizontal: spacing.sm,
+    paddingTop: spacing.xs + 2,
+    paddingBottom: spacing.sm,
+    gap: 3,
   },
   sharedPostAuthor: {
     fontSize: typography.size.xs,
     fontFamily: typography.family.semibold,
     color: colors.textSecondary,
+    flexShrink: 1,
   },
-  sharedPostAuthorOwn: { color: 'rgba(255,255,255,0.8)' },
   sharedPostDesc: {
     fontSize: typography.size.xs,
     fontFamily: typography.family.regular,
     color: colors.textPrimary,
     lineHeight: 16,
   },
-  sharedPostDescOwn: { color: 'rgba(255,255,255,0.95)' },
-  sharedPostMeta: {
-    fontSize: 10,
-    fontFamily: typography.family.regular,
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  sharedPostMetaOwn: { color: 'rgba(255,255,255,0.6)' },
+
   bubbleWithPost: {
     borderTopLeftRadius: 4,
     borderTopRightRadius: 4,

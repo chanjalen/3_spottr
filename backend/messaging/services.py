@@ -30,6 +30,35 @@ def _clean_id(value):
     return str(value).replace('-', '')
 
 
+def _serialize_shared_post(message):
+    """Return the nested shared_post dict for WebSocket payloads, or None."""
+    try:
+        if message.post_id:
+            post = message.post
+            if post:
+                from messaging.serializers import SharedPostSerializer
+                return SharedPostSerializer(post).data
+        if message.quick_workout_id:
+            qw = message.quick_workout
+            if qw:
+                from messaging.serializers import SharedCheckinSerializer
+                return SharedCheckinSerializer(qw).data
+    except Exception:
+        pass
+    return None
+
+
+def _serialize_shared_profile(message):
+    """Return the nested shared_profile_card dict for WebSocket payloads, or None."""
+    try:
+        if message.shared_profile_id and message.shared_profile:
+            from messaging.serializers import SharedProfileSerializer
+            return SharedProfileSerializer(message.shared_profile).data
+    except Exception:
+        pass
+    return None
+
+
 def _serialize_for_ws(message, recipient_id, client_msg_id=None):
     """
     Build a minimal message dict for WebSocket delivery.
@@ -61,14 +90,6 @@ def _serialize_for_ws(message, recipient_id, client_msg_id=None):
             'height': asset.height,
         })
 
-    shared_post = None
-    if message.shared_profile_id:
-        try:
-            from messaging.serializers import SharedProfileSerializer
-            shared_post = SharedProfileSerializer(message.shared_profile).data
-        except Exception:
-            pass
-
     payload = {
         'id': message.id,
         'sender': message.sender_id,
@@ -80,7 +101,8 @@ def _serialize_for_ws(message, recipient_id, client_msg_id=None):
         'is_read': False,
         'is_system': message.is_system,
         'is_request': message.is_request,
-        'shared_post': shared_post,
+        'shared_post': _serialize_shared_post(message),
+        'shared_profile_card': _serialize_shared_profile(message),
         'join_request_id': None,
         'join_request_status': None,
         # Routing fields — used by the client to decide which chat to update.

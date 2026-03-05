@@ -772,6 +772,10 @@ export default function GroupChatScreen({ navigation, route }: Props) {
     navigation.navigate('Profile', { username });
   }, [navigation]);
 
+  const handleSharedPostPress = useCallback((postId: string, itemType: 'post' | 'workout' | 'checkin') => {
+    navigation.navigate('PostDetail', { postId, itemType });
+  }, [navigation]);
+
   const keyExtractor = useCallback((item: ListItem) => String(item.id), []);
 
   const ItemSeparator = useCallback(() => <View style={{ height: spacing.sm }} />, []);
@@ -804,8 +808,9 @@ export default function GroupChatScreen({ navigation, route }: Props) {
       onVideoPress={setVideoPlayerUrl}
       onImagePress={setImageViewerUrl}
       onMentionPress={handleMentionPress}
+      onSharedPostPress={handleSharedPostPress}
     />
-  ), [myId, handleNavigateToProfile, handleRetry, handleLongPress, handleTapReaction, handleLongPressReaction, handleMentionPress]);
+  ), [myId, handleNavigateToProfile, handleRetry, handleLongPress, handleTapReaction, handleLongPressReaction, handleMentionPress, handleSharedPostPress]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 

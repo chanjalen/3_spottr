@@ -1399,28 +1399,28 @@ def add_checkin_comment_view(request, checkin_id):
     })
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def delete_post_view(request, post_id):
     """Delete a post. Only the post owner can delete it."""
     post = get_object_or_404(Post, id=post_id)
     if post.user != request.user:
-        return JsonResponse({'success': False, 'error': 'You can only delete your own posts'}, status=403)
+        return DRFResponse({'success': False, 'error': 'You can only delete your own posts'}, status=403)
     post.delete()
     # Decrement total workouts (floor at 0)
     from accounts.models import User
     User.objects.filter(pk=request.user.pk, total_workouts__gt=0).update(total_workouts=F('total_workouts') - 1)
     request.user.refresh_from_db()
-    return JsonResponse({'success': True, 'total_workouts': request.user.total_workouts})
+    return DRFResponse({'success': True, 'total_workouts': request.user.total_workouts})
 
 
-@login_required
-@require_POST
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def delete_checkin_view(request, checkin_id):
     """Delete a check-in. Only the owner can delete it."""
     checkin = get_object_or_404(QuickWorkout, id=checkin_id)
     if checkin.user != request.user:
-        return JsonResponse({'success': False, 'error': 'You can only delete your own check-ins'}, status=403)
+        return DRFResponse({'success': False, 'error': 'You can only delete your own check-ins'}, status=403)
     # Also remove the photo file and MediaAsset/MediaLink if they exist
     photo_path = f'checkins/{checkin.id}.jpg'
     if default_storage.exists(photo_path):
@@ -1437,7 +1437,7 @@ def delete_checkin_view(request, checkin_id):
     from accounts.models import User
     User.objects.filter(pk=request.user.pk, total_workouts__gt=0).update(total_workouts=F('total_workouts') - 1)
     request.user.refresh_from_db()
-    return JsonResponse({'success': True, 'total_workouts': request.user.total_workouts})
+    return DRFResponse({'success': True, 'total_workouts': request.user.total_workouts})
 
 
 @api_view(['POST'])

@@ -780,6 +780,10 @@ export default function ChatScreen({ navigation, route }: Props) {
     navigation.navigate('Profile', { username });
   }, [navigation]);
 
+  const handleSharedPostPress = useCallback((postId: string, itemType: 'post' | 'workout' | 'checkin') => {
+    navigation.navigate('PostDetail', { postId, itemType });
+  }, [navigation]);
+
   const renderItem = useCallback(({ item }: { item: ListItem }) => (
     <MessageRow
       item={item}
@@ -793,8 +797,9 @@ export default function ChatScreen({ navigation, route }: Props) {
       onVideoPress={setVideoPlayerUrl}
       onImagePress={setImageViewerUrl}
       onMentionPress={handleMentionPress}
+      onSharedPostPress={handleSharedPostPress}
     />
-  ), [myId, handleNavigateToProfile, handleRetry, handleLongPress, handleTapReaction, handleLongPressReaction, handleMentionPress]);
+  ), [myId, handleNavigateToProfile, handleRetry, handleLongPress, handleTapReaction, handleLongPressReaction, handleMentionPress, handleSharedPostPress]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 
