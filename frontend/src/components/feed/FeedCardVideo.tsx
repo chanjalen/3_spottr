@@ -41,7 +41,7 @@ export default function FeedCardVideo({ uri, onExpand }: FeedCardVideoProps) {
       <VideoView
         player={player}
         style={styles.video}
-        contentFit="cover"
+        contentFit="contain"
         nativeControls={false}
         allowsFullscreen={false}
       />

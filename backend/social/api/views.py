@@ -58,7 +58,7 @@ def create_post(request):
     """
     Create a post. Accepts multipart/form-data for photo/video uploads.
     Fields: text, workout_id (optional), pr_exercise_name, pr_value, pr_unit,
-            photo (file), video (file),
+            photos[] (multiple files), video (file),
             poll_question, poll_options[] (repeat), poll_duration (hours).
     """
     from social.models import Post
@@ -68,7 +68,10 @@ def create_post(request):
     pr_exercise_name = (request.data.get('pr_exercise_name') or '').strip()
     pr_value = (request.data.get('pr_value') or '').strip()
     pr_unit = (request.data.get('pr_unit') or 'lbs').strip()
-    photo = request.FILES.get('photo')
+    # Accept photos[] array (new multi-photo) or legacy single photo field
+    photos_list = request.FILES.getlist('photos[]') if hasattr(request.FILES, 'getlist') else []
+    photo = photos_list[0] if photos_list else request.FILES.get('photo')
+    extra_photos = photos_list[1:] if len(photos_list) > 1 else []
     video = request.FILES.get('video')
 
     # Poll fields
@@ -85,7 +88,7 @@ def create_post(request):
 
     has_pr = bool(pr_exercise_name and pr_value)
 
-    if not text and not photo and not video and not has_pr and not workout_id and not has_poll:
+    if not text and not photo and not photos_list and not video and not has_pr and not workout_id and not has_poll:
         return Response({'success': False, 'error': 'Post must have content'}, status=400)
 
     if len(text) > 500:
@@ -114,6 +117,16 @@ def create_post(request):
                 MediaLink.objects.create(asset=asset, destination_type='post', destination_id=str(post.id), type='inline')
             except Exception:
                 pass
+        except Exception:
+            pass
+
+    if extra_photos:
+        try:
+            from social.models import PostPhoto
+            for idx, extra_file in enumerate(extra_photos):
+                pp = PostPhoto(post=post, order=idx)
+                pp.photo = extra_file
+                pp.save()
         except Exception:
             pass
 
@@ -632,6 +645,12 @@ def post_detail(request, post_id):
             if post.video:
                 from media.utils import build_media_url
                 video_url = build_media_url(post.video.name)
+            try:
+                from media.utils import build_media_url as _bmu
+                extra_photo_urls = [_bmu(pp.photo.name) for pp in post.extra_photos.all() if pp.photo]
+            except Exception:
+                extra_photo_urls = []
+            all_photo_urls = ([photo_url] if photo_url else []) + extra_photo_urls
 
             poll_data = None
             try:
@@ -680,6 +699,7 @@ def post_detail(request, post_id):
                 'description': post.description or '',
                 'location_name': None,
                 'photo_url': photo_url,
+                'photo_urls': all_photo_urls,
                 'video_url': video_url,
                 'link_url': getattr(post, 'link_url', None),
                 'like_count': like_count,

@@ -396,6 +396,17 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
     checkin_photos = _bulk_media_urls('quick_workout', checkin_ids)
     post_photos = _bulk_media_urls('post', post_ids)
 
+    # Bulk fetch extra (additional) photos per post
+    extra_photos_by_post = {}
+    if post_ids:
+        try:
+            from social.models import PostPhoto as _PostPhoto
+            for pp in _PostPhoto.objects.filter(post_id__in=post_ids).order_by('post_id', 'order'):
+                if pp.photo:
+                    extra_photos_by_post.setdefault(pp.post_id, []).append(build_media_url(pp.photo.name))
+        except Exception:
+            pass
+
     # Bulk fetch polls for posts (with prefetched options)
     polls_by_post = {}
     if post_ids:
@@ -507,6 +518,8 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
         else:
             post = obj
             photo_url = post_photos.get(str(item_id)) or (build_media_url(post.photo.name) if post.photo else None)
+            _extra_urls = extra_photos_by_post.get(item_id, [])
+            all_photo_urls = ([photo_url] if photo_url else []) + _extra_urls
             post_data = {
                 'type': 'workout' if post.workout_id else 'post',
                 'id': str(item_id),
@@ -515,6 +528,7 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
                 'description': post.description,
                 'created_at': created_at,
                 'photo_url': photo_url,
+                'photo_urls': all_photo_urls,
                 'video_url': build_media_url(post.video.name) if post.video else None,
                 'link_url': post.link_url,
                 'like_count': post.like_count,
@@ -897,7 +911,7 @@ def get_user_posts(user, viewer=None, thumbnail=False):
         Post.objects.filter(
             user=user
         ).select_related('location', 'workout').prefetch_related(
-            'poll__options'
+            'poll__options', 'extra_photos'
         ).order_by('-created_at')
     )
 
@@ -922,13 +936,19 @@ def get_user_posts(user, viewer=None, thumbnail=False):
             if viewer and viewer.is_authenticated:
                 user_liked = Reaction.objects.filter(post=post, user=viewer).exists()
 
+        _primary_url = get_media_url('post', str(post.id)) or (build_media_url(post.photo.name) if post.photo else None)
+        try:
+            _extra_urls = [build_media_url(pp.photo.name) for pp in post.extra_photos.all() if pp.photo]
+        except Exception:
+            _extra_urls = []
         post_data = {
             'type': 'workout' if post.workout else 'post',
             'id': post.id,
             'location': post.location,
             'description': post.description,
             'created_at': post.created_at,
-            'photo_url': get_media_url('post', str(post.id)) or (build_media_url(post.photo.name) if post.photo else None),
+            'photo_url': _primary_url,
+            'photo_urls': ([_primary_url] if _primary_url else []) + _extra_urls,
             'video_url': build_media_url(post.video.name) if post.video else None,
             'like_count': like_count,
             'comment_count': comment_count,
@@ -1645,6 +1665,17 @@ def search_feed_view(request):
     checkin_photos = _bulk_media_urls('quick_workout', checkin_ids)
     post_photos = _bulk_media_urls('post', post_ids)
 
+    # Bulk fetch extra photos per post
+    search_extra_photos_by_post = {}
+    if post_ids:
+        try:
+            from social.models import PostPhoto as _PostPhoto2
+            for pp in _PostPhoto2.objects.filter(post_id__in=post_ids).order_by('post_id', 'order'):
+                if pp.photo:
+                    search_extra_photos_by_post.setdefault(pp.post_id, []).append(build_media_url(pp.photo.name))
+        except Exception:
+            pass
+
     # Build feed items
     feed_items = []
     for item_type, created_at, item_id, obj in raw_items:
@@ -1674,6 +1705,7 @@ def search_feed_view(request):
         else:
             post = obj
             photo_url = post_photos.get(str(item_id)) or (build_media_url(post.photo.name) if post.photo else None)
+            _extra_urls2 = search_extra_photos_by_post.get(item_id, [])
             feed_items.append({
                 'type': 'workout' if post.workout_id else 'post',
                 'id': str(item_id),
@@ -1682,6 +1714,7 @@ def search_feed_view(request):
                 'description': post.description,
                 'created_at': created_at,
                 'photo_url': photo_url,
+                'photo_urls': ([photo_url] if photo_url else []) + _extra_urls2,
                 'video_url': build_media_url(post.video.name) if post.video else None,
                 'link_url': post.link_url,
                 'like_count': post.like_count,
