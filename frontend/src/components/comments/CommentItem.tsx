@@ -14,6 +14,7 @@ import { colors, spacing, typography } from '../../theme';
 interface CommentItemProps {
   comment: Comment;
   currentUserId?: string;
+  highlighted?: boolean;
   onLike: (id: string) => void;
   onDelete: (id: string) => void;
   onLoadReplies: (id: string) => void;
@@ -23,6 +24,7 @@ interface CommentItemProps {
 export default function CommentItem({
   comment,
   currentUserId,
+  highlighted,
   onLike,
   onDelete,
   onLoadReplies,
@@ -44,7 +46,7 @@ export default function CommentItem({
   };
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, highlighted && styles.highlighted]}>
       {/* ── Main comment row ────────────────────────────────────────── */}
       <View style={styles.row}>
         <Avatar
@@ -149,6 +151,12 @@ export default function CommentItem({
 const styles = StyleSheet.create({
   container: {
     marginBottom: spacing.md,
+  },
+  highlighted: {
+    backgroundColor: 'rgba(79,195,224,0.12)',
+    borderRadius: 10,
+    paddingHorizontal: spacing.sm,
+    marginHorizontal: -spacing.sm,
   },
   row: {
     flexDirection: 'row',
