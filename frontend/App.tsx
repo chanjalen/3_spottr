@@ -20,6 +20,7 @@ import {
 import { AuthProvider, useAuth } from './src/store/AuthContext';
 import { UnreadCountProvider } from './src/store/UnreadCountContext';
 import { ActiveWorkoutProvider } from './src/store/ActiveWorkoutContext';
+import { usePushNotifications } from './src/hooks/usePushNotifications';
 import ActiveWorkoutBanner from './src/components/navigation/ActiveWorkoutBanner';
 import MainTabs from './src/navigation/MainTabs';
 import LoginScreen from './src/screens/auth/LoginScreen';
@@ -101,6 +102,7 @@ function OnboardingNavigator() {
 
 function RootNavigator() {
   const { token, user, isLoading } = useAuth();
+  usePushNotifications(navigationRef, !!(token && user && (user.onboarding_step ?? 5) >= 5));
 
   if (isLoading) {
     return (

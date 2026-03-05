@@ -24,6 +24,7 @@ import PersonalRecordCard from './PersonalRecordCard';
 import LinkPreview from './LinkPreview';
 import PollCard from './PollCard';
 import WorkoutDetailModal from './WorkoutDetailModal';
+import LikersSheet from './LikersSheet';
 import { FeedItem } from '../../types/feed';
 import { RootStackParamList } from '../../navigation/types';
 import { timeAgo } from '../../utils/timeAgo';
@@ -74,6 +75,7 @@ export default function ImmersivePostCard({
 
   const likeScale = useSharedValue(1);
   const [workoutDetailId, setWorkoutDetailId] = useState<string | null>(null);
+  const [likersVisible, setLikersVisible] = useState(false);
   const hasPhoto = !!item.photo_url;
   const activityLabel = item.workout_type ? (ACTIVITY_LABELS[item.workout_type] ?? item.workout_type) : null;
   const gymName = item.location_name ?? null;
@@ -122,6 +124,13 @@ export default function ImmersivePostCard({
             <AnimatedPressable
               style={[styles.actionBtn, likeAnimatedStyle]}
               onPress={handleLike}
+              onLongPress={() => {
+                if (item.like_count > 0) {
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                  setLikersVisible(true);
+                }
+              }}
+              delayLongPress={300}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityLabel={`Like, ${item.like_count} likes`}
               accessibilityRole="button"
@@ -240,6 +249,13 @@ export default function ImmersivePostCard({
         <WorkoutDetailModal
           workoutId={workoutDetailId}
           onClose={() => setWorkoutDetailId(null)}
+        />
+        <LikersSheet
+          visible={likersVisible}
+          itemId={item.id}
+          itemType="checkin"
+          likeCount={item.like_count}
+          onClose={() => setLikersVisible(false)}
         />
       </>
     );

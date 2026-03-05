@@ -33,8 +33,8 @@ export const ENDPOINTS = {
   userPosts: (username: string) => `/accounts/api/user/${username}/posts/`,
   userCheckins: (username: string) => `/accounts/api/user/${username}/checkins/`,
 
-  postLikers: (id: ID) => `${BASE}/post/${id}/likers/`,
-  checkinLikers: (id: ID) => `${BASE}/checkin/${id}/likers/`,
+  postLikers: (id: ID) => `/api/social/post/${id}/likers/`,
+  checkinLikers: (id: ID) => `/api/social/checkin/${id}/likers/`,
 
   shareRecipients: '/api/social/share/recipients/',
   sendShare: '/api/social/share/send/',

@@ -467,14 +467,30 @@ export default function NotificationsScreen({ navigation }: Props) {
     }
 
     const actor = item.actors[0];
-    if (item.type === 'follow' && actor) {
+    const { type, target_type, target_id } = item;
+
+    if (type === 'like_post' && target_id) {
+      navigation.navigate('PostDetail', { postId: target_id, itemType: 'post' });
+    } else if (type === 'like_checkin' && target_id) {
+      navigation.navigate('PostDetail', { postId: target_id, itemType: 'checkin' });
+    } else if (type === 'comment' && target_type === 'post' && target_id) {
+      navigation.navigate('PostDetail', { postId: target_id, itemType: 'post', commentId: item.context_id || undefined });
+    } else if (type === 'comment' && target_type === 'quick_workout' && target_id) {
+      navigation.navigate('PostDetail', { postId: target_id, itemType: 'checkin', commentId: item.context_id || undefined });
+    } else if (type === 'mention' && target_type === 'post' && target_id) {
+      navigation.navigate('PostDetail', { postId: target_id, itemType: 'post' });
+    } else if (type === 'mention' && target_type === 'quick_workout' && target_id) {
+      navigation.navigate('PostDetail', { postId: target_id, itemType: 'checkin' });
+    } else if (type === 'follow' && actor) {
       navigation.navigate('Profile', { username: actor.username });
-    } else if (item.type === 'pr' && actor) {
+    } else if (type === 'pr' && actor) {
       navigation.navigate('Profile', { username: actor.username });
-    } else if (item.type === 'mention' && actor) {
+    } else if (type === 'join_request' && target_type === 'group' && target_id) {
+      navigation.navigate('GroupProfile', { groupId: target_id });
+    } else if (actor) {
+      // Fallback for like_comment, comment replies, mention-in-comment, etc.
+      // where we don't have a direct post ID — go to the actor's profile
       navigation.navigate('Profile', { username: actor.username });
-    } else if (item.type === 'join_request' && item.target_type === 'group' && item.target_id) {
-      navigation.navigate('GroupProfile', { groupId: item.target_id });
     }
   };
 

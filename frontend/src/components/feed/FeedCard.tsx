@@ -16,6 +16,7 @@ import { FeedItem } from '../../types/feed';
 import FeedCardHeader from './FeedCardHeader';
 import FeedCardBody from './FeedCardBody';
 import FeedCardActions from './FeedCardActions';
+import LikersSheet from './LikersSheet';
 import WorkoutDetailModal from './WorkoutDetailModal';
 import MediaViewerModal from './MediaViewerModal';
 import { colors, spacing } from '../../theme';
@@ -42,6 +43,7 @@ export default function FeedCard({
   onDelete,
 }: FeedCardProps) {
   const [workoutDetailId, setWorkoutDetailId] = useState<string | null>(null);
+  const [likersVisible, setLikersVisible] = useState(false);
   const [mediaViewer, setMediaViewer] = useState<{
     uri: string;
     kind: 'image' | 'video';
@@ -139,11 +141,19 @@ export default function FeedCard({
           commentCount={item.comment_count}
           userLiked={item.user_liked}
           onLike={onLike}
+          onLongPressLike={() => setLikersVisible(true)}
           onComment={onComment}
           onShare={onShare}
         />
       </Animated.View>
 
+      <LikersSheet
+        visible={likersVisible}
+        itemId={item.id}
+        itemType={item.type === 'checkin' ? 'checkin' : 'post'}
+        likeCount={item.like_count}
+        onClose={() => setLikersVisible(false)}
+      />
       <WorkoutDetailModal
         workoutId={workoutDetailId}
         onClose={() => setWorkoutDetailId(null)}

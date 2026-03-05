@@ -30,6 +30,17 @@ def like_post(request, post_id):
             notify_like_post(request.user, post)
         except Exception:
             pass
+        try:
+            if post.user and post.user != request.user:
+                from accounts.push import send_push_to_user
+                send_push_to_user(
+                    post.user,
+                    title='New like ❤️',
+                    body=f'@{request.user.username} liked your post',
+                    data={'type': 'like_post', 'post_id': str(post.id)},
+                )
+        except Exception:
+            pass
     like_count = Reaction.objects.filter(post=post).count()
     return Response({'liked': liked, 'like_count': like_count})
 
@@ -47,8 +58,67 @@ def like_checkin(request, checkin_id):
     else:
         Reaction.objects.create(quick_workout=checkin, user=request.user, type='like')
         liked = True
+        try:
+            if checkin.user and checkin.user != request.user:
+                from accounts.push import send_push_to_user
+                send_push_to_user(
+                    checkin.user,
+                    title='New like ❤️',
+                    body=f'@{request.user.username} liked your check-in',
+                    data={'type': 'like_checkin', 'checkin_id': str(checkin.id)},
+                )
+        except Exception:
+            pass
     like_count = Reaction.objects.filter(quick_workout=checkin).count()
     return Response({'liked': liked, 'like_count': like_count})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def post_likers(request, post_id):
+    """GET /api/social/post/<post_id>/likers/ — list of users who liked a post."""
+    from social.models import Post, Reaction
+    post = get_object_or_404(Post, id=post_id)
+    reactions = (
+        Reaction.objects
+        .filter(post=post)
+        .select_related('user')
+        .order_by('-created_at')
+    )
+    likers = [
+        {
+            'id': str(r.user.id),
+            'username': r.user.username,
+            'display_name': r.user.display_name or r.user.username,
+            'avatar_url': getattr(r.user, 'avatar_url', None) or None,
+        }
+        for r in reactions
+    ]
+    return Response({'likers': likers})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def checkin_likers(request, checkin_id):
+    """GET /api/social/checkin/<checkin_id>/likers/ — list of users who liked a check-in."""
+    from social.models import QuickWorkout, Reaction
+    checkin = get_object_or_404(QuickWorkout, id=checkin_id)
+    reactions = (
+        Reaction.objects
+        .filter(quick_workout=checkin)
+        .select_related('user')
+        .order_by('-created_at')
+    )
+    likers = [
+        {
+            'id': str(r.user.id),
+            'username': r.user.username,
+            'display_name': r.user.display_name or r.user.username,
+            'avatar_url': getattr(r.user, 'avatar_url', None) or None,
+        }
+        for r in reactions
+    ]
+    return Response({'likers': likers})
 
 
 @api_view(['POST'])
@@ -133,7 +203,16 @@ def create_post(request):
     if video:
         try:
             post.video = video
-            post.save(update_fields=['video'])
+            # Store dimensions supplied by the client (avoids server-side ffprobe)
+            try:
+                vw = int(request.data.get('video_width') or 0)
+                vh = int(request.data.get('video_height') or 0)
+                if vw > 0 and vh > 0:
+                    post.video_width = vw
+                    post.video_height = vh
+            except (ValueError, TypeError):
+                pass
+            post.save(update_fields=['video', 'video_width', 'video_height'])
             try:
                 from media.utils import create_media_asset
                 from media.models import MediaLink
