@@ -293,38 +293,23 @@ def vote_poll(request, poll_id):
     except PollOption.DoesNotExist:
         return Response({'error': 'Option not found'}, status=404)
 
-    existing_vote = PollVote.objects.filter(poll=poll, user=request.user).first()
+    if PollVote.objects.filter(poll=poll, user=request.user).exists():
+        return Response({'error': 'You have already voted on this poll.'}, status=400)
 
-    if existing_vote:
-        if str(existing_vote.option.id) != str(option_id):
-            old_option = existing_vote.option
-            old_option.votes = max(0, old_option.votes - 1)
-            old_option.save()
-            existing_vote.option = option
-            existing_vote.save()
-            option.votes += 1
-            option.save()
-    else:
-        PollVote.objects.create(poll=poll, user=request.user, option=option)
-        option.votes += 1
-        option.save()
+    PollVote.objects.create(poll=poll, user=request.user, option=option)
+    option.votes += 1
+    option.save()
 
     total_votes = poll.get_total_votes()
-    options_data = []
-    for opt in poll.options.all().order_by('order'):
-        options_data.append({
-            'id': opt.id,
-            'text': opt.text,
-            'votes': opt.votes,
-            'order': opt.order,
-        })
-
+    options_data = [
+        {'id': opt.id, 'text': opt.text, 'votes': opt.votes, 'order': opt.order}
+        for opt in poll.options.all().order_by('order')
+    ]
     return Response({
         'id': poll.id,
         'question': poll.question,
         'options': options_data,
         'total_votes': total_votes,
-        'user_voted': option.id,
         'user_vote_id': option.id,
         'is_active': poll.is_active,
         'ends_at': poll.ends_at.isoformat() if poll.ends_at else None,
@@ -540,20 +525,12 @@ def vote_poll(request, poll_id):
     except PollOption.DoesNotExist:
         return Response({'error': 'Option not found'}, status=404)
 
-    existing_vote = PollVote.objects.filter(poll=poll, user=request.user).first()
-    if existing_vote:
-        if str(existing_vote.option.id) != str(option_id):
-            old_option = existing_vote.option
-            old_option.votes = max(0, old_option.votes - 1)
-            old_option.save()
-            existing_vote.option = option
-            existing_vote.save()
-            option.votes += 1
-            option.save()
-    else:
-        PollVote.objects.create(poll=poll, user=request.user, option=option)
-        option.votes += 1
-        option.save()
+    if PollVote.objects.filter(poll=poll, user=request.user).exists():
+        return Response({'error': 'You have already voted on this poll.'}, status=400)
+
+    PollVote.objects.create(poll=poll, user=request.user, option=option)
+    option.votes += 1
+    option.save()
 
     total_votes = poll.get_total_votes()
     options_data = [

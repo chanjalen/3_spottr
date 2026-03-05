@@ -93,7 +93,7 @@ export default function FeedScreen() {
   // Refresh feed whenever this screen comes back into focus (e.g. after creating a post)
   const initialFocusHandled = useRef(false);
   useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => {
+    const unsubscribeFocus = navigation.addListener('focus', () => {
       if (!initialFocusHandled.current) {
         initialFocusHandled.current = true;
         return; // Skip initial mount — useFeed already loads on mount
@@ -105,7 +105,11 @@ export default function FeedScreen() {
         immersiveListRef.current?.snapToCurrentItem();
       }
     });
-    return unsubscribe;
+    const unsubscribeBlur = navigation.addListener('blur', () => {
+      setIsSearchFocused(false);
+      searchInputRef.current?.blur();
+    });
+    return () => { unsubscribeFocus(); unsubscribeBlur(); };
   }, [navigation, refresh]);
 
   const immersiveListRef = useRef<ImmersiveFeedListHandle>(null);
@@ -116,6 +120,7 @@ export default function FeedScreen() {
   const [containerHeight, setContainerHeight] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(0);
   const searchInputRef = useRef<TextInput>(null);
+  const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
   const dropdownAnim = useRef(new Animated.Value(0)).current;
 
@@ -140,8 +145,15 @@ export default function FeedScreen() {
     }).start();
   }, [filterDropdownOpen]);
 
+  const handleCancelSearch = () => {
+    clearSearch();
+    setIsSearchFocused(false);
+    searchInputRef.current?.blur();
+  };
+
   const handleDropdownSelect = (tab: FeedTab) => {
     setFilterDropdownOpen(false);
+    setIsSearchFocused(false);
     changeTab(tab);
   };
 
@@ -176,7 +188,8 @@ export default function FeedScreen() {
     );
   };
 
-  const showDropdown = searchQuery.length > 0;
+  const isSearchActive = isSearchFocused || searchQuery.length > 0;
+  const showDropdown = isSearchActive;
   const hasSearchResults =
     searchResults &&
     (searchResults.users.length > 0 || searchResults.posts.length > 0);
@@ -213,16 +226,18 @@ export default function FeedScreen() {
               isRefreshing={isRefreshing}
               onEndReached={handleEndReached}
               isLoadingMore={isLoadingMore}
+              onAddFriends={() => navigation.navigate('FindFriends')}
             />
           )}
         </View>
 
-        {/* Header — transparent dark overlay so the post shows through (TikTok-style).
-            Dark-to-transparent gradient keeps white icons readable on any post.
-            pointerEvents="box-none" lets the gradient pass touches to the feed. */}
+        {/* Header — switches between dark TikTok-style gradient and main-feed cyan
+            gradient when search is active, so the search experience is identical. */}
         <LinearGradient
-          colors={['rgba(0,0,0,0.65)', 'rgba(0,0,0,0.25)', 'transparent']}
-          locations={[0, 0.6, 1]}
+          colors={isSearchActive
+            ? ['#4FC3E0', '#6DCFE8', '#A8E2F4', '#D6F2FB', '#FFFFFF']
+            : ['rgba(0,0,0,0.65)', 'rgba(0,0,0,0.25)', 'transparent']}
+          locations={isSearchActive ? [0, 0.2, 0.5, 0.75, 1] : [0, 0.6, 1]}
           style={styles.floatingHeader}
           pointerEvents="box-none"
           onLayout={(e) => {
@@ -232,37 +247,40 @@ export default function FeedScreen() {
         >
           <AppHeader />
           <View style={styles.searchRow}>
-            <View style={[styles.searchInputWrap, styles.searchInputWrapDark]}>
-              <Feather name="search" size={16} color="rgba(255,255,255,0.8)" />
+            <View style={[styles.searchInputWrap, !isSearchActive && styles.searchInputWrapDark, { flex: 1 }]}>
+              <Feather name="search" size={16} color={isSearchActive ? colors.textSecondary : 'rgba(255,255,255,0.8)'} />
               <TextInput
                 ref={searchInputRef}
-                style={[styles.searchInput, styles.searchInputDark]}
+                style={[styles.searchInput, !isSearchActive && styles.searchInputDark]}
                 value={searchQuery}
                 onChangeText={handleSearchChange}
+                onFocus={() => setIsSearchFocused(true)}
                 placeholder="Search users or #hashtags..."
-                placeholderTextColor="rgba(255,255,255,0.6)"
+                placeholderTextColor={isSearchActive ? colors.textSecondary : 'rgba(255,255,255,0.6)'}
                 returnKeyType="search"
                 autoCorrect={false}
                 autoCapitalize="none"
               />
               {searchQuery.length > 0 && (
                 <Pressable
-                  onPress={() => {
-                    clearSearch();
-                    searchInputRef.current?.blur();
-                  }}
+                  onPress={() => { clearSearch(); searchInputRef.current?.blur(); }}
                   hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 >
-                  <Feather name="x" size={16} color="rgba(255,255,255,0.9)" />
+                  <Feather name="x" size={16} color={isSearchActive ? colors.textSecondary : 'rgba(255,255,255,0.9)'} />
                 </Pressable>
               )}
             </View>
+            {isSearchActive && (
+              <Pressable onPress={handleCancelSearch} style={styles.cancelBtn} hitSlop={8}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </Pressable>
+            )}
           </View>
           <FeedTabs
             activeTab={activeTab}
             onTabChange={(tab) => { setFilterDropdownOpen(false); changeTab(tab); }}
             onDropdownPress={() => setFilterDropdownOpen((o) => !o)}
-            dark
+            dark={!isSearchActive}
           />
         </LinearGradient>
 
@@ -278,11 +296,7 @@ export default function FeedScreen() {
               <View style={styles.dropdownEmpty}>
                 <Text style={styles.dropdownEmptyText}>No results for "{searchQuery}"</Text>
               </View>
-            ) : searchResults === null ? (
-              <View style={styles.dropdownEmpty}>
-                <Text style={styles.dropdownEmptyText}>Type to search...</Text>
-              </View>
-            ) : (
+            ) : searchResults === null ? null : (
               <ScrollView
                 style={styles.dropdownScroll}
                 keyboardShouldPersistTaps="handled"
@@ -402,13 +416,14 @@ export default function FeedScreen() {
 
         {/* Search bar */}
         <View style={styles.searchRow}>
-          <View style={styles.searchInputWrap}>
+          <View style={[styles.searchInputWrap, { flex: 1 }]}>
             <Feather name="search" size={16} color={colors.textSecondary} />
             <TextInput
               ref={searchInputRef}
               style={styles.searchInput}
               value={searchQuery}
               onChangeText={handleSearchChange}
+              onFocus={() => setIsSearchFocused(true)}
               placeholder="Search users or #hashtags..."
               placeholderTextColor={colors.textSecondary}
               returnKeyType="search"
@@ -417,16 +432,18 @@ export default function FeedScreen() {
             />
             {searchQuery.length > 0 && (
               <Pressable
-                onPress={() => {
-                  clearSearch();
-                  searchInputRef.current?.blur();
-                }}
+                onPress={() => { clearSearch(); searchInputRef.current?.blur(); }}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Feather name="x" size={16} color={colors.textSecondary} />
               </Pressable>
             )}
           </View>
+          {isSearchActive && (
+            <Pressable onPress={handleCancelSearch} style={styles.cancelBtn} hitSlop={8}>
+              <Text style={styles.cancelText}>Cancel</Text>
+            </Pressable>
+          )}
         </View>
 
         <FeedTabs
@@ -458,7 +475,7 @@ export default function FeedScreen() {
               { paddingBottom: bottomNavHeight + 16 },
               items.length === 0 && styles.emptyList,
             ]}
-            ListEmptyComponent={<EmptyState tab={activeTab} />}
+            ListEmptyComponent={<EmptyState tab={activeTab} onAddFriends={activeTab === 'friends' ? () => navigation.navigate('FindFriends') : undefined} />}
             ListFooterComponent={renderFooter}
             onEndReached={handleEndReached}
             onEndReachedThreshold={0.3}
@@ -521,7 +538,7 @@ export default function FeedScreen() {
           </>
         )}
 
-        {/* Search dropdown — absolute inside feedContainer, covers feed below header */}
+        {/* Search overlay — absolute inside feedContainer, covers feed below header */}
         {showDropdown && (
         <View style={styles.dropdownOverlay}>
           {isSearching && !hasSearchResults ? (
@@ -533,11 +550,7 @@ export default function FeedScreen() {
             <View style={styles.dropdownEmpty}>
               <Text style={styles.dropdownEmptyText}>No results for "{searchQuery}"</Text>
             </View>
-          ) : searchResults === null ? (
-            <View style={styles.dropdownEmpty}>
-              <Text style={styles.dropdownEmptyText}>Type to search...</Text>
-            </View>
-          ) : (
+          ) : searchResults === null ? null : (
             <ScrollView
               style={styles.dropdownScroll}
               keyboardShouldPersistTaps="handled"
@@ -668,6 +681,9 @@ const styles = StyleSheet.create({
   searchRow: {
     paddingHorizontal: spacing.xl,
     paddingBottom: 5,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
   },
   searchInputWrap: {
     flexDirection: 'row',
@@ -678,6 +694,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingVertical: Platform.OS === 'ios' ? 6 : 4,
     gap: spacing.sm,
+  },
+  cancelBtn: {
+    paddingHorizontal: spacing.xs,
+    paddingVertical: spacing.xs,
+  },
+  cancelText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.medium,
+    color: colors.primary,
   },
   searchInput: {
     flex: 1,

@@ -171,7 +171,7 @@ export default function ShareSheet({ item, onClose, bottomOffset }: ShareSheetPr
   const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.value * 0.5 }));
   const sheetStyle = useAnimatedStyle(() => ({
     top: sheetY.value,
-    bottom: Math.max(bottomNavHeight, keyboardHeight.value),
+    bottom: Math.max(0, keyboardHeight.value),
   }));
 
   // ── Toggle selection ──────────────────────────────────────────────────────
@@ -353,7 +353,7 @@ export default function ShareSheet({ item, onClose, bottomOffset }: ShareSheetPr
 
         {/* Bottom fixed area — only renders when there's something to show */}
         {(selectedIds.size > 0 || (isOwner && hasMedia)) ? (
-          <View style={[styles.bottomBar, contentBottomPad > 0 && { paddingBottom: spacing.md + contentBottomPad }]}>
+          <View style={[styles.bottomBar, { paddingBottom: spacing.md + (noTabBar ? contentBottomPad : bottomNavHeight) }]}>
             {selectedIds.size > 0 ? (
               // Send bar
               <>
@@ -389,7 +389,7 @@ export default function ShareSheet({ item, onClose, bottomOffset }: ShareSheetPr
             ) : null}
           </View>
         ) : (
-          contentBottomPad > 0 && <View style={{ height: contentBottomPad }} />
+          <View style={{ height: noTabBar ? contentBottomPad : bottomNavHeight }} />
         )}
       </Animated.View>
     </View>
