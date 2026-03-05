@@ -254,17 +254,17 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
         from accounts.models import User as AccUser
         following_ids = set(Follow.objects.filter(follower=user).values_list('following_id', flat=True))
         follower_ids = set(Follow.objects.filter(following=user).values_list('follower_id', flat=True))
-        mutual_ids = following_ids & follower_ids  # both follow each other
-        one_way_ids = following_ids - mutual_ids   # viewer follows them, not mutual
+        mutual_ids = following_ids & follower_ids  # both follow each other (friends)
         my_group_ids = GroupMember.objects.filter(user=user).values_list('group_id', flat=True)
         group_peer_ids = set(GroupMember.objects.filter(group_id__in=my_group_ids).values_list('user_id', flat=True))
 
         # Apply checkin privacy: exclude authors who've disabled visibility for this audience
         blocked_mutual = set(AccUser.objects.filter(id__in=mutual_ids, checkin_visible_friends=False).values_list('id', flat=True))
-        blocked_oneway = set(AccUser.objects.filter(id__in=one_way_ids, checkin_visible_following=False).values_list('id', flat=True))
-        allowed_social = (mutual_ids - blocked_mutual) | (one_way_ids - blocked_oneway)
+        blocked_group = set(AccUser.objects.filter(id__in=group_peer_ids, checkin_visible_friends=False).values_list('id', flat=True))
+        allowed_social = mutual_ids - blocked_mutual
+        allowed_group = group_peer_ids - blocked_group
 
-        visible_user_ids = (allowed_social | group_peer_ids | {user.id}) - blocked_user_ids
+        visible_user_ids = (allowed_social | allowed_group | {user.id}) - blocked_user_ids
         qw_qs = QuickWorkout.objects.filter(user_id__in=visible_user_ids)
         post_qs = Post.objects.none()
     elif tab == 'gym' and user:

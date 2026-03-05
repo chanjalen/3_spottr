@@ -382,7 +382,7 @@ def _lb_user(u):
 def leaderboard(request):
     """
     Streak-based leaderboard.
-    ?tab=friends (default) — following + self, ranked by -current_streak, -total_workouts
+    ?tab=friends (default) — mutual follows (friends) + self, ranked by -current_streak, -total_workouts
     ?tab=gym[&gym_id=<uuid>] — users enrolled in the selected gym
     """
     from accounts.models import User
@@ -427,11 +427,15 @@ def leaderboard(request):
             'my_rank': my_rank,
         })
 
-    # Friends: following + self
-    following_ids = list(
+    # Friends: mutual follows (friends) + self
+    following_ids = set(
         Follow.objects.filter(follower=request.user).values_list('following_id', flat=True)
     )
-    all_ids = following_ids + [request.user.id]
+    follower_ids = set(
+        Follow.objects.filter(following=request.user).values_list('follower_id', flat=True)
+    )
+    mutual_ids = following_ids & follower_ids
+    all_ids = list(mutual_ids) + [request.user.id]
     friends_qs = (
         User.objects.filter(id__in=all_ids)
         .order_by('-current_streak', '-total_workouts')
