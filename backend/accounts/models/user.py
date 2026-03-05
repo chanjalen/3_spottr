@@ -119,6 +119,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     notify_leaderboard_updates = models.BooleanField(default=False)
     push_notifications = models.BooleanField(default=True)
     email_notifications = models.BooleanField(default=True)
+    expo_push_token = models.CharField(max_length=200, blank=True, default='')
 
     # Required by AbstractBaseUser
     is_active = models.BooleanField(default=True)

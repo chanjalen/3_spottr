@@ -47,6 +47,8 @@ class Post(BaseModel):
         null=True,
         blank=True,
     )
+    video_width = models.PositiveIntegerField(null=True, blank=True)
+    video_height = models.PositiveIntegerField(null=True, blank=True)
     link_url = models.URLField(
         max_length=500,
         blank=True,

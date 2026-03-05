@@ -87,5 +87,5 @@ export type RootStackParamList = {
   CameraCapture: undefined;
   CheckInReview: { mediaUri: string; mediaType: 'photo' | 'video'; workoutId?: string };
   FindFriends: undefined;
-  PostDetail: { postId: string; itemType: 'post' | 'workout' | 'checkin' };
+  PostDetail: { postId: string; itemType: 'post' | 'workout' | 'checkin'; commentId?: string };
 };

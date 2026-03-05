@@ -570,6 +570,69 @@ def api_profile_view(request, username):
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
+def api_follow_toggle_view(request):
+    """Toggle follow/unfollow for a user (Token auth for mobile)."""
+    from social.models import Follow
+    from common.utils import check_rate_limit
+
+    if not check_rate_limit(f'rl:follow:{request.user.id}', limit=60, period=60):
+        return Response({'error': 'Too many requests.'}, status=status.HTTP_429_TOO_MANY_REQUESTS)
+
+    user_id = request.data.get('user_id')
+    username = request.data.get('username')
+    action_type = request.data.get('action', '')
+
+    if user_id:
+        try:
+            target = User.objects.get(pk=user_id)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+    elif username:
+        try:
+            target = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+    else:
+        return Response({'error': 'user_id or username required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if target.pk == request.user.pk:
+        return Response({'error': 'Cannot follow yourself'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if action_type == 'remove_follower':
+        Follow.objects.filter(follower=target, following=request.user).delete()
+        action = 'removed'
+    else:
+        follow, created = Follow.objects.get_or_create(
+            follower=request.user, following=target,
+        )
+        if not created:
+            follow.delete()
+            action = 'unfollowed'
+        else:
+            action = 'followed'
+            from notifications.dispatcher import notify_follow
+            notify_follow(request.user, target)
+
+    def friends_count(u):
+        return Follow.objects.filter(
+            follower=u,
+            following__in=Follow.objects.filter(following=u).values('follower'),
+        ).count()
+
+    return Response({
+        'action': action,
+        'following': action == 'followed',
+        'target_followers_count': Follow.objects.filter(following=target).count(),
+        'target_following_count': Follow.objects.filter(follower=target).count(),
+        'target_friends_count': friends_count(target),
+        'my_followers_count': Follow.objects.filter(following=request.user).count(),
+        'my_following_count': Follow.objects.filter(follower=request.user).count(),
+        'my_friends_count': friends_count(request.user),
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def api_block_toggle_view(request):
     """Block or unblock a user. On block, removes follows in both directions."""
     from social.models import Follow, Block
@@ -1195,21 +1258,37 @@ def api_google_auth_view(request):
     if not id_token_str:
         return Response({'error': 'id_token is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-    client_id = getattr(settings, 'GOOGLE_CLIENT_ID', '')
-    if not client_id:
+    # Collect all configured client IDs — the token's `aud` claim will match
+    # whichever platform credential was used (iOS vs Android vs Web), so we
+    # try each one until verification succeeds.
+    client_ids = [
+        cid for cid in [
+            getattr(settings, 'GOOGLE_CLIENT_ID', ''),
+            getattr(settings, 'GOOGLE_IOS_CLIENT_ID', ''),
+            getattr(settings, 'GOOGLE_ANDROID_CLIENT_ID', ''),
+        ] if cid
+    ]
+    if not client_ids:
         return Response(
             {'error': 'Google authentication is not configured on this server.'},
             status=status.HTTP_503_SERVICE_UNAVAILABLE,
         )
 
-    try:
-        idinfo = google_id_token.verify_oauth2_token(
-            id_token_str,
-            google_requests.Request(),
-            client_id,
-        )
-    except ValueError as e:
-        logger.warning('Google ID token verification failed: %s', e)
+    idinfo = None
+    last_error = None
+    for cid in client_ids:
+        try:
+            idinfo = google_id_token.verify_oauth2_token(
+                id_token_str,
+                google_requests.Request(),
+                cid,
+            )
+            break
+        except ValueError as e:
+            last_error = e
+
+    if idinfo is None:
+        logger.warning('Google ID token verification failed (tried %d client IDs): %s', len(client_ids), last_error)
         return Response({'error': 'Invalid Google token.'}, status=status.HTTP_401_UNAUTHORIZED)
 
     google_id = idinfo['sub']
@@ -1263,3 +1342,51 @@ def api_google_auth_view(request):
     from rest_framework.authtoken.models import Token
     token, _ = Token.objects.get_or_create(user=user)
     return Response({'token': token.key, 'user': _user_brief(user)})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_save_push_token_view(request):
+    token = (request.data.get('token') or '').strip()
+    if not token:
+        return Response({'error': 'token is required'}, status=400)
+    request.user.expo_push_token = token
+    request.user.save(update_fields=['expo_push_token'])
+    return Response({'ok': True})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_send_gym_reminders_view(request):
+    """
+    POST /accounts/api/send-gym-reminders/
+    Sends a push notification to every user who has a push token, has
+    push_notifications enabled, and has NOT logged a workout or check-in today.
+    Intended to be called by a daily cron job (authenticate with a service token).
+    """
+    from django.utils import timezone
+    from accounts.push import send_push
+    from social.models import QuickWorkout
+    from workouts.models import Workout
+
+    today = timezone.localdate()
+
+    users = User.objects.filter(
+        push_notifications=True,
+        expo_push_token__gt='',
+    )
+
+    sent = 0
+    for user in users:
+        has_workout = Workout.objects.filter(user=user, date=today).exists()
+        has_checkin = QuickWorkout.objects.filter(user=user, created_at__date=today).exists()
+        if not has_workout and not has_checkin:
+            send_push(
+                user.expo_push_token,
+                title="Don't break your streak! 🔥",
+                body="You haven't logged a workout today. Keep the momentum going!",
+                data={'type': 'gym_reminder'},
+            )
+            sent += 1
+
+    return Response({'sent': sent})

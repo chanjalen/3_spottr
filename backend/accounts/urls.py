@@ -13,7 +13,7 @@ urlpatterns = [
     path('edit/', views.edit_profile_view, name='edit_profile'),
     path('delete-account/', views.delete_account_view, name='delete_account'),
     path('api/search-users/', views.search_users_view, name='search_users'),
-    path('api/follow-toggle/', views.follow_toggle_view, name='follow_toggle'),
+    path('api/follow-toggle/', api_views.api_follow_toggle_view, name='follow_toggle'),
     path('api/block-toggle/', api_views.api_block_toggle_view, name='block_toggle'),
     path('api/followers/', views.followers_list_view, name='followers_list'),
     path('api/following/', views.following_list_view, name='following_list'),
@@ -43,4 +43,6 @@ urlpatterns = [
     path('api/user/<str:username>/checkins/', api_views.api_user_checkins_view, name='api_user_checkins'),
     path('api/user/<str:username>/mutual-followers/', api_views.api_mutual_followers_view, name='api_mutual_followers'),
     path('api/suggested-users/', api_views.api_suggested_users_view, name='api_suggested_users'),
+    path('api/push-token/', api_views.api_save_push_token_view, name='api_save_push_token'),
+    path('api/send-gym-reminders/', api_views.api_send_gym_reminders_view, name='api_send_gym_reminders'),
 ]

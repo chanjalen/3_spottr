@@ -385,6 +385,19 @@ def send_dm(sender, recipient_id, content, post_id=None, quick_workout_id=None, 
     # Push updated unread count to the recipient.
     _push_unread_update(recipient)
 
+    # Push notification to recipient.
+    try:
+        from accounts.push import send_push_to_user
+        preview = (content or '')[:80] or '📎 Attachment'
+        send_push_to_user(
+            recipient,
+            title=f'@{sender.username}',
+            body=preview,
+            data={'type': 'dm', 'sender_id': str(sender.id)},
+        )
+    except Exception:
+        pass
+
     return message
 
 
@@ -565,6 +578,21 @@ def send_group_message(sender, group_id, content, post_id=None, quick_workout_id
 
     from messaging.tasks import fanout_group_inbox
     fanout_group_inbox.delay(str(message.id), str(group.id), str(sender.id))
+
+    # Push notification to all group members except sender.
+    try:
+        from accounts.push import send_push_to_user
+        preview = (content or '')[:80] or '📎 Attachment'
+        members = group.members.exclude(id=sender.id)
+        for member in members:
+            send_push_to_user(
+                member,
+                title=f'{group.name}: @{sender.username}',
+                body=preview,
+                data={'type': 'group_message', 'group_id': str(group.id)},
+            )
+    except Exception:
+        pass
 
     return message
 

@@ -109,18 +109,20 @@ export default function GymDetailScreen({ navigation, route }: Props) {
   const [inviteLoading, setInviteLoading] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (forceRefresh = false) => {
     const cacheKey = `gym:detail:${gymId}`;
     type CachedDetail = { gym: Gym; busyLevel: BusyLevel | null; topLifters: TopLifter[]; invites: WorkoutInvite[] };
 
-    // ── Serve cached data immediately ────────────────────────────────────────
-    const cached = await staleCache.get<CachedDetail>(cacheKey);
-    if (cached) {
-      setGym(cached.gym);
-      setBusyLevel(cached.busyLevel);
-      setTopLifters(cached.topLifters);
-      setInvites(cached.invites);
-      setLoading(false);
+    // ── Serve cached data immediately (skip on manual refresh) ───────────────
+    if (!forceRefresh) {
+      const cached = await staleCache.get<CachedDetail>(cacheKey);
+      if (cached) {
+        setGym(cached.gym);
+        setBusyLevel(cached.busyLevel);
+        setTopLifters(cached.topLifters);
+        setInvites(cached.invites);
+        setLoading(false);
+      }
     }
 
     // ── Always fetch fresh in background ─────────────────────────────────────
@@ -128,7 +130,7 @@ export default function GymDetailScreen({ navigation, route }: Props) {
       const [gymData, busy, lifters] = await Promise.all([
         fetchGymDetail(gymId),
         fetchBusyLevel(gymId).catch(() => null),
-        fetchGymLeaderboard(gymId, 'total').catch(() => []),
+        fetchGymLeaderboard(gymId, 'total', forceRefresh).catch(() => []),
       ]);
       const inviteData = await fetchWorkoutInvites(gymId).catch(() => []);
       staleCache.set(cacheKey, { gym: gymData, busyLevel: busy, topLifters: lifters, invites: inviteData }, 2 * 60 * 1000);
@@ -321,7 +323,7 @@ export default function GymDetailScreen({ navigation, route }: Props) {
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
-            onRefresh={() => { setRefreshing(true); load(); }}
+            onRefresh={() => { setRefreshing(true); load(true); }}
             tintColor={colors.primary}
           />
         }

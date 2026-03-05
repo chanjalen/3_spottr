@@ -29,7 +29,7 @@ type Props = {
 };
 
 export default function PostDetailScreen({ navigation, route }: Props) {
-  const { postId, itemType } = route.params;
+  const { postId, itemType, commentId } = route.params;
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
 
@@ -53,6 +53,13 @@ export default function PostDetailScreen({ navigation, route }: Props) {
   const updateItem = useCallback((id: string, updates: Partial<FeedItem>) => {
     setItem((prev) => (prev && prev.id === id ? { ...prev, ...updates } : prev));
   }, []);
+
+  // Auto-open comments sheet when arriving from a comment notification
+  useEffect(() => {
+    if (item && commentId) {
+      setCommentItem(item);
+    }
+  }, [item, commentId]);
 
   const handlePollVote = usePollVote(updateItem);
 
@@ -103,6 +110,7 @@ export default function PostDetailScreen({ navigation, route }: Props) {
             if (item) updateItem(item.id, { comment_count: item.comment_count + delta });
           }}
           bottomOffset={insets.bottom}
+          highlightCommentId={commentId}
         />
         <ShareSheet item={shareItem} onClose={() => setShareItem(null)} bottomOffset={insets.bottom} />
       </View>
