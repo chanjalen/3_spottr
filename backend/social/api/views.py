@@ -716,6 +716,7 @@ def post_detail(request, post_id):
             'created_at': checkin.created_at.isoformat(),
             'description': checkin.description or '',
             'location_name': checkin.location_name or (checkin.location.name if checkin.location else None),
+            'gym_id': str(checkin.location.id) if checkin.location else None,
             'photo_url': photo_url,
             'video_url': None,
             'link_url': None,

@@ -1,15 +1,19 @@
 import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Feather } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Avatar from '../common/Avatar';
 import { UserBrief } from '../../types/user';
 import { timeAgo } from '../../utils/timeAgo';
 import { colors, spacing, typography } from '../../theme';
+import { RootStackParamList } from '../../navigation/types';
 
 interface FeedCardHeaderProps {
   user: UserBrief;
   createdAt: string;
   locationName: string | null;
+  gymId?: string | null;
   workoutType?: string;
   sharedContext?: string[];
   onPressUser?: () => void;
@@ -20,11 +24,13 @@ export default function FeedCardHeader({
   user,
   createdAt,
   locationName,
+  gymId,
   workoutType,
   sharedContext,
   onPressUser,
   onMore,
 }: FeedCardHeaderProps) {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   if (!user) return null;
 
   const contextTag = workoutType ?? locationName;
@@ -73,9 +79,20 @@ export default function FeedCardHeader({
       {/* Context tag (workout type / location) below name row */}
       {contextTag && (
         <View style={styles.tagWrap}>
-          <View style={styles.tag}>
-            <Text style={styles.tagText}>{contextTag}</Text>
-          </View>
+          {locationName && gymId ? (
+            <Pressable
+              style={({ pressed }) => [styles.tag, pressed && { opacity: 0.6 }]}
+              onPress={() => navigation.navigate('GymDetail', { gymId, gymName: locationName })}
+              hitSlop={6}
+            >
+              <Feather name="map-pin" size={9} color={colors.primary} />
+              <Text style={styles.tagText}>{contextTag}</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.tag}>
+              <Text style={styles.tagText}>{contextTag}</Text>
+            </View>
+          )}
           {sharedContext?.map((t, i) => (
             <View key={i} style={styles.tag}>
               <Text style={styles.tagText}>{t}</Text>
@@ -139,6 +156,9 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
   tag: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
     backgroundColor: colors.primary + '15',
     borderRadius: 6,
     paddingHorizontal: 6,

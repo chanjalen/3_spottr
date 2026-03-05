@@ -73,6 +73,7 @@ export interface FeedItem {
   created_at: string;
   description: string;
   location_name: string | null;
+  gym_id?: string | null;
   photo_url: string | null;
   video_url?: string | null;
   link_url: string | null;

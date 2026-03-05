@@ -119,6 +119,7 @@ export default function FeedScreen() {
   const [shareItem, setShareItem] = useState<FeedItem | null>(null);
   const [containerHeight, setContainerHeight] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(0);
+  const lastKnownHeaderHeight = useRef(0);
   const searchInputRef = useRef<TextInput>(null);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [filterDropdownOpen, setFilterDropdownOpen] = useState(false);
@@ -131,10 +132,9 @@ export default function FeedScreen() {
   const isImmersive = activeTab !== 'main';
   isImmersiveRef.current = isImmersive;
 
-  // Reset measured heights when switching between immersive ↔ main layouts
+  // Reset container height when switching between immersive ↔ main layouts
   useEffect(() => {
     setContainerHeight(0);
-    setHeaderHeight(0);
   }, [isImmersive]);
 
   useEffect(() => {
@@ -242,7 +242,7 @@ export default function FeedScreen() {
           pointerEvents="box-none"
           onLayout={(e) => {
             const h = e.nativeEvent.layout.height;
-            if (h > 0) setHeaderHeight(h);
+            if (h > 0) { setHeaderHeight(h); lastKnownHeaderHeight.current = h; }
           }}
         >
           <AppHeader />
@@ -352,7 +352,7 @@ export default function FeedScreen() {
             <Animated.View
               style={[
                 styles.filterDropdown,
-                { top: headerHeight + 8 },
+                { top: (headerHeight || lastKnownHeaderHeight.current || insets.top + 100) + 8 },
                 {
                   opacity: dropdownAnim,
                   transform: [{ translateY: dropdownAnim.interpolate({ inputRange: [0, 1], outputRange: [-8, 0] }) }],
@@ -804,12 +804,11 @@ const styles = StyleSheet.create({
   // Filter dropdown
   filterDropdown: {
     position: 'absolute',
-    top: 8,
     left: spacing.xl,
     backgroundColor: colors.surface,
     borderRadius: 14,
     zIndex: 20,
-    minWidth: 200,
+    minWidth: 240,
     ...Platform.select({
       ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.14, shadowRadius: 20 },
       android: { elevation: 8 },
