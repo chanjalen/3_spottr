@@ -79,13 +79,12 @@ export type RootStackParamList = {
   OrgProfile: { orgId: string };
   UserList: UserListParams;
   CreatePost: undefined;
-  QuickCheckin: undefined;
   AllDMs: undefined;
   AllGroupChats: undefined;
   AllOrgs: undefined;
   CheckInSelection: undefined;
   CameraCapture: { fromCheckinReview?: boolean } | undefined;
-  CheckInReview: { mediaUri?: string; mediaType?: 'photo' | 'video'; workoutId?: string };
+  CheckInReview: { mediaUri?: string; mediaType?: 'photo' | 'video'; workoutId?: string; isFrontCamera?: boolean };
   FindFriends: undefined;
   PostDetail: { postId: string; itemType: 'post' | 'workout' | 'checkin'; commentId?: string };
 };

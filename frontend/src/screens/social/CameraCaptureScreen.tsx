@@ -48,9 +48,7 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
   const [isCameraReady, setIsCameraReady] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const navigatedToWorkoutRef = useRef(false);
-
-  // Camera mode as state so we control when it changes
-  const [cameraMode, setCameraMode] = useState<'picture' | 'video'>('picture');
+  const isCapturingRef = useRef(false);
 
   // Mount/unmount CameraView on focus so it always initializes fresh
   const [isFocused, setIsFocused] = useState(false);
@@ -59,6 +57,7 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
       setIsFocused(true);
       setIsCameraReady(false);
       return () => {
+        if (isCapturingRef.current) return;
         setIsFocused(false);
         setIsCameraReady(false);
       };
@@ -112,6 +111,7 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
 
   // Reset camera-ready whenever facing changes (camera reinitializes)
   const handleFacingChange = useCallback(() => {
+    if (isCapturingRef.current) return;
     setIsCameraReady(false);
     setFacing((f) => (f === 'back' ? 'front' : 'back'));
   }, []);
@@ -150,34 +150,35 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
       return {
         mediaUri,
         mediaType,
+        isFrontCamera: facing === 'front',
         ...(existingWorkoutId ? { workoutId: existingWorkoutId } : {}),
       };
     },
-    [navigation],
+    [navigation, facing],
   );
 
   const handleTakePhoto = useCallback(async () => {
-    if (!cameraRef.current || !isCameraReady) return;
+    if (!cameraRef.current || !isCameraReady || isCapturingRef.current) return;
+    isCapturingRef.current = true;
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.85 });
       if (photo?.uri) {
         if (fromCheckinReview) {
           navigation.navigate('CheckInReview', getCheckinParams(photo.uri, 'photo'));
         } else {
-          navigation.replace('CheckInReview', { mediaUri: photo.uri, mediaType: 'photo' });
+          navigation.replace('CheckInReview', { mediaUri: photo.uri, mediaType: 'photo', isFrontCamera: facing === 'front' });
         }
       }
     } catch (err) {
       console.error('[CameraCapture] takePictureAsync error:', err);
       Alert.alert('Error', 'Could not take photo. Please try again.');
+    } finally {
+      isCapturingRef.current = false;
     }
   }, [navigation, fromCheckinReview, isCameraReady, getCheckinParams]);
 
   const handleStartRecording = useCallback(async () => {
     if (!cameraRef.current || isRecording || !isCameraReady) return;
-    // Switch to video mode, then wait for camera to be ready again
-    setIsCameraReady(false);
-    setCameraMode('video');
     setIsRecording(true);
     shutterScale.value = withSpring(0.75, { stiffness: 300, damping: 20 });
     shutterRingScale.value = withSpring(1.25, { stiffness: 300, damping: 20 });
@@ -189,15 +190,18 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
         if (fromCheckinReview) {
           navigation.navigate('CheckInReview', getCheckinParams(video.uri, 'video'));
         } else {
-          navigation.replace('CheckInReview', { mediaUri: video.uri, mediaType: 'video' });
+          navigation.replace('CheckInReview', { mediaUri: video.uri, mediaType: 'video', isFrontCamera: facing === 'front' });
         }
       }
     } catch (err) {
       console.error('[CameraCapture] recordAsync error:', err);
       setIsRecording(false);
-      setCameraMode('picture');
+      stopRecordingTimer();
+      shutterScale.value = withSpring(1);
+      shutterRingScale.value = withSpring(1);
+      progressAnim.value = 0;
     }
-  }, [isRecording, navigation, fromCheckinReview, startRecordingTimer, isCameraReady, getCheckinParams]);
+  }, [isRecording, isCameraReady, startRecordingTimer, stopRecordingTimer, fromCheckinReview, navigation, getCheckinParams]);
 
   const handleStopRecording = useCallback(() => {
     if (!isRecording || !cameraRef.current) return;
@@ -207,9 +211,6 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
     shutterScale.value = withSpring(1);
     shutterRingScale.value = withSpring(1);
     progressAnim.value = 0;
-    // Switch back to picture mode (camera will call onCameraReady again)
-    setIsCameraReady(false);
-    setCameraMode('picture');
   }, [isRecording, stopRecordingTimer]);
 
   const handleLogWorkout = useCallback(() => {
@@ -243,10 +244,11 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
     <View style={styles.container}>
       {isFocused && (
         <CameraView
+          key={facing}
           ref={cameraRef}
           style={StyleSheet.absoluteFill}
           facing={facing}
-          mode={cameraMode}
+          mode="video"
           onCameraReady={handleCameraReady}
         />
       )}
@@ -294,7 +296,7 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
       {!isRecording && (
         <View style={styles.hintWrap}>
           <Text style={styles.hintText}>
-            {isCameraReady ? 'Tap for photo · Hold for video' : 'Camera starting…'}
+            Tap for photo · Hold for video
           </Text>
         </View>
       )}

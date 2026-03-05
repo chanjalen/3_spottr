@@ -24,6 +24,7 @@ function adaptFeedItem(raw: any): FeedItem {
         ? [raw.photo_url]
         : [],
     video_url: raw.video_url ?? null,
+    is_front_camera: raw.is_front_camera ?? false,
     link_url: raw.link_url ?? null,
     like_count: raw.like_count ?? 0,
     comment_count: raw.comment_count ?? 0,
@@ -220,6 +221,8 @@ export interface CheckinItem {
   location_name: string;
   workout_type: string;
   photo_url: string | null;
+  video_url: string | null;
+  is_front_camera: boolean;
   created_at: string;
   like_count: number;
   comment_count: number;
@@ -247,6 +250,8 @@ export async function fetchUserCheckins(
     location_name: r.location_name ?? '',
     workout_type: r.workout_type ?? '',
     photo_url: r.photo_url ?? null,
+    video_url: r.video_url ?? null,
+    is_front_camera: r.is_front_camera ?? false,
     created_at: r.created_at ?? new Date().toISOString(),
     like_count: r.like_count ?? 0,
     comment_count: r.comment_count ?? 0,
@@ -271,6 +276,7 @@ export async function createCheckin(params: {
   video?: { uri: string; name: string; type: string };
   // Optional: ID of a logged workout to attach to this check-in
   workoutId?: string;
+  isFrontCamera?: boolean;
 }): Promise<{ checkin_id: string }> {
   const formData = new FormData();
   if (params.gymId) formData.append('gym_id', params.gymId);
@@ -280,6 +286,7 @@ export async function createCheckin(params: {
   if (params.photo) formData.append('photo', params.photo as any);
   if (params.video) formData.append('video', params.video as any);
   if (params.workoutId) formData.append('workout_id', params.workoutId);
+  formData.append('is_front_camera', params.isFrontCamera ? 'true' : 'false');
 
   // Do NOT set Content-Type manually — React Native's XHR sets it automatically
   // with the correct multipart boundary when the body is FormData.

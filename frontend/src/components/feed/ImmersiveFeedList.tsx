@@ -1,4 +1,5 @@
 import React, { useCallback, useRef, useMemo, useState, useImperativeHandle, forwardRef } from 'react';
+import { useIsFocused } from '@react-navigation/native';
 import {
   FlatList,
   ActivityIndicator,
@@ -64,6 +65,8 @@ const ImmersiveFeedList = forwardRef<ImmersiveFeedListHandle, ImmersiveFeedListP
   onAddFriends,
 }, ref) {
   const [shareItem, setShareItem] = useState<FeedItem | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const isScreenFocused = useIsFocused();
 
   const flatListRef = useRef<FlatList<FeedItem>>(null);
 
@@ -147,19 +150,20 @@ const ImmersiveFeedList = forwardRef<ImmersiveFeedListHandle, ImmersiveFeedListP
   // ─── FlatList setup ─────────────────────────────────────────────────────────
 
   const renderItem = useCallback(
-    ({ item }: { item: FeedItem }) => (
+    ({ item, index }: { item: FeedItem; index: number }) => (
       <ImmersivePostCard
         item={item}
         itemHeight={itemHeight}
         topInset={topInset}
         bottomInset={bottomInset}
+        isActive={index === activeIndex && isScreenFocused}
         onLike={() => onLike(item)}
         onComment={() => onComment(item)}
         onShare={() => setShareItem(item)}
         onPollVote={(optionId) => onPollVote(item, optionId)}
       />
     ),
-    [itemHeight, topInset, bottomInset, onLike, onComment, onPollVote],
+    [itemHeight, topInset, bottomInset, onLike, onComment, onPollVote, activeIndex, isScreenFocused],
   );
 
   const getItemLayout = useCallback(
@@ -173,10 +177,16 @@ const ImmersiveFeedList = forwardRef<ImmersiveFeedListHandle, ImmersiveFeedListP
 
   const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 });
 
+  // Keep a stable ref to setActiveIndex so the viewability callback never goes stale
+  const setActiveIndexRef = useRef(setActiveIndex);
+  setActiveIndexRef.current = setActiveIndex;
+
   const onViewableItemsChanged = useRef(
     ({ viewableItems }: { viewableItems: ViewToken[] }) => {
       if (viewableItems.length > 0) {
-        currentIndexRef.current = viewableItems[0].index ?? 0;
+        const idx = viewableItems[0].index ?? 0;
+        currentIndexRef.current = idx;
+        setActiveIndexRef.current(idx);
       }
     },
   ).current;

@@ -36,6 +36,7 @@ class QuickWorkout(BaseModel):
     type = models.CharField(max_length=50)
 
     audience = models.JSONField(default=list)
+    is_front_camera = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['-created_at']

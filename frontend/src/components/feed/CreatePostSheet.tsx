@@ -15,7 +15,7 @@ import BottomSheet, {
   BottomSheetScrollView,
 } from '@gorhom/bottom-sheet';
 import { Feather } from '@expo/vector-icons';
-import * as ImagePicker from 'expo-image-picker';
+import { pickMedia as pickMediaUtil } from '../../utils/pickMedia';
 import { colors, spacing, typography } from '../../theme';
 import { createPost } from '../../api/feed';
 import { useAuth } from '../../store/AuthContext';
@@ -88,35 +88,17 @@ export default function CreatePostSheet({ sheetRef, onSuccess }: Props) {
   // exports H.264 MP4 regardless of original format, so we always use video/mp4.
 
   const pickMedia = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Please allow access to your photo library.');
-      return;
+    const picked = await pickMediaUtil({ allowsMultiple: false });
+    if (!picked) return;
+    const asset = picked[0];
+    if (asset.kind === 'video') {
+      setVideo({ uri: asset.uri, name: asset.filename, type: asset.mimeType });
+      setPhoto(null);
+    } else {
+      setPhoto({ uri: asset.uri, name: asset.filename, type: asset.mimeType });
+      setVideo(null);
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.All,
-      allowsEditing: false,
-      quality: 0.9,
-      videoMaxDuration: 120,
-      preferredAssetRepresentationMode:
-        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
-    });
-    if (!result.canceled && result.assets[0]) {
-      const asset = result.assets[0];
-      if (asset.type === 'video') {
-        // iOS exports Compatible as H.264 MP4 — force mp4 mime type
-        const mimeType = Platform.OS === 'ios' ? 'video/mp4' : (asset.mimeType ?? 'video/mp4');
-        const extension = Platform.OS === 'ios' ? 'mp4' : (asset.uri.split('.').pop()?.toLowerCase() ?? 'mp4');
-        setVideo({ uri: asset.uri, name: `video.${extension}`, type: mimeType });
-        setPhoto(null);
-      } else {
-        const mimeType = asset.mimeType ?? 'image/jpeg';
-        const extension = mimeType === 'image/png' ? 'png' : 'jpg';
-        setPhoto({ uri: asset.uri, name: `photo.${extension}`, type: mimeType });
-        setVideo(null);
-      }
-      setMode('media');
-    }
+    setMode('media');
   };
 
   // ── Submit ───────────────────────────────────────────────────────────────────

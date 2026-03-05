@@ -77,6 +77,7 @@ export interface FeedItem {
   photo_url: string | null;
   photo_urls: string[];
   video_url?: string | null;
+  is_front_camera?: boolean;
   link_url: string | null;
   like_count: number;
   comment_count: number;

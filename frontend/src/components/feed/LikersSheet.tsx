@@ -106,7 +106,7 @@ export default function LikersSheet({
         ) : likers.length === 0 ? (
           <View style={styles.center}>
             <Feather name="heart" size={32} color={colors.textMuted} />
-            <Text style={styles.emptyText}>No likes yet</Text>
+            <Text style={styles.emptyText}>No one liked this yet</Text>
           </View>
         ) : (
           <FlatList

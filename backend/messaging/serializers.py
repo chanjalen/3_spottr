@@ -128,6 +128,7 @@ class SharedCheckinSerializer(serializers.Serializer):
     author_avatar_url = serializers.SerializerMethodField()
     description = serializers.CharField(allow_blank=True, allow_null=True, required=False)
     photo_url = serializers.SerializerMethodField()
+    video_url = serializers.SerializerMethodField()
     workout_type = serializers.SerializerMethodField()
     location_name = serializers.SerializerMethodField()
     like_count = serializers.SerializerMethodField()
@@ -150,9 +151,15 @@ class SharedCheckinSerializer(serializers.Serializer):
 
     def get_photo_url(self, obj):
         from media.utils import get_media_url, build_media_url
-        url = get_media_url('quick_workout', str(obj.id))
-        if url:
-            return url
+        from media.models import MediaLink
+        image_link = MediaLink.objects.filter(
+            destination_type='quick_workout',
+            destination_id=str(obj.id),
+            type='inline',
+            asset__kind='image',
+        ).select_related('asset').first()
+        if image_link:
+            return build_media_url(image_link.asset.storage_key)
         from django.core.files.storage import default_storage
         path = f'checkins/{obj.id}.jpg'
         try:
@@ -160,6 +167,19 @@ class SharedCheckinSerializer(serializers.Serializer):
                 return build_media_url(path)
         except Exception:
             pass
+        return None
+
+    def get_video_url(self, obj):
+        from media.utils import build_media_url
+        from media.models import MediaLink
+        video_link = MediaLink.objects.filter(
+            destination_type='quick_workout',
+            destination_id=str(obj.id),
+            type='inline',
+            asset__kind='video',
+        ).select_related('asset').first()
+        if video_link:
+            return build_media_url(video_link.asset.storage_key)
         return None
 
     def get_workout_type(self, obj):

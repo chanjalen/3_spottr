@@ -800,9 +800,27 @@ def post_detail(request, post_id):
         user_liked = Reaction.objects.filter(quick_workout=checkin, user=request.user).exists()
 
         photo_url = None
+        video_url = None
         try:
-            from media.utils import get_media_url
-            photo_url = get_media_url('quick_workout', str(checkin.id))
+            from media.models import MediaLink as _ML
+            from media.utils import build_media_url as _bmu
+            for _link in _ML.objects.filter(
+                destination_type='quick_workout',
+                destination_id=str(checkin.id),
+                type='inline',
+            ).select_related('asset'):
+                if _link.asset.kind == 'video' and video_url is None:
+                    video_url = _bmu(_link.asset.storage_key)
+                elif _link.asset.kind == 'image' and photo_url is None:
+                    photo_url = _bmu(_link.asset.storage_key)
+            if photo_url is None:
+                from django.core.files.storage import default_storage
+                _legacy = f'checkins/{checkin.id}.jpg'
+                try:
+                    if default_storage.exists(_legacy):
+                        photo_url = _bmu(_legacy)
+                except Exception:
+                    pass
         except Exception:
             pass
 
@@ -821,7 +839,8 @@ def post_detail(request, post_id):
             'location_name': checkin.location_name or (checkin.location.name if checkin.location else None),
             'gym_id': str(checkin.location.id) if checkin.location else None,
             'photo_url': photo_url,
-            'video_url': None,
+            'video_url': video_url,
+            'is_front_camera': checkin.is_front_camera,
             'link_url': None,
             'like_count': like_count,
             'comment_count': comment_count,
