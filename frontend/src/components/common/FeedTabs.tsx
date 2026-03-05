@@ -14,10 +14,10 @@ export type FeedTab = 'main' | 'friends' | 'gym' | 'org';
 const DROPDOWN_TABS: FeedTab[] = ['friends', 'gym', 'org'];
 
 const LEFT_TAB_LABELS: Record<FeedTab, string> = {
-  friends: 'Friends/Groups',
-  gym: 'Gym',
-  org: 'Organizations',
-  main: 'Friends/Groups', // fallback, never shown as left label when main is active
+  friends: 'CheckIn (Friends/Groups)',
+  gym: 'CheckIn (Gym)',
+  org: 'CheckIn (Organizations)',
+  main: 'CheckIn (Friends/Groups)', // fallback, never shown as left label when main is active
 };
 
 interface FeedTabsProps {
@@ -69,7 +69,7 @@ export default function FeedTabs({
   }));
 
   const isDropdownTab = DROPDOWN_TABS.includes(activeTab);
-  const leftLabel = isDropdownTab ? LEFT_TAB_LABELS[activeTab] : 'Friends/Groups';
+  const leftLabel = isDropdownTab ? LEFT_TAB_LABELS[activeTab] : 'CheckIn (Friends/Groups)';
 
   const handleLeftTabPress = () => {
     if (isDropdownTab) {
@@ -124,7 +124,7 @@ export default function FeedTabs({
             style={styles.tab}
             accessibilityRole="tab"
             accessibilityState={{ selected: activeTab === 'main' }}
-            accessibilityLabel="Main"
+            accessibilityLabel="Posts"
           >
             <Text
               style={[
@@ -134,7 +134,7 @@ export default function FeedTabs({
                   : dark ? styles.tabLabelInactiveDark : styles.tabLabelInactive,
               ]}
             >
-              Main
+              Posts
             </Text>
           </Pressable>
 

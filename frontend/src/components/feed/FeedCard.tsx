@@ -109,6 +109,7 @@ export default function FeedCard({
               user={item.user}
               createdAt={item.created_at}
               locationName={item.location_name}
+              gymId={item.gym_id}
               workoutType={item.workout_type}
               sharedContext={item.shared_context}
               onPressUser={onPressUser}

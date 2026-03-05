@@ -486,6 +486,7 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
                 'user': obj.user,
                 'location': obj.location,
                 'location_name': obj.location_name or (obj.location.name if obj.location else ''),
+                'gym_id': str(obj.location.id) if obj.location else None,
                 'workout_type': obj.type.replace('_', ' ').title() if obj.type else '',
                 'description': obj.description,
                 'created_at': created_at,
