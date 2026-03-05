@@ -106,26 +106,23 @@ export default function EditProfileScreen({ navigation, route }: Props) {
   };
 
   // Privacy — checkin audience visibility, auto-saved on toggle
-  const [checkinFriends, setCheckinFriends] = useState(user?.checkin_visible_friends ?? true);
-  const [checkinFollowing, setCheckinFollowing] = useState(user?.checkin_visible_following ?? true);
+  const [checkinFriendsGroups, setCheckinFriendsGroups] = useState(user?.checkin_visible_friends ?? true);
   const [checkinOrgs, setCheckinOrgs] = useState(user?.checkin_visible_orgs ?? true);
   const [checkinGyms, setCheckinGyms] = useState(user?.checkin_visible_gyms ?? true);
 
   const handlePrivacyToggle = async (
-    field: 'checkin_visible_friends' | 'checkin_visible_following' | 'checkin_visible_orgs' | 'checkin_visible_gyms',
+    field: 'checkin_visible_friends' | 'checkin_visible_orgs' | 'checkin_visible_gyms',
     value: boolean,
   ) => {
     // Optimistic update
-    if (field === 'checkin_visible_friends') setCheckinFriends(value);
-    else if (field === 'checkin_visible_following') setCheckinFollowing(value);
+    if (field === 'checkin_visible_friends') setCheckinFriendsGroups(value);
     else if (field === 'checkin_visible_orgs') setCheckinOrgs(value);
     else setCheckinGyms(value);
     try {
       await apiUpdatePrivacy({ [field]: value });
     } catch {
       // rollback
-      if (field === 'checkin_visible_friends') setCheckinFriends(!value);
-      else if (field === 'checkin_visible_following') setCheckinFollowing(!value);
+      if (field === 'checkin_visible_friends') setCheckinFriendsGroups(!value);
       else if (field === 'checkin_visible_orgs') setCheckinOrgs(!value);
       else setCheckinGyms(!value);
     }
@@ -282,16 +279,10 @@ export default function EditProfileScreen({ navigation, route }: Props) {
               <Text style={styles.sectionHeading}>Check-ins</Text>
               <Text style={styles.sectionSubheading}>Choose who can see your check-ins in their feed. Changes save instantly.</Text>
               <SwitchRow
-                label="Friends"
-                sublabel="Mutual followers"
-                value={checkinFriends}
+                label="Friends/Groups"
+                sublabel="Your friends and groups"
+                value={checkinFriendsGroups}
                 onChange={(v) => handlePrivacyToggle('checkin_visible_friends', v)}
-              />
-              <SwitchRow
-                label="Friends & Following"
-                sublabel="People you follow but who don't follow back"
-                value={checkinFollowing}
-                onChange={(v) => handlePrivacyToggle('checkin_visible_following', v)}
               />
               <SwitchRow
                 label="Organizations"
