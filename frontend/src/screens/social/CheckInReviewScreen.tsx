@@ -48,19 +48,6 @@ const BUSY_COLORS: Record<number, string> = {
   5: '#F44336',
 };
 
-const ACTIVITY_TYPES = [
-  { type: 'strength_training', emoji: '💪', label: 'Strength' },
-  { type: 'cardio', emoji: '🏃', label: 'Cardio' },
-  { type: 'hiit', emoji: '🔥', label: 'HIIT' },
-  { type: 'yoga', emoji: '🧘', label: 'Yoga' },
-  { type: 'cycling', emoji: '🚴', label: 'Cycling' },
-  { type: 'swimming', emoji: '🏊', label: 'Swimming' },
-  { type: 'boxing', emoji: '🥊', label: 'Boxing' },
-  { type: 'stretching', emoji: '🤸', label: 'Stretch' },
-  { type: 'sports', emoji: '⚽', label: 'Sports' },
-  { type: 'hiking', emoji: '🥾', label: 'Hiking' },
-  { type: 'other', emoji: '🏅', label: 'Other' },
-] as const;
 
 export default function CheckInReviewScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
@@ -173,7 +160,7 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
   const locationValid =
     !!selectedGymId || (otherSelected && customLocation.trim().length > 0);
 
-  const canSubmit = !!activity && locationValid && !submitting && !!localMediaUri;
+  const canSubmit = activity.trim().length > 0 && locationValid && !submitting && !!localMediaUri;
 
   const handleSubmit = async () => {
     if (!canSubmit || !localMediaUri || !localMediaType) return;
@@ -186,7 +173,7 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
       await createCheckin({
         gymId: selectedGymId ?? undefined,
         locationName: otherSelected ? customLocation.trim() : undefined,
-        activity,
+        activity: activity.trim(),
         description: description.trim() || undefined,
         [localMediaType === 'video' ? 'video' : 'photo']: {
           uri: localMediaUri,
@@ -194,6 +181,7 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
           type: mimeType,
         },
         workoutId: attachedWorkout?.id,
+        isFrontCamera: localMediaType === 'video' ? isFrontCamera : false,
       });
       if (selectedGymId) {
         setShowBusyModal(true);
@@ -312,22 +300,15 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
           <Text style={styles.sectionLabel}>
             Workout Type <Text style={styles.required}>*</Text>
           </Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            <View style={styles.chipRow}>
-              {ACTIVITY_TYPES.map((a) => (
-                <Pressable
-                  key={a.type}
-                  style={[styles.activityChip, activity === a.type && styles.chipSelected]}
-                  onPress={() => setActivity(a.type)}
-                >
-                  <Text style={styles.activityEmoji}>{a.emoji}</Text>
-                  <Text style={[styles.chipLabel, activity === a.type && styles.chipLabelSelected]}>
-                    {a.label}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-          </ScrollView>
+          <TextInput
+            style={[styles.textInput, { minHeight: 0, paddingVertical: spacing.sm }]}
+            placeholder="e.g. Chest & Triceps, Morning run, HIIT class…"
+            placeholderTextColor={colors.textMuted}
+            value={activity}
+            onChangeText={setActivity}
+            maxLength={100}
+            returnKeyType="done"
+          />
         </View>
 
         {/* Location — flat chip list: enrolled gyms + Other */}
@@ -586,19 +567,6 @@ const styles = StyleSheet.create({
   retakeBtnText: { fontSize: 12, color: '#fff', fontWeight: '600' },
 
   chipRow: { flexDirection: 'row', gap: spacing.sm },
-
-  activityChip: {
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: spacing.sm,
-    paddingVertical: spacing.sm,
-    borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: colors.border.default,
-    backgroundColor: colors.surface,
-    minWidth: 62,
-  },
-  activityEmoji: { fontSize: 22 },
 
   locationChip: {
     flexDirection: 'row',

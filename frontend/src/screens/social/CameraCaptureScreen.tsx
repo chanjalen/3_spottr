@@ -48,6 +48,7 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
   const [isCameraReady, setIsCameraReady] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const navigatedToWorkoutRef = useRef(false);
+  const isCapturingRef = useRef(false);
 
   // Mount/unmount CameraView on focus so it always initializes fresh
   const [isFocused, setIsFocused] = useState(false);
@@ -56,6 +57,7 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
       setIsFocused(true);
       setIsCameraReady(false);
       return () => {
+        if (isCapturingRef.current) return;
         setIsFocused(false);
         setIsCameraReady(false);
       };
@@ -109,6 +111,7 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
 
   // Reset camera-ready whenever facing changes (camera reinitializes)
   const handleFacingChange = useCallback(() => {
+    if (isCapturingRef.current) return;
     setIsCameraReady(false);
     setFacing((f) => (f === 'back' ? 'front' : 'back'));
   }, []);
@@ -155,7 +158,8 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
   );
 
   const handleTakePhoto = useCallback(async () => {
-    if (!cameraRef.current || !isCameraReady) return;
+    if (!cameraRef.current || !isCameraReady || isCapturingRef.current) return;
+    isCapturingRef.current = true;
     try {
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.85 });
       if (photo?.uri) {
@@ -168,6 +172,8 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
     } catch (err) {
       console.error('[CameraCapture] takePictureAsync error:', err);
       Alert.alert('Error', 'Could not take photo. Please try again.');
+    } finally {
+      isCapturingRef.current = false;
     }
   }, [navigation, fromCheckinReview, isCameraReady, getCheckinParams]);
 

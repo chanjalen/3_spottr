@@ -1002,15 +1002,36 @@ def api_user_checkins_view(request, username):
                 .values_list('quick_workout_id', flat=True)
         )
 
+    # Bulk-fetch photo and video URLs (avoids N queries from get_checkin_photo)
+    from media.models import MediaLink as _MediaLink
+    from media.utils import build_media_url as _bmu
+    str_page_ids = [str(qw.id) for qw in page]
+    _photo_urls = {}
+    _video_urls = {}
+    for _link in _MediaLink.objects.filter(
+        destination_type='quick_workout',
+        destination_id__in=str_page_ids,
+        type='inline',
+    ).select_related('asset'):
+        _did = _link.destination_id
+        if _link.asset.kind == 'video' and _did not in _video_urls:
+            _video_urls[_did] = _bmu(_link.asset.storage_key)
+        elif _link.asset.kind == 'image' and _did not in _photo_urls:
+            _photo_urls[_did] = _bmu(_link.asset.storage_key)
+
     results = []
     for qw in page:
+        sid = str(qw.id)
+        photo_url = _photo_urls.get(sid) or get_checkin_photo(qw.id)
         results.append({
-            'id': str(qw.id),
+            'id': sid,
             'type': 'checkin',
             'description': qw.description,
             'location_name': qw.location_name or (qw.location.name if qw.location else ''),
             'workout_type': qw.type.replace('_', ' ').title() if qw.type else '',
-            'photo_url': get_checkin_photo(qw.id),
+            'photo_url': photo_url,
+            'video_url': _video_urls.get(sid),
+            'is_front_camera': qw.is_front_camera,
             'created_at': qw.created_at.isoformat(),
             'like_count': reaction_counts.get(qw.id, 0),
             'user_liked': qw.id in user_liked_ids,

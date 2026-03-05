@@ -29,7 +29,6 @@ function FullScreenVideo({ uri, onClose }: { uri: string; onClose: () => void })
         style={StyleSheet.absoluteFill}
         contentFit="contain"
         nativeControls
-        allowsFullscreen={false}
       />
       <Pressable
         style={[styles.closeBtn, { top: insets.top + 8 }]}

@@ -2927,6 +2927,10 @@ const styles = StyleSheet.create({
   calModalLocation: { fontSize: 13, color: 'rgba(255,255,255,0.8)' },
   calModalDesc: { fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 5, lineHeight: 19 },
   calModalNoPhoto: { alignItems: 'center', justifyContent: 'center' },
+  calModalPauseIndicator: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center', justifyContent: 'center', zIndex: 5,
+  },
   calModalActions: {
     position: 'absolute', right: 10, bottom: 60,
     alignItems: 'center', gap: 20,
@@ -3162,6 +3166,8 @@ function CalDayPage({ day, likeState, onClose, onLike, onComment }: {
   onLike: (c: CheckinItem) => void;
   onComment: (c: CheckinItem) => void;
 }) {
+  const [activeCheckinIdx, setActiveCheckinIdx] = useState(0);
+
   if (day.checkins.length === 1) {
     return (
       <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, alignItems: 'center', justifyContent: 'center' }}>
@@ -3171,6 +3177,7 @@ function CalDayPage({ day, likeState, onClose, onLike, onComment }: {
           day={day}
           checkinIdx={0}
           totalCheckins={1}
+          isActive
           likeState={likeState}
           onClose={onClose}
           onLike={onLike}
@@ -3190,6 +3197,10 @@ function CalDayPage({ day, likeState, onClose, onLike, onComment }: {
         showsHorizontalScrollIndicator={false}
         decelerationRate="fast"
         getItemLayout={(_, index) => ({ length: SCREEN_WIDTH, offset: SCREEN_WIDTH * index, index })}
+        onMomentumScrollEnd={(e) => {
+          const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+          setActiveCheckinIdx(idx);
+        }}
         renderItem={({ item: checkin, index }) => (
           <View style={{ width: SCREEN_WIDTH, height: SCREEN_HEIGHT, alignItems: 'center', justifyContent: 'center' }}>
             <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
@@ -3198,6 +3209,7 @@ function CalDayPage({ day, likeState, onClose, onLike, onComment }: {
               day={day}
               checkinIdx={index}
               totalCheckins={day.checkins.length}
+              isActive={index === activeCheckinIdx}
               likeState={likeState}
               onClose={onClose}
               onLike={onLike}
@@ -3211,24 +3223,88 @@ function CalDayPage({ day, likeState, onClose, onLike, onComment }: {
 }
 
 // The actual bezel card shown for a single check-in.
-function CalCheckinCard({ checkin, day, checkinIdx, totalCheckins, likeState, onClose, onLike, onComment }: {
+function CalCheckinCard({ checkin, day, checkinIdx, totalCheckins, isActive, likeState, onClose, onLike, onComment }: {
   checkin: CheckinItem;
   day: CalViewerDay;
   checkinIdx: number;
   totalCheckins: number;
+  isActive: boolean;
   likeState: Record<string, { liked: boolean; count: number }>;
   onClose: () => void;
   onLike: (c: CheckinItem) => void;
   onComment: (c: CheckinItem) => void;
 }) {
   const likeData = likeState[checkin.id] ?? { liked: checkin.user_liked, count: checkin.like_count };
+  const hasVideo = !!checkin.video_url;
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [userPaused, setUserPaused] = useState(false);
+
+  const videoPlayer = useVideoPlayer(hasVideo ? checkin.video_url! : null, (p) => {
+    p.loop = true;
+    p.muted = false;
+  });
+
+  useEffect(() => {
+    if (!hasVideo) return;
+    if (isActive) {
+      videoPlayer.play();
+      setIsVideoPlaying(true);
+      setUserPaused(false);
+    } else {
+      videoPlayer.pause();
+      setIsVideoPlaying(false);
+      setUserPaused(false);
+    }
+  }, [isActive, hasVideo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const lastVideoTapRef = useRef(0);
+  const videoTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleVideoTap = () => {
+    const now = Date.now();
+    if (now - lastVideoTapRef.current < 300) {
+      if (videoTapTimerRef.current) { clearTimeout(videoTapTimerRef.current); videoTapTimerRef.current = null; }
+      lastVideoTapRef.current = 0;
+      return;
+    }
+    lastVideoTapRef.current = now;
+    const playing = isVideoPlaying;
+    videoTapTimerRef.current = setTimeout(() => {
+      videoTapTimerRef.current = null;
+      if (playing) {
+        videoPlayer.pause();
+        setIsVideoPlaying(false);
+        setUserPaused(true);
+      } else {
+        videoPlayer.play();
+        setIsVideoPlaying(true);
+        setUserPaused(false);
+      }
+    }, 300);
+  };
+
   return (
-    <View style={styles.calModalCard}>
-      {checkin.photo_url ? (
+    <Pressable style={styles.calModalCard} onPress={hasVideo ? handleVideoTap : undefined}>
+      {hasVideo ? (
+        <View style={[StyleSheet.absoluteFill, { transform: [{ scaleX: -1 }] }]}>
+          <VideoView
+            player={videoPlayer}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            nativeControls={false}
+          />
+        </View>
+      ) : checkin.photo_url ? (
         <Image source={{ uri: checkin.photo_url }} style={StyleSheet.absoluteFill} contentFit="cover" />
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.calModalNoPhoto]}>
           <Feather name="camera" size={48} color="rgba(255,255,255,0.2)" />
+        </View>
+      )}
+
+      {hasVideo && userPaused && (
+        <View style={styles.calModalPauseIndicator} pointerEvents="none">
+          <Feather name="pause" size={36} color="rgba(255,255,255,0.85)" />
         </View>
       )}
 
@@ -3270,6 +3346,6 @@ function CalCheckinCard({ checkin, day, checkinIdx, totalCheckins, likeState, on
       <Pressable style={styles.calModalXBtn} onPress={onClose}>
         <Feather name="x" size={18} color="#fff" />
       </Pressable>
-    </View>
+    </Pressable>
   );
 }

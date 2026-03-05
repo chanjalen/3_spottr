@@ -198,18 +198,21 @@ def _serialize_user(user):
     }
 
 
-def _bulk_media_urls(destination_type, entity_ids):
-    """Single query to get photo URLs for a batch of entities.
-    Returns dict mapping entity_id -> URL."""
+def _bulk_media_urls(destination_type, entity_ids, kind=None):
+    """Single query to get media URLs for a batch of entities.
+    Returns dict mapping entity_id -> URL.
+    Pass kind='image' or kind='video' to filter by asset type."""
     if not entity_ids:
         return {}
-    links = MediaLink.objects.filter(
+    qs = MediaLink.objects.filter(
         destination_type=destination_type,
         destination_id__in=[str(eid) for eid in entity_ids],
         type='inline',
     ).select_related('asset')
+    if kind:
+        qs = qs.filter(asset__kind=kind)
     result = {}
-    for link in links:
+    for link in qs:
         if link.destination_id not in result:
             result[link.destination_id] = build_media_url(link.asset.storage_key)
     return result
@@ -393,7 +396,8 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
     post_objs = {item[2]: item[3] for item in raw_items if item[0] == 'post'}
 
     # Bulk fetch media URLs (1-2 queries instead of N)
-    checkin_photos = _bulk_media_urls('quick_workout', checkin_ids)
+    checkin_photos = _bulk_media_urls('quick_workout', checkin_ids, kind='image')
+    checkin_videos = _bulk_media_urls('quick_workout', checkin_ids, kind='video')
     post_photos = _bulk_media_urls('post', post_ids)
 
     # Bulk fetch extra (additional) photos per post
@@ -502,6 +506,8 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
                 'description': obj.description,
                 'created_at': created_at,
                 'photo_url': photo_url,
+                'video_url': checkin_videos.get(str(item_id)),
+                'is_front_camera': obj.is_front_camera,
                 'like_count': obj.like_count,
                 'comment_count': obj.comment_count,
                 'user_liked': bool(obj.user_liked) if user else False,
@@ -796,11 +802,17 @@ def checkin_detail_view(request, checkin_id):
 
 def get_checkin_photo(checkin_id):
     """
-    Get the photo URL for a check-in if it exists.
+    Get the photo URL for a check-in if it exists (images only).
     """
-    url = get_media_url('quick_workout', str(checkin_id))
-    if url:
-        return url
+    from media.models import MediaLink
+    link = MediaLink.objects.filter(
+        destination_type='quick_workout',
+        destination_id=str(checkin_id),
+        type='inline',
+        asset__kind='image',
+    ).select_related('asset').first()
+    if link:
+        return build_media_url(link.asset.storage_key)
     # Fallback for legacy uploads without MediaAsset rows
     path = f'checkins/{checkin_id}.jpg'
     try:
@@ -824,7 +836,10 @@ def create_checkin_view(request):
         gym_id = data.get('gym') or data.get('gym_id')
         activity = (data.get('activity') or '').strip() or 'general'
         photo = request.FILES.get('photo')
+        video = request.FILES.get('video')
         workout_id = data.get('workout_id')
+        is_front_camera_raw = data.get('is_front_camera', 'false')
+        is_front_camera = str(is_front_camera_raw).lower() in ('true', '1', 'yes')
 
         # Require either a gym FK or a typed location name
         location_name_raw = (data.get('location_name') or '').strip()
@@ -862,6 +877,7 @@ def create_checkin_view(request):
             description=description,
             workout=linked_workout,
             audience=['friends'],
+            is_front_camera=is_front_camera,
         )
 
         # Increment total workouts
@@ -875,12 +891,25 @@ def create_checkin_view(request):
         update_streak(request.user, activity_type='checkin')
         update_group_streaks_for_user(request.user)
 
-        # Save the photo if provided
+        # Save the photo or video if provided
+        from django.core.exceptions import ValidationError as DjangoValidationError
         if photo:
-            from django.core.exceptions import ValidationError as DjangoValidationError
             try:
                 path = f'checkins/{checkin.id}.jpg'
                 asset = create_media_asset(request.user, photo, path, 'image')
+                MediaLink.objects.create(
+                    asset=asset,
+                    destination_type='quick_workout',
+                    destination_id=str(checkin.id),
+                    type='inline',
+                )
+            except DjangoValidationError as e:
+                return DRFResponse({'success': False, 'error': e.message}, status=400)
+        elif video:
+            try:
+                ext = video.name.rsplit('.', 1)[-1].lower() if '.' in video.name else 'mp4'
+                path = f'checkins/videos/{checkin.id}.{ext}'
+                asset = create_media_asset(request.user, video, path, 'video')
                 MediaLink.objects.create(
                     asset=asset,
                     destination_type='quick_workout',
@@ -1668,7 +1697,8 @@ def search_feed_view(request):
     # Collect IDs for bulk media fetch
     checkin_ids = [item[2] for item in raw_items if item[0] == 'checkin']
     post_ids = [item[2] for item in raw_items if item[0] == 'post']
-    checkin_photos = _bulk_media_urls('quick_workout', checkin_ids)
+    checkin_photos = _bulk_media_urls('quick_workout', checkin_ids, kind='image')
+    checkin_videos = _bulk_media_urls('quick_workout', checkin_ids, kind='video')
     post_photos = _bulk_media_urls('post', post_ids)
 
     # Bulk fetch extra photos per post
@@ -1704,6 +1734,8 @@ def search_feed_view(request):
                 'description': obj.description,
                 'created_at': created_at,
                 'photo_url': photo_url,
+                'video_url': checkin_videos.get(str(item_id)),
+                'is_front_camera': obj.is_front_camera,
                 'like_count': obj.like_count,
                 'comment_count': obj.comment_count,
                 'user_liked': bool(obj.user_liked),

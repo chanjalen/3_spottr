@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   StyleSheet,
   ScrollView,
 } from 'react-native';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
@@ -54,6 +55,8 @@ interface ImmersivePostCardProps {
   topInset: number;
   /** Height of the bottom nav bar — content must end above this */
   bottomInset: number;
+  /** True when this card is the currently visible item in the feed */
+  isActive?: boolean;
   onLike: () => void;
   onComment: () => void;
   onShare: () => void;
@@ -65,6 +68,7 @@ export default function ImmersivePostCard({
   itemHeight,
   topInset,
   bottomInset,
+  isActive = false,
   onLike,
   onComment,
   onShare,
@@ -77,9 +81,60 @@ export default function ImmersivePostCard({
   const [workoutDetailId, setWorkoutDetailId] = useState<string | null>(null);
   const [likersVisible, setLikersVisible] = useState(false);
   const hasPhoto = !!item.photo_url;
+  const hasVideo = !!item.video_url;
   const activityLabel = item.workout_type ? (ACTIVITY_LABELS[item.workout_type] ?? item.workout_type) : null;
   const gymName = item.location_name ?? null;
   const gymId = item.gym_id ?? null;
+
+  // ─── Video playback ──────────────────────────────────────────────────────────
+  // isVideoPlaying: tracks actual play state
+  // userPaused: true only when the user manually tapped to pause (shows pause icon)
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [userPaused, setUserPaused] = useState(false);
+  const videoPlayer = useVideoPlayer(hasVideo ? item.video_url! : null, (p) => {
+    p.loop = true;
+    p.muted = false;
+  });
+
+  useEffect(() => {
+    if (!hasVideo) return;
+    if (isActive) {
+      videoPlayer.play();
+      setIsVideoPlaying(true);
+      setUserPaused(false);
+    } else {
+      videoPlayer.pause();
+      setIsVideoPlaying(false);
+      setUserPaused(false);
+    }
+  }, [isActive, hasVideo]);
+
+  const lastVideoTapRef = useRef(0);
+  const videoTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleVideoTap = () => {
+    const now = Date.now();
+    if (now - lastVideoTapRef.current < 300) {
+      // Second tap within 300ms = double-tap — cancel pending pause/play
+      if (videoTapTimerRef.current) { clearTimeout(videoTapTimerRef.current); videoTapTimerRef.current = null; }
+      lastVideoTapRef.current = 0;
+      return;
+    }
+    lastVideoTapRef.current = now;
+    const playing = isVideoPlaying;
+    videoTapTimerRef.current = setTimeout(() => {
+      videoTapTimerRef.current = null;
+      if (playing) {
+        videoPlayer.pause();
+        setIsVideoPlaying(false);
+        setUserPaused(true);
+      } else {
+        videoPlayer.play();
+        setIsVideoPlaying(true);
+        setUserPaused(false);
+      }
+    }, 300);
+  };
 
   const likeAnimatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: likeScale.value }],
@@ -243,6 +298,173 @@ export default function ImmersivePostCard({
             )}
           </View>
         </View>
+
+        <WorkoutDetailModal
+          workoutId={workoutDetailId}
+          onClose={() => setWorkoutDetailId(null)}
+        />
+        <LikersSheet
+          visible={likersVisible}
+          itemId={item.id}
+          itemType={item.type}
+          likeCount={item.like_count}
+          onClose={() => setLikersVisible(false)}
+        />
+      </>
+    );
+  }
+
+  // ─── Video card ───────────────────────────────────────────────────────────────
+  if (hasVideo) {
+    return (
+      <>
+        <Pressable
+          style={[styles.card, { height: itemHeight }]}
+          onPress={handleVideoTap}
+          accessibilityLabel={isVideoPlaying ? 'Pause video' : 'Play video'}
+        >
+          {/* Full-bleed video background — checkin videos are selfie-style, always mirror */}
+          <View style={[StyleSheet.absoluteFill, { bottom: bottomInset }, item.type === 'checkin' ? { transform: [{ scaleX: -1 }] } : null]}>
+            <VideoView
+              player={videoPlayer}
+              style={StyleSheet.absoluteFill}
+              contentFit="cover"
+              nativeControls={false}
+            />
+          </View>
+
+          {/* Dark gradient overlay */}
+          <LinearGradient
+            colors={['transparent', 'rgba(0,0,0,0.72)']}
+            locations={[0.4, 1]}
+            style={[StyleSheet.absoluteFill, { bottom: bottomInset }]}
+            pointerEvents="none"
+          />
+
+          {/* Pause indicator — shown only when user manually paused */}
+          {userPaused && (
+            <View style={styles.pauseIndicator} pointerEvents="none">
+              <Feather name="pause" size={36} color="rgba(255,255,255,0.85)" />
+            </View>
+          )}
+
+          {/* Right-side vertical action bar */}
+          <View style={[styles.actionBar, { bottom: bottomInset + spacing.base }]}>
+            <AnimatedPressable
+              style={[styles.actionBtn, likeAnimatedStyle]}
+              onPress={handleLike}
+              onLongPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                setLikersVisible(true);
+              }}
+              delayLongPress={300}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel={`Like, ${item.like_count} likes`}
+              accessibilityRole="button"
+            >
+              <Feather
+                name="heart"
+                size={26}
+                color={item.user_liked ? colors.semantic.like : '#FFFFFF'}
+              />
+              {item.like_count > 0 && (
+                <Text
+                  style={[
+                    styles.actionCountPhoto,
+                    item.user_liked && { color: colors.semantic.like },
+                  ]}
+                >
+                  {item.like_count}
+                </Text>
+              )}
+            </AnimatedPressable>
+
+            <Pressable
+              style={styles.actionBtn}
+              onPress={onComment}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel={`Comment, ${item.comment_count} comments`}
+              accessibilityRole="button"
+            >
+              <Feather name="message-circle" size={26} color="#FFFFFF" />
+              {item.comment_count > 0 && (
+                <Text style={styles.actionCountPhoto}>{item.comment_count}</Text>
+              )}
+            </Pressable>
+
+            <Pressable
+              style={styles.actionBtn}
+              onPress={handleShare}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="Share"
+              accessibilityRole="button"
+            >
+              <Feather name="send" size={26} color="#FFFFFF" />
+            </Pressable>
+          </View>
+
+          {/* Bottom-left: user info + caption + meta */}
+          <View style={[styles.bottomInfo, { bottom: bottomInset + spacing.base }]}>
+            <Pressable style={styles.userRow} onPress={goToProfile}>
+              <Avatar uri={item.user.avatar_url} name={item.user.display_name} size={36} />
+              <View style={styles.userText}>
+                <Text style={styles.displayNamePhoto} numberOfLines={1}>
+                  {item.user.display_name}
+                </Text>
+                {item.description !== '' && (
+                  <Text style={styles.captionPhoto} numberOfLines={2}>
+                    {item.description}
+                  </Text>
+                )}
+              </View>
+            </Pressable>
+
+            <View style={styles.metaRow}>
+              {(gymName || activityLabel) && (
+                <Feather name="map-pin" size={11} color="rgba(255,255,255,0.7)" />
+              )}
+              {gymName && gymId ? (
+                <Pressable onPress={() => navigation.navigate('GymDetail', { gymId, gymName })} hitSlop={8}>
+                  <Text style={[styles.metaText, styles.metaLink]}>{gymName}</Text>
+                </Pressable>
+              ) : gymName ? (
+                <Text style={styles.metaText}>{gymName}</Text>
+              ) : null}
+              {gymName && activityLabel && <Text style={styles.metaSep}>·</Text>}
+              {activityLabel && <Text style={styles.metaText}>{activityLabel}</Text>}
+              {(gymName || activityLabel) && <Text style={styles.metaSep}>·</Text>}
+              <Text style={styles.metaTime}>{timeAgo(item.created_at)}</Text>
+            </View>
+
+            {item.workout && (
+              <Pressable
+                style={styles.workoutChipPhoto}
+                onPress={() => setWorkoutDetailId(item.workout!.id)}
+              >
+                <Feather name="activity" size={13} color="#fff" />
+                <View style={styles.workoutChipPhotoInfo}>
+                  <Text style={styles.workoutChipPhotoName} numberOfLines={1}>
+                    {item.workout.name}
+                  </Text>
+                  <Text style={styles.workoutChipPhotoMeta}>
+                    {item.workout.exercise_count} exercises · {item.workout.duration}
+                  </Text>
+                </View>
+                <Feather name="chevron-right" size={13} color="rgba(255,255,255,0.8)" />
+              </Pressable>
+            )}
+
+            {item.shared_context && item.shared_context.length > 0 && (
+              <View style={styles.tagsRow}>
+                {item.shared_context.map((tag, i) => (
+                  <View key={i} style={styles.overlayTag}>
+                    <Text style={styles.overlayTagText}>{tag}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        </Pressable>
 
         <WorkoutDetailModal
           workoutId={workoutDetailId}
@@ -455,6 +677,18 @@ const styles = StyleSheet.create({
     gap: 5,
     minHeight: 44,
     justifyContent: 'center',
+  },
+
+  // ─── Video overlay ──────────────────────────────────────────────────────────
+  pauseIndicator: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5,
   },
 
   // ─── Photo overlay ──────────────────────────────────────────────────────────

@@ -17,6 +17,7 @@ import FeedCard from '../../components/feed/FeedCard';
 import ImmersivePostCard from '../../components/feed/ImmersivePostCard';
 import CommentsSheet from '../../components/comments/CommentsSheet';
 import ShareSheet from '../../components/feed/ShareSheet';
+import { useIsFocused } from '@react-navigation/native';
 import { fetchPostById, toggleLike } from '../../api/feed';
 import { usePollVote } from '../../hooks/usePollVote';
 import { FeedItem } from '../../types/feed';
@@ -33,6 +34,7 @@ export default function PostDetailScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { height: windowHeight } = useWindowDimensions();
 
+  const isFocused = useIsFocused();
   const [item, setItem] = useState<FeedItem | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +90,7 @@ export default function PostDetailScreen({ navigation, route }: Props) {
           itemHeight={windowHeight}
           topInset={insets.top + 44}
           bottomInset={insets.bottom}
+          isActive={isFocused}
           onLike={handleLike}
           onComment={() => setCommentItem(item)}
           onShare={() => setShareItem(item)}

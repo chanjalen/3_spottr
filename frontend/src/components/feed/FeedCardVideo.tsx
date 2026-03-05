@@ -43,7 +43,6 @@ export default function FeedCardVideo({ uri, onExpand }: FeedCardVideoProps) {
         style={styles.video}
         contentFit="contain"
         nativeControls={false}
-        allowsFullscreen={false}
       />
       <Pressable
         style={styles.overlay}

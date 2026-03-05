@@ -18,6 +18,7 @@ import {
   View,
 } from 'react-native';
 import { Image } from 'expo-image';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { fetchUserCheckins, CheckinItem } from '../../api/feed';
@@ -238,6 +239,7 @@ function CheckinCard({
         month={month}
         idx={0}
         total={1}
+        isActive
         onClose={onClose}
       />
     );
@@ -266,6 +268,7 @@ function CheckinCard({
             month={month}
             idx={index}
             total={total}
+            isActive={index === checkinIdx}
             onClose={onClose}
           />
         )}
@@ -284,7 +287,7 @@ function CheckinCard({
 }
 
 function SingleCheckin({
-  checkin, day, year, month, idx, total, onClose,
+  checkin, day, year, month, idx, total, isActive, onClose,
 }: {
   checkin: CheckinItem;
   day: number;
@@ -292,15 +295,79 @@ function SingleCheckin({
   month: number;
   idx: number;
   total: number;
+  isActive: boolean;
   onClose: () => void;
 }) {
+  const hasVideo = !!checkin.video_url;
+  const [isVideoPlaying, setIsVideoPlaying] = useState(false);
+  const [userPaused, setUserPaused] = useState(false);
+
+  const videoPlayer = useVideoPlayer(hasVideo ? checkin.video_url! : null, (p) => {
+    p.loop = true;
+    p.muted = false;
+  });
+
+  useEffect(() => {
+    if (!hasVideo) return;
+    if (isActive) {
+      videoPlayer.play();
+      setIsVideoPlaying(true);
+      setUserPaused(false);
+    } else {
+      videoPlayer.pause();
+      setIsVideoPlaying(false);
+      setUserPaused(false);
+    }
+  }, [isActive, hasVideo]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const lastVideoTapRef = useRef(0);
+  const videoTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleVideoTap = () => {
+    const now = Date.now();
+    if (now - lastVideoTapRef.current < 300) {
+      if (videoTapTimerRef.current) { clearTimeout(videoTapTimerRef.current); videoTapTimerRef.current = null; }
+      lastVideoTapRef.current = 0;
+      return;
+    }
+    lastVideoTapRef.current = now;
+    const playing = isVideoPlaying;
+    videoTapTimerRef.current = setTimeout(() => {
+      videoTapTimerRef.current = null;
+      if (playing) {
+        videoPlayer.pause();
+        setIsVideoPlaying(false);
+        setUserPaused(true);
+      } else {
+        videoPlayer.play();
+        setIsVideoPlaying(true);
+        setUserPaused(false);
+      }
+    }, 300);
+  };
+
   return (
-    <View style={styles.photoCard}>
-      {checkin.photo_url ? (
+    <Pressable style={styles.photoCard} onPress={hasVideo ? handleVideoTap : undefined}>
+      {hasVideo ? (
+        <View style={[StyleSheet.absoluteFill, { transform: [{ scaleX: -1 }] }]}>
+          <VideoView
+            player={videoPlayer}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+            nativeControls={false}
+          />
+        </View>
+      ) : checkin.photo_url ? (
         <Image source={{ uri: checkin.photo_url }} style={StyleSheet.absoluteFill} contentFit="cover" />
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.noPhoto]}>
           <Feather name="camera" size={48} color="rgba(255,255,255,0.2)" />
+        </View>
+      )}
+
+      {hasVideo && userPaused && (
+        <View style={styles.pauseIndicator} pointerEvents="none">
+          <Feather name="pause" size={36} color="rgba(255,255,255,0.85)" />
         </View>
       )}
 
@@ -331,7 +398,7 @@ function SingleCheckin({
           <Feather name="x" size={18} color="#fff" />
         </Pressable>
       )}
-    </View>
+    </Pressable>
   );
 }
 
@@ -390,6 +457,13 @@ const styles = StyleSheet.create({
     }),
   },
   noPhoto: { alignItems: 'center', justifyContent: 'center' },
+  pauseIndicator: {
+    position: 'absolute',
+    top: 0, left: 0, right: 0, bottom: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 5,
+  },
   topGrad: {
     position: 'absolute', top: 0, left: 0, right: 0,
     paddingTop: 16, paddingHorizontal: 16, paddingBottom: 40,

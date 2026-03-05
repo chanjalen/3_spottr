@@ -102,6 +102,12 @@ function SharedPostCard({ post, onPress }: Omit<SharedPostCardProps, 'isOwn'> & 
       <Pressable onPress={onPress} style={styles.sharedImmersiveCard} disabled={!onPress}>
         {post.photo_url ? (
           <Image source={{ uri: post.photo_url }} style={styles.sharedImmersiveThumb} contentFit="cover" />
+        ) : post.video_url ? (
+          <VideoThumbnail
+            videoUrl={post.video_url}
+            style={[styles.sharedImmersiveThumb, post.item_type === 'checkin' && { transform: [{ scaleX: -1 }] }]}
+            iconSize={32}
+          />
         ) : (
           <View style={[styles.sharedImmersiveThumb, styles.sharedImmersivePlaceholder]}>
             <Feather name={post.item_type === 'checkin' ? 'map-pin' : 'activity'} size={30} color={colors.textMuted} />
@@ -144,9 +150,11 @@ function SharedPostCard({ post, onPress }: Omit<SharedPostCardProps, 'isOwn'> & 
   // Regular main-feed post — mini FeedCard style (photo on top, content below)
   return (
     <Pressable onPress={onPress} style={styles.sharedPostCard} disabled={!onPress}>
-      {/* Photo — full width, only shown when present */}
+      {/* Photo/video — full width, only shown when present */}
       {post.photo_url ? (
         <Image source={{ uri: post.photo_url }} style={styles.sharedPostThumb} contentFit="cover" />
+      ) : post.video_url ? (
+        <VideoThumbnail videoUrl={post.video_url} style={styles.sharedPostThumb} />
       ) : null}
 
       {/* Body */}

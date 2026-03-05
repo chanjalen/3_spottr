@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Image, StyleSheet, ViewStyle } from 'react-native';
+import { View, Image, StyleSheet, ViewStyle, StyleProp } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as VideoThumbnails from 'expo-video-thumbnails';
 
@@ -8,7 +8,7 @@ interface Props {
   videoUrl: string;
   /** Pre-generated thumbnail URL (from backend or pickMedia). If provided, skips generation. */
   thumbnailUrl?: string | null;
-  style?: ViewStyle;
+  style?: StyleProp<ViewStyle>;
   /** Icon size for the play button overlay. Defaults to 28. */
   iconSize?: number;
 }
