@@ -1,5 +1,5 @@
 import zoneinfo
-from datetime import date, timedelta
+from datetime import date, datetime, time as dt_time, timedelta
 from django.utils import timezone
 from django.db import transaction
 
@@ -229,21 +229,42 @@ def get_streak_details(user):
     week_start = today_streak - timedelta(days=days_since_sunday)
     week_end = week_start + timedelta(days=6)
 
-    # Unique dates with at least one workout or check-in (no double-counting)
-    workout_dates = set(
-        Workout.objects.filter(
+    # Build timezone-aware datetime boundaries so all DB queries use the
+    # user's local timezone — never raw UTC dates.
+    tz_str = getattr(user, 'timezone', None) or 'UTC'
+    try:
+        user_tz = zoneinfo.ZoneInfo(tz_str)
+    except (zoneinfo.ZoneInfoNotFoundError, KeyError):
+        user_tz = zoneinfo.ZoneInfo('UTC')
+    week_start_dt = datetime.combine(week_start, dt_time.min, tzinfo=user_tz)
+    # Extend end by 3 hours so Saturday-late workouts done 12am–2:59am Sunday
+    # local (which the 3AM rule counts as Saturday) are included.
+    week_end_dt = datetime.combine(week_end, dt_time.max, tzinfo=user_tz) + timedelta(hours=3)
+
+    # Fetch raw aware datetimes and apply the same 3AM rule used by
+    # update_streak, so Thursday 1am local shows under Wednesday in the UI.
+    def _to_streak_date_local(aware_dt):
+        return get_streak_date(aware_dt.astimezone(user_tz))
+
+    # Unique dates with at least one workout or check-in (no double-counting).
+    workout_dates = {
+        d for dt in Workout.objects.filter(
             user=user,
-            start_time__date__gte=week_start,
-            start_time__date__lte=week_end,
-        ).values_list('start_time__date', flat=True)
-    )
-    checkin_dates = set(
-        QuickWorkout.objects.filter(
+            start_time__gte=week_start_dt,
+            start_time__lte=week_end_dt,
+        ).values_list('start_time', flat=True)
+        for d in [_to_streak_date_local(dt)]
+        if week_start <= d <= week_end
+    }
+    checkin_dates = {
+        d for dt in QuickWorkout.objects.filter(
             user=user,
-            created_at__date__gte=week_start,
-            created_at__date__lte=week_end,
-        ).values_list('created_at__date', flat=True)
-    )
+            created_at__gte=week_start_dt,
+            created_at__lte=week_end_dt,
+        ).values_list('created_at', flat=True)
+        for d in [_to_streak_date_local(dt)]
+        if week_start <= d <= week_end
+    }
     active_dates = workout_dates | checkin_dates
 
     # Rest days used this week
