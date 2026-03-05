@@ -30,8 +30,10 @@ export async function submitBusyLevel(gymId: string, surveyResponse: number): Pr
   return res.data;
 }
 
-export async function fetchGymLeaderboard(gymId: string, lift = 'total'): Promise<TopLifter[]> {
-  const res = await apiClient.get(`/api/gyms/gyms/${gymId}/leaderboard/`, { params: { lift } });
+export async function fetchGymLeaderboard(gymId: string, lift = 'total', forceRefresh = false): Promise<TopLifter[]> {
+  const res = await apiClient.get(`/api/gyms/gyms/${gymId}/leaderboard/`, {
+    params: { lift, ...(forceRefresh ? { refresh: '1' } : {}) },
+  });
   return res.data;
 }
 

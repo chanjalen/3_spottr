@@ -20,7 +20,7 @@ import {
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import * as ImagePicker from 'expo-image-picker';
+import { pickMedia } from '../../utils/pickMedia';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { RouteProp } from '@react-navigation/native';
@@ -532,19 +532,9 @@ export default function ProfileScreen({ navigation, route }: Props) {
   // ── Video picker ──────────────────────────────────────────────────────────────
 
   const pickVideo = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Please allow access to your media library.');
-      return;
-    }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: 'videos',
-      allowsEditing: false,
-      preferredAssetRepresentationMode:
-        ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Compatible,
-    });
-    if (!result.canceled && result.assets?.[0]) {
-      setPrVideoUri(result.assets[0].uri);
+    const picked = await pickMedia({ allowsMultiple: false, maxVideoBytes: 50 * 1024 * 1024, mediaTypes: ['videos'] });
+    if (picked?.[0]?.kind === 'video') {
+      setPrVideoUri(picked[0].uri);
     }
   };
 

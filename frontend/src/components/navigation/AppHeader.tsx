@@ -46,7 +46,7 @@ export default function AppHeader() {
             accessibilityLabel={`Notifications${notificationCount > 0 ? `, ${notificationCount} unread` : ''}`}
             accessibilityRole="button"
           >
-            <Feather name="bell" size={17} color={colors.iconActive} />
+            <Feather name="bell" size={17} color={colors.textPrimary} />
             {notificationCount > 0 && (
               <View style={styles.badge}>
                 <Text style={styles.badgeText}>
@@ -62,7 +62,7 @@ export default function AppHeader() {
             accessibilityLabel="Find friends"
             accessibilityRole="button"
           >
-            <Feather name="user-plus" size={17} color={colors.iconActive} />
+            <Feather name="user-plus" size={17} color={colors.textPrimary} />
           </Pressable>
         </View>
 
