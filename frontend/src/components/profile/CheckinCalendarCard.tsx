@@ -103,6 +103,14 @@ export default function CheckinCalendarCard({ username }: Props) {
   const firstDay    = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
+  // Build explicit week rows so each cell uses flex: 1 (avoids % rounding wrap bugs)
+  const cells: (number | null)[] = [
+    ...Array.from({ length: firstDay }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, i) => i + 1),
+  ];
+  while (cells.length % 7 !== 0) cells.push(null);
+  const weeks = Array.from({ length: cells.length / 7 }, (_, i) => cells.slice(i * 7, i * 7 + 7));
+
   return (
     <View style={styles.card}>
       {/* Month nav */}
@@ -127,29 +135,30 @@ export default function CheckinCalendarCard({ username }: Props) {
         ))}
       </View>
 
-      {/* Day grid */}
+      {/* Day grid — rendered as explicit rows so each cell uses flex:1 (no % rounding) */}
       <View style={styles.calDays}>
-        {Array.from({ length: firstDay }).map((_, i) => (
-          <View key={`e-${i}`} style={styles.calDay} />
+        {weeks.map((week, wi) => (
+          <View key={wi} style={styles.calWeekRow}>
+            {week.map((day, di) => {
+              if (day === null) return <View key={di} style={styles.calDay} />;
+              const hasCheckin = checkinDayNums.has(day);
+              return (
+                <Pressable
+                  key={di}
+                  style={styles.calDay}
+                  onPress={() => handleDayPress(day)}
+                  disabled={!hasCheckin}
+                >
+                  <View style={[styles.calDayBubble, hasCheckin && styles.calDayBubbleWorkout]}>
+                    <Text style={[styles.calDayText, hasCheckin && styles.calDayTextWorkout]}>
+                      {day}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
+          </View>
         ))}
-        {Array.from({ length: daysInMonth }).map((_, i) => {
-          const day = i + 1;
-          const hasCheckin = checkinDayNums.has(day);
-          return (
-            <Pressable
-              key={day}
-              style={styles.calDay}
-              onPress={() => handleDayPress(day)}
-              disabled={!hasCheckin}
-            >
-              <View style={[styles.calDayBubble, hasCheckin && styles.calDayBubbleWorkout]}>
-                <Text style={[styles.calDayText, hasCheckin && styles.calDayTextWorkout]}>
-                  {day}
-                </Text>
-              </View>
-            </Pressable>
-          );
-        })}
       </View>
 
       {/* Day viewer modal — matches profile's CalCheckinCard */}
@@ -358,7 +367,7 @@ function SingleCheckin({
           />
         </View>
       ) : checkin.photo_url ? (
-        <Image source={{ uri: checkin.photo_url }} style={StyleSheet.absoluteFill} contentFit="cover" />
+        <Image source={{ uri: checkin.photo_url }} style={[StyleSheet.absoluteFill, checkin.is_front_camera && { transform: [{ scaleX: -1 }] }]} contentFit="cover" />
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.noPhoto]}>
           <Feather name="camera" size={48} color="rgba(255,255,255,0.2)" />
@@ -426,8 +435,9 @@ const styles = StyleSheet.create({
   calMonthLabel: { fontSize: 16, fontWeight: '600', color: colors.textPrimary },
   calWeekdays: { flexDirection: 'row', marginBottom: spacing.sm },
   calWeekday: { flex: 1, textAlign: 'center', fontSize: 12, fontWeight: '500', color: colors.textMuted, paddingVertical: 4 },
-  calDays: { flexDirection: 'row', flexWrap: 'wrap' },
-  calDay: { width: `${100 / 7}%` as any, aspectRatio: 1, padding: 2, alignItems: 'center', justifyContent: 'center' },
+  calDays: {},
+  calWeekRow: { flexDirection: 'row' },
+  calDay: { flex: 1, aspectRatio: 1, padding: 2, alignItems: 'center', justifyContent: 'center' },
   calDayBubble: {
     flex: 1, width: '100%', alignItems: 'center', justifyContent: 'center',
     borderRadius: 999, backgroundColor: 'rgba(120,120,128,0.15)',

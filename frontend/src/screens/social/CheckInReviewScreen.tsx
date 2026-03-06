@@ -181,7 +181,7 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
           type: mimeType,
         },
         workoutId: attachedWorkout?.id,
-        isFrontCamera: localMediaType === 'video' ? isFrontCamera : false,
+        isFrontCamera,
       });
       if (selectedGymId) {
         setShowBusyModal(true);
