@@ -9,6 +9,7 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
+  Linking,
 } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -308,9 +309,19 @@ export default function SignupScreen({ navigation }: Props) {
 
           <Text style={styles.consent}>
             By continuing, you agree to our{' '}
-            <Text style={styles.consentLink}>Terms of Service</Text>
+            <Text
+              style={styles.consentLink}
+              onPress={() => Linking.openURL('https://api.spottrgym.app/terms/')}
+            >
+              Terms of Service
+            </Text>
             {' '}and{' '}
-            <Text style={styles.consentLink}>Privacy Policy</Text>
+            <Text
+              style={styles.consentLink}
+              onPress={() => Linking.openURL('https://api.spottrgym.app/privacy/')}
+            >
+              Privacy Policy
+            </Text>
           </Text>
 
           <Pressable onPress={() => navigation.navigate('Login')} style={styles.link}>

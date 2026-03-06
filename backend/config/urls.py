@@ -3,12 +3,15 @@ from django.conf.urls.static import static
 from django.contrib import admin
 from django.shortcuts import render
 from django.urls import include, path
+from django.views.generic import TemplateView
 
 from social.views import feed_view
 
 
 urlpatterns = [
     path("", feed_view, name="home"),
+    path("privacy/", TemplateView.as_view(template_name="legal/privacy.html"), name="privacy"),
+    path("terms/", TemplateView.as_view(template_name="legal/terms.html"), name="terms"),
     path("admin/", admin.site.urls),
     path("accounts/", include("accounts.urls")),
     path("gyms/", include("gyms.urls")),
