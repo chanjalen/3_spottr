@@ -129,6 +129,7 @@ class SharedCheckinSerializer(serializers.Serializer):
     description = serializers.CharField(allow_blank=True, allow_null=True, required=False)
     photo_url = serializers.SerializerMethodField()
     video_url = serializers.SerializerMethodField()
+    is_front_camera = serializers.BooleanField()
     workout_type = serializers.SerializerMethodField()
     location_name = serializers.SerializerMethodField()
     like_count = serializers.SerializerMethodField()

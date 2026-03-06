@@ -76,6 +76,7 @@ export interface SharedPost {
   description?: string | null;
   photo_url?: string | null;
   video_url?: string | null;
+  is_front_camera?: boolean;
   like_count?: number;
   comment_count?: number;
   workout?: object | null;

@@ -162,7 +162,7 @@ export default function ImmersivePostCard({
           {/* Full-bleed photo background — clipped above the nav bar */}
           <Image
             source={{ uri: item.photo_url! }}
-            style={[StyleSheet.absoluteFill, { bottom: bottomInset }]}
+            style={[StyleSheet.absoluteFill, { bottom: bottomInset }, item.is_front_camera ? { transform: [{ scaleX: -1 }] } : null]}
             contentFit="cover"
           />
 

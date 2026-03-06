@@ -167,7 +167,7 @@ export default function CheckinViewer({ visible, checkins, onClose }: Props) {
                 />
               </View>
             ) : item.photo_url ? (
-              <Image source={{ uri: item.photo_url }} style={StyleSheet.absoluteFill} contentFit="cover" />
+              <Image source={{ uri: item.photo_url }} style={[StyleSheet.absoluteFill, item.is_front_camera && { transform: [{ scaleX: -1 }] }]} contentFit="cover" />
             ) : (
               <View style={[StyleSheet.absoluteFill, styles.noPhoto]}>
                 <Feather name="activity" size={60} color="rgba(255,255,255,0.15)" />
