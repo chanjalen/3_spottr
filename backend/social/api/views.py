@@ -298,6 +298,8 @@ def create_checkin(request):
         from workouts.models import Workout
         linked_workout = Workout.objects.filter(id=workout_id, user=request.user).first()
 
+    is_front_camera = str(request.data.get('is_front_camera', '')).lower() == 'true'
+
     checkin = QuickWorkout.objects.create(
         user=request.user,
         location=gym,
@@ -306,6 +308,7 @@ def create_checkin(request):
         description=description or f'{activity.replace("_", " ").title()} workout',
         workout=linked_workout,
         audience=['friends'],
+        is_front_camera=is_front_camera,
     )
 
     if photo:

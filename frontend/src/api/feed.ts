@@ -290,8 +290,10 @@ export async function createCheckin(params: {
 
   // Do NOT set Content-Type manually — React Native's XHR sets it automatically
   // with the correct multipart boundary when the body is FormData.
+  // Use a longer timeout when uploading a video (default 15s is too short).
   const response = await apiClient.post(ENDPOINTS.createCheckin, formData, {
     headers: { 'Content-Type': undefined },
+    timeout: params.video ? 120_000 : 30_000,
   });
   return response.data;
 }
