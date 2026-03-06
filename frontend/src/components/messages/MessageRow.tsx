@@ -101,7 +101,7 @@ function SharedPostCard({ post, onPress }: Omit<SharedPostCardProps, 'isOwn'> & 
     return (
       <Pressable onPress={onPress} style={styles.sharedImmersiveCard} disabled={!onPress}>
         {post.photo_url ? (
-          <Image source={{ uri: post.photo_url }} style={styles.sharedImmersiveThumb} contentFit="cover" />
+          <Image source={{ uri: post.photo_url }} style={[styles.sharedImmersiveThumb, post.item_type === 'checkin' && post.is_front_camera && { transform: [{ scaleX: -1 }] }]} contentFit="cover" />
         ) : post.video_url ? (
           <VideoThumbnail
             videoUrl={post.video_url}

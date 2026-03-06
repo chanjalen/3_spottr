@@ -275,6 +275,7 @@ def create_checkin(request):
     gym_id = (request.data.get('gym_id') or '').strip()
     location_name = (request.data.get('location_name') or '').strip()
     workout_id = (request.data.get('workout_id') or '').strip()
+    is_front_camera = str(request.data.get('is_front_camera', 'false')).lower() in ('true', '1', 'yes')
     photo = request.FILES.get('photo')
     video = request.FILES.get('video')
 
@@ -306,6 +307,7 @@ def create_checkin(request):
         description=description or f'{activity.replace("_", " ").title()} workout',
         workout=linked_workout,
         audience=['friends'],
+        is_front_camera=is_front_camera,
     )
 
     if photo:

@@ -3295,7 +3295,7 @@ function CalCheckinCard({ checkin, day, checkinIdx, totalCheckins, isActive, lik
           />
         </View>
       ) : checkin.photo_url ? (
-        <Image source={{ uri: checkin.photo_url }} style={StyleSheet.absoluteFill} contentFit="cover" />
+        <Image source={{ uri: checkin.photo_url }} style={[StyleSheet.absoluteFill, checkin.is_front_camera && { transform: [{ scaleX: -1 }] }]} contentFit="cover" />
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.calModalNoPhoto]}>
           <Feather name="camera" size={48} color="rgba(255,255,255,0.2)" />
