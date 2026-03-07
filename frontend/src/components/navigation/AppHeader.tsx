@@ -11,6 +11,7 @@ import { fetchStreakInfo } from '../../api/workouts';
 import { fetchMe } from '../../api/accounts';
 import { colors, spacing, typography, shadow } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
+import { useTutorial } from '../../store/TutorialContext';
 
 type RootNav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -18,6 +19,7 @@ export default function AppHeader() {
   const insets = useSafeAreaInsets();
   const { user, token, currentStreak, setCurrentStreak, updateUser } = useAuth();
   const navigation = useNavigation<RootNav>();
+  const { isActive: tutorialActive, step: tutorialStep, next: tutorialNext } = useTutorial();
   const [notificationCount, setNotificationCount] = useState(0);
 
   useFocusEffect(
@@ -58,7 +60,10 @@ export default function AppHeader() {
 
           <Pressable
             style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
-            onPress={() => navigation.navigate('FindFriends')}
+            onPress={() => {
+              if (tutorialActive && tutorialStep === 16) tutorialNext();
+              navigation.navigate('FindFriends');
+            }}
             accessibilityLabel="Find friends"
             accessibilityRole="button"
           >
@@ -73,14 +78,20 @@ export default function AppHeader() {
         <View style={styles.rightZone}>
           <Pressable
             style={styles.streakPill}
-            onPress={() => navigation.navigate('StreakDetails')}
+            onPress={() => {
+              if (tutorialActive && tutorialStep === 12) tutorialNext();
+              navigation.navigate('StreakDetails');
+            }}
             accessibilityLabel={`${currentStreak} day streak`}
             accessibilityRole="button"
           >
             <Text style={styles.streakEmoji}>🔥</Text>
             <Text style={styles.streakNum}>{currentStreak}</Text>
           </Pressable>
-          <Pressable onPress={() => user && navigation.navigate('Profile', { username: user.username })}>
+          <Pressable onPress={() => {
+            if (tutorialActive && tutorialStep === 14) tutorialNext();
+            if (user) navigation.navigate('Profile', { username: user.username });
+          }}>
             <Avatar uri={user?.avatar_url ?? null} name={user?.display_name ?? 'Me'} size={34} />
           </Pressable>
         </View>

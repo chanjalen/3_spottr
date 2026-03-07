@@ -19,6 +19,7 @@ import { BlurView } from 'expo-blur';
 import { colors } from '../../theme';
 import CreateMenuSheet from '../feed/CreateMenuSheet';
 import { useUnreadCount } from '../../store/UnreadCountContext';
+import { useTutorial } from '../../store/TutorialContext';
 
 const TAB_ICONS: Record<string, React.ComponentProps<typeof Feather>['name']> = {
   Feed: 'home',
@@ -32,9 +33,13 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const { total: unreadTotal } = useUnreadCount();
 
+  const { isActive: tutorialActive, step: tutorialStep, next: tutorialNext } = useTutorial();
+
   const openCreateMenu = useCallback(() => {
+    // Step index 3 = tutorial step 4 — tapping + advances to step 5 and opens the sheet
+    if (tutorialActive && tutorialStep === 3) tutorialNext();
     setShowCreateMenu(true);
-  }, []);
+  }, [tutorialActive, tutorialStep, tutorialNext]);
 
   return (
     <>
@@ -59,6 +64,10 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
               if (!isFocused && !event.defaultPrevented) {
                 navigation.navigate(route.name);
               }
+              // Tutorial: tap interactions that advance the tutorial
+              if (tutorialActive && tutorialStep === 5 && route.name === 'Gyms') tutorialNext();
+              if (tutorialActive && tutorialStep === 8 && route.name === 'Social') tutorialNext();
+              if (tutorialActive && tutorialStep === 11 && route.name === 'Ranks') tutorialNext();
             };
 
             return (

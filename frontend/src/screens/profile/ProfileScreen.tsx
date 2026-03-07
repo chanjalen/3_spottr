@@ -45,6 +45,7 @@ import { ExerciseCatalogItem, Achievement } from '../../types/workout';
 import { FeedItem } from '../../types/feed';
 import { Gym } from '../../types/gym';
 import { colors, spacing, typography } from '../../theme';
+import { useTutorial, TUTORIAL_TOTAL_STEPS } from '../../store/TutorialContext';
 import RNAnimated, {
   useSharedValue,
   useAnimatedStyle,
@@ -85,6 +86,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
   const { user: me } = useAuth();
   const { username } = route.params;
   const isOwn = me?.username === username;
+  const { isActive: tutorialActive, step: tutorialStep, next: tutorialNext, skip: tutorialSkip } = useTutorial();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1404,6 +1406,30 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
       {/* ── PR video viewer ───────────────────────────────────────────────────── */}
       <VideoPlayerModal url={videoViewerUrl} onClose={() => setVideoViewerUrl(null)} topInset={insets.top} />
+
+      {/* Tutorial overlay — step 16 (index 15) */}
+      {tutorialActive && tutorialStep === 15 && (
+        <View style={profileTutStyles.overlay} pointerEvents="box-none">
+          <View style={profileTutStyles.card}>
+            <View style={profileTutStyles.topRow}>
+              <Text style={profileTutStyles.stepLabel}>Step 16 of {TUTORIAL_TOTAL_STEPS}</Text>
+              <Pressable onPress={tutorialSkip} hitSlop={8}>
+                <Text style={profileTutStyles.skipText}>Skip tutorial</Text>
+              </Pressable>
+            </View>
+            <Text style={profileTutStyles.title}>Your Profile</Text>
+            <Text style={profileTutStyles.body}>
+              Your profile is your fitness hub. View your full workout history, track your progress over time, and see all your posts and check-ins in one place.
+            </Text>
+            <Pressable
+              style={profileTutStyles.nextBtn}
+              onPress={() => { navigation.goBack(); tutorialNext(); }}
+            >
+              <Text style={profileTutStyles.nextBtnText}>Next</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -1798,6 +1824,68 @@ function AchievementModal({ achievement, onClose }: { achievement: Achievement |
     </Modal>
   );
 }
+
+const profileTutStyles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: spacing.lg,
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  stepLabel: {
+    fontSize: typography.size.xs,
+    color: colors.textMuted,
+    fontFamily: typography.family.semibold,
+  },
+  skipText: {
+    fontSize: typography.size.xs,
+    color: colors.textMuted,
+    fontFamily: typography.family.semibold,
+    textDecorationLine: 'underline',
+  },
+  title: {
+    fontSize: typography.size.md,
+    fontFamily: typography.family.bold,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  body: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.textSecondary,
+    lineHeight: 19,
+    marginBottom: spacing.lg,
+  },
+  nextBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 20,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  nextBtnText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.bold,
+    color: '#fff',
+  },
+});
 
 const achievStyles = StyleSheet.create({
   badge: {
