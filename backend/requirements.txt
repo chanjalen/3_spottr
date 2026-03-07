@@ -14,3 +14,9 @@ redis==7.2.0
 daphne==4.2.1
 celery==5.6.2
 django-allauth[google]>=65.0.0
+# AI / LLM dependencies (Assignment 6)
+torch>=2.2.0
+transformers>=4.40.0
+accelerate>=0.29.0
+sentencepiece>=0.2.0
+groq>=0.9.0

@@ -209,3 +209,12 @@ __marimo__/
 # Claude Code
 .claude/
 backend/.claude/
+# Model weights — do NOT commit to GitHub (Assignment 6 requirement)
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.gguf
+*.onnx
+*.msgpack
+.cache/huggingface/

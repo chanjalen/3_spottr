@@ -45,6 +45,7 @@ INSTALLED_APPS = [
     "messaging",
     "notifications",
     "storages",
+    "ai",
     # Google OAuth (django-allauth)
     "django.contrib.sites",
     "allauth",
