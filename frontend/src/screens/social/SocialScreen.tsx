@@ -34,6 +34,7 @@ import { SocialStackParamList, RootStackParamList } from '../../navigation/types
 import AppHeader from '../../components/navigation/AppHeader';
 import { useUnreadCount } from '../../store/UnreadCountContext';
 import { useAuth } from '../../store/AuthContext';
+import { useTutorial } from '../../store/TutorialContext';
 import { timeAgo } from '../../utils/timeAgo';
 import { staleCache } from '../../utils/staleCache';
 
@@ -51,6 +52,7 @@ export default function SocialScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { dm, group, org, optimisticDecrement, optimisticIncrement } = useUnreadCount();
   const { user: me } = useAuth();
+  const { isActive: tutorialActive, step: tutorialStep, next: tutorialNext } = useTutorial();
   const [activeTab, setActiveTab] = useState<SocialTab>(route.params?.tab ?? 'Messages');
 
   useEffect(() => {
@@ -770,6 +772,7 @@ export default function SocialScreen({ navigation, route }: Props) {
                     setOrgsView('Mine');
                     setOrgSearchQuery('');
                     setLoadingOrgs(true);
+                    if (tutorialActive && tutorialStep === 10) tutorialNext();
                   }
                   setActiveTab(tab);
                 }}

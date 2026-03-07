@@ -37,12 +37,14 @@ import { useAuth } from '../store/AuthContext';
 import { deletePost, deleteCheckin } from '../api/feed';
 import { colors, spacing, typography } from '../theme';
 import { RootStackParamList } from '../navigation/types';
+import { useTutorial } from '../store/TutorialContext';
 
 type RootNav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function FeedScreen() {
   const navigation = useNavigation<RootNav>();
   const { user: currentUser } = useAuth();
+  const { isActive: tutorialActive, step: tutorialStep, unlock: tutorialUnlock } = useTutorial();
   const {
     items,
     activeTab,
@@ -278,7 +280,7 @@ export default function FeedScreen() {
           </View>
           <FeedTabs
             activeTab={activeTab}
-            onTabChange={(tab) => { setFilterDropdownOpen(false); changeTab(tab); }}
+            onTabChange={(tab) => { setFilterDropdownOpen(false); changeTab(tab); if (tutorialActive && tutorialStep === 2 && tab === 'main') tutorialUnlock(); }}
             onDropdownPress={() => setFilterDropdownOpen((o) => !o)}
             dark={!isSearchActive}
           />
@@ -448,7 +450,7 @@ export default function FeedScreen() {
 
         <FeedTabs
           activeTab={activeTab}
-          onTabChange={(tab) => { setFilterDropdownOpen(false); changeTab(tab); }}
+          onTabChange={(tab) => { setFilterDropdownOpen(false); changeTab(tab); if (tutorialActive && tutorialStep === 2 && tab === 'main') tutorialUnlock(); }}
           onDropdownPress={() => setFilterDropdownOpen((o) => !o)}
         />
       </LinearGradient>
