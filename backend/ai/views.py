@@ -2,10 +2,12 @@
 AI views for Spottr — Assignment 6: Text Intelligence
 
 POST /api/ai/workout-summary/  — local TinyLlama (transformers)
-POST /api/ai/workout-coach/    — Groq Cloud API (llama3-8b-8192)
+    Accepts: {"request": "<free-text workout request, e.g. 'back and bi routine'>"}
+    Returns: a structured workout routine
 
-Both endpoints accept:
-    {"workout_text": "<free-text description of the workout>"}
+POST /api/ai/workout-coach/    — Groq Cloud API (llama-3.1-8b-instant)
+    Accepts: {"request": "<free-text workout request>"}
+    Returns: a detailed workout plan with sets, reps, and tips
 
 Safety guardrails:
 - Input capped at 500 characters to prevent prompt injection via oversized payloads
@@ -51,53 +53,69 @@ def _get_local_pipeline():
 FEW_SHOT_EXAMPLES = [
     {
         "role": "user",
-        "content": "Workout: 5 sets squat 185 lbs x 5, 3 sets leg press 270 lbs x 10",
+        "content": "Give me a chest and tricep routine",
     },
     {
         "role": "assistant",
         "content": (
-            "Incredible leg day — 5 sets of squats at 185 lbs plus leg press shows real dedication. "
-            "You moved serious weight today. Keep building that base!"
+            "Chest & Triceps Routine:\n"
+            "1. Bench Press — 4x8\n"
+            "2. Incline Dumbbell Press — 3x10\n"
+            "3. Cable Fly — 3x12\n"
+            "4. Tricep Pushdown — 3x12\n"
+            "5. Overhead Tricep Extension — 3x10\n"
+            "Rest 60-90s between sets. Great for building upper body pushing strength!"
         ),
     },
     {
         "role": "user",
-        "content": "Workout: 30 min run 3.2 miles, 100 push-ups in 4 sets",
+        "content": "I want a leg day workout",
     },
     {
         "role": "assistant",
         "content": (
-            "A 3.2-mile run combined with 100 push-ups is a well-rounded cardio and strength combo. "
-            "You challenged both your aerobic system and your upper body. That consistency pays off!"
+            "Leg Day Routine:\n"
+            "1. Barbell Squat — 4x6\n"
+            "2. Romanian Deadlift — 3x10\n"
+            "3. Leg Press — 3x12\n"
+            "4. Walking Lunges — 3x12 each leg\n"
+            "5. Leg Curl — 3x12\n"
+            "Rest 90s between sets. This hits quads, hamstrings, and glutes!"
         ),
     },
     {
         "role": "user",
-        "content": "Workout: 4 sets dumbbell curl 40 lbs x 10, 3 sets tricep pushdown 60 lbs x 12",
+        "content": "Can you give me a quick 20 minute HIIT workout",
     },
     {
         "role": "assistant",
         "content": (
-            "Focused arm work today — curls and tricep pushdowns for total arm development. "
-            "Isolation sessions like this build the detail that compound lifts can't always reach. "
-            "You're sculpting something great!"
+            "20-Minute HIIT:\n"
+            "4 rounds of (40s on / 20s rest):\n"
+            "1. Burpees\n"
+            "2. Jump Squats\n"
+            "3. Push-Ups\n"
+            "4. Mountain Climbers\n"
+            "5. High Knees\n"
+            "Rest 1 min between rounds. Maximize effort on each interval!"
         ),
     },
 ]
 
 SYSTEM_MSG = (
     "You are a fitness coach assistant for the Spottr workout tracking app. "
-    "Write a motivational workout summary in exactly 2-3 sentences. "
-    "Mention the specific exercises. End with an encouraging sentence. "
-    "Do not include any harmful, off-topic, or unsafe content."
+    "Generate a clear, structured workout routine based on the user's request. "
+    "Format it as a numbered list of exercises with sets and reps. "
+    "End with one short motivational tip. "
+    "Only respond to fitness-related requests. Do not include harmful or off-topic content."
 )
 
 
-def _build_messages(workout_text: str) -> list:
+def _build_messages(request_text: str) -> list:
     return (
         [{"role": "system", "content": SYSTEM_MSG}]
         + FEW_SHOT_EXAMPLES
-        + [{"role": "user", "content": f"Workout: {workout_text}"}]
+        + [{"role": "user", "content": request_text}]
     )
 
 
@@ -127,16 +145,16 @@ def workout_summary_local(request):
     except (json.JSONDecodeError, UnicodeDecodeError):
         return JsonResponse({"error": "Invalid JSON body"}, status=400)
 
-    workout_text = data.get("workout_text", "").strip()
-    if not workout_text:
-        return JsonResponse({"error": "workout_text is required"}, status=400)
+    request_text = data.get("request", data.get("workout_text", "")).strip()
+    if not request_text:
+        return JsonResponse({"error": "request is required"}, status=400)
 
-    workout_text = _sanitise_input(workout_text)
+    request_text = _sanitise_input(request_text)
 
     try:
         pipe = _get_local_pipeline()
-        messages = _build_messages(workout_text)
-        raw = pipe(messages, max_new_tokens=120, do_sample=False)
+        messages = _build_messages(request_text)
+        raw = pipe(messages, max_new_tokens=200, do_sample=False)
 
         # Extract assistant reply from chat-formatted output
         generated = raw[0]["generated_text"]
@@ -146,7 +164,7 @@ def workout_summary_local(request):
             summary = generated
 
         summary = _sanitise_output(summary)
-        return JsonResponse({"summary": summary, "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0"})
+        return JsonResponse({"routine": summary, "model": "TinyLlama/TinyLlama-1.1B-Chat-v1.0"})
 
     except Exception as e:
         return JsonResponse({"error": f"Model inference failed: {e}"}, status=500)
@@ -171,11 +189,11 @@ def workout_coach_api(request):
     except (json.JSONDecodeError, UnicodeDecodeError):
         return JsonResponse({"error": "Invalid JSON body"}, status=400)
 
-    workout_text = data.get("workout_text", "").strip()
-    if not workout_text:
-        return JsonResponse({"error": "workout_text is required"}, status=400)
+    request_text = data.get("request", data.get("workout_text", "")).strip()
+    if not request_text:
+        return JsonResponse({"error": "request is required"}, status=400)
 
-    workout_text = _sanitise_input(workout_text)
+    request_text = _sanitise_input(request_text)
 
     api_key = os.environ.get("GROQ_API_KEY", "")
     if not api_key:
@@ -192,22 +210,20 @@ def workout_coach_api(request):
                     "role": "system",
                     "content": (
                         "You are an expert fitness coach for the Spottr workout tracking app. "
-                        "Provide specific, actionable coaching advice based on the user's workout. "
-                        "Highlight key achievements, suggest one improvement, and be encouraging. "
-                        "Keep your response to 3-5 sentences. Do not produce off-topic content."
+                        "Generate a detailed, structured workout routine based on the user's request. "
+                        "Format it as a numbered list with exercise name, sets, reps, and a brief tip. "
+                        "End with one motivational sentence. Only respond to fitness-related requests."
                     ),
                 },
                 {
                     "role": "user",
-                    "content": (
-                        f"Based on this workout, give me key achievements and what to focus on next: {workout_text}"
-                    ),
+                    "content": request_text,
                 },
             ],
-            max_tokens=200,
+            max_tokens=400,
         )
-        advice = _sanitise_output(response.choices[0].message.content)
-        return JsonResponse({"advice": advice, "model": "llama3-8b-8192 (Groq)"})
+        routine = _sanitise_output(response.choices[0].message.content)
+        return JsonResponse({"routine": routine, "model": "llama-3.1-8b-instant (Groq)"})
 
     except Exception as e:
         return JsonResponse({"error": f"Groq API call failed: {e}"}, status=502)
