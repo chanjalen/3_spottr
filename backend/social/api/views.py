@@ -1037,11 +1037,13 @@ class SharePostView(APIView):
                 membership = OrgMember.objects.get(
                     org_id=oid, user=request.user, role__in=['admin', 'creator']
                 )
-                content = message if message else f'Shared a {item_type}'
+                content = message or ''
                 Announcement.objects.create(
                     org=membership.org,
                     author=request.user,
                     content=content,
+                    shared_post_id=shared_post_id,
+                    shared_checkin_id=shared_checkin_id,
                 )
                 sent_count += 1
             except OrgMember.DoesNotExist:

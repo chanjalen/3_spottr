@@ -83,7 +83,7 @@ interface SharedPostCardProps {
 
 // Shared post cards are always white/neutral — they're content preview cards,
 // not message bubbles. Text is always dark regardless of who sent the message.
-function SharedPostCard({ post, onPress }: Omit<SharedPostCardProps, 'isOwn'> & { isOwn?: boolean }) {
+export function SharedPostCard({ post, onPress }: Omit<SharedPostCardProps, 'isOwn'> & { isOwn?: boolean }) {
   const isImmersive = post.item_type === 'workout' || post.item_type === 'checkin' || !!post.workout;
 
   if (isImmersive) {
