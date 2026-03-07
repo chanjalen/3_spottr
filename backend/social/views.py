@@ -569,6 +569,7 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
                     'is_active': poll.is_active,
                     'user_voted': user_voted,
                     'user_vote_option': user_vote_option,
+                    'ends_at': poll.ends_at.isoformat() if poll.ends_at else None,
                 }
             else:
                 post_data['poll'] = None
@@ -765,6 +766,7 @@ def post_detail_view(request, post_id):
             'is_active': poll.is_active,
             'user_voted': user_voted,
             'user_vote_option': user_vote_option,
+            'ends_at': poll.ends_at.isoformat() if poll.ends_at else None,
         }
     except Poll.DoesNotExist:
         item['poll'] = None

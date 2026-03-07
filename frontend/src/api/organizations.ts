@@ -376,6 +376,24 @@ export async function voteOnPoll(
   return data;
 }
 
+export interface AnnouncementPollVotersResponse {
+  options: Array<{
+    id: string;
+    text: string;
+    voters: Array<{ username: string; display_name: string; avatar_url: string | null }>;
+  }>;
+}
+
+export async function fetchAnnouncementPollVoters(
+  orgId: string,
+  announcementId: string,
+): Promise<AnnouncementPollVotersResponse> {
+  const { data } = await apiClient.get(
+    `/api/organizations/${orgId}/announcements/${announcementId}/poll/voters/`,
+  );
+  return data;
+}
+
 export async function markAnnouncementsRead(orgId: string): Promise<void> {
   await apiClient.post(`/api/organizations/${orgId}/announcements/read/`);
 }

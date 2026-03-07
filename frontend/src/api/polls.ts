@@ -16,7 +16,7 @@ export async function votePoll(
     question: data.question,
     options: data.options ?? [],
     total_votes: data.total_votes ?? 0,
-    user_vote_id: data.user_voted ?? null,
+    user_vote_id: data.user_vote_id ?? null,
     is_active: data.is_active ?? false,
     ends_at: data.ends_at ?? '',
   };

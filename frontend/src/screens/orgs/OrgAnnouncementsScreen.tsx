@@ -15,6 +15,7 @@ import {
   ScrollView,
   Dimensions,
   Animated,
+  SafeAreaView,
 } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
 import * as MediaLibrary from 'expo-media-library';
@@ -26,7 +27,7 @@ import { BlurView } from 'expo-blur';
 import { pickMedia } from '../../utils/pickMedia';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RouteProp, useFocusEffect } from '@react-navigation/native';
+import { RouteProp, useFocusEffect, useNavigation } from '@react-navigation/native';
 import Avatar from '../../components/common/Avatar';
 import ReactionDetailModal from '../../components/messages/ReactionDetailModal';
 import VideoThumbnail from '../../components/common/VideoThumbnail';
@@ -40,12 +41,14 @@ import {
   reactToAnnouncement,
   fetchAnnouncementReactionDetails,
   voteOnPoll,
+  fetchAnnouncementPollVoters,
   markAnnouncementsRead,
   uploadMedia,
   fetchOrgDetail,
   listOrgMembers,
   Announcement,
   AnnouncementPoll,
+  AnnouncementPollVotersResponse,
   OrgDetail,
   CreateAnnouncementPayload,
 } from '../../api/organizations';
@@ -121,6 +124,7 @@ function PollOptionBar({
   showResult,
   isActive,
   voting,
+  changingVote,
   onPress,
 }: {
   text: string;
@@ -129,6 +133,7 @@ function PollOptionBar({
   showResult: boolean;
   isActive: boolean;
   voting: boolean;
+  changingVote: boolean;
   onPress: () => void;
 }) {
   const [containerWidth, setContainerWidth] = useState(0);
@@ -154,7 +159,7 @@ function PollOptionBar({
       ]}
       onLayout={e => setContainerWidth(e.nativeEvent.layout.width)}
       onPress={onPress}
-      disabled={!isActive || voting}
+      disabled={!isActive || voting || (!changingVote && isVoted)}
     >
       {showResult && (
         <Animated.View style={[pollStyles.bar, { width: animWidth }]} />
@@ -172,11 +177,15 @@ function PollCard({
   poll,
   orgId,
   announcementId,
+  isAdmin,
+  isMember,
   onVoted,
 }: {
   poll: AnnouncementPoll;
   orgId: string;
   announcementId: string;
+  isAdmin: boolean;
+  isMember: boolean;
   onVoted: (updatedPoll: AnnouncementPoll) => void;
 }) {
   // localVotedId: tracks which option this user voted for.
@@ -185,7 +194,26 @@ function PollCard({
   const [localVotedId, setLocalVotedId] = useState<string | null>(
     poll.user_voted_option_id,
   );
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const [changingVote, setChangingVote] = useState(false);
   const [voting, setVoting] = useState(false);
+  const [showVoters, setShowVoters] = useState(false);
+  const [votersData, setVotersData] = useState<AnnouncementPollVotersResponse | null>(null);
+  const [loadingVoters, setLoadingVoters] = useState(false);
+
+  const openVoters = async () => {
+    setShowVoters(true);
+    setLoadingVoters(true);
+    try {
+      const data = await fetchAnnouncementPollVoters(orgId, announcementId);
+      setVotersData(data);
+    } catch {
+      Alert.alert('Error', 'Could not load voter data.');
+      setShowVoters(false);
+    } finally {
+      setLoadingVoters(false);
+    }
+  };
   // useRef guard: prevents double-taps before React batches the state update.
   // Unlike useState, setting this is synchronous and takes effect immediately.
   const votingRef = useRef(false);
@@ -208,6 +236,7 @@ function PollCard({
     if (optionId === localVotedId) return; // Already voted for this option
 
     votingRef.current = true; // Lock immediately — before any await or setState
+    setChangingVote(false);
 
     const prevVotedId = localVotedId;
     const isChangingVote = prevVotedId !== null;
@@ -262,16 +291,105 @@ function PollCard({
             showResult={showResult}
             isActive={poll.is_active}
             voting={voting}
+            changingVote={changingVote}
             onPress={() => handleVote(opt.id)}
           />
         );
       })}
-      <Text style={pollStyles.meta}>
-        {totalVotes} {totalVotes !== 1 ? 'votes' : 'vote'}
-        {poll.is_active
-          ? ` \u2022 Active \u2022 ${formatTimeRemaining(poll.ends_at)}`
-          : ' \u2022 Ended'}
-      </Text>
+      <View style={pollStyles.metaRow}>
+        <Text style={pollStyles.meta}>
+          {totalVotes} {totalVotes !== 1 ? 'votes' : 'vote'}
+          {poll.is_active
+            ? ` \u2022 Active \u2022 ${formatTimeRemaining(poll.ends_at)}`
+            : ' \u2022 Ended'}
+        </Text>
+        {localVotedId !== null && poll.is_active && (
+          <Pressable
+            onPress={() => setChangingVote(v => !v)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={pollStyles.changeVoteBtn}
+          >
+            <Feather name={changingVote ? 'x' : 'refresh-cw'} size={11} color={colors.primary} />
+            <Text style={pollStyles.changeVoteText}>{changingVote ? 'Cancel' : 'Change vote'}</Text>
+          </Pressable>
+        )}
+        {isMember && (
+          <Pressable
+            onPress={openVoters}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            style={pollStyles.changeVoteBtn}
+          >
+            <Feather name="users" size={11} color={colors.primary} />
+            <Text style={pollStyles.changeVoteText}>See voters</Text>
+          </Pressable>
+        )}
+      </View>
+
+      <Modal
+        visible={showVoters}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowVoters(false)}
+      >
+        <SafeAreaView style={pollStyles.modalRoot}>
+          <View style={pollStyles.modalHeader}>
+            <Text style={pollStyles.modalTitle}>Poll Voters</Text>
+            <Pressable
+              onPress={() => setShowVoters(false)}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Feather name="x" size={22} color={colors.textPrimary} />
+            </Pressable>
+          </View>
+          <View style={pollStyles.modalQuestion}>
+            <Text style={pollStyles.modalQuestionText}>{poll.question}</Text>
+            <Text style={pollStyles.modalVoteCount}>
+              {poll.total_votes} {poll.total_votes === 1 ? 'vote' : 'votes'} total
+            </Text>
+          </View>
+          {loadingVoters ? (
+            <View style={pollStyles.modalLoader}>
+              <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+          ) : votersData ? (
+            <FlatList
+              data={votersData.options}
+              keyExtractor={(opt) => opt.id}
+              contentContainerStyle={pollStyles.modalList}
+              renderItem={({ item: opt }) => (
+                <View style={pollStyles.optionSection}>
+                  <View style={pollStyles.optionHeader}>
+                    <Text style={pollStyles.optionLabel}>{opt.text}</Text>
+                    <Text style={pollStyles.optionCount}>
+                      {opt.voters.length} {opt.voters.length === 1 ? 'vote' : 'votes'}
+                    </Text>
+                  </View>
+                  {opt.voters.length === 0 ? (
+                    <Text style={pollStyles.noVoters}>No votes yet</Text>
+                  ) : (
+                    opt.voters.map((voter) => (
+                      <Pressable
+                        key={voter.username}
+                        style={pollStyles.voterRow}
+                        onPress={() => {
+                          setShowVoters(false);
+                          setTimeout(() => navigation.navigate('Profile', { username: voter.username }), 200);
+                        }}
+                      >
+                        <Avatar uri={voter.avatar_url} name={voter.display_name} size={36} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={pollStyles.voterName}>{voter.display_name}</Text>
+                          <Text style={pollStyles.voterHandle}>@{voter.username}</Text>
+                        </View>
+                      </Pressable>
+                    ))
+                  )}
+                </View>
+              )}
+            />
+          ) : null}
+        </SafeAreaView>
+      </Modal>
     </View>
   );
 }
@@ -329,10 +447,117 @@ const pollStyles = StyleSheet.create({
     color: colors.textMuted,
     marginLeft: 6,
   },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
   meta: {
     fontSize: typography.size.xs,
     color: colors.textMuted,
-    marginTop: 4,
+    flex: 1,
+  },
+  changeVoteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  changeVoteText: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.semibold,
+    color: colors.primary,
+  },
+  modalRoot: {
+    flex: 1,
+    backgroundColor: colors.background.base,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.base,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderColor,
+  },
+  modalTitle: {
+    fontSize: typography.size.lg,
+    fontFamily: typography.family.semibold,
+    color: colors.textPrimary,
+  },
+  modalQuestion: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.base,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderColor,
+    backgroundColor: colors.background.elevated,
+  },
+  modalQuestionText: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.semibold,
+    color: colors.textPrimary,
+    marginBottom: 4,
+  },
+  modalVoteCount: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+  },
+  modalLoader: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalList: {
+    paddingHorizontal: spacing.xl,
+    paddingBottom: spacing['2xl'],
+  },
+  optionSection: {
+    marginTop: spacing.lg,
+  },
+  optionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: spacing.sm,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.borderColor,
+  },
+  optionLabel: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.semibold,
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  optionCount: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.medium,
+    color: colors.textMuted,
+  },
+  noVoters: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+    fontStyle: 'italic',
+    paddingVertical: spacing.sm,
+  },
+  voterRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  voterName: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.semibold,
+    color: colors.textPrimary,
+  },
+  voterHandle: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
   },
 });
 
@@ -532,6 +757,8 @@ function AnnouncementBubble({
           poll={item.poll}
           orgId={orgId}
           announcementId={item.id}
+          isAdmin={isAdmin}
+          isMember={true}
           onVoted={(p) => onVoted(item.id, p)}
         />
       )}
@@ -635,6 +862,9 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
   }, [orgId, isAdmin, myUserId]);
 
   const flatRef = useRef<FlatList>(null);
+  const hasScrolledInitially = useRef(false);
+  const initialScrollDeadline = useRef(0);
+  const loadingMoreRef = useRef(false);
   const [videoPlayerUrl, setVideoPlayerUrl] = useState<string | null>(null);
   const _mountTime = useRef(Date.now());
 
@@ -642,6 +872,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
 
   const loadInitial = useCallback(async () => {
     const cacheKey = `org:ann:${orgId}`;
+    hasScrolledInitially.current = false;
 
     // ── Serve cached data immediately (skip spinner) ──────────────────────────
     const cached = await staleCache.get<CachedOrgAnn>(cacheKey);
@@ -675,11 +906,16 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
         : reversed;
       staleCache.set(cacheKey, { announcements: listItems, has_more: page.has_more, oldest_id: page.oldest_id, userRole: detail.user_role }, 5 * 60 * 1000);
       setAnnouncements(listItems);
-      // Scroll to bottom to show the latest announcement (like the messages screen).
-      setTimeout(() => flatRef.current?.scrollToEnd({ animated: false }), 50);
       setHasMore(page.has_more);
       setOldestId(page.oldest_id);
       setUserRole(detail.user_role);
+      // Scroll to newest message after layout completes.
+      // Keep scrolling for 1.5s so images loading in don't push us back up.
+      setTimeout(() => {
+        initialScrollDeadline.current = Date.now() + 1500;
+        flatRef.current?.scrollToEnd({ animated: false });
+        hasScrolledInitially.current = true;
+      }, 80);
       // Mark as read and refresh the global unread badge.
       markAnnouncementsRead(orgId).then(refreshUnread).catch(() => {});
       if (__DEV__) {
@@ -726,17 +962,24 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
   }, [orgId]);
 
   const loadMore = async () => {
-    if (!hasMore || loadingMore || !oldestId) return;
+    if (!hasMore || loadingMoreRef.current || !oldestId) return;
+    loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
       const page = await fetchAnnouncements(orgId, { before_id: oldestId, limit: 30 });
       // Prepend older items (reversed to oldest-first) at the front of the list.
-      setAnnouncements(prev => [...page.results.reverse(), ...prev]);
+      // Dedup to prevent duplicate keys if loadMore is called twice before the first resolves.
+      setAnnouncements(prev => {
+        const existingIds = new Set(prev.map(a => isAnn(a) ? (a._clientId ?? a.id) : a.id));
+        const newItems = [...page.results].reverse().filter(a => !existingIds.has(a.id));
+        return [...newItems, ...prev];
+      });
       setHasMore(page.has_more);
       setOldestId(page.oldest_id);
     } catch {
       // ignore
     } finally {
+      loadingMoreRef.current = false;
       setLoadingMore(false);
     }
   };
@@ -1048,14 +1291,19 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
           data={announcements}
           keyExtractor={(item) => isAnn(item) ? (item._clientId ?? item.id) : item.id}
           renderItem={renderItem}
+          onContentSizeChange={() => {
+            if (!hasScrolledInitially.current || Date.now() < initialScrollDeadline.current) {
+              flatRef.current?.scrollToEnd({ animated: false });
+              hasScrolledInitially.current = true;
+            }
+          }}
           contentContainerStyle={{
             paddingTop: spacing.md,
             paddingBottom: insets.bottom + (isAdmin ? 90 : 24),
             paddingHorizontal: spacing.base,
           }}
-          maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
           onScroll={(e) => {
-            if (e.nativeEvent.contentOffset.y < 80 && hasMore && !loadingMore) {
+            if (e.nativeEvent.contentOffset.y < 80 && hasMore && !loadingMoreRef.current) {
               loadMore();
             }
           }}
@@ -1162,6 +1410,8 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
                         poll={contextItem.poll}
                         orgId={orgId}
                         announcementId={contextItem.id}
+                        isAdmin={isAdmin}
+                        isMember={true}
                         onVoted={(p) => {
                           handlePollVoted(contextItem.id, p);
                           setContextVisible(false);
