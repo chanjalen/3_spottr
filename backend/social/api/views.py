@@ -58,6 +58,8 @@ def like_checkin(request, checkin_id):
     else:
         Reaction.objects.create(quick_workout=checkin, user=request.user, type='like')
         liked = True
+        from notifications.dispatcher import notify_like_checkin
+        notify_like_checkin(request.user, checkin)
         try:
             if checkin.user and checkin.user != request.user:
                 from accounts.push import send_push_to_user
@@ -387,13 +389,23 @@ def vote_poll(request, poll_id):
     except PollOption.DoesNotExist:
         return Response({'error': 'Option not found'}, status=404)
 
-    if PollVote.objects.filter(poll=poll, user=request.user).exists():
-        return Response({'error': 'You have already voted on this poll.'}, status=400)
+    from django.db.models import F as DjF
+    existing_vote = PollVote.objects.filter(poll=poll, user=request.user).select_related('option').first()
 
-    PollVote.objects.create(poll=poll, user=request.user, option=option)
-    option.votes += 1
-    option.save()
+    if existing_vote:
+        if existing_vote.option_id == option.id:
+            pass  # Same option — no change
+        else:
+            # Changing vote: decrement old option, update vote record
+            PollOption.objects.filter(id=existing_vote.option_id).update(votes=DjF('votes') - 1)
+            existing_vote.option = option
+            existing_vote.save(update_fields=['option'])
+            PollOption.objects.filter(id=option.id).update(votes=DjF('votes') + 1)
+    else:
+        PollVote.objects.create(poll=poll, user=request.user, option=option)
+        PollOption.objects.filter(id=option.id).update(votes=DjF('votes') + 1)
 
+    option.refresh_from_db()
     total_votes = poll.get_total_votes()
     options_data = [
         {'id': opt.id, 'text': opt.text, 'votes': opt.votes, 'order': opt.order}
@@ -623,13 +635,23 @@ def vote_poll(request, poll_id):
     except PollOption.DoesNotExist:
         return Response({'error': 'Option not found'}, status=404)
 
-    if PollVote.objects.filter(poll=poll, user=request.user).exists():
-        return Response({'error': 'You have already voted on this poll.'}, status=400)
+    from django.db.models import F as DjF
+    existing_vote = PollVote.objects.filter(poll=poll, user=request.user).select_related('option').first()
 
-    PollVote.objects.create(poll=poll, user=request.user, option=option)
-    option.votes += 1
-    option.save()
+    if existing_vote:
+        if existing_vote.option_id == option.id:
+            pass  # Same option — no change
+        else:
+            # Changing vote: decrement old option, update vote record
+            PollOption.objects.filter(id=existing_vote.option_id).update(votes=DjF('votes') - 1)
+            existing_vote.option = option
+            existing_vote.save(update_fields=['option'])
+            PollOption.objects.filter(id=option.id).update(votes=DjF('votes') + 1)
+    else:
+        PollVote.objects.create(poll=poll, user=request.user, option=option)
+        PollOption.objects.filter(id=option.id).update(votes=DjF('votes') + 1)
 
+    option.refresh_from_db()
     total_votes = poll.get_total_votes()
     options_data = [
         {'id': opt.id, 'text': opt.text, 'votes': opt.votes, 'order': opt.order}

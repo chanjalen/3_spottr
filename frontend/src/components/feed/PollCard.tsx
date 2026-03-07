@@ -16,6 +16,9 @@ import Avatar from '../common/Avatar';
 import { colors, spacing, typography } from '../../theme';
 import { fetchPollVoters, PollVotersResponse } from '../../api/polls';
 import { Feather } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../navigation/types';
 
 // ─── Countdown helpers ────────────────────────────────────────────────────────
 
@@ -52,16 +55,22 @@ interface PollCardProps {
 }
 
 export default function PollCard({ poll, onVote, isOwner = false }: PollCardProps) {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const sortedOptions = [...poll.options].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
   const hasVoted = poll.user_vote_id !== null;
+  const [changingVote, setChangingVote] = useState(false);
   const [showVoters, setShowVoters] = useState(false);
   const [votersData, setVotersData] = useState<PollVotersResponse | null>(null);
   const [loadingVoters, setLoadingVoters] = useState(false);
   const timeLabel = useCountdown(poll.ends_at, poll.is_active);
 
+  const handleOptionVote = (optionId: number | string) => {
+    setChangingVote(false);
+    onVote(optionId);
+  };
+
   const openVoters = async () => {
     setShowVoters(true);
-    if (votersData) return;
     setLoadingVoters(true);
     try {
       const data = await fetchPollVoters(poll.id);
@@ -89,11 +98,12 @@ export default function PollCard({ poll, onVote, isOwner = false }: PollCardProp
           isSelected={String(option.id) === String(poll.user_vote_id)}
           hasVoted={hasVoted}
           isActive={poll.is_active}
-          onVote={() => onVote(option.id)}
+          changingVote={changingVote}
+          onVote={() => handleOptionVote(option.id)}
         />
       ))}
 
-      {/* Footer: votes · timer · see voters */}
+      {/* Footer: votes · timer · change vote · see voters */}
       <View style={styles.footer}>
         <Text style={styles.footerVotes}>
           {poll.total_votes} {poll.total_votes === 1 ? 'vote' : 'votes'}
@@ -109,6 +119,16 @@ export default function PollCard({ poll, onVote, isOwner = false }: PollCardProp
             {timeLabel}
           </Text>
         </View>
+        {hasVoted && poll.is_active && (
+          <Pressable
+            onPress={() => setChangingVote(v => !v)}
+            style={styles.votersBtn}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Feather name={changingVote ? 'x' : 'refresh-cw'} size={12} color={colors.primary} />
+            <Text style={styles.votersBtnText}>{changingVote ? 'Cancel' : 'Change vote'}</Text>
+          </Pressable>
+        )}
         {isOwner && (
           <Pressable
             onPress={openVoters}
@@ -168,13 +188,20 @@ export default function PollCard({ poll, onVote, isOwner = false }: PollCardProp
                     <Text style={styles.noVoters}>No votes yet</Text>
                   ) : (
                     opt.voters.map((voter) => (
-                      <View key={voter.username} style={styles.voterRow}>
+                      <Pressable
+                        key={voter.username}
+                        style={styles.voterRow}
+                        onPress={() => {
+                          setShowVoters(false);
+                          setTimeout(() => navigation.navigate('Profile', { username: voter.username }), 200);
+                        }}
+                      >
                         <Avatar uri={voter.avatar_url} name={voter.display_name} size={36} />
                         <View style={styles.voterInfo}>
                           <Text style={styles.voterName}>{voter.display_name}</Text>
                           <Text style={styles.voterHandle}>@{voter.username}</Text>
                         </View>
-                      </View>
+                      </Pressable>
                     ))
                   )}
                 </View>
