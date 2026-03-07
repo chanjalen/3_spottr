@@ -213,6 +213,20 @@ class Announcement(BaseModel):
     # Optional text caption — can be empty if the announcement is media/poll only
     content = models.TextField(blank=True, default='')
 
+    # Shared content — set when an admin shares a post or check-in to the org
+    shared_post = models.ForeignKey(
+        'social.Post',
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name='org_announcement_shares',
+    )
+    shared_checkin = models.ForeignKey(
+        'social.QuickWorkout',
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name='org_announcement_shares',
+    )
+
     class Meta:
         ordering = ['-created_at']
         indexes = [

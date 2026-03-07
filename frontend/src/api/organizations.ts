@@ -1,4 +1,5 @@
 import { apiClient, getToken, API_BASE_URL } from './client';
+import { SharedPost } from '../types/messaging';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -106,6 +107,7 @@ export interface Announcement {
   reactions: AnnouncementReaction[];
   created_at: string;
   is_read: boolean;
+  shared_post?: SharedPost | null;
 }
 
 export interface AnnouncementPage {

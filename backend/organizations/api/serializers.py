@@ -179,13 +179,14 @@ class AnnouncementSerializer(serializers.ModelSerializer):
     poll = serializers.SerializerMethodField()
     reactions = serializers.SerializerMethodField()
     is_read = serializers.SerializerMethodField()
+    shared_post = serializers.SerializerMethodField()
 
     class Meta:
         model = Announcement
         fields = [
             'id', 'org', 'author_id', 'author_username', 'author_display_name',
             'author_avatar_url', 'content', 'media', 'poll', 'reactions', 'created_at',
-            'is_read',
+            'is_read', 'shared_post',
         ]
 
     def get_author_display_name(self, obj):
@@ -268,6 +269,18 @@ class AnnouncementSerializer(serializers.ModelSerializer):
             [{'emoji': e, 'count': c, 'user_reacted': e in user_emojis} for e, c in counts.items()],
             key=lambda x: -x['count'],
         )
+
+    def get_shared_post(self, obj):
+        try:
+            if obj.shared_post_id and obj.shared_post:
+                from messaging.serializers import SharedPostSerializer
+                return SharedPostSerializer(obj.shared_post).data
+            if obj.shared_checkin_id and obj.shared_checkin:
+                from messaging.serializers import SharedCheckinSerializer
+                return SharedCheckinSerializer(obj.shared_checkin).data
+        except Exception:
+            pass
+        return None
 
     def get_is_read(self, obj):
         last_read_at = self.context.get('last_read_at')

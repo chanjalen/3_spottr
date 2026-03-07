@@ -32,6 +32,7 @@ import ReactionDetailModal from '../../components/messages/ReactionDetailModal';
 import VideoThumbnail from '../../components/common/VideoThumbnail';
 import MentionText from '../../components/common/MentionText';
 import MentionAutocomplete, { type MentionableUser } from '../../components/messages/MentionAutocomplete';
+import { SharedPostCard } from '../../components/messages/MessageRow';
 import {
   fetchAnnouncements,
   createAnnouncement,
@@ -427,6 +428,7 @@ function AnnouncementBubble({
   onVideoPress,
   onMentionPress,
   onAuthorPress,
+  onSharedPostPress,
 }: {
   item: OptimisticAnnouncement;
   orgId: string;
@@ -439,6 +441,7 @@ function AnnouncementBubble({
   onVideoPress: (url: string) => void;
   onMentionPress?: (username: string) => void;
   onAuthorPress?: (username: string) => void;
+  onSharedPostPress?: (postId: string, itemType: 'post' | 'workout' | 'checkin') => void;
 }) {
   const isPending = item._status === 'pending';
   const isFailed = item._status === 'failed';
@@ -482,6 +485,23 @@ function AnnouncementBubble({
           textStyle={styles.bubbleContent}
           onMentionPress={onMentionPress}
         />
+      )}
+
+      {!!item.shared_post && (
+        <View style={styles.sharedPostWrapper}>
+          <SharedPostCard
+            post={item.shared_post}
+            onPress={
+              onSharedPostPress && item.shared_post.id
+                ? () => onSharedPostPress(
+                    item.shared_post!.id!,
+                    item.shared_post!.item_type === 'checkin' ? 'checkin'
+                      : item.shared_post!.workout ? 'workout' : 'post',
+                  )
+                : undefined
+            }
+          />
+        </View>
       )}
 
       {item.media.length > 0 && (
@@ -981,6 +1001,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
         onVideoPress={setVideoPlayerUrl}
         onMentionPress={(u) => navigation.navigate('Profile', { username: u })}
         onAuthorPress={(u) => navigation.navigate('Profile', { username: u })}
+        onSharedPostPress={(postId, itemType) => navigation.navigate('PostDetail', { postId, itemType })}
       />
     );
   };
@@ -1443,6 +1464,7 @@ const styles = StyleSheet.create({
   bubbleTime: { fontSize: typography.size.xs, color: colors.textMuted },
   bubbleContent: { fontSize: typography.size.sm, color: colors.textPrimary, lineHeight: 20 },
 
+  sharedPostWrapper: { marginTop: 8 },
   mediaGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 8 },
   mediaThumb: { width: 100, height: 100, borderRadius: 8 },
   videoThumb: { backgroundColor: '#000', alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
