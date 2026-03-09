@@ -196,28 +196,6 @@ export default function LoginScreen({ navigation }: Props) {
             )}
           </Pressable>
 
-          <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.googleBtn,
-              pressed && styles.btnPressed,
-              !request && styles.btnDisabled,
-            ]}
-            onPress={handleGoogleSignIn}
-            disabled={!request || isLoading}
-          >
-            {googleLoading ? (
-              <ActivityIndicator color={colors.textPrimary} />
-            ) : (
-              <Text style={styles.googleBtnText}>Continue with Google</Text>
-            )}
-          </Pressable>
-
           <Pressable onPress={() => navigation.navigate('Signup')} style={styles.link}>
             <Text style={styles.linkText}>
               Don't have an account?{' '}

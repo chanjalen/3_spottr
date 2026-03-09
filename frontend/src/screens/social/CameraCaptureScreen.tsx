@@ -60,12 +60,6 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const navigatedToWorkoutRef = useRef(false);
   const isCapturingRef = useRef(false);
-  // Segment recording — accumulates URIs across flips
-  const segmentsRef = useRef<string[]>([]);
-  // Set to true when flip is triggered mid-recording so the loop knows to continue
-  const isFlippingRef = useRef(false);
-  // Tracks which camera was active when recording started (for isFrontCamera param)
-  const startFacingRef = useRef<CameraType>('back');
   // Guards against multiple rapid taps on the stop button
   const isStoppingRef = useRef(false);
   // Tracks last tap time for double-tap-to-flip detection
@@ -134,24 +128,12 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
     return unsub;
   }, [navigation]);
 
-  // User-initiated flip.
-  // While idle: full remount for a clean facing switch.
-  // While recording: stop the current segment, switch cameras, and let the recording loop
-  // restart a new segment automatically once the new camera is ready.
+  // Flip camera — disabled during recording
   const handleFacingChange = useCallback(() => {
-    if (isCapturingRef.current) return;
-    if (isRecording) {
-      isFlippingRef.current = true;
-      isCameraReadyRef.current = false;
-      setIsCameraReady(false);
-      setFacing((f) => (f === 'back' ? 'front' : 'back'));
-      setCameraKey((k) => k + 1);
-      cameraRef.current?.stopRecording();
-    } else {
-      setIsCameraReady(false);
-      setFacing((f) => (f === 'back' ? 'front' : 'back'));
-      setCameraKey((k) => k + 1);
-    }
+    if (isCapturingRef.current || isRecording) return;
+    setIsCameraReady(false);
+    setFacing((f) => (f === 'back' ? 'front' : 'back'));
+    setCameraKey((k) => k + 1);
   }, [isRecording]);
 
   const handleToggleDualCamera = useCallback(() => {
@@ -278,77 +260,40 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
   const handleStartRecording = useCallback(async () => {
     if (!cameraRef.current || isRecording || !isCameraReady) return;
 
-    // Reset segment state for this recording session
-    segmentsRef.current = [];
-    startFacingRef.current = facing;
-    isFlippingRef.current = false;
     isStoppingRef.current = false;
-
     setIsRecording(true);
     shutterScale.value = withSpring(0.75, { stiffness: 300, damping: 20 });
     shutterRingScale.value = withSpring(1.25, { stiffness: 300, damping: 20 });
     progressAnim.value = withTiming(1, { duration: MAX_VIDEO_DURATION * 1000 });
     startRecordingTimer();
 
-    // Multi-segment loop: each iteration records one segment.
-    // A flip stops the current segment and restarts the loop with the new camera.
-    let keepGoing = true;
-    while (keepGoing) {
-      try {
-        const video = await cameraRef.current?.recordAsync({ maxDuration: MAX_VIDEO_DURATION });
-        if (video?.uri) segmentsRef.current.push(video.uri);
-      } catch (err) {
-        if (isFlippingRef.current) {
-          // stopRecording() called as part of a flip — this throw is expected, not a real error.
-          // Fall through so the flip-wait logic below handles the loop continuation.
-        } else {
-          console.error('[CameraCapture] recordAsync error:', err);
-          keepGoing = false;
-          break;
-        }
-      }
-
-      if (isFlippingRef.current) {
-        // Camera was flipped — wait for the new CameraView to be ready, then loop
-        isFlippingRef.current = false;
-        await new Promise<void>((resolve) => {
-          cameraReadyResolverRef.current = resolve;
-          setTimeout(resolve, 8000);
-        });
-        await new Promise((r) => setTimeout(r, 600));
-      } else {
-        keepGoing = false;
-      }
+    let videoUri: string | undefined;
+    try {
+      const video = await cameraRef.current.recordAsync({ maxDuration: MAX_VIDEO_DURATION });
+      videoUri = video?.uri;
+    } catch (err) {
+      console.error('[CameraCapture] recordAsync error:', err);
     }
 
-    // Finalize: reset all recording UI state
+    // Finalize UI
     setIsRecording(false);
     stopRecordingTimer();
     shutterScale.value = withSpring(1);
     shutterRingScale.value = withSpring(1);
     progressAnim.value = 0;
 
-    const segments = segmentsRef.current;
-    if (segments.length === 0) {
+    if (!videoUri) {
       setIsFinalizingVideo(false);
       return;
     }
 
-    // Pass all segments to CheckInReview; backend will stitch if >1
-    const previewUri = segments[0];
-    const extraSegments = segments.length > 1 ? segments : undefined;
-
     if (fromCheckinReview) {
-      navigation.navigate('CheckInReview', {
-        ...getCheckinParams(previewUri, 'video'),
-        ...(extraSegments ? { videoSegments: segments } : {}),
-      });
+      navigation.navigate('CheckInReview', getCheckinParams(videoUri, 'video'));
     } else {
       navigation.replace('CheckInReview', {
-        mediaUri: previewUri,
+        mediaUri: videoUri,
         mediaType: 'video',
-        isFrontCamera: startFacingRef.current === 'front',
-        ...(extraSegments ? { videoSegments: segments } : {}),
+        isFrontCamera: facing === 'front',
       });
     }
   }, [isRecording, isCameraReady, facing, startRecordingTimer, stopRecordingTimer, fromCheckinReview, navigation, getCheckinParams]);
@@ -366,8 +311,9 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
     cameraRef.current.stopRecording();
   }, [isRecording, stopRecordingTimer]);
 
-  // Double-tap anywhere on the camera preview to flip
+  // Double-tap anywhere on the camera preview to flip (disabled during recording)
   const handleCameraAreaPress = useCallback(() => {
+    if (isRecording) return;
     const now = Date.now();
     if (now - lastTapRef.current < 300) {
       lastTapRef.current = 0;
@@ -375,7 +321,7 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
     } else {
       lastTapRef.current = now;
     }
-  }, [handleFacingChange]);
+  }, [isRecording, handleFacingChange]);
 
   const handleLogWorkout = useCallback(() => {
     navigatedToWorkoutRef.current = true;
@@ -473,7 +419,12 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
 
         {/* Right column: flip + dual camera toggle */}
         <View style={styles.topRightCol}>
-          <Pressable onPress={handleFacingChange} style={styles.topBtn} hitSlop={12}>
+          <Pressable
+            onPress={handleFacingChange}
+            style={[styles.topBtn, isRecording && { opacity: 0.35 }]}
+            hitSlop={12}
+            disabled={isRecording}
+          >
             <Feather name="refresh-cw" size={22} color="#fff" />
           </Pressable>
           {!isRecording && (

@@ -8,7 +8,8 @@
       "developmentClient": true,
       "distribution": "internal",
       "env": {
-        "EXPO_PUBLIC_APP_VARIANT": "development"
+        "EXPO_PUBLIC_APP_VARIANT": "development",
+        "EXPO_PUBLIC_GOOGLE_IOS_DEV_CLIENT_ID": "265741649084-4dc0b5d6imkjr62oti37g96gasuvegk9.apps.googleusercontent.com"
       }
     },
     "preview": {

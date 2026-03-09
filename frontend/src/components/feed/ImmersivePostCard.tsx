@@ -341,8 +341,8 @@ export default function ImmersivePostCard({
           onPress={handleVideoTap}
           accessibilityLabel={isVideoPlaying ? 'Pause video' : 'Play video'}
         >
-          {/* Full-bleed video background — checkin videos are selfie-style, always mirror */}
-          <View style={[StyleSheet.absoluteFill, { bottom: bottomInset }, item.type === 'checkin' ? { transform: [{ scaleX: -1 }] } : null]}>
+          {/* Mirror only front-camera videos */}
+          <View style={[StyleSheet.absoluteFill, { bottom: bottomInset }, item.is_front_camera ? { transform: [{ scaleX: -1 }] } : null]}>
             <VideoView
               player={videoPlayer}
               style={StyleSheet.absoluteFill}
