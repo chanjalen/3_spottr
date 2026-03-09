@@ -32,5 +32,8 @@ export interface Notification {
   target_type: string;
   target_id: string | null;
   context_id: string;
+  context_type: string;
+  gym_id?: string;
+  gym_name?: string;
   action_status?: 'pending' | 'accepted';
 }

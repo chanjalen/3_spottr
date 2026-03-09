@@ -180,6 +180,13 @@ class MessagingConsumer(AsyncWebsocketConsumer):
             'reactions': event['reactions'],
         }))
 
+    async def notification_unread_update(self, event):
+        """Forward updated notification unread count to this WebSocket client."""
+        await self.send(text_data=json.dumps({
+            'type': 'notification_unread_update',
+            'count': event['count'],
+        }))
+
     # ── DB helpers (must be async-safe) ──────────────────────────────────────
 
     @database_sync_to_async

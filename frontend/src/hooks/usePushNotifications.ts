@@ -78,28 +78,45 @@ export function usePushNotifications(
 
       const { type } = data;
 
-      if (type === 'dm' && data.sender_id) {
-        navigationRef.navigate('AllDMs');
-      } else if (type === 'group_message' && data.group_id) {
-        navigationRef.navigate('AllGroupChats');
+      if (type === 'dm' && data.partner_username) {
+        navigationRef.navigate('Chat', {
+          partnerId: data.sender_id,
+          partnerUsername: data.partner_username,
+          partnerName: data.partner_name || data.partner_username,
+          partnerAvatar: data.partner_avatar || null,
+        });
+      } else if (type === 'group_message' && data.group_id && data.group_name) {
+        navigationRef.navigate('GroupChat', {
+          groupId: data.group_id,
+          groupName: data.group_name,
+          groupAvatar: data.group_avatar || null,
+        });
+      } else if (type === 'org_announcement' && data.org_id && data.org_name) {
+        navigationRef.navigate('OrgAnnouncements', {
+          orgId: data.org_id,
+          orgName: data.org_name,
+          orgAvatar: data.org_avatar || null,
+        });
       } else if (type === 'like_post' && data.post_id) {
         navigationRef.navigate('PostDetail', { postId: data.post_id, itemType: 'post' });
       } else if (type === 'like_checkin' && data.checkin_id) {
         navigationRef.navigate('PostDetail', { postId: data.checkin_id, itemType: 'checkin' });
+      } else if (type === 'like_comment' && data.post_id && data.item_type) {
+        navigationRef.navigate('PostDetail', { postId: data.post_id, itemType: data.item_type as 'post' | 'checkin', commentId: data.comment_id });
       } else if (type === 'comment' && data.post_id) {
-        navigationRef.navigate('PostDetail', { postId: data.post_id, itemType: 'post' });
+        navigationRef.navigate('PostDetail', { postId: data.post_id, itemType: 'post', commentId: data.comment_id });
       } else if (type === 'comment' && data.checkin_id) {
-        navigationRef.navigate('PostDetail', { postId: data.checkin_id, itemType: 'checkin' });
-      } else if (type === 'comment_reply' || type === 'like_comment') {
-        navigationRef.navigate('MainTabs', { screen: 'Notifications' });
-      } else if (type === 'friend_checkin' && data.username) {
-        navigationRef.navigate('Profile', { username: data.username });
+        navigationRef.navigate('PostDetail', { postId: data.checkin_id, itemType: 'checkin', commentId: data.comment_id });
+      } else if (type === 'comment_reply' && data.post_id && data.item_type) {
+        navigationRef.navigate('PostDetail', { postId: data.post_id, itemType: data.item_type as 'post' | 'checkin', commentId: data.comment_id });
+      } else if (type === 'mention' && data.post_id && data.item_type) {
+        navigationRef.navigate('PostDetail', { postId: data.post_id, itemType: data.item_type as 'post' | 'checkin', commentId: data.comment_id });
+      } else if (type === 'friend_checkin') {
+        navigationRef.navigate('MainTabs', { screen: 'Feed' });
       } else if (type === 'follow' && data.username) {
         navigationRef.navigate('Profile', { username: data.username });
-      } else if (type === 'mention') {
-        navigationRef.navigate('MainTabs', { screen: 'Notifications' });
       } else if (type === 'workout_invite' || type === 'workout_join_request' || type === 'join_request') {
-        navigationRef.navigate('MainTabs', { screen: 'Notifications' });
+        navigationRef.navigate('Notifications');
       } else if (type === 'gym_reminder') {
         navigationRef.navigate('MainTabs', { screen: 'Feed' });
       }

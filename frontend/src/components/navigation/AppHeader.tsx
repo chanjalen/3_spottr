@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import { fetchMe } from '../../api/accounts';
 import { colors, spacing, typography, shadow } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 import { useTutorial } from '../../store/TutorialContext';
+import { wsManager } from '../../services/websocket';
 
 type RootNav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -22,6 +23,14 @@ export default function AppHeader() {
   const { isActive: tutorialActive, step: tutorialStep, next: tutorialNext } = useTutorial();
   const [notificationCount, setNotificationCount] = useState(0);
 
+  // Real-time: update badge instantly when a new notification arrives via WebSocket
+  useEffect(() => {
+    const handler = ({ count }: { count: number }) => setNotificationCount(count);
+    wsManager.on('notification_unread_update', handler);
+    return () => wsManager.off('notification_unread_update', handler);
+  }, []);
+
+  // On focus: fetch fresh count (handles read/clear from NotificationsScreen) + streak + profile
   useFocusEffect(
     React.useCallback(() => {
       if (!token) return;

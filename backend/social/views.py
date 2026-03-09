@@ -1615,7 +1615,8 @@ def add_comment_reply_view(request, comment_id):
     _notify_mentions(
         request.user, text,
         Notification.TargetType.COMMENT, reply.id,
-        context_type=Notification.TargetType.COMMENT, context_id=parent_comment.id,
+        context_type=Notification.TargetType.POST if root.post_id else Notification.TargetType.QUICK_WORKOUT,
+        context_id=root.post_id if root.post_id else root.quick_workout_id,
     )
 
     return DRFResponse({

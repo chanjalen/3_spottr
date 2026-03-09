@@ -17,6 +17,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../navigation/types';
 import { useAuth } from '../../store/AuthContext';
 import { apiSignup, apiGoogleAuth } from '../../api/accounts';
+import { apiClient } from '../../api/client';
 import { useGoogleAuth, googleRedirectUri } from '../../hooks/useGoogleAuth';
 import { colors, spacing, typography } from '../../theme';
 
@@ -88,6 +89,12 @@ export default function SignupScreen({ navigation }: Props) {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submittingRef = useRef(false);
+
+  // Warm up Django when the screen mounts so the first real signup request
+  // doesn't hit a cold server. The 401 response is expected and ignored.
+  useEffect(() => {
+    apiClient.get('/accounts/api/me/').catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!response) return;

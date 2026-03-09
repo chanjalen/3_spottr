@@ -250,9 +250,9 @@ def _get_post(post_id):
 
 def _check_recipient_not_checked_in(recipient):
     """Raise if the recipient has already checked in today (workout, check-in, or rest day)."""
-    from workouts.services.streak_service import get_streak_date
+    from workouts.services.streak_service import get_streak_date, _get_local_now
     from workouts.models import Streak, RestDay
-    today_streak = get_streak_date()
+    today_streak = get_streak_date(_get_local_now(recipient))
     streak_obj = Streak.objects.filter(user=recipient).first()
     already_active = (
         streak_obj is not None and streak_obj.last_streak_date == today_streak
@@ -393,7 +393,13 @@ def send_dm(sender, recipient_id, content, post_id=None, quick_workout_id=None, 
             recipient,
             title=f'@{sender.username}',
             body=preview,
-            data={'type': 'dm', 'sender_id': str(sender.id)},
+            data={
+                'type': 'dm',
+                'sender_id': str(sender.id),
+                'partner_username': sender.username,
+                'partner_name': sender.display_name or sender.username,
+                'partner_avatar': sender.avatar_url or '',
+            },
         )
     except Exception:
         pass
@@ -590,7 +596,12 @@ def send_group_message(sender, group_id, content, post_id=None, quick_workout_id
                 member,
                 title=f'{group.name}: @{sender.username}',
                 body=preview,
-                data={'type': 'group_message', 'group_id': str(group.id)},
+                data={
+                    'type': 'group_message',
+                    'group_id': str(group.id),
+                    'group_name': group.name,
+                    'group_avatar': group.avatar_url or '',
+                },
             )
     except Exception:
         pass
