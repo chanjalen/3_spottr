@@ -557,10 +557,10 @@ def ws_send_group_message(sender, group_id, content, client_msg_id=None):
     try:
         from accounts.push import send_push_to_user
         preview = (content or '')[:80] or '📎 Attachment'
-        members = group.members.exclude(id=sender.id)
-        for member in members:
+        memberships = group.members.exclude(user_id=sender.id).select_related('user')
+        for membership in memberships:
             send_push_to_user(
-                member,
+                membership.user,
                 title=f'{group.name}: @{sender.username}',
                 body=preview,
                 data={
@@ -629,10 +629,10 @@ def send_group_message(sender, group_id, content, post_id=None, quick_workout_id
     try:
         from accounts.push import send_push_to_user
         preview = (content or '')[:80] or '📎 Attachment'
-        members = group.members.exclude(id=sender.id)
-        for member in members:
+        memberships = group.members.exclude(user_id=sender.id).select_related('user')
+        for membership in memberships:
             send_push_to_user(
-                member,
+                membership.user,
                 title=f'{group.name}: @{sender.username}',
                 body=preview,
                 data={
