@@ -1,16 +1,18 @@
 import React, { useMemo, useState } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { Image, ImageLoadEventData } from 'expo-image';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { colors, spacing } from '../../theme';
+import { getImageUrl } from '../../utils/imageUrl';
 
 interface FeedCardImageProps {
   uri: string;
+  frontCameraUri?: string | null;
   onPress?: () => void;
   onDoubleTap?: () => void;
 }
 
-export default function FeedCardImage({ uri, onPress, onDoubleTap }: FeedCardImageProps) {
+export default function FeedCardImage({ uri, frontCameraUri, onPress, onDoubleTap }: FeedCardImageProps) {
   // Start with a neutral 1:1 ratio until we know the real dimensions.
   const [aspectRatio, setAspectRatio] = useState(1);
 
@@ -39,35 +41,71 @@ export default function FeedCardImage({ uri, onPress, onDoubleTap }: FeedCardIma
     return Gesture.Exclusive(doubleTap, singleTap);
   }, [onPress, onDoubleTap]);
 
+  const pip = frontCameraUri ? (
+    <View style={styles.pipContainer}>
+      <Image
+        source={{ uri: getImageUrl(frontCameraUri, 'feed') ?? frontCameraUri }}
+        style={styles.pipImage}
+        contentFit="cover"
+      />
+    </View>
+  ) : null;
+
   if (!onPress && !onDoubleTap) {
     return (
-      <Image
-        source={{ uri }}
-        style={[styles.image, { aspectRatio }]}
-        contentFit="contain"
-        onLoad={handleLoad}
-        transition={300}
-      />
+      <View style={styles.imageWrapper}>
+        <Image
+          source={{ uri: getImageUrl(uri, 'feed') ?? uri }}
+          style={[styles.image, { aspectRatio }]}
+          contentFit="contain"
+          onLoad={handleLoad}
+          transition={300}
+        />
+        {pip}
+      </View>
     );
   }
 
   return (
     <GestureDetector gesture={gesture}>
-      <Image
-        source={{ uri }}
-        style={[styles.image, { aspectRatio }]}
-        contentFit="contain"
-        onLoad={handleLoad}
-        transition={300}
-      />
+      <View style={styles.imageWrapper}>
+        <Image
+          source={{ uri: getImageUrl(uri, 'feed') ?? uri }}
+          style={[styles.image, { aspectRatio }]}
+          contentFit="contain"
+          onLoad={handleLoad}
+          transition={300}
+        />
+        {pip}
+      </View>
     </GestureDetector>
   );
 }
 
 const styles = StyleSheet.create({
+  imageWrapper: {
+    position: 'relative',
+  },
   image: {
     width: '100%',
     marginBottom: spacing.md,
     backgroundColor: '#000',
+  },
+  pipContainer: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    width: 90,
+    height: 120,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#fff',
+    overflow: 'hidden',
+    zIndex: 10,
+  },
+  pipImage: {
+    width: '100%',
+    height: '100%',
+    transform: [{ scaleX: -1 }],
   },
 });

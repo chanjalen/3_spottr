@@ -27,6 +27,7 @@ import Avatar from '../../components/common/Avatar';
 import { colors, spacing, typography } from '../../theme';
 import { GymsStackParamList, RootStackParamList } from '../../navigation/types';
 import AppHeader from '../../components/navigation/AppHeader';
+import { useTutorial } from '../../store/TutorialContext';
 
 type RootNav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -65,6 +66,7 @@ const LEGEND_ITEMS = [
 export default function GymListScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const rootNav = useNavigation<RootNav>();
+  const { isActive: tutorialActive, step: tutorialStep, next: tutorialNext } = useTutorial();
   const [allGyms, setAllGyms] = useState<GymListItem[]>([]);
   const [gyms, setGyms] = useState<GymListItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -160,7 +162,10 @@ export default function GymListScreen({ navigation }: Props) {
     return (
       <Pressable
         style={({ pressed }) => [styles.gymCard, pressed && styles.gymCardPressed]}
-        onPress={() => navigation.navigate('GymDetail', { gymId: item.id, gymName: item.name })}
+        onPress={() => {
+          if (tutorialActive && tutorialStep === 6) tutorialNext();
+          navigation.navigate('GymDetail', { gymId: item.id, gymName: item.name });
+        }}
       >
         {/* Top row: name + enroll */}
         <View style={styles.cardTop}>

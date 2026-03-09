@@ -37,12 +37,15 @@ import { useAuth } from '../store/AuthContext';
 import { deletePost, deleteCheckin } from '../api/feed';
 import { colors, spacing, typography } from '../theme';
 import { RootStackParamList } from '../navigation/types';
+import { useTutorial } from '../store/TutorialContext';
 
 type RootNav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function FeedScreen() {
   const navigation = useNavigation<RootNav>();
   const { user: currentUser } = useAuth();
+  const { pendingTabRequest, clearTabRequest } = useTutorial();
+
   const {
     items,
     activeTab,
@@ -61,6 +64,14 @@ export default function FeedScreen() {
     handleSearchChange,
     clearSearch,
   } = useFeed();
+
+  // Tutorial: switch to Posts tab when requested via Next button
+  useEffect(() => {
+    if (pendingTabRequest === 'postsTab') {
+      clearTabRequest();
+      changeTab('main');
+    }
+  }, [pendingTabRequest]);
 
   const handleLike = useToggleLike(updateItem);
   const handlePollVote = usePollVote(updateItem);

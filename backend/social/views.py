@@ -198,7 +198,7 @@ def _serialize_user(user):
     }
 
 
-def _bulk_media_urls(destination_type, entity_ids, kind=None):
+def _bulk_media_urls(destination_type, entity_ids, kind=None, link_type='inline'):
     """Single query to get media URLs for a batch of entities.
     Returns dict mapping entity_id -> URL.
     Pass kind='image' or kind='video' to filter by asset type."""
@@ -207,7 +207,7 @@ def _bulk_media_urls(destination_type, entity_ids, kind=None):
     qs = MediaLink.objects.filter(
         destination_type=destination_type,
         destination_id__in=[str(eid) for eid in entity_ids],
-        type='inline',
+        type=link_type,
     ).select_related('asset')
     if kind:
         qs = qs.filter(asset__kind=kind)
@@ -398,6 +398,7 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
     # Bulk fetch media URLs (1-2 queries instead of N)
     checkin_photos = _bulk_media_urls('quick_workout', checkin_ids, kind='image')
     checkin_videos = _bulk_media_urls('quick_workout', checkin_ids, kind='video')
+    checkin_front_cameras = _bulk_media_urls('quick_workout', checkin_ids, kind='image', link_type='front_camera')
     post_photos = _bulk_media_urls('post', post_ids)
 
     # Bulk fetch extra (additional) photos per post
@@ -507,6 +508,7 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
                 'created_at': created_at,
                 'photo_url': photo_url,
                 'video_url': checkin_videos.get(str(item_id)),
+                'front_camera_url': checkin_front_cameras.get(str(item_id)),
                 'is_front_camera': obj.is_front_camera,
                 'like_count': obj.like_count,
                 'comment_count': obj.comment_count,
@@ -569,6 +571,7 @@ def _get_feed_page(request, tab, cursor=None, tag=None):
                     'is_active': poll.is_active,
                     'user_voted': user_voted,
                     'user_vote_option': user_vote_option,
+                    'ends_at': poll.ends_at.isoformat() if poll.ends_at else None,
                 }
             else:
                 post_data['poll'] = None
@@ -765,6 +768,7 @@ def post_detail_view(request, post_id):
             'is_active': poll.is_active,
             'user_voted': user_voted,
             'user_vote_option': user_vote_option,
+            'ends_at': poll.ends_at.isoformat() if poll.ends_at else None,
         }
     except Poll.DoesNotExist:
         item['poll'] = None
@@ -1611,7 +1615,8 @@ def add_comment_reply_view(request, comment_id):
     _notify_mentions(
         request.user, text,
         Notification.TargetType.COMMENT, reply.id,
-        context_type=Notification.TargetType.COMMENT, context_id=parent_comment.id,
+        context_type=Notification.TargetType.POST if root.post_id else Notification.TargetType.QUICK_WORKOUT,
+        context_id=root.post_id if root.post_id else root.quick_workout_id,
     )
 
     return DRFResponse({
@@ -1699,6 +1704,7 @@ def search_feed_view(request):
     post_ids = [item[2] for item in raw_items if item[0] == 'post']
     checkin_photos = _bulk_media_urls('quick_workout', checkin_ids, kind='image')
     checkin_videos = _bulk_media_urls('quick_workout', checkin_ids, kind='video')
+    checkin_front_cameras = _bulk_media_urls('quick_workout', checkin_ids, kind='image', link_type='front_camera')
     post_photos = _bulk_media_urls('post', post_ids)
 
     # Bulk fetch extra photos per post
@@ -1735,6 +1741,7 @@ def search_feed_view(request):
                 'created_at': created_at,
                 'photo_url': photo_url,
                 'video_url': checkin_videos.get(str(item_id)),
+                'front_camera_url': checkin_front_cameras.get(str(item_id)),
                 'is_front_camera': obj.is_front_camera,
                 'like_count': obj.like_count,
                 'comment_count': obj.comment_count,

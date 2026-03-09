@@ -250,9 +250,9 @@ def _get_post(post_id):
 
 def _check_recipient_not_checked_in(recipient):
     """Raise if the recipient has already checked in today (workout, check-in, or rest day)."""
-    from workouts.services.streak_service import get_streak_date
+    from workouts.services.streak_service import get_streak_date, _get_local_now
     from workouts.models import Streak, RestDay
-    today_streak = get_streak_date()
+    today_streak = get_streak_date(_get_local_now(recipient))
     streak_obj = Streak.objects.filter(user=recipient).first()
     already_active = (
         streak_obj is not None and streak_obj.last_streak_date == today_streak
@@ -393,7 +393,13 @@ def send_dm(sender, recipient_id, content, post_id=None, quick_workout_id=None, 
             recipient,
             title=f'@{sender.username}',
             body=preview,
-            data={'type': 'dm', 'sender_id': str(sender.id)},
+            data={
+                'type': 'dm',
+                'sender_id': str(sender.id),
+                'partner_username': sender.username,
+                'partner_name': sender.display_name or sender.username,
+                'partner_avatar': sender.avatar_url or '',
+            },
         )
     except Exception:
         pass
@@ -418,6 +424,7 @@ def send_group_zap(sender, group_id, target_user_id):
     _check_group_member(group, sender)
     target = _get_user(target_user_id)
     _check_group_member(group, target)
+    _check_recipient_not_checked_in(target)
 
     message = Message.objects.create(
         sender=sender,
@@ -490,6 +497,25 @@ def ws_send_dm(sender, recipient_id, content, client_msg_id=None):
     recipient_group = f"dm_{_clean_id(recipient.id)}"
     recipient_unread = get_unread_count(recipient)
 
+    # Push notification to recipient.
+    try:
+        from accounts.push import send_push_to_user
+        preview = (content or '')[:80] or '📎 Attachment'
+        send_push_to_user(
+            recipient,
+            title=f'@{sender.username}',
+            body=preview,
+            data={
+                'type': 'dm',
+                'sender_id': str(sender.id),
+                'partner_username': sender.username,
+                'partner_name': sender.display_name or sender.username,
+                'partner_avatar': sender.avatar_url or '',
+            },
+        )
+    except Exception:
+        pass
+
     return payload, sender_group, recipient_group, recipient_unread
 
 
@@ -526,6 +552,26 @@ def ws_send_group_message(sender, group_id, content, client_msg_id=None):
 
     # Return empty dict — Celery now handles the per-member unread pushes
     member_dm_groups = {}
+
+    # Push notification to all group members except sender.
+    try:
+        from accounts.push import send_push_to_user
+        preview = (content or '')[:80] or '📎 Attachment'
+        memberships = group.members.exclude(user_id=sender.id).select_related('user')
+        for membership in memberships:
+            send_push_to_user(
+                membership.user,
+                title=f'{group.name}: @{sender.username}',
+                body=preview,
+                data={
+                    'type': 'group_message',
+                    'group_id': str(group.id),
+                    'group_name': group.name,
+                    'group_avatar': group.avatar_url or '',
+                },
+            )
+    except Exception:
+        pass
 
     return payload, group_channel, member_dm_groups
 
@@ -583,13 +629,18 @@ def send_group_message(sender, group_id, content, post_id=None, quick_workout_id
     try:
         from accounts.push import send_push_to_user
         preview = (content or '')[:80] or '📎 Attachment'
-        members = group.members.exclude(id=sender.id)
-        for member in members:
+        memberships = group.members.exclude(user_id=sender.id).select_related('user')
+        for membership in memberships:
             send_push_to_user(
-                member,
+                membership.user,
                 title=f'{group.name}: @{sender.username}',
                 body=preview,
-                data={'type': 'group_message', 'group_id': str(group.id)},
+                data={
+                    'type': 'group_message',
+                    'group_id': str(group.id),
+                    'group_name': group.name,
+                    'group_avatar': group.avatar_url or '',
+                },
             )
     except Exception:
         pass

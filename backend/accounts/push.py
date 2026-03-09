@@ -1,8 +1,10 @@
 """
 Expo push notification helpers.
-send_push() fires-and-forgets a single notification to an Expo push token.
+send_push() fires a notification in a background thread so it never blocks a request.
 """
 import logging
+import threading
+
 import requests
 
 logger = logging.getLogger(__name__)
@@ -11,9 +13,10 @@ EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send'
 
 
 def send_push(token: str, title: str, body: str, data: dict | None = None) -> None:
-    """Send a push notification via Expo's push API. Silently ignores failures."""
+    """Send a push notification via Expo's push API in a background thread."""
     if not token or not token.startswith('ExponentPushToken['):
         return
+
     payload = {
         'to': token,
         'title': title,
@@ -21,10 +24,14 @@ def send_push(token: str, title: str, body: str, data: dict | None = None) -> No
         'sound': 'default',
         'data': data or {},
     }
-    try:
-        requests.post(EXPO_PUSH_URL, json=payload, timeout=5)
-    except Exception as e:
-        logger.warning('send_push failed: %s', e)
+
+    def _worker():
+        try:
+            requests.post(EXPO_PUSH_URL, json=payload, timeout=5)
+        except Exception as e:
+            logger.warning('send_push failed: %s', e)
+
+    threading.Thread(target=_worker, daemon=True).start()
 
 
 def send_push_to_user(user, title: str, body: str, data: dict | None = None) -> None:

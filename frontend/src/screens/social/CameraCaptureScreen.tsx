@@ -6,6 +6,7 @@ import {
   StyleSheet,
   Alert,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -36,6 +37,7 @@ type Props = {
 
 const MAX_VIDEO_DURATION = 30; // seconds
 
+
 export default function CameraCaptureScreen({ navigation, route }: Props) {
   const fromCheckinReview = route.params?.fromCheckinReview ?? false;
   const insets = useSafeAreaInsets();
@@ -43,22 +45,39 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
   const [micPermission, requestMicPermission] = useMicrophonePermissions();
   const cameraRef = useRef<CameraView>(null);
   const [facing, setFacing] = useState<CameraType>('back');
+  // cameraKey increments only on user-initiated flip, NOT during dual capture
+  // This avoids crashing by not tearing down the active session mid-capture
+  const [cameraKey, setCameraKey] = useState(0);
+  const [isDualCamera, setIsDualCamera] = useState(false);
+  const [isDualCapturing, setIsDualCapturing] = useState(false);
+  // Resolves when camera reports ready — used to await facing change during dual capture
+  const cameraReadyResolverRef = useRef<(() => void) | null>(null);
+  // Ref mirrors isCameraReady state so async dual-capture code reads the live value
+  const isCameraReadyRef = useRef(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [isCameraReady, setIsCameraReady] = useState(false);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const navigatedToWorkoutRef = useRef(false);
   const isCapturingRef = useRef(false);
+  // Guards against multiple rapid taps on the stop button
+  const isStoppingRef = useRef(false);
+  // Tracks last tap time for double-tap-to-flip detection
+  const lastTapRef = useRef(0);
+  // Shows a spinner between recording stop and navigation
+  const [isFinalizingVideo, setIsFinalizingVideo] = useState(false);
 
   // Mount/unmount CameraView on focus so it always initializes fresh
   const [isFocused, setIsFocused] = useState(false);
   useFocusEffect(
     useCallback(() => {
       setIsFocused(true);
+      isCameraReadyRef.current = false;
       setIsCameraReady(false);
       return () => {
         if (isCapturingRef.current) return;
         setIsFocused(false);
+        isCameraReadyRef.current = false;
         setIsCameraReady(false);
       };
     }, []),
@@ -109,15 +128,24 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
     return unsub;
   }, [navigation]);
 
-  // Reset camera-ready whenever facing changes (camera reinitializes)
+  // Flip camera — disabled during recording
   const handleFacingChange = useCallback(() => {
-    if (isCapturingRef.current) return;
+    if (isCapturingRef.current || isRecording) return;
     setIsCameraReady(false);
     setFacing((f) => (f === 'back' ? 'front' : 'back'));
+    setCameraKey((k) => k + 1);
+  }, [isRecording]);
+
+  const handleToggleDualCamera = useCallback(() => {
+    setIsDualCamera((d) => !d);
   }, []);
 
   const handleCameraReady = useCallback(() => {
+    isCameraReadyRef.current = true;
     setIsCameraReady(true);
+    // Unblock any in-progress dual capture waiting for camera to reinitialize
+    cameraReadyResolverRef.current?.();
+    cameraReadyResolverRef.current = null;
   }, []);
 
   const stopRecordingTimer = useCallback(() => {
@@ -142,7 +170,7 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
   // When returning to an existing CheckInReview (fromCheckinReview mode), preserve
   // any workoutId that was already in its params so it doesn't get dropped on navigate.
   const getCheckinParams = useCallback(
-    (mediaUri: string, mediaType: 'photo' | 'video') => {
+    (mediaUri: string, mediaType: 'photo' | 'video', frontCameraUri?: string) => {
       const existingWorkoutId = (
         navigation.getState().routes.find((r) => r.name === 'CheckInReview')
           ?.params as { workoutId?: string } | undefined
@@ -151,6 +179,7 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
         mediaUri,
         mediaType,
         isFrontCamera: facing === 'front',
+        ...(frontCameraUri ? { frontCameraUri } : {}),
         ...(existingWorkoutId ? { workoutId: existingWorkoutId } : {}),
       };
     },
@@ -160,58 +189,139 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
   const handleTakePhoto = useCallback(async () => {
     if (!cameraRef.current || !isCameraReady || isCapturingRef.current) return;
     isCapturingRef.current = true;
+    const originalFacing = facing;
     try {
+      // Capture main photo
       const photo = await cameraRef.current.takePictureAsync({ quality: 0.85 });
-      if (photo?.uri) {
-        if (fromCheckinReview) {
-          navigation.navigate('CheckInReview', getCheckinParams(photo.uri, 'photo'));
-        } else {
-          navigation.replace('CheckInReview', { mediaUri: photo.uri, mediaType: 'photo', isFrontCamera: facing === 'front' });
+      if (!photo?.uri) return;
+
+      let frontUri: string | undefined;
+
+      if (isDualCamera) {
+        const oppositeFacing: CameraType = originalFacing === 'back' ? 'front' : 'back';
+        setIsDualCapturing(true);
+        isCameraReadyRef.current = false;
+        setIsCameraReady(false);
+        setFacing(oppositeFacing);
+        setCameraKey((k) => k + 1); // remount CameraView with opposite facing
+
+        // Wait for onCameraReady to fire (up to 12 seconds for slow devices)
+        await new Promise<void>((resolve) => {
+          cameraReadyResolverRef.current = resolve;
+          setTimeout(resolve, 12000);
+        });
+
+        // Extra settle: poll isCameraReadyRef until truly ready, max 3 more seconds
+        const settleStart = Date.now();
+        while (!isCameraReadyRef.current && Date.now() - settleStart < 3000) {
+          await new Promise((r) => setTimeout(r, 200));
         }
+        // Final settle after ready is confirmed
+        await new Promise((r) => setTimeout(r, 1500));
+
+        // Attempt the second shot up to 3 times
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            if (!cameraRef.current) break;
+            const secondPhoto = await cameraRef.current.takePictureAsync({ quality: 0.85 });
+            if (secondPhoto?.uri) {
+              frontUri = secondPhoto.uri;
+              console.log(`[DualCam] second photo captured on attempt ${attempt}`);
+              break;
+            }
+          } catch (e) {
+            console.warn(`[DualCam] attempt ${attempt} failed:`, e);
+            if (attempt < 3) await new Promise((r) => setTimeout(r, 500));
+          }
+        }
+        if (!frontUri) console.warn('[DualCam] all attempts failed — posting without front camera');
+        setIsDualCapturing(false);
+      }
+
+      if (fromCheckinReview) {
+        navigation.navigate('CheckInReview', getCheckinParams(photo.uri, 'photo', frontUri));
+      } else {
+        navigation.replace('CheckInReview', {
+          mediaUri: photo.uri,
+          mediaType: 'photo',
+          isFrontCamera: originalFacing === 'front',
+          ...(frontUri ? { frontCameraUri: frontUri } : {}),
+        });
       }
     } catch (err) {
       console.error('[CameraCapture] takePictureAsync error:', err);
       Alert.alert('Error', 'Could not take photo. Please try again.');
+      setIsDualCapturing(false);
     } finally {
       isCapturingRef.current = false;
     }
-  }, [navigation, fromCheckinReview, isCameraReady, getCheckinParams]);
+  }, [navigation, fromCheckinReview, isCameraReady, isDualCamera, facing, getCheckinParams]);
 
   const handleStartRecording = useCallback(async () => {
     if (!cameraRef.current || isRecording || !isCameraReady) return;
+
+    isStoppingRef.current = false;
     setIsRecording(true);
     shutterScale.value = withSpring(0.75, { stiffness: 300, damping: 20 });
     shutterRingScale.value = withSpring(1.25, { stiffness: 300, damping: 20 });
     progressAnim.value = withTiming(1, { duration: MAX_VIDEO_DURATION * 1000 });
     startRecordingTimer();
+
+    let videoUri: string | undefined;
     try {
       const video = await cameraRef.current.recordAsync({ maxDuration: MAX_VIDEO_DURATION });
-      if (video?.uri) {
-        if (fromCheckinReview) {
-          navigation.navigate('CheckInReview', getCheckinParams(video.uri, 'video'));
-        } else {
-          navigation.replace('CheckInReview', { mediaUri: video.uri, mediaType: 'video', isFrontCamera: facing === 'front' });
-        }
-      }
+      videoUri = video?.uri;
     } catch (err) {
       console.error('[CameraCapture] recordAsync error:', err);
-      setIsRecording(false);
-      stopRecordingTimer();
-      shutterScale.value = withSpring(1);
-      shutterRingScale.value = withSpring(1);
-      progressAnim.value = 0;
     }
-  }, [isRecording, isCameraReady, startRecordingTimer, stopRecordingTimer, fromCheckinReview, navigation, getCheckinParams]);
 
-  const handleStopRecording = useCallback(() => {
-    if (!isRecording || !cameraRef.current) return;
-    cameraRef.current.stopRecording();
+    // Finalize UI
     setIsRecording(false);
     stopRecordingTimer();
     shutterScale.value = withSpring(1);
     shutterRingScale.value = withSpring(1);
     progressAnim.value = 0;
+
+    if (!videoUri) {
+      setIsFinalizingVideo(false);
+      return;
+    }
+
+    if (fromCheckinReview) {
+      navigation.navigate('CheckInReview', getCheckinParams(videoUri, 'video'));
+    } else {
+      navigation.replace('CheckInReview', {
+        mediaUri: videoUri,
+        mediaType: 'video',
+        isFrontCamera: facing === 'front',
+      });
+    }
+  }, [isRecording, isCameraReady, facing, startRecordingTimer, stopRecordingTimer, fromCheckinReview, navigation, getCheckinParams]);
+
+  const handleStopRecording = useCallback(() => {
+    if (!isRecording || !cameraRef.current || isStoppingRef.current) return;
+    isStoppingRef.current = true;
+    setIsFinalizingVideo(true);
+    // Immediate visual reset so the UI responds on first tap
+    setIsRecording(false);
+    stopRecordingTimer();
+    shutterScale.value = withSpring(1);
+    shutterRingScale.value = withSpring(1);
+    progressAnim.value = 0;
+    cameraRef.current.stopRecording();
   }, [isRecording, stopRecordingTimer]);
+
+  // Double-tap anywhere on the camera preview to flip (disabled during recording)
+  const handleCameraAreaPress = useCallback(() => {
+    if (isRecording) return;
+    const now = Date.now();
+    if (now - lastTapRef.current < 300) {
+      lastTapRef.current = 0;
+      handleFacingChange();
+    } else {
+      lastTapRef.current = now;
+    }
+  }, [isRecording, handleFacingChange]);
 
   const handleLogWorkout = useCallback(() => {
     navigatedToWorkoutRef.current = true;
@@ -244,7 +354,7 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
     <View style={styles.container}>
       {isFocused && (
         <CameraView
-          key={facing}
+          key={cameraKey}
           ref={cameraRef}
           style={StyleSheet.absoluteFill}
           facing={facing}
@@ -252,6 +362,26 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
           onCameraReady={handleCameraReady}
         />
       )}
+
+      {/* Full-screen tap zone for double-tap-to-flip. Sits above the camera but
+          below all controls so button taps still win. */}
+      <Pressable style={StyleSheet.absoluteFill} onPress={handleCameraAreaPress} />
+
+      {/* Dual-capture overlay — shown while switching cameras for second shot */}
+      {isDualCapturing && (
+        <View style={styles.dualCaptureOverlay}>
+          <Text style={styles.dualCaptureText}>📸 Capturing front camera…</Text>
+        </View>
+      )}
+
+      {/* Finalizing overlay — shown after stop until navigation */}
+      {isFinalizingVideo && (
+        <View style={styles.dualCaptureOverlay}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={[styles.dualCaptureText, { marginTop: 12 }]}>Preparing video…</Text>
+        </View>
+      )}
+
 
       {/* Top bar */}
       <View style={[styles.topBar, { paddingTop: insets.top + 12 }]}>
@@ -287,16 +417,33 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
           <View style={{ width: 44 }} />
         )}
 
-        <Pressable onPress={handleFacingChange} style={styles.topBtn} hitSlop={12}>
-          <Feather name="refresh-cw" size={22} color="#fff" />
-        </Pressable>
+        {/* Right column: flip + dual camera toggle */}
+        <View style={styles.topRightCol}>
+          <Pressable
+            onPress={handleFacingChange}
+            style={[styles.topBtn, isRecording && { opacity: 0.35 }]}
+            hitSlop={12}
+            disabled={isRecording}
+          >
+            <Feather name="refresh-cw" size={22} color="#fff" />
+          </Pressable>
+          {!isRecording && (
+            <Pressable
+              onPress={handleToggleDualCamera}
+              style={[styles.topBtn, styles.topBtnSmall, isDualCamera && styles.topBtnActive]}
+              hitSlop={12}
+            >
+              <Feather name="aperture" size={18} color="#fff" />
+            </Pressable>
+          )}
+        </View>
       </View>
 
       {/* Hint label */}
       {!isRecording && (
         <View style={styles.hintWrap}>
           <Text style={styles.hintText}>
-            Tap for photo · Hold for video
+            {isDualCamera ? 'Dual camera · Tap for both shots' : 'Tap for photo · Hold for video'}
           </Text>
         </View>
       )}
@@ -372,6 +519,26 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
   },
 
+  dualCaptureOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dualCaptureText: {
+    color: '#fff',
+    fontSize: 17,
+    fontWeight: '600',
+    backgroundColor: 'rgba(0,0,0,0.4)',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
   topBar: {
     position: 'absolute',
     top: 0,
@@ -379,9 +546,14 @@ const styles = StyleSheet.create({
     right: 0,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingHorizontal: 20,
     paddingBottom: 12,
+  },
+  topRightCol: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 8,
   },
   topBtn: {
     width: 44,
@@ -390,6 +562,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'rgba(0,0,0,0.35)',
     borderRadius: 22,
+  },
+  topBtnSmall: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+  },
+  topBtnActive: {
+    backgroundColor: colors.primary,
   },
   recordingBadge: {
     flexDirection: 'row',

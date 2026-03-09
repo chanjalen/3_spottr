@@ -33,7 +33,7 @@ import CommentsSheet from '../../components/comments/CommentsSheet';
 import { useAuth } from '../../store/AuthContext';
 import { fetchProfile, toggleFollow, fetchUserPRs, savePR, deletePR, fetchMutualFollowers, apiBlockToggle, apiRemoveFollower } from '../../api/accounts';
 import ShareSheet from '../../components/feed/ShareSheet';
-import { fetchExerciseCatalog, fetchUserAchievements } from '../../api/workouts';
+import { fetchExerciseCatalog, fetchUserAchievements, fetchCalendarPosts } from '../../api/workouts';
 import { fetchUserPostThumbnails, fetchUserPosts, fetchUserCheckins, toggleLikeCheckin, CheckinItem, deletePost } from '../../api/feed';
 import CheckinViewer from '../../components/profile/CheckinViewer';
 import { fetchMyGyms, fetchUserGyms } from '../../api/gyms';
@@ -45,6 +45,8 @@ import { ExerciseCatalogItem, Achievement } from '../../types/workout';
 import { FeedItem } from '../../types/feed';
 import { Gym } from '../../types/gym';
 import { colors, spacing, typography } from '../../theme';
+import { getImageUrl } from '../../utils/imageUrl';
+import { useTutorial, TUTORIAL_TOTAL_STEPS } from '../../store/TutorialContext';
 import RNAnimated, {
   useSharedValue,
   useAnimatedStyle,
@@ -61,7 +63,7 @@ type Props = {
   route: RouteProp<{ Profile: { username: string } }, 'Profile'>;
 };
 
-type ProfileTab = 'Posts' | 'Calendar' | 'Records';
+type ProfileTab = 'Posts' | 'CheckIns' | 'Records';
 
 type CalViewerDay = {
   year: number;
@@ -85,6 +87,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
   const { user: me } = useAuth();
   const { username } = route.params;
   const isOwn = me?.username === username;
+  const { isActive: tutorialActive, step: tutorialStep, next: tutorialNext, skip: tutorialSkip } = useTutorial();
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -356,7 +359,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
   }, [username]);
 
   useEffect(() => {
-    if ((activeTab === 'Posts' || activeTab === 'Calendar') && !postsLoaded.current) {
+    if ((activeTab === 'Posts' || activeTab === 'CheckIns') && !postsLoaded.current) {
       postsLoaded.current = true;
       loadPosts();
     }
@@ -927,7 +930,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
         {/* ── Tab bar ──────────────────────────────────────────────────────────── */}
         <View style={styles.tabBar}>
-          {(['Posts', 'Calendar', 'Records'] as ProfileTab[]).map((tab) => (
+          {(['Posts', 'CheckIns', 'Records'] as ProfileTab[]).map((tab) => (
             <Pressable
               key={tab}
               style={[styles.tabBtn, activeTab === tab && styles.tabBtnActive]}
@@ -953,7 +956,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
             />
           )}
 
-          {activeTab === 'Calendar' && (
+          {activeTab === 'CheckIns' && (
             <CalendarTab
               profileUsername={username}
               preloadedMonths={calPreloaded}
@@ -1404,6 +1407,29 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
       {/* ── PR video viewer ───────────────────────────────────────────────────── */}
       <VideoPlayerModal url={videoViewerUrl} onClose={() => setVideoViewerUrl(null)} topInset={insets.top} />
+
+      {/* Tutorial overlay — step 16 (index 15) */}
+      {tutorialActive && tutorialStep === 15 && (
+        <View style={profileTutStyles.overlay} pointerEvents="box-none">
+          <View style={profileTutStyles.card}>
+            <View style={profileTutStyles.topRow}>
+              <Pressable onPress={tutorialSkip} hitSlop={8}>
+                <Text style={profileTutStyles.skipText}>Skip tutorial</Text>
+              </Pressable>
+            </View>
+            <Text style={profileTutStyles.title}>Your Profile</Text>
+            <Text style={profileTutStyles.body}>
+              Your profile is your fitness hub. View your full workout history, track your progress over time, and see all your posts and check-ins in one place.
+            </Text>
+            <Pressable
+              style={profileTutStyles.nextBtn}
+              onPress={() => { navigation.goBack(); tutorialNext(); }}
+            >
+              <Text style={profileTutStyles.nextBtnText}>Next</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -1618,7 +1644,7 @@ function OrgsSection({ orgs, isOwn, navigation }: { orgs: OrgListItem[]; isOwn: 
             >
               <View style={styles.experienceIconWrap}>
                 {org.avatar_url ? (
-                  <Image source={{ uri: org.avatar_url }} style={styles.orgAvatar} contentFit="cover" />
+                  <Image source={{ uri: getImageUrl(org.avatar_url, 'avatar') ?? org.avatar_url }} style={styles.orgAvatar} contentFit="cover" />
                 ) : (
                   <Feather name="users" size={18} color="white" />
                 )}
@@ -1798,6 +1824,68 @@ function AchievementModal({ achievement, onClose }: { achievement: Achievement |
     </Modal>
   );
 }
+
+const profileTutStyles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: spacing.lg,
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  stepLabel: {
+    fontSize: typography.size.xs,
+    color: colors.textMuted,
+    fontFamily: typography.family.semibold,
+  },
+  skipText: {
+    fontSize: typography.size.xs,
+    color: colors.textMuted,
+    fontFamily: typography.family.semibold,
+    textDecorationLine: 'underline',
+  },
+  title: {
+    fontSize: typography.size.md,
+    fontFamily: typography.family.bold,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  body: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.textSecondary,
+    lineHeight: 19,
+    marginBottom: spacing.lg,
+  },
+  nextBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 20,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  nextBtnText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.bold,
+    color: '#fff',
+  },
+});
 
 const achievStyles = StyleSheet.create({
   badge: {
@@ -2072,7 +2160,7 @@ function PostThumbnail({ item, onPress, size }: { item: FeedItem; onPress: () =>
       onPress={onPress}
     >
       {item.photo_url ? (
-        <Image source={{ uri: item.photo_url }} style={{ width: s, height: s }} contentFit="cover" />
+        <Image source={{ uri: getImageUrl(item.photo_url, 'thumbnail') ?? item.photo_url }} style={{ width: s, height: s }} contentFit="cover" />
       ) : item.workout ? (
         <LinearGradient colors={['rgba(124,58,237,0.14)', 'rgba(6,182,212,0.14)']} style={styles.thumbContent}>
           <View style={styles.thumbBadge}>
@@ -2146,19 +2234,32 @@ function CalendarTab({
   const [checkins, setCheckins] = useState<CheckinItem[]>(
     () => preloadedMonths[`${now.getFullYear()}-${now.getMonth()}`] ?? []
   );
+  const [restDayNums, setRestDayNums] = useState<Set<number>>(new Set());
 
   // When pre-loaded map arrives (or month changes), sync in pre-loaded data or fetch
   useEffect(() => {
     const preloaded = preloadedMonths[currentKey];
     if (preloaded !== undefined) {
-      // Data already available — show immediately, no network call
       setCheckins(preloaded);
     } else {
-      // Not pre-loaded — fetch without clearing first so old dots stay visible
       fetchUserCheckins(profileUsername, undefined, month + 1, year)
         .then((res) => setCheckins(res.items))
         .catch(() => {});
     }
+    // Fetch rest days for the month
+    fetchCalendarPosts(year, month + 1, profileUsername)
+      .then((res) => {
+        const nums = new Set(
+          res.posts
+            .filter((p) => p.type === 'rest')
+            .map((p) => {
+              const parts = p.date.split('-');
+              return parseInt(parts[2], 10);
+            })
+        );
+        setRestDayNums(nums);
+      })
+      .catch(() => {});
   }, [year, month, profileUsername, preloadedMonths]);
 
   // Group check-ins by day number
@@ -2236,6 +2337,7 @@ function CalendarTab({
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const day = i + 1;
             const hasCheckin = checkinDayNums.has(day);
+            const isRestDay = !hasCheckin && restDayNums.has(day);
             return (
               <Pressable
                 key={day}
@@ -2243,8 +2345,12 @@ function CalendarTab({
                 onPress={() => handleDayPress(day)}
                 disabled={!hasCheckin}
               >
-                <View style={[styles.calDayBubble, hasCheckin && styles.calDayBubbleWorkout]}>
-                  <Text style={[styles.calDayText, hasCheckin && styles.calDayTextWorkout]}>
+                <View style={[
+                  styles.calDayBubble,
+                  hasCheckin && styles.calDayBubbleWorkout,
+                  isRestDay && styles.calDayBubbleRest,
+                ]}>
+                  <Text style={[styles.calDayText, hasCheckin && styles.calDayTextWorkout, isRestDay && styles.calDayTextRest]}>
                     {day}
                   </Text>
                 </View>
@@ -2856,10 +2962,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(120,120,128,0.15)',
   },
   calDayBubbleWorkout: { backgroundColor: colors.primary },
-  calDayBubbleRest: { backgroundColor: '#F59E0B' },
+  calDayBubbleRest: { backgroundColor: colors.textMuted },
   calDayText: { fontSize: 14, fontWeight: '500', color: colors.textSecondary },
   calDayTextWorkout: { color: '#fff', fontWeight: '700' },
-  calDayTextRest: { color: '#fff', fontWeight: '700' },
+  calDayTextRest: { fontSize: 16, fontWeight: '700', color: '#fff' },
 
   calModalOverlay: {
     ...StyleSheet.absoluteFillObject,
@@ -3295,7 +3401,7 @@ function CalCheckinCard({ checkin, day, checkinIdx, totalCheckins, isActive, lik
           />
         </View>
       ) : checkin.photo_url ? (
-        <Image source={{ uri: checkin.photo_url }} style={[StyleSheet.absoluteFill, checkin.is_front_camera && { transform: [{ scaleX: -1 }] }]} contentFit="cover" />
+        <Image source={{ uri: getImageUrl(checkin.photo_url, 'detail') ?? checkin.photo_url }} style={[StyleSheet.absoluteFill, checkin.is_front_camera && { transform: [{ scaleX: -1 }] }]} contentFit="cover" />
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.calModalNoPhoto]}>
           <Feather name="camera" size={48} color="rgba(255,255,255,0.2)" />

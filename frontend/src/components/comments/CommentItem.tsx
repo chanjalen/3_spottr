@@ -9,6 +9,7 @@ import MentionText from '../common/MentionText';
 import { Comment } from '../../types/feed';
 import { RootStackParamList } from '../../navigation/types';
 import { timeAgo } from '../../utils/timeAgo';
+import { getImageUrl } from '../../utils/imageUrl';
 import { colors, spacing, typography } from '../../theme';
 
 interface CommentItemProps {
@@ -73,7 +74,7 @@ export default function CommentItem({
             {/* Photo (if any) */}
             {!!comment.photo_url && (
               <Image
-                source={{ uri: comment.photo_url }}
+                source={{ uri: getImageUrl(comment.photo_url, 'feed') ?? comment.photo_url }}
                 style={styles.photo}
                 resizeMode="cover"
               />

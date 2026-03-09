@@ -623,8 +623,8 @@ def member_activity(request, org_id):
         return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
 
     membership = OrgMember.objects.filter(org_id=org_id, user=request.user).first()
-    if not membership or membership.role not in (OrgMember.Role.ADMIN, OrgMember.Role.CREATOR):
-        return Response({'error': 'You do not have admin permissions for this organization.'}, status=status.HTTP_403_FORBIDDEN)
+    if not membership:
+        return Response({'error': 'You are not a member of this organization.'}, status=status.HTTP_403_FORBIDDEN)
 
     start_date = request.query_params.get('start_date')
     end_date = request.query_params.get('end_date')
@@ -671,8 +671,8 @@ def member_logs(request, org_id):
         return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
 
     membership = OrgMember.objects.filter(org_id=org_id, user=request.user).first()
-    if not membership or membership.role not in (OrgMember.Role.ADMIN, OrgMember.Role.CREATOR):
-        return Response({'error': 'Admin permission required.'}, status=status.HTTP_403_FORBIDDEN)
+    if not membership:
+        return Response({'error': 'You are not a member of this organization.'}, status=status.HTTP_403_FORBIDDEN)
 
     member_ids = list(OrgMember.objects.filter(org_id=org_id).values_list('user_id', flat=True))
     limit = min(int(request.query_params.get('limit', 20)), 50)
@@ -796,8 +796,8 @@ def member_status(request, org_id):
         return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
 
     membership = OrgMember.objects.filter(org_id=org_id, user=request.user).first()
-    if not membership or membership.role not in (OrgMember.Role.ADMIN, OrgMember.Role.CREATOR):
-        return Response({'error': 'Admin permission required.'}, status=status.HTTP_403_FORBIDDEN)
+    if not membership:
+        return Response({'error': 'You are not a member of this organization.'}, status=status.HTTP_403_FORBIDDEN)
 
     today = timezone.now().date()
     members_qs = OrgMember.objects.filter(org_id=org_id).select_related('user')
@@ -910,3 +910,52 @@ def announcement_vote(request, org_id, announcement_id):
     except PollOptionNotFoundError as e:
         return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
     return Response({'poll': poll_data})
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def announcement_poll_voters(request, org_id, announcement_id):
+    """Return per-option voter lists for an announcement poll. Any org member can view."""
+    from organizations.models import Organization, Announcement, AnnouncementPollVote
+
+    try:
+        org = Organization.objects.get(id=org_id)
+    except Organization.DoesNotExist:
+        return Response({'error': 'Org not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if not OrgMember.objects.filter(org=org, user=request.user).exists():
+        return Response({'error': 'Permission denied'}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        ann = Announcement.objects.select_related('poll').prefetch_related('poll__options').get(
+            id=announcement_id, org=org
+        )
+    except Announcement.DoesNotExist:
+        return Response({'error': 'Announcement not found'}, status=status.HTTP_404_NOT_FOUND)
+
+    if not hasattr(ann, 'poll') or ann.poll is None:
+        return Response({'error': 'This announcement has no poll'}, status=status.HTTP_404_NOT_FOUND)
+
+    # Collect all voters up front to build avatar map in one query
+    all_votes = AnnouncementPollVote.objects.filter(
+        poll=ann.poll
+    ).select_related('user', 'option')
+    avatar_map = _build_avatar_map([v.user_id for v in all_votes])
+
+    votes_by_option = {}
+    for v in all_votes:
+        votes_by_option.setdefault(v.option_id, []).append(v)
+
+    options_data = []
+    for opt in ann.poll.options.all().order_by('order'):
+        voters = [
+            {
+                'username': v.user.username,
+                'display_name': v.user.display_name or v.user.username,
+                'avatar_url': avatar_map.get(str(v.user_id)),
+            }
+            for v in votes_by_option.get(opt.id, [])
+        ]
+        options_data.append({'id': str(opt.id), 'text': opt.text, 'voters': voters})
+
+    return Response({'options': options_data})

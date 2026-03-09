@@ -22,7 +22,9 @@ import { VideoView, useVideoPlayer } from 'expo-video';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Feather } from '@expo/vector-icons';
 import { fetchUserCheckins, CheckinItem } from '../../api/feed';
+import { fetchCalendarPosts } from '../../api/workouts';
 import { colors, spacing } from '../../theme';
+import { getImageUrl } from '../../utils/imageUrl';
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTHS = [
@@ -46,13 +48,28 @@ export default function CheckinCalendarCard({ username }: Props) {
   const [month, setMonth] = useState(now.getMonth()); // 0-indexed
 
   const [checkins, setCheckins] = useState<CheckinItem[]>([]);
+  const [restDayNums, setRestDayNums] = useState<Set<number>>(new Set());
   const [modalVisible, setModalVisible] = useState(false);
   const [modalDayIdx, setModalDayIdx]   = useState(0);
 
   useEffect(() => {
     setCheckins([]);
+    setRestDayNums(new Set());
     fetchUserCheckins(username, undefined, month + 1, year)
       .then((res) => setCheckins(res.items))
+      .catch(() => {});
+    fetchCalendarPosts(year, month + 1, username)
+      .then((res) => {
+        const nums = new Set(
+          res.posts
+            .filter((p) => p.type === 'rest')
+            .map((p) => {
+              const parts = p.date.split('-');
+              return parseInt(parts[2], 10);
+            })
+        );
+        setRestDayNums(nums);
+      })
       .catch(() => {});
   }, [username, year, month]);
 
@@ -142,6 +159,7 @@ export default function CheckinCalendarCard({ username }: Props) {
             {week.map((day, di) => {
               if (day === null) return <View key={di} style={styles.calDay} />;
               const hasCheckin = checkinDayNums.has(day);
+              const isRestDay = !hasCheckin && restDayNums.has(day);
               return (
                 <Pressable
                   key={di}
@@ -149,8 +167,12 @@ export default function CheckinCalendarCard({ username }: Props) {
                   onPress={() => handleDayPress(day)}
                   disabled={!hasCheckin}
                 >
-                  <View style={[styles.calDayBubble, hasCheckin && styles.calDayBubbleWorkout]}>
-                    <Text style={[styles.calDayText, hasCheckin && styles.calDayTextWorkout]}>
+                  <View style={[
+                    styles.calDayBubble,
+                    hasCheckin && styles.calDayBubbleWorkout,
+                    isRestDay && styles.calDayBubbleRest,
+                  ]}>
+                    <Text style={[styles.calDayText, hasCheckin && styles.calDayTextWorkout, isRestDay && styles.calDayTextWorkout]}>
                       {day}
                     </Text>
                   </View>
@@ -367,7 +389,7 @@ function SingleCheckin({
           />
         </View>
       ) : checkin.photo_url ? (
-        <Image source={{ uri: checkin.photo_url }} style={[StyleSheet.absoluteFill, checkin.is_front_camera && { transform: [{ scaleX: -1 }] }]} contentFit="cover" />
+        <Image source={{ uri: getImageUrl(checkin.photo_url, 'thumbnail') ?? checkin.photo_url }} style={[StyleSheet.absoluteFill, checkin.is_front_camera && { transform: [{ scaleX: -1 }] }]} contentFit="cover" />
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.noPhoto]}>
           <Feather name="camera" size={48} color="rgba(255,255,255,0.2)" />
@@ -443,8 +465,10 @@ const styles = StyleSheet.create({
     borderRadius: 999, backgroundColor: 'rgba(120,120,128,0.15)',
   },
   calDayBubbleWorkout: { backgroundColor: colors.primary },
+  calDayBubbleRest: { backgroundColor: colors.textMuted },
   calDayText: { fontSize: 14, fontWeight: '500', color: colors.textSecondary },
   calDayTextWorkout: { color: '#fff', fontWeight: '700' },
+  calDayRestText: { fontSize: 16, fontWeight: '700', color: '#fff' },
 
   // Modal
   modalBg: {

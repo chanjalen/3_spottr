@@ -144,6 +144,7 @@ export default function MainTabs() {
       <Root.Screen name="CheckInReview" component={CheckInReviewScreen} options={{ presentation: 'card', gestureEnabled: true }} />
       <Root.Screen name="FindFriends" component={FindFriendsScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="PostDetail" component={PostDetailScreen} options={{ presentation: 'card' }} />
+      <Root.Screen name="GymDetail" component={GymDetailScreen} options={{ presentation: 'card' }} />
     </Root.Navigator>
   );
 }

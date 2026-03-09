@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { Image } from 'expo-image';
 import { colors, typography } from '../../theme';
+import { getImageUrl } from '../../utils/imageUrl';
 
 interface AvatarProps {
   uri: string | null;
@@ -22,7 +23,7 @@ export default function Avatar({ uri, name, size = 40, onPress }: AvatarProps) {
 
   const content = uri ? (
     <Image
-      source={{ uri }}
+      source={{ uri: getImageUrl(uri, 'avatar') ?? uri }}
       style={[
         styles.image,
         {

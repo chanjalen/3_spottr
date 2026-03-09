@@ -1,4 +1,5 @@
 import { apiClient, getToken, API_BASE_URL } from './client';
+import { SharedPost } from '../types/messaging';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -106,6 +107,7 @@ export interface Announcement {
   reactions: AnnouncementReaction[];
   created_at: string;
   is_read: boolean;
+  shared_post?: SharedPost | null;
 }
 
 export interface AnnouncementPage {
@@ -370,6 +372,24 @@ export async function voteOnPoll(
   const { data } = await apiClient.post(
     `/api/organizations/${orgId}/announcements/${announcementId}/vote/`,
     { option_id: optionId },
+  );
+  return data;
+}
+
+export interface AnnouncementPollVotersResponse {
+  options: Array<{
+    id: string;
+    text: string;
+    voters: Array<{ username: string; display_name: string; avatar_url: string | null }>;
+  }>;
+}
+
+export async function fetchAnnouncementPollVoters(
+  orgId: string,
+  announcementId: string,
+): Promise<AnnouncementPollVotersResponse> {
+  const { data } = await apiClient.get(
+    `/api/organizations/${orgId}/announcements/${announcementId}/poll/voters/`,
   );
   return data;
 }

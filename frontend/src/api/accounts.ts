@@ -26,6 +26,13 @@ export async function apiUpdatePrivacy(data: {
   await apiClient.patch('/accounts/api/me/privacy/', data);
 }
 
+export async function apiUpdateNotifications(data: {
+  push_notifications?: boolean;
+}): Promise<UserBrief> {
+  const res = await apiClient.patch('/accounts/api/me/notifications/', data);
+  return res.data;
+}
+
 export async function apiSignup(data: {
   email: string;
   password: string;

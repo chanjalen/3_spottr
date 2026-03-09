@@ -3,20 +3,20 @@ import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 // In-memory cache so the SecureStore bridge is only crossed once per session.
-// undefined = not yet read; null would mean "no token" but we only cache truthy values.
-let _tokenCache: string | undefined = undefined;
+// undefined = not yet read; null = read and confirmed no token stored.
+let _tokenCache: string | null | undefined = undefined;
 
 export const getToken = async (): Promise<string | null> => {
   if (_tokenCache !== undefined) return _tokenCache;
   const token = Platform.OS === 'web'
     ? localStorage.getItem('auth_token')
     : await SecureStore.getItemAsync('auth_token');
-  if (token) _tokenCache = token;
-  return token ?? null;
+  _tokenCache = token ?? null; // cache null too so SecureStore isn't hit on every unauthenticated request
+  return _tokenCache;
 };
 
 /** Called by AuthContext.signIn/signOut to keep the in-memory cache in sync. */
-export const setTokenCache = (token: string | undefined) => {
+export const setTokenCache = (token: string | null | undefined) => {
   _tokenCache = token;
 };
 
@@ -27,7 +27,7 @@ const deleteToken = async () => {
 };
 
 export const API_BASE_URL = __DEV__
-  ? Platform.OS === 'web' ? 'http://localhost:8000' : 'http://192.168.89.71'
+  ? Platform.OS === 'web' ? 'http://localhost:8000' : 'http://10.198.112.33:80'
   : 'https://api.spottrgym.app';
 
 export const apiClient = axios.create({

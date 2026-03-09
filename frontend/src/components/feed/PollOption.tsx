@@ -16,6 +16,7 @@ interface PollOptionProps {
   isSelected: boolean;
   hasVoted: boolean;
   isActive: boolean;
+  changingVote?: boolean;
   onVote: () => void;
 }
 
@@ -26,12 +27,13 @@ export default function PollOption({
   isSelected,
   hasVoted,
   isActive,
+  changingVote = false,
   onVote,
 }: PollOptionProps) {
   const percentage = totalVotes > 0 ? Math.round((votes / totalVotes) * 100) : 0;
   const barWidth = useSharedValue(0);
-  // Show results once user has voted OR poll has ended
-  const showResults = hasVoted || !isActive;
+  // Show results once user has voted OR poll has ended (keep bars during change-vote mode)
+  const showResults = hasVoted || !isActive || changingVote;
 
   useEffect(() => {
     barWidth.value = showResults
@@ -45,10 +47,13 @@ export default function PollOption({
 
   const isLeading = showResults && totalVotes > 0 && votes === Math.max(...[votes]);
 
+  // Clickable when: poll active AND (hasn't voted yet OR currently changing vote)
+  const canPress = isActive && (!hasVoted || changingVote);
+
   return (
     <Pressable
-      onPress={isActive && !hasVoted ? onVote : undefined}
-      disabled={!isActive || hasVoted}
+      onPress={canPress ? onVote : undefined}
+      disabled={!canPress}
       accessibilityRole="button"
       accessibilityLabel={`${text}${showResults ? `, ${percentage}%` : ''}`}
       accessibilityState={{ selected: isSelected }}

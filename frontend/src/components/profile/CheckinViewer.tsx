@@ -23,6 +23,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 import { CheckinItem } from '../../api/feed';
+import { getImageUrl } from '../../utils/imageUrl';
 
 const { height: SH } = Dimensions.get('window');
 
@@ -167,7 +168,7 @@ export default function CheckinViewer({ visible, checkins, onClose }: Props) {
                 />
               </View>
             ) : item.photo_url ? (
-              <Image source={{ uri: item.photo_url }} style={[StyleSheet.absoluteFill, item.is_front_camera && { transform: [{ scaleX: -1 }] }]} contentFit="cover" />
+              <Image source={{ uri: getImageUrl(item.photo_url, 'detail') ?? item.photo_url }} style={[StyleSheet.absoluteFill, item.is_front_camera && { transform: [{ scaleX: -1 }] }]} contentFit="cover" />
             ) : (
               <View style={[StyleSheet.absoluteFill, styles.noPhoto]}>
                 <Feather name="activity" size={60} color="rgba(255,255,255,0.15)" />

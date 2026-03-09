@@ -23,7 +23,7 @@ import Avatar from '../common/Avatar';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-type AttachmentMode = 'media' | 'poll' | 'link' | 'pr' | null;
+type AttachmentMode = 'media' | 'link' | 'pr' | null;
 
 const POLL_DURATIONS: Array<{ label: string; hours: number }> = [
   { label: '1h',  hours: 1 },
@@ -49,6 +49,7 @@ export default function CreatePostSheet({ sheetRef, onSuccess }: Props) {
 
   const [text, setText] = useState('');
   const [mode, setMode] = useState<AttachmentMode>(null);
+  const [showPoll, setShowPoll] = useState(false);
   const [photo, setPhoto] = useState<Media | null>(null);
   const [video, setVideo] = useState<Media | null>(null);
   const [linkUrl, setLinkUrl] = useState('');
@@ -65,6 +66,7 @@ export default function CreatePostSheet({ sheetRef, onSuccess }: Props) {
   const reset = useCallback(() => {
     setText('');
     setMode(null);
+    setShowPoll(false);
     setPhoto(null);
     setVideo(null);
     setLinkUrl('');
@@ -105,10 +107,17 @@ export default function CreatePostSheet({ sheetRef, onSuccess }: Props) {
 
   const handleSubmit = async () => {
     if (!canSubmit || submitting) return;
+    if (showPoll) {
+      const opts = pollOptions.filter(o => o.trim());
+      if (!pollQuestion.trim() || opts.length < 2) {
+        Alert.alert('Incomplete poll', 'Please fill in the poll question and at least 2 options before posting.');
+        return;
+      }
+    }
     setSubmitting(true);
     try {
       const validOptions = pollOptions.filter(o => o.trim());
-      const hasPoll = pollQuestion.trim().length > 0 && validOptions.length >= 2;
+      const hasPoll = showPoll && pollQuestion.trim().length > 0 && validOptions.length >= 2;
       const hasPr = prExercise.trim().length > 0 && prValue.trim().length > 0;
 
       await createPost({
@@ -116,7 +125,7 @@ export default function CreatePostSheet({ sheetRef, onSuccess }: Props) {
         linkUrl: linkUrl.trim() || undefined,
         visibility,
         replyRestriction,
-        photo: photo ?? undefined,
+        photos: photo ? [photo] : undefined,
         video: video ?? undefined,
         poll: hasPoll
           ? { question: pollQuestion.trim(), options: validOptions, duration: pollDuration }
@@ -141,7 +150,7 @@ export default function CreatePostSheet({ sheetRef, onSuccess }: Props) {
     text.trim().length > 0 ||
     !!photo ||
     !!video ||
-    (pollQuestion.trim().length > 0 && pollOptions.filter(o => o.trim()).length >= 2) ||
+    (showPoll && pollQuestion.trim().length > 0 && pollOptions.filter(o => o.trim()).length >= 2) ||
     (prExercise.trim().length > 0 && prValue.trim().length > 0)
   );
 
@@ -281,7 +290,7 @@ export default function CreatePostSheet({ sheetRef, onSuccess }: Props) {
             )}
 
             {/* ── Poll builder ─────────────────────────── */}
-            {mode === 'poll' && (
+            {showPoll && (
               <View style={styles.pollSection}>
                 <TextInput
                   style={styles.pollQuestionInput}
@@ -312,7 +321,7 @@ export default function CreatePostSheet({ sheetRef, onSuccess }: Props) {
                     )}
                   </View>
                 ))}
-                {pollOptions.length < 4 && (
+                {pollOptions.length < 6 && (
                   <Pressable
                     style={styles.addOptionBtn}
                     onPress={() => setPollOptions([...pollOptions, ''])}
@@ -416,8 +425,8 @@ export default function CreatePostSheet({ sheetRef, onSuccess }: Props) {
             />
             <ToolbarBtn
               icon="bar-chart-2"
-              active={mode === 'poll'}
-              onPress={() => toggleMode('poll')}
+              active={showPoll}
+              onPress={() => setShowPoll(p => !p)}
             />
             <ToolbarBtn
               icon="link"

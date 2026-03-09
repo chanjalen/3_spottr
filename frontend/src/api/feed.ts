@@ -4,6 +4,9 @@ import { FeedItem, WorkoutDetail } from '../types/feed';
 
 /** Normalize a raw backend feed item to the frontend FeedItem shape. */
 function adaptFeedItem(raw: any): FeedItem {
+  if (raw.type === 'checkin') {
+    console.log('[Feed] checkin', raw.id, 'front_camera_url:', raw.front_camera_url ?? 'MISSING');
+  }
   return {
     id: String(raw.id ?? ''),
     type: raw.type === 'workout' ? 'post' : (raw.type ?? 'post'),
@@ -25,6 +28,7 @@ function adaptFeedItem(raw: any): FeedItem {
         : [],
     video_url: raw.video_url ?? null,
     is_front_camera: raw.is_front_camera ?? false,
+    front_camera_url: raw.front_camera_url ?? null,
     link_url: raw.link_url ?? null,
     like_count: raw.like_count ?? 0,
     comment_count: raw.comment_count ?? 0,
@@ -274,6 +278,10 @@ export async function createCheckin(params: {
   // Camera capture always produces a photo or video
   photo?: { uri: string; name: string; type: string };
   video?: { uri: string; name: string; type: string };
+  // Multiple segments when camera was flipped during recording — backend stitches
+  videoSegments?: Array<{ uri: string; name: string; type: string }>;
+  // Optional second camera shot (dual camera mode)
+  frontCameraPhoto?: { uri: string; name: string; type: string };
   // Optional: ID of a logged workout to attach to this check-in
   workoutId?: string;
   isFrontCamera?: boolean;
@@ -284,14 +292,21 @@ export async function createCheckin(params: {
   formData.append('activity', params.activity);
   if (params.description) formData.append('description', params.description);
   if (params.photo) formData.append('photo', params.photo as any);
-  if (params.video) formData.append('video', params.video as any);
+  if (params.videoSegments && params.videoSegments.length > 1) {
+    params.videoSegments.forEach((seg) => formData.append('video_segments[]', seg as any));
+  } else if (params.video) {
+    formData.append('video', params.video as any);
+  }
+  if (params.frontCameraPhoto) formData.append('front_camera_photo', params.frontCameraPhoto as any);
   if (params.workoutId) formData.append('workout_id', params.workoutId);
   formData.append('is_front_camera', params.isFrontCamera ? 'true' : 'false');
 
+  console.log('[createCheckin] sending front_camera_photo:', !!params.frontCameraPhoto, params.frontCameraPhoto?.uri ?? 'none');
   // Do NOT set Content-Type manually — React Native's XHR sets it automatically
   // with the correct multipart boundary when the body is FormData.
   const response = await apiClient.post(ENDPOINTS.createCheckin, formData, {
     headers: { 'Content-Type': undefined },
   });
+  console.log('[createCheckin] response:', JSON.stringify(response.data));
   return response.data;
 }

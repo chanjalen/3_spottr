@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CommonActions } from '@react-navigation/native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Avatar from '../common/Avatar';
@@ -11,6 +12,8 @@ import { fetchStreakInfo } from '../../api/workouts';
 import { fetchMe } from '../../api/accounts';
 import { colors, spacing, typography, shadow } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
+import { useTutorial } from '../../store/TutorialContext';
+import { wsManager } from '../../services/websocket';
 
 type RootNav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -18,8 +21,17 @@ export default function AppHeader() {
   const insets = useSafeAreaInsets();
   const { user, token, currentStreak, setCurrentStreak, updateUser } = useAuth();
   const navigation = useNavigation<RootNav>();
+  const { isActive: tutorialActive, step: tutorialStep, next: tutorialNext, restart: restartTutorial } = useTutorial();
   const [notificationCount, setNotificationCount] = useState(0);
 
+  // Real-time: update badge instantly when a new notification arrives via WebSocket
+  useEffect(() => {
+    const handler = ({ count }: { count: number }) => setNotificationCount(count);
+    wsManager.on('notification_unread_update', handler);
+    return () => wsManager.off('notification_unread_update', handler);
+  }, []);
+
+  // On focus: fetch fresh count (handles read/clear from NotificationsScreen) + streak + profile
   useFocusEffect(
     React.useCallback(() => {
       if (!token) return;
@@ -58,7 +70,10 @@ export default function AppHeader() {
 
           <Pressable
             style={({ pressed }) => [styles.iconBtn, pressed && styles.iconBtnPressed]}
-            onPress={() => navigation.navigate('FindFriends')}
+            onPress={() => {
+              if (tutorialActive && tutorialStep === 16) tutorialNext();
+              navigation.navigate('FindFriends');
+            }}
             accessibilityLabel="Find friends"
             accessibilityRole="button"
           >
@@ -66,21 +81,40 @@ export default function AppHeader() {
           </Pressable>
         </View>
 
-        {/* Center: Spottr logo text */}
-        <Text style={styles.logoText}>Spottr</Text>
+        {/* Center: Spottr logo text — absolutely centered so side zones don't affect it */}
+        <Text style={styles.logoText} pointerEvents="none">Spottr</Text>
 
-        {/* Right: streak pill + user avatar */}
+        {/* Right: info button + streak pill + user avatar */}
         <View style={styles.rightZone}>
+          {!tutorialActive && (
+            <Pressable
+              style={styles.infoBtn}
+              onPress={() => {
+                restartTutorial();
+                navigation.dispatch(CommonActions.navigate({ name: 'MainTabs', params: { screen: 'Feed' } }));
+              }}
+              accessibilityLabel="Start tutorial"
+              accessibilityRole="button"
+            >
+              <Text style={styles.infoBtnText}>i</Text>
+            </Pressable>
+          )}
           <Pressable
             style={styles.streakPill}
-            onPress={() => navigation.navigate('StreakDetails')}
+            onPress={() => {
+              if (tutorialActive && tutorialStep === 12) tutorialNext();
+              navigation.navigate('StreakDetails');
+            }}
             accessibilityLabel={`${currentStreak} day streak`}
             accessibilityRole="button"
           >
             <Text style={styles.streakEmoji}>🔥</Text>
             <Text style={styles.streakNum}>{currentStreak}</Text>
           </Pressable>
-          <Pressable onPress={() => user && navigation.navigate('Profile', { username: user.username })}>
+          <Pressable onPress={() => {
+            if (tutorialActive && tutorialStep === 14) tutorialNext();
+            if (user) navigation.navigate('Profile', { username: user.username });
+          }}>
             <Avatar uri={user?.avatar_url ?? null} name={user?.display_name ?? 'Me'} size={34} />
           </Pressable>
         </View>
@@ -139,6 +173,10 @@ const styles = StyleSheet.create({
     lineHeight: 12,
   },
   logoText: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
     fontSize: 19,
     fontWeight: '700',
     color: colors.textOnPrimary,
@@ -148,6 +186,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  infoBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: colors.textMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textMuted,
+    lineHeight: 14,
   },
   streakPill: {
     flexDirection: 'row',

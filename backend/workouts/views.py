@@ -611,15 +611,6 @@ def finish_workout_view(request, workout_id):
                         achieved_date=timezone.now().date(),
                     )
 
-    # Always update streak and workout count, regardless of post_to_feed
-    from workouts.services.streak_service import update_streak
-    from groups.services import update_group_streaks_for_user
-    update_streak(request.user, activity_type='workout')
-    update_group_streaks_for_user(request.user)
-
-    request.user.total_workouts = F('total_workouts') + 1
-    request.user.save(update_fields=['total_workouts'])
-
     return JsonResponse({
         'success': True,
         'workout': {

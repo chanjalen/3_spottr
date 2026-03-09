@@ -33,6 +33,7 @@ import CheckinCalendarCard from '../../components/profile/CheckinCalendarCard';
 import { useAuth } from '../../store/AuthContext';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
+import { useTutorial, TUTORIAL_TOTAL_STEPS } from '../../store/TutorialContext';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'StreakDetails'>;
@@ -43,6 +44,7 @@ const { width: SCREEN_WIDTH } = Dimensions.get('window');
 export default function StreakDetailsScreen({ navigation }: Props) {
   const insets = useSafeAreaInsets();
   const { setCurrentStreak, user } = useAuth();
+  const { isActive: tutorialActive, step: tutorialStep, next: tutorialNext, skip: tutorialSkip } = useTutorial();
 
   const [streakData, setStreakData] = useState<StreakDetails | null>(null);
   const [loading, setLoading] = useState(true);
@@ -274,9 +276,94 @@ export default function StreakDetailsScreen({ navigation }: Props) {
         achievement={selectedAchievement}
         onClose={() => setSelectedAchievement(null)}
       />
+
+      {/* Tutorial overlay — step 14 (index 13) */}
+      {tutorialActive && tutorialStep === 13 && (
+        <View style={tutStyles.overlay} pointerEvents="box-none">
+          <View style={tutStyles.card}>
+            <View style={tutStyles.topRow}>
+              <Pressable onPress={tutorialSkip} hitSlop={8}>
+                <Text style={tutStyles.skipText}>Skip tutorial</Text>
+              </Pressable>
+            </View>
+            <Text style={tutStyles.title}>Your Streak 🔥</Text>
+            <Text style={tutStyles.body}>
+              Track your daily check-in streak and watch it grow. Hit milestones to earn badges and show off your consistency on your profile.
+            </Text>
+            <Pressable
+              style={tutStyles.nextBtn}
+              onPress={() => { navigation.goBack(); tutorialNext(); }}
+            >
+              <Text style={tutStyles.nextBtnText}>Next</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
     </View>
   );
 }
+
+const tutStyles = StyleSheet.create({
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.72)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.xl,
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: spacing.lg,
+    width: '100%',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 20,
+    elevation: 12,
+  },
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.sm,
+  },
+  stepLabel: {
+    fontSize: typography.size.xs,
+    color: colors.textMuted,
+    fontFamily: typography.family.semibold,
+  },
+  skipText: {
+    fontSize: typography.size.xs,
+    color: colors.textMuted,
+    fontFamily: typography.family.semibold,
+    textDecorationLine: 'underline',
+  },
+  title: {
+    fontSize: typography.size.md,
+    fontFamily: typography.family.bold,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  body: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.textSecondary,
+    lineHeight: 19,
+    marginBottom: spacing.lg,
+  },
+  nextBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 20,
+    paddingVertical: spacing.sm,
+    alignItems: 'center',
+  },
+  nextBtnText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.bold,
+    color: '#fff',
+  },
+});
 
 
 // ─── Sub-components ───────────────────────────────────────────────────────────

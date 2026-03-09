@@ -20,6 +20,8 @@ import {
 import { AuthProvider, useAuth } from './src/store/AuthContext';
 import { UnreadCountProvider } from './src/store/UnreadCountContext';
 import { ActiveWorkoutProvider } from './src/store/ActiveWorkoutContext';
+import { TutorialProvider } from './src/store/TutorialContext';
+import TutorialOverlay from './src/components/tutorial/TutorialOverlay';
 import { usePushNotifications } from './src/hooks/usePushNotifications';
 import ActiveWorkoutBanner from './src/components/navigation/ActiveWorkoutBanner';
 import MainTabs from './src/navigation/MainTabs';
@@ -159,15 +161,18 @@ export default function App() {
       <BottomSheetModalProvider>
         <SafeAreaProvider>
           <AuthProvider>
-            <ActiveWorkoutProvider>
-              <UnreadCountProvider>
-                <NavigationContainer theme={navTheme} ref={navigationRef}>
-                  <RootNavigator />
-                  <StatusBar style="dark" />
-                </NavigationContainer>
-                <ActiveWorkoutBanner navigationRef={navigationRef} />
-              </UnreadCountProvider>
-            </ActiveWorkoutProvider>
+            <TutorialProvider>
+              <ActiveWorkoutProvider>
+                <UnreadCountProvider>
+                  <NavigationContainer theme={navTheme} ref={navigationRef}>
+                    <RootNavigator />
+                    <StatusBar style="dark" />
+                  </NavigationContainer>
+                  <ActiveWorkoutBanner navigationRef={navigationRef} />
+                </UnreadCountProvider>
+              </ActiveWorkoutProvider>
+              <TutorialOverlay navigationRef={navigationRef} />
+            </TutorialProvider>
           </AuthProvider>
         </SafeAreaProvider>
       </BottomSheetModalProvider>

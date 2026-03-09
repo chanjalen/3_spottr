@@ -53,6 +53,7 @@ import {
 import RangeCalendar from '../../components/common/RangeCalendar';
 import { useAuth } from '../../store/AuthContext';
 import { colors, spacing, typography } from '../../theme';
+import { getImageUrl } from '../../utils/imageUrl';
 import { RootStackParamList } from '../../navigation/types';
 
 type Props = {
@@ -256,7 +257,7 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
   const handleTabChange = (tab: ProfileTab) => {
     setActiveTab(tab);
     if (tab === 'Admin' && isAdmin) loadAdminData();
-    if (tab === 'Activity' && isAdmin) {
+    if (tab === 'Activity' && isMember) {
       setActivitySubTab('Logs');
       loadLogs(undefined, logTypeFilter, logStartDate, logEndDate);
     }
@@ -908,7 +909,7 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
               {detailModal?.kind === 'checkin' && (
                 <View style={styles.detailBody}>
                   {!!detailModal.data.photo_url && (
-                    <Image source={{ uri: detailModal.data.photo_url }} style={styles.detailPhoto} />
+                    <Image source={{ uri: getImageUrl(detailModal.data.photo_url, 'detail') ?? detailModal.data.photo_url }} style={styles.detailPhoto} />
                   )}
                   {!!detailModal.data.workout_type && (
                     <View style={styles.detailPill}>
@@ -1117,7 +1118,7 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
     );
   }
 
-  const tabs: ProfileTab[] = isAdmin ? ['Info', 'Admin', 'Activity'] : ['Info'];
+  const tabs: ProfileTab[] = isMember ? (isAdmin ? ['Info', 'Admin', 'Activity'] : ['Info', 'Activity']) : ['Info'];
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background.base }}>
@@ -1255,7 +1256,7 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
                         {editAvatarUri ? (
                           <Image source={{ uri: editAvatarUri }} style={styles.settingsAvatarPreview} />
                         ) : org?.avatar_url ? (
-                          <Image source={{ uri: org.avatar_url }} style={styles.settingsAvatarPreview} />
+                          <Image source={{ uri: getImageUrl(org.avatar_url, 'avatar') ?? org.avatar_url }} style={styles.settingsAvatarPreview} />
                         ) : (
                           <Text style={styles.settingsAvatarInitial}>
                             {org?.name[0]?.toUpperCase() ?? '?'}

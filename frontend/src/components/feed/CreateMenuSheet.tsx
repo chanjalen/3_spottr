@@ -18,6 +18,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 import { fetchStreakInfo, takeRestDay } from '../../api/workouts';
+import { useTutorial } from '../../store/TutorialContext';
 
 type RootNav = NativeStackNavigationProp<RootStackParamList>;
 
@@ -28,7 +29,10 @@ interface Props {
 
 export default function CreateMenuSheet({ visible, onClose }: Props) {
   const navigation = useNavigation<RootNav>();
-  const { width } = useWindowDimensions();
+  const { width, height: screenHeight } = useWindowDimensions();
+  const { isActive: tutorialActive, step: tutorialStep, totalSteps: tutorialTotal, next: tutorialNext } = useTutorial();
+  // Step index 4 (0-based) = tutorial step 5 — activates when user opens this sheet
+  const showTutorialOverlay = tutorialActive && tutorialStep === 4;
   const pagerRef = useRef<ScrollView>(null);
   const [page, setPage] = useState(0);
   const [restDaysRemaining, setRestDaysRemaining] = useState<number | null>(null);
@@ -157,6 +161,7 @@ export default function CreateMenuSheet({ visible, onClose }: Props) {
         <View style={[styles.card, { width: cardWidth, height: cardHeight }]}>
           {/* Horizontal pager — fills entire card */}
           <ScrollView
+            pointerEvents={showTutorialOverlay ? 'none' : 'auto'}
             ref={pagerRef}
             horizontal
             scrollEnabled={false}
@@ -275,6 +280,49 @@ export default function CreateMenuSheet({ visible, onClose }: Props) {
             <Feather name="x" size={20} color={colors.textPrimary} />
           </Pressable>
         </View>
+
+        {/* ── Tutorial step 5 overlay ── */}
+        {showTutorialOverlay && (() => {
+          const cW = cardWidth;
+          const cH = cardHeight;
+          const cX = (width - cW) / 2;
+          const cY = (screenHeight - cH) / 2;
+          const CARD_W = cW - 16;
+          const tooltipX = cX + 8;
+          return (
+            <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+              {/* Dark cutout: 4 rects around the card */}
+              <View style={{ position: 'absolute', top: 0, left: 0, right: 0, height: cY, backgroundColor: 'rgba(0,0,0,0.78)' }} />
+              <View style={{ position: 'absolute', top: cY + cH, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.78)' }} />
+              <View style={{ position: 'absolute', top: cY, left: 0, width: cX, height: cH, backgroundColor: 'rgba(0,0,0,0.78)' }} />
+              <View style={{ position: 'absolute', top: cY, left: cX + cW, right: 0, height: cH, backgroundColor: 'rgba(0,0,0,0.78)' }} />
+
+              {/* Cyan spotlight ring around the card */}
+              <View pointerEvents="none" style={{ position: 'absolute', top: cY - 4, left: cX - 4, width: cW + 8, height: cH + 8, borderRadius: 28, borderWidth: 2, borderColor: colors.primary }} />
+
+              {/* Tooltip card above the sheet */}
+              <View style={[styles.tutorialCard, { position: 'absolute', bottom: screenHeight - cY + 14, left: tooltipX, width: CARD_W }]}>
+                <Text style={styles.tutorialTitle}>Post & Check-In</Text>
+                <Text style={styles.tutorialBody}>
+                  This is how you post and make check-ins. Tap Post to share content with the fitness community, or Check-In to log your gym visit and keep your streak alive.
+                </Text>
+                <View style={styles.tutorialFooter}>
+                  <View style={styles.tutorialDots}>
+                    {Array.from({ length: tutorialTotal }).map((_, i) => (
+                      <View key={i} style={[styles.tutorialDot, i === tutorialStep && styles.tutorialDotActive]} />
+                    ))}
+                  </View>
+                  <Pressable
+                    style={({ pressed }) => [styles.tutorialBtn, pressed && { opacity: 0.85 }]}
+                    onPress={() => { handleClose(); tutorialNext(); }}
+                  >
+                    <Text style={styles.tutorialBtnText}>Next</Text>
+                  </Pressable>
+                </View>
+              </View>
+            </View>
+          );
+        })()}
       </View>
     </Modal>
   );
@@ -458,5 +506,74 @@ const styles = StyleSheet.create({
   restRowSublabel: {
     fontSize: typography.size.xs,
     color: colors.textMuted,
+  },
+
+  // Tutorial step 5
+  tutorialTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: spacing.xs,
+  },
+  tutorialStepLabel: {
+    fontSize: typography.size.xs,
+    color: colors.textMuted,
+    fontWeight: '500',
+  },
+  tutorialFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: spacing.sm,
+  },
+  tutorialDots: {
+    flexDirection: 'row',
+    gap: 5,
+    alignItems: 'center',
+  },
+  tutorialDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.borderColor,
+  },
+  tutorialDotActive: {
+    width: 16,
+    borderRadius: 3,
+    backgroundColor: colors.primary,
+  },
+  tutorialCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: spacing.base,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 20,
+    elevation: 12,
+    gap: spacing.xs,
+  },
+  tutorialTitle: {
+    fontSize: typography.size.md,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  tutorialBody: {
+    fontSize: typography.size.sm,
+    color: colors.textSecondary,
+    lineHeight: 19,
+  },
+  tutorialBtn: {
+    marginTop: spacing.sm,
+    alignSelf: 'flex-end',
+    backgroundColor: colors.primary,
+    borderRadius: 20,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
+  tutorialBtnText: {
+    fontSize: typography.size.sm,
+    fontWeight: '700',
+    color: '#fff',
   },
 });

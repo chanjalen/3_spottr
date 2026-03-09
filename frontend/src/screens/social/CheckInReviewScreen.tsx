@@ -51,19 +51,24 @@ const BUSY_COLORS: Record<number, string> = {
 
 export default function CheckInReviewScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { mediaUri: initialMediaUri, mediaType: initialMediaType, workoutId: incomingWorkoutId, isFrontCamera: initialIsFrontCamera } = route.params;
+  const { mediaUri: initialMediaUri, mediaType: initialMediaType, workoutId: incomingWorkoutId, isFrontCamera: initialIsFrontCamera, frontCameraUri: initialFrontCameraUri, videoSegments: initialVideoSegments } = route.params;
+  console.log('[CheckInReview] frontCameraUri from params:', initialFrontCameraUri ?? 'none');
 
   // Local media state — can be filled later by navigating to CameraCapture
   const [localMediaUri, setLocalMediaUri] = useState<string | null>(initialMediaUri ?? null);
   const [localMediaType, setLocalMediaType] = useState<'photo' | 'video' | null>(initialMediaType ?? null);
   const [isFrontCamera, setIsFrontCamera] = useState(initialIsFrontCamera ?? false);
+  const [localFrontCameraUri, setLocalFrontCameraUri] = useState<string | null>(initialFrontCameraUri ?? null);
+  const [videoSegments, setVideoSegments] = useState<string[] | undefined>(initialVideoSegments);
 
   // Sync when CameraCapture navigates back with new media params
   useEffect(() => {
     if (route.params?.mediaUri) { setLocalMediaUri(route.params.mediaUri); setIsVideoPlaying(false); }
     if (route.params?.mediaType) setLocalMediaType(route.params.mediaType);
     if (route.params?.isFrontCamera !== undefined) setIsFrontCamera(route.params.isFrontCamera);
-  }, [route.params?.mediaUri, route.params?.mediaType]);
+    setLocalFrontCameraUri(route.params?.frontCameraUri ?? null);
+    setVideoSegments(route.params?.videoSegments);
+  }, [route.params?.mediaUri, route.params?.mediaType, route.params?.frontCameraUri, route.params?.isFrontCamera, route.params?.videoSegments]);
 
   const [activity, setActivity] = useState('');
   const [description, setDescription] = useState('');
@@ -175,11 +180,29 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
         locationName: otherSelected ? customLocation.trim() : undefined,
         activity: activity.trim(),
         description: description.trim() || undefined,
-        [localMediaType === 'video' ? 'video' : 'photo']: {
-          uri: localMediaUri,
-          name: filename,
-          type: mimeType,
-        },
+        // Multi-segment video (camera flipped during recording) — backend stitches
+        ...(videoSegments && videoSegments.length > 1
+          ? {
+              videoSegments: videoSegments.map((uri, i) => ({
+                uri,
+                name: `segment_${i}.mp4`,
+                type: 'video/mp4',
+              })),
+            }
+          : {
+              [localMediaType === 'video' ? 'video' : 'photo']: {
+                uri: localMediaUri,
+                name: filename,
+                type: mimeType,
+              },
+            }),
+        ...(localFrontCameraUri && localMediaType !== 'video' ? {
+          frontCameraPhoto: {
+            uri: localFrontCameraUri,
+            name: localFrontCameraUri.split('/').pop() ?? 'front.jpg',
+            type: 'image/jpeg',
+          },
+        } : {}),
         workoutId: attachedWorkout?.id,
         isFrontCamera,
       });
@@ -269,11 +292,20 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
                   )}
                 </Pressable>
               ) : (
-                <Image
-                  source={{ uri: localMediaUri }}
-                  style={[styles.mediaPreview, isFrontCamera && { transform: [{ scaleX: -1 }] }]}
-                  resizeMode="cover"
-                />
+                <View>
+                  <Image
+                    source={{ uri: localMediaUri }}
+                    style={[styles.mediaPreview, isFrontCamera && { transform: [{ scaleX: -1 }] }]}
+                    resizeMode="cover"
+                  />
+                  {localFrontCameraUri && (
+                    <Image
+                      source={{ uri: localFrontCameraUri }}
+                      style={[styles.pipOverlay, { transform: [{ scaleX: -1 }] }]}
+                      resizeMode="cover"
+                    />
+                  )}
+                </View>
               )}
               <Pressable
                 style={styles.retakeBtn}
@@ -499,6 +531,17 @@ const styles = StyleSheet.create({
     width: '100%',
     aspectRatio: 4 / 3,
     backgroundColor: colors.surface,
+  },
+  pipOverlay: {
+    position: 'absolute',
+    bottom: 12,
+    left: 12,
+    width: 100,
+    height: 135,
+    borderRadius: 12,
+    borderWidth: 2.5,
+    borderColor: '#fff',
+    overflow: 'hidden',
   },
   mediaPlaceholder: {
     width: '100%',

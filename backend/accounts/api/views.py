@@ -2,6 +2,7 @@ import hashlib
 import logging
 import re
 import secrets
+import threading
 from datetime import date, timedelta
 
 from django.contrib.auth import authenticate
@@ -49,21 +50,26 @@ def _user_brief(user):
         'checkin_visible_following': user.checkin_visible_following,
         'checkin_visible_orgs': user.checkin_visible_orgs,
         'checkin_visible_gyms': user.checkin_visible_gyms,
+        'push_notifications': user.push_notifications,
     }
 
 
 def _send_email(subject: str, to: str, text_body: str, html_body: str) -> None:
-    """Send a transactional email with plain-text and HTML alternatives."""
+    """Send a transactional email in a background thread so the request returns immediately."""
     msg = EmailMultiAlternatives(
         subject=subject,
         body=text_body,
         to=[to],
     )
     msg.attach_alternative(html_body, 'text/html')
-    try:
-        msg.send()
-    except Exception:
-        logger.exception('Failed to send email to %s (subject: %s)', to, subject)
+
+    def _worker():
+        try:
+            msg.send()
+        except Exception:
+            logger.exception('Failed to send email to %s (subject: %s)', to, subject)
+
+    threading.Thread(target=_worker, daemon=True).start()
 
 
 def _send_password_reset_email(user, code: str) -> None:
@@ -206,8 +212,18 @@ def api_signup_view(request):
     existing = User.objects.filter(email=email).first()
     if existing:
         if not existing.is_email_verified:
-            code = _issue_verification_code(existing)
-            _send_verification_email(existing, code)
+            # Only issue a new code (and send a new email) if the existing code has
+            # already expired. This prevents duplicate emails when the first signup
+            # request succeeded on the server but the network dropped the response —
+            # the user would re-submit the form, and we return the same token quietly.
+            code_expired = (
+                not existing.email_verification_token
+                or not existing.email_verification_token_expires
+                or timezone.now() > existing.email_verification_token_expires
+            )
+            if code_expired:
+                code = _issue_verification_code(existing)
+                _send_verification_email(existing, code)
             from rest_framework.authtoken.models import Token
             token, _ = Token.objects.get_or_create(user=existing)
             return Response({'token': token.key, 'user': _user_brief(existing)}, status=status.HTTP_200_OK)
@@ -225,6 +241,26 @@ def api_signup_view(request):
             onboarding_step=0,
         )
     except IntegrityError:
+        # Race condition: the client timed out and retried, but our first request
+        # already committed the user between the filter() check above and this
+        # create_user() call.  Recover the same way as the "existing unverified
+        # user" path so the retry returns a token instead of an error.
+        race_user = User.objects.filter(email=email, is_email_verified=False).first()
+        if race_user:
+            code_expired = (
+                not race_user.email_verification_token
+                or not race_user.email_verification_token_expires
+                or timezone.now() > race_user.email_verification_token_expires
+            )
+            if code_expired:
+                code = _issue_verification_code(race_user)
+                _send_verification_email(race_user, code)
+            from rest_framework.authtoken.models import Token
+            token, _ = Token.objects.get_or_create(user=race_user)
+            return Response(
+                {'token': token.key, 'user': _user_brief(race_user)},
+                status=status.HTTP_200_OK,
+            )
         return Response(
             {'error': 'An account with this email already exists.'},
             status=status.HTTP_400_BAD_REQUEST,
@@ -518,6 +554,24 @@ def api_privacy_settings_view(request):
     return Response({f: getattr(user, f) for f in FIELDS})
 
 
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def api_notification_settings_view(request):
+    """GET or PATCH push/email notification toggles."""
+    user = request.user
+    FIELDS = ['push_notifications']
+    if request.method == 'GET':
+        return Response({f: getattr(user, f) for f in FIELDS})
+    changed = []
+    for f in FIELDS:
+        if f in request.data:
+            setattr(user, f, bool(request.data[f]))
+            changed.append(f)
+    if changed:
+        user.save(update_fields=changed)
+    return Response(_user_brief(user))
+
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def api_profile_view(request, username):
@@ -545,7 +599,12 @@ def api_profile_view(request, username):
         follower=target,
         following__in=Follow.objects.filter(following=target).values('follower'),
     ).count()
-    today = tz.now().date()
+    import zoneinfo
+    try:
+        user_tz = zoneinfo.ZoneInfo(target.timezone or 'UTC')
+    except Exception:
+        user_tz = zoneinfo.ZoneInfo('UTC')
+    today = tz.now().astimezone(user_tz).date()
     has_checkin_today = QuickWorkout.objects.filter(user=target, created_at__date=today).exists()
 
     return Response({
@@ -1286,6 +1345,7 @@ def api_google_auth_view(request):
         cid for cid in [
             getattr(settings, 'GOOGLE_CLIENT_ID', ''),
             getattr(settings, 'GOOGLE_IOS_CLIENT_ID', ''),
+            getattr(settings, 'GOOGLE_IOS_DEV_CLIENT_ID', ''),
             getattr(settings, 'GOOGLE_ANDROID_CLIENT_ID', ''),
         ] if cid
     ]
@@ -1381,33 +1441,9 @@ def api_save_push_token_view(request):
 def api_send_gym_reminders_view(request):
     """
     POST /accounts/api/send-gym-reminders/
-    Sends a push notification to every user who has a push token, has
-    push_notifications enabled, and has NOT logged a workout or check-in today.
-    Intended to be called by a daily cron job (authenticate with a service token).
+    Manual trigger for the gym reminder task (useful for testing / admin use).
+    The same logic runs automatically via Celery beat every hour.
     """
-    from django.utils import timezone
-    from accounts.push import send_push
-    from social.models import QuickWorkout
-    from workouts.models import Workout
-
-    today = timezone.localdate()
-
-    users = User.objects.filter(
-        push_notifications=True,
-        expo_push_token__gt='',
-    )
-
-    sent = 0
-    for user in users:
-        has_workout = Workout.objects.filter(user=user, date=today).exists()
-        has_checkin = QuickWorkout.objects.filter(user=user, created_at__date=today).exists()
-        if not has_workout and not has_checkin:
-            send_push(
-                user.expo_push_token,
-                title="Don't break your streak! 🔥",
-                body="You haven't logged a workout today. Keep the momentum going!",
-                data={'type': 'gym_reminder'},
-            )
-            sent += 1
-
+    from accounts.tasks import send_gym_reminders
+    sent = send_gym_reminders()
     return Response({'sent': sent})

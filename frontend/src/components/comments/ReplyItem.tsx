@@ -8,6 +8,7 @@ import MentionText from '../common/MentionText';
 import { Comment } from '../../types/feed';
 import { RootStackParamList } from '../../navigation/types';
 import { timeAgo } from '../../utils/timeAgo';
+import { getImageUrl } from '../../utils/imageUrl';
 import { colors, spacing, typography } from '../../theme';
 
 interface ReplyItemProps {
@@ -42,7 +43,7 @@ export default function ReplyItem({
         )}
         {!!reply.photo_url && (
           <Image
-            source={{ uri: reply.photo_url }}
+            source={{ uri: getImageUrl(reply.photo_url, 'feed') ?? reply.photo_url }}
             style={styles.photo}
             resizeMode="cover"
           />
