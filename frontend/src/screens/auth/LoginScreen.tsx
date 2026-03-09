@@ -10,12 +10,13 @@ import {
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
+import { exchangeCodeAsync } from 'expo-auth-session';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../navigation/types';
 import { useAuth } from '../../store/AuthContext';
 import { apiLogin, apiGoogleAuth } from '../../api/accounts';
-import { useGoogleAuth } from '../../hooks/useGoogleAuth';
+import { useGoogleAuth, googleRedirectUri } from '../../hooks/useGoogleAuth';
 import { colors, spacing, typography } from '../../theme';
 
 type Props = {
@@ -33,20 +34,45 @@ export default function LoginScreen({ navigation }: Props) {
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Handle Google OAuth response
+  // Handle Google OAuth response (PKCE code flow)
   useEffect(() => {
-    if (response?.type === 'success') {
-      const idToken = response.params?.id_token ?? (response as any).authentication?.idToken;
-      if (idToken) {
-        handleGoogleToken(idToken);
-      } else {
+    if (!response) return;
+
+    if (response.type === 'success') {
+      const code = response.params?.code;
+      if (!code) {
         setError('Google sign-in failed. Please try again.');
         setGoogleLoading(false);
+        return;
       }
-    } else if (response?.type === 'error') {
+
+      const clientId = Platform.OS === 'ios'
+        ? (process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? '')
+        : (process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '');
+
+      exchangeCodeAsync(
+        {
+          code,
+          redirectUri: googleRedirectUri,
+          clientId,
+          extraParams: request?.codeVerifier ? { code_verifier: request.codeVerifier } : {},
+        },
+        { tokenEndpoint: 'https://oauth2.googleapis.com/token' },
+      ).then((tokenResult) => {
+        if (tokenResult.idToken) {
+          handleGoogleToken(tokenResult.idToken);
+        } else {
+          setError('Google sign-in failed. Please try again.');
+          setGoogleLoading(false);
+        }
+      }).catch(() => {
+        setError('Google sign-in failed. Please try again.');
+        setGoogleLoading(false);
+      });
+    } else if (response.type === 'error') {
       setError('Google sign-in was cancelled or failed.');
       setGoogleLoading(false);
-    } else if (response?.type === 'dismiss') {
+    } else if (response.type === 'dismiss') {
       setGoogleLoading(false);
     }
   }, [response]);

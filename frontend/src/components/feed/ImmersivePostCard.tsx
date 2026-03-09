@@ -166,6 +166,17 @@ export default function ImmersivePostCard({
             contentFit="cover"
           />
 
+          {/* Front camera PIP — shown when dual camera was used */}
+          {!!item.front_camera_url && (
+            <View style={[styles.pip, { top: topInset + 16 }]}>
+              <Image
+                source={{ uri: item.front_camera_url }}
+                style={styles.pipImage}
+                contentFit="cover"
+              />
+            </View>
+          )}
+
           {/* Dark gradient overlay — clipped to match the photo */}
           <LinearGradient
             colors={['transparent', 'rgba(0,0,0,0.72)']}
@@ -677,6 +688,24 @@ const styles = StyleSheet.create({
     gap: 5,
     minHeight: 44,
     justifyContent: 'center',
+  },
+
+  // ─── Front camera PIP ───────────────────────────────────────────────────────
+  pip: {
+    position: 'absolute',
+    left: spacing.base,
+    width: 135,
+    height: 180,
+    borderRadius: 16,
+    borderWidth: 2,
+    borderColor: '#fff',
+    overflow: 'hidden',
+    zIndex: 10,
+  },
+  pipImage: {
+    width: '100%',
+    height: '100%',
+    transform: [{ scaleX: -1 }],
   },
 
   // ─── Video overlay ──────────────────────────────────────────────────────────

@@ -245,6 +245,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'workouts.tasks.reset_broken_streaks',
         'schedule': 3600,  # every hour (UTC) — catches each user's 3 AM window
     },
+    'send-gym-reminders-hourly': {
+        'task': 'accounts.tasks.send_gym_reminders',
+        'schedule': 3600,  # runs every hour; internally fires at 9am/12pm/6pm per user's local time
+    },
 }
 
 # Email — from address used for all outgoing mail

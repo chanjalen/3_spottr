@@ -1,3 +1,4 @@
+import logging
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
@@ -5,6 +6,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db import models
 from django.shortcuts import get_object_or_404
+
+logger = logging.getLogger(__name__)
 
 from social.models import Follow
 from common.throttles import SocialWriteRateThrottle
@@ -30,17 +33,6 @@ def like_post(request, post_id):
             notify_like_post(request.user, post)
         except Exception:
             pass
-        try:
-            if post.user and post.user != request.user:
-                from accounts.push import send_push_to_user
-                send_push_to_user(
-                    post.user,
-                    title='New like ❤️',
-                    body=f'@{request.user.username} liked your post',
-                    data={'type': 'like_post', 'post_id': str(post.id)},
-                )
-        except Exception:
-            pass
     like_count = Reaction.objects.filter(post=post).count()
     return Response({'liked': liked, 'like_count': like_count})
 
@@ -58,17 +50,9 @@ def like_checkin(request, checkin_id):
     else:
         Reaction.objects.create(quick_workout=checkin, user=request.user, type='like')
         liked = True
-        from notifications.dispatcher import notify_like_checkin
-        notify_like_checkin(request.user, checkin)
         try:
-            if checkin.user and checkin.user != request.user:
-                from accounts.push import send_push_to_user
-                send_push_to_user(
-                    checkin.user,
-                    title='New like ❤️',
-                    body=f'@{request.user.username} liked your check-in',
-                    data={'type': 'like_checkin', 'checkin_id': str(checkin.id)},
-                )
+            from notifications.dispatcher import notify_like_checkin
+            notify_like_checkin(request.user, checkin)
         except Exception:
             pass
     like_count = Reaction.objects.filter(quick_workout=checkin).count()
@@ -280,6 +264,8 @@ def create_checkin(request):
     is_front_camera = str(request.data.get('is_front_camera', 'false')).lower() in ('true', '1', 'yes')
     photo = request.FILES.get('photo')
     video = request.FILES.get('video')
+    front_camera_photo = request.FILES.get('front_camera_photo')
+    print(f'[checkin] photo={bool(photo)} video={bool(video)} front_camera_photo={bool(front_camera_photo)}')
 
     if not activity:
         return Response({'success': False, 'error': 'Activity type is required'}, status=400)
@@ -324,8 +310,8 @@ def create_checkin(request):
                 destination_id=str(checkin.id),
                 type='inline',
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.exception('photo save failed for checkin %s: %s', checkin.id, e)
 
     if video:
         try:
@@ -344,6 +330,26 @@ def create_checkin(request):
         except Exception:
             pass
 
+    front_camera_url = None
+    if front_camera_photo:
+        try:
+            from media.utils import create_media_asset, build_media_url
+            from media.models import MediaLink
+            path = f'checkins/{checkin.id}_front.jpg'
+            asset = create_media_asset(request.user, front_camera_photo, path, 'image')
+            MediaLink.objects.create(
+                asset=asset,
+                destination_type='quick_workout',
+                destination_id=str(checkin.id),
+                type='front_camera',
+            )
+            front_camera_url = build_media_url(asset.storage_key)
+            print(f'[checkin] front_camera saved: {front_camera_url}')
+            logger.info('front_camera saved for checkin %s', checkin.id)
+        except Exception as e:
+            print(f'[checkin] front_camera FAILED for checkin {checkin.id}: {e}')
+            logger.exception('front_camera save failed for checkin %s: %s', checkin.id, e)
+
     request.user.total_workouts = DjF('total_workouts') + 1
     request.user.save(update_fields=['total_workouts'])
     request.user.refresh_from_db()
@@ -360,7 +366,13 @@ def create_checkin(request):
     except Exception:
         pass
 
-    return Response({'success': True, 'checkin_id': str(checkin.id)})
+    try:
+        from notifications.dispatcher import notify_friend_checkin
+        notify_friend_checkin(request.user)
+    except Exception:
+        pass
+
+    return Response({'success': True, 'checkin_id': str(checkin.id), 'front_camera_url': front_camera_url})
 
 
 @api_view(['POST'])
@@ -825,18 +837,21 @@ def post_detail(request, post_id):
 
         photo_url = None
         video_url = None
+        front_camera_url = None
         try:
             from media.models import MediaLink as _ML
             from media.utils import build_media_url as _bmu
             for _link in _ML.objects.filter(
                 destination_type='quick_workout',
                 destination_id=str(checkin.id),
-                type='inline',
             ).select_related('asset'):
-                if _link.asset.kind == 'video' and video_url is None:
-                    video_url = _bmu(_link.asset.storage_key)
-                elif _link.asset.kind == 'image' and photo_url is None:
-                    photo_url = _bmu(_link.asset.storage_key)
+                if _link.type == 'front_camera' and _link.asset.kind == 'image' and front_camera_url is None:
+                    front_camera_url = _bmu(_link.asset.storage_key)
+                elif _link.type == 'inline':
+                    if _link.asset.kind == 'video' and video_url is None:
+                        video_url = _bmu(_link.asset.storage_key)
+                    elif _link.asset.kind == 'image' and photo_url is None:
+                        photo_url = _bmu(_link.asset.storage_key)
             if photo_url is None:
                 from django.core.files.storage import default_storage
                 _legacy = f'checkins/{checkin.id}.jpg'
@@ -864,6 +879,7 @@ def post_detail(request, post_id):
             'gym_id': str(checkin.location.id) if checkin.location else None,
             'photo_url': photo_url,
             'video_url': video_url,
+            'front_camera_url': front_camera_url,
             'is_front_camera': checkin.is_front_camera,
             'link_url': None,
             'like_count': like_count,
