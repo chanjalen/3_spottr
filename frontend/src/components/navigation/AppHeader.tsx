@@ -81,8 +81,8 @@ export default function AppHeader() {
           </Pressable>
         </View>
 
-        {/* Center: Spottr logo text */}
-        <Text style={styles.logoText}>Spottr</Text>
+        {/* Center: Spottr logo text — absolutely centered so side zones don't affect it */}
+        <Text style={styles.logoText} pointerEvents="none">Spottr</Text>
 
         {/* Right: info button + streak pill + user avatar */}
         <View style={styles.rightZone}>
@@ -173,6 +173,10 @@ const styles = StyleSheet.create({
     lineHeight: 12,
   },
   logoText: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
     fontSize: 19,
     fontWeight: '700',
     color: colors.textOnPrimary,
