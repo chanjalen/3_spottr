@@ -17,13 +17,23 @@ const setItem = async (key: string, value: string): Promise<void> => {
   return SecureStore.setItemAsync(key, value);
 };
 
+export type TabRequest = 'postsTab' | 'orgsTab' | null;
+
 interface TutorialState {
   isActive: boolean;
   step: number;
   totalSteps: number;
   nextUnlocked: boolean;
+  fabOpenRequested: boolean;
+  pendingTabRequest: TabRequest;
   next: () => void;
+  jumpTo: (step: number) => void;
   unlock: () => void;
+  requestFABOpen: () => void;
+  clearFABRequest: () => void;
+  requestTab: (tab: TabRequest) => void;
+  clearTabRequest: () => void;
+  restart: () => void;
   skip: () => void;
 }
 
@@ -32,8 +42,16 @@ const TutorialContext = createContext<TutorialState>({
   step: 0,
   totalSteps: TUTORIAL_TOTAL_STEPS,
   nextUnlocked: false,
+  fabOpenRequested: false,
+  pendingTabRequest: null,
   next: () => {},
+  jumpTo: () => {},
   unlock: () => {},
+  requestFABOpen: () => {},
+  clearFABRequest: () => {},
+  requestTab: () => {},
+  clearTabRequest: () => {},
+  restart: () => {},
   skip: () => {},
 });
 
@@ -42,6 +60,8 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
   const [isActive, setIsActive] = useState(false);
   const [step, setStep] = useState(0);
   const [nextUnlocked, setNextUnlocked] = useState(false);
+  const [fabOpenRequested, setFabOpenRequested] = useState(false);
+  const [pendingTabRequest, setPendingTabRequest] = useState<TabRequest>(null);
 
   // Re-check whenever the logged-in user changes so each account gets its own tutorial
   useEffect(() => {
@@ -71,12 +91,31 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const jumpTo = (targetStep: number) => {
+    setNextUnlocked(false);
+    setStep(targetStep);
+  };
+
   const unlock = () => setNextUnlocked(true);
+
+  const requestFABOpen = () => setFabOpenRequested(true);
+  const clearFABRequest = () => setFabOpenRequested(false);
+
+  const requestTab = (tab: TabRequest) => setPendingTabRequest(tab);
+  const clearTabRequest = () => setPendingTabRequest(null);
+
+  const restart = () => {
+    setStep(0);
+    setIsActive(true);
+    setNextUnlocked(false);
+    setFabOpenRequested(false);
+    setPendingTabRequest(null);
+  };
 
   const skip = () => complete();
 
   return (
-    <TutorialContext.Provider value={{ isActive, step, totalSteps: TUTORIAL_TOTAL_STEPS, nextUnlocked, next, unlock, skip }}>
+    <TutorialContext.Provider value={{ isActive, step, totalSteps: TUTORIAL_TOTAL_STEPS, nextUnlocked, fabOpenRequested, pendingTabRequest, next, jumpTo, unlock, requestFABOpen, clearFABRequest, requestTab, clearTabRequest, restart, skip }}>
       {children}
     </TutorialContext.Provider>
   );
