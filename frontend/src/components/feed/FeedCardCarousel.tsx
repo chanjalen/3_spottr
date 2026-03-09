@@ -2,6 +2,7 @@ import React, { useRef, useState } from 'react';
 import { ScrollView, View, StyleSheet, Pressable, useWindowDimensions } from 'react-native';
 import { Image, ImageLoadEventData } from 'expo-image';
 import { colors, spacing } from '../../theme';
+import { getImageUrl } from '../../utils/imageUrl';
 
 interface FeedCardCarouselProps {
   uris: string[];
@@ -49,7 +50,7 @@ export default function FeedCardCarousel({ uris, onPress }: FeedCardCarouselProp
             style={{ width, height: imageHeight }}
           >
             <Image
-              source={{ uri }}
+              source={{ uri: getImageUrl(uri, 'feed') ?? uri }}
               style={{ width, height: imageHeight, backgroundColor: '#000' }}
               contentFit="cover"
               onLoad={i === 0 ? handleFirstLoad : undefined}

@@ -3,6 +3,7 @@ import { StyleSheet, View } from 'react-native';
 import { Image, ImageLoadEventData } from 'expo-image';
 import { GestureDetector, Gesture } from 'react-native-gesture-handler';
 import { colors, spacing } from '../../theme';
+import { getImageUrl } from '../../utils/imageUrl';
 
 interface FeedCardImageProps {
   uri: string;
@@ -43,7 +44,7 @@ export default function FeedCardImage({ uri, frontCameraUri, onPress, onDoubleTa
   const pip = frontCameraUri ? (
     <View style={styles.pipContainer}>
       <Image
-        source={{ uri: frontCameraUri }}
+        source={{ uri: getImageUrl(frontCameraUri, 'feed') ?? frontCameraUri }}
         style={styles.pipImage}
         contentFit="cover"
       />
@@ -54,7 +55,7 @@ export default function FeedCardImage({ uri, frontCameraUri, onPress, onDoubleTa
     return (
       <View style={styles.imageWrapper}>
         <Image
-          source={{ uri }}
+          source={{ uri: getImageUrl(uri, 'feed') ?? uri }}
           style={[styles.image, { aspectRatio }]}
           contentFit="contain"
           onLoad={handleLoad}
@@ -69,7 +70,7 @@ export default function FeedCardImage({ uri, frontCameraUri, onPress, onDoubleTa
     <GestureDetector gesture={gesture}>
       <View style={styles.imageWrapper}>
         <Image
-          source={{ uri }}
+          source={{ uri: getImageUrl(uri, 'feed') ?? uri }}
           style={[styles.image, { aspectRatio }]}
           contentFit="contain"
           onLoad={handleLoad}

@@ -35,6 +35,7 @@ import {
 import { followBack } from '../api/accounts';
 import { Notification, NotificationActor } from '../types/notification';
 import { colors, spacing, typography } from '../theme';
+import { getImageUrl } from '../utils/imageUrl';
 import { RootStackParamList } from '../navigation/types';
 
 type Props = {
@@ -264,7 +265,7 @@ function NotifRow({
 
       <View style={styles.notifRight}>
         {item.thumbnail ? (
-          <Image source={{ uri: item.thumbnail }} style={styles.thumbnail} />
+          <Image source={{ uri: getImageUrl(item.thumbnail, 'thumbnail') ?? item.thumbnail }} style={styles.thumbnail} />
         ) : !item.is_read ? (
           <View style={styles.unreadDot} />
         ) : null}

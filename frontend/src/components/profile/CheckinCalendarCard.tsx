@@ -24,6 +24,7 @@ import { Feather } from '@expo/vector-icons';
 import { fetchUserCheckins, CheckinItem } from '../../api/feed';
 import { fetchCalendarPosts } from '../../api/workouts';
 import { colors, spacing } from '../../theme';
+import { getImageUrl } from '../../utils/imageUrl';
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTHS = [
@@ -388,7 +389,7 @@ function SingleCheckin({
           />
         </View>
       ) : checkin.photo_url ? (
-        <Image source={{ uri: checkin.photo_url }} style={[StyleSheet.absoluteFill, checkin.is_front_camera && { transform: [{ scaleX: -1 }] }]} contentFit="cover" />
+        <Image source={{ uri: getImageUrl(checkin.photo_url, 'thumbnail') ?? checkin.photo_url }} style={[StyleSheet.absoluteFill, checkin.is_front_camera && { transform: [{ scaleX: -1 }] }]} contentFit="cover" />
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.noPhoto]}>
           <Feather name="camera" size={48} color="rgba(255,255,255,0.2)" />
