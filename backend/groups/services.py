@@ -605,7 +605,8 @@ def get_group_streak_details(group_id, requesting_user):
 
     # Use Streak.last_streak_date as source of truth for has_activity_today
     # (same as _try_advance_group_streak — avoids stale last_checkin_date reads)
-    from workouts.models import Streak
+    # Also count rest days — a member who logged a rest day counts as active today.
+    from workouts.models import Streak, RestDay
     member_user_ids = [m.user_id for m in members_qs]
     checked_in_today = set(
         Streak.objects.filter(
@@ -613,6 +614,13 @@ def get_group_streak_details(group_id, requesting_user):
             last_streak_date=today,
         ).values_list('user_id', flat=True)
     )
+    rested_today = set(
+        RestDay.objects.filter(
+            user_id__in=member_user_ids,
+            streak_date=today,
+        ).values_list('user_id', flat=True)
+    )
+    active_today = checked_in_today | rested_today
 
     members_data = []
     for m in members_qs:
@@ -622,7 +630,7 @@ def get_group_streak_details(group_id, requesting_user):
             'display_name': m.user.display_name,
             'avatar_url': m.user.avatar_url or None,
             'current_streak': m.user.current_streak,
-            'has_activity_today': m.user_id in checked_in_today,
+            'has_activity_today': m.user_id in active_today,
         })
 
     return {
