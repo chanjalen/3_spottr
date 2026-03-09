@@ -55,6 +55,7 @@ import {
 import { useAuth } from '../../store/AuthContext';
 import { useUnreadCount } from '../../store/UnreadCountContext';
 import { colors, spacing, typography } from '../../theme';
+import { getImageUrl } from '../../utils/imageUrl';
 import { staleCache } from '../../utils/staleCache';
 import { RootStackParamList } from '../../navigation/types';
 import { timeAgo } from '../../utils/timeAgo';
@@ -743,7 +744,7 @@ function AnnouncementBubble({
             ) : (
               <Image
                 key={i}
-                source={{ uri: m.thumbnail_url ?? m.url }}
+                source={{ uri: getImageUrl(m.thumbnail_url ?? m.url, 'thumbnail') ?? (m.thumbnail_url ?? m.url) }}
                 style={styles.mediaThumb}
                 resizeMode="cover"
               />
@@ -1398,7 +1399,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
                               iconSize={28}
                             />
                           ) : (
-                            <Image key={idx} source={{ uri: m.thumbnail_url ?? m.url }} style={styles.contextMediaThumb} resizeMode="cover" />
+                            <Image key={idx} source={{ uri: getImageUrl(m.thumbnail_url ?? m.url, 'thumbnail') ?? (m.thumbnail_url ?? m.url) }} style={styles.contextMediaThumb} resizeMode="cover" />
                           )
                         )}
                       </View>

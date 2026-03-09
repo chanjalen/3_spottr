@@ -45,6 +45,7 @@ import { ExerciseCatalogItem, Achievement } from '../../types/workout';
 import { FeedItem } from '../../types/feed';
 import { Gym } from '../../types/gym';
 import { colors, spacing, typography } from '../../theme';
+import { getImageUrl } from '../../utils/imageUrl';
 import { useTutorial, TUTORIAL_TOTAL_STEPS } from '../../store/TutorialContext';
 import RNAnimated, {
   useSharedValue,
@@ -1644,7 +1645,7 @@ function OrgsSection({ orgs, isOwn, navigation }: { orgs: OrgListItem[]; isOwn: 
             >
               <View style={styles.experienceIconWrap}>
                 {org.avatar_url ? (
-                  <Image source={{ uri: org.avatar_url }} style={styles.orgAvatar} contentFit="cover" />
+                  <Image source={{ uri: getImageUrl(org.avatar_url, 'avatar') ?? org.avatar_url }} style={styles.orgAvatar} contentFit="cover" />
                 ) : (
                   <Feather name="users" size={18} color="white" />
                 )}
@@ -2160,7 +2161,7 @@ function PostThumbnail({ item, onPress, size }: { item: FeedItem; onPress: () =>
       onPress={onPress}
     >
       {item.photo_url ? (
-        <Image source={{ uri: item.photo_url }} style={{ width: s, height: s }} contentFit="cover" />
+        <Image source={{ uri: getImageUrl(item.photo_url, 'thumbnail') ?? item.photo_url }} style={{ width: s, height: s }} contentFit="cover" />
       ) : item.workout ? (
         <LinearGradient colors={['rgba(124,58,237,0.14)', 'rgba(6,182,212,0.14)']} style={styles.thumbContent}>
           <View style={styles.thumbBadge}>
@@ -3401,7 +3402,7 @@ function CalCheckinCard({ checkin, day, checkinIdx, totalCheckins, isActive, lik
           />
         </View>
       ) : checkin.photo_url ? (
-        <Image source={{ uri: checkin.photo_url }} style={[StyleSheet.absoluteFill, checkin.is_front_camera && { transform: [{ scaleX: -1 }] }]} contentFit="cover" />
+        <Image source={{ uri: getImageUrl(checkin.photo_url, 'detail') ?? checkin.photo_url }} style={[StyleSheet.absoluteFill, checkin.is_front_camera && { transform: [{ scaleX: -1 }] }]} contentFit="cover" />
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.calModalNoPhoto]}>
           <Feather name="camera" size={48} color="rgba(255,255,255,0.2)" />

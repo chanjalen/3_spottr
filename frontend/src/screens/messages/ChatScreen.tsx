@@ -39,6 +39,7 @@ import { Message } from '../../types/messaging';
 import { useAuth } from '../../store/AuthContext';
 import { useUnreadCount } from '../../store/UnreadCountContext';
 import { colors, spacing, typography } from '../../theme';
+import { getImageUrl } from '../../utils/imageUrl';
 import { RootStackParamList } from '../../navigation/types';
 import { staleCache } from '../../utils/staleCache';
 
@@ -94,7 +95,7 @@ function ImageViewerModal({ url, onClose }: { url: string; onClose: () => void }
   return (
     <Modal visible animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <View style={{ flex: 1, backgroundColor: '#000' }}>
-        <Image source={{ uri: url }} style={{ flex: 1 }} contentFit="contain" />
+        <Image source={{ uri: getImageUrl(url, 'detail') ?? url }} style={{ flex: 1 }} contentFit="contain" />
         <Pressable
           onPress={onClose}
           style={{ position: 'absolute', top: 52, right: 20, padding: 10, backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 20 }}
@@ -1025,7 +1026,7 @@ export default function ChatScreen({ navigation, route }: Props) {
                                   iconSize={32}
                                 />
                               ) : (
-                                <Image key={idx} source={{ uri: m.thumbnail_url ?? m.url }} style={styles.contextMediaThumb} contentFit="cover" />
+                                <Image key={idx} source={{ uri: getImageUrl(m.thumbnail_url ?? m.url, 'thumbnail') ?? (m.thumbnail_url ?? m.url) }} style={styles.contextMediaThumb} contentFit="cover" />
                               )
                             )}
                           </View>

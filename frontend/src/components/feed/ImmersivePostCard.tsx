@@ -29,6 +29,7 @@ import LikersSheet from './LikersSheet';
 import { FeedItem } from '../../types/feed';
 import { RootStackParamList } from '../../navigation/types';
 import { timeAgo } from '../../utils/timeAgo';
+import { getImageUrl } from '../../utils/imageUrl';
 import { colors, spacing, typography } from '../../theme';
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
@@ -161,7 +162,7 @@ export default function ImmersivePostCard({
         <View style={[styles.card, { height: itemHeight }]}>
           {/* Full-bleed photo background — clipped above the nav bar */}
           <Image
-            source={{ uri: item.photo_url! }}
+            source={{ uri: getImageUrl(item.photo_url, 'feed') ?? item.photo_url! }}
             style={[StyleSheet.absoluteFill, { bottom: bottomInset }, item.is_front_camera ? { transform: [{ scaleX: -1 }] } : null]}
             contentFit="cover"
           />
@@ -170,7 +171,7 @@ export default function ImmersivePostCard({
           {!!item.front_camera_url && (
             <View style={[styles.pip, { top: topInset + 16 }]}>
               <Image
-                source={{ uri: item.front_camera_url }}
+                source={{ uri: getImageUrl(item.front_camera_url, 'feed') ?? item.front_camera_url! }}
                 style={styles.pipImage}
                 contentFit="cover"
               />

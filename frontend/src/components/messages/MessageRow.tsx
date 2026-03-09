@@ -13,6 +13,7 @@ import VideoThumbnail from '../common/VideoThumbnail';
 import MentionText from '../common/MentionText';
 import { Message, MessageReaction, SharedPost, SharedPostPoll, SharedProfileCard } from '../../types/messaging';
 import { colors, spacing, typography } from '../../theme';
+import { getImageUrl } from '../../utils/imageUrl';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -101,7 +102,7 @@ export function SharedPostCard({ post, onPress }: Omit<SharedPostCardProps, 'isO
     return (
       <Pressable onPress={onPress} style={styles.sharedImmersiveCard} disabled={!onPress}>
         {post.photo_url ? (
-          <Image source={{ uri: post.photo_url }} style={[styles.sharedImmersiveThumb, post.item_type === 'checkin' && post.is_front_camera && { transform: [{ scaleX: -1 }] }]} contentFit="cover" />
+          <Image source={{ uri: getImageUrl(post.photo_url, 'feed') ?? post.photo_url }} style={[styles.sharedImmersiveThumb, post.item_type === 'checkin' && post.is_front_camera && { transform: [{ scaleX: -1 }] }]} contentFit="cover" />
         ) : post.video_url ? (
           <VideoThumbnail
             videoUrl={post.video_url}
@@ -152,7 +153,7 @@ export function SharedPostCard({ post, onPress }: Omit<SharedPostCardProps, 'isO
     <Pressable onPress={onPress} style={styles.sharedPostCard} disabled={!onPress}>
       {/* Photo/video — full width, only shown when present */}
       {post.photo_url ? (
-        <Image source={{ uri: post.photo_url }} style={styles.sharedPostThumb} contentFit="cover" />
+        <Image source={{ uri: getImageUrl(post.photo_url, 'feed') ?? post.photo_url }} style={styles.sharedPostThumb} contentFit="cover" />
       ) : post.video_url ? (
         <VideoThumbnail videoUrl={post.video_url} style={styles.sharedPostThumb} />
       ) : null}
@@ -309,7 +310,7 @@ function MessageRowInner({
                       <View key={idx} style={[styles.msgMediaThumb, styles.msgMediaVideo]}>
                         {m.thumbnail_url ? (
                           <Image
-                            source={{ uri: m.thumbnail_url }}
+                            source={{ uri: getImageUrl(m.thumbnail_url, 'thumbnail') ?? m.thumbnail_url }}
                             style={StyleSheet.absoluteFill}
                             contentFit="cover"
                           />
@@ -339,7 +340,7 @@ function MessageRowInner({
                     >
                       <View pointerEvents="none">
                         <Image
-                          source={{ uri: m.thumbnail_url ?? m.url }}
+                          source={{ uri: getImageUrl(m.thumbnail_url ?? m.url, 'thumbnail') ?? (m.thumbnail_url ?? m.url) }}
                           style={styles.msgMediaThumb}
                           contentFit="cover"
                         />

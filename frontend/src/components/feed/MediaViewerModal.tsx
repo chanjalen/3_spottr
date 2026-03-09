@@ -5,6 +5,7 @@ import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { colors } from '../../theme';
+import { getImageUrl } from '../../utils/imageUrl';
 
 interface MediaViewerModalProps {
   uri: string | null;
@@ -75,7 +76,7 @@ function FullScreenImages({
         {uris.map((uri, i) => (
           <Pressable key={uri + i} style={{ width, height }} onPress={onClose}>
             <Image
-              source={{ uri }}
+              source={{ uri: getImageUrl(uri, 'detail') ?? uri }}
               style={{ width, height }}
               contentFit="contain"
               transition={i === 0 ? 200 : 0}

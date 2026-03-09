@@ -39,6 +39,7 @@ import { fetchFriends } from '../../api/accounts';
 import { UserBrief } from '../../types/user';
 import { useAuth } from '../../store/AuthContext';
 import { colors, spacing, typography } from '../../theme';
+import { getImageUrl } from '../../utils/imageUrl';
 import { RootStackParamList } from '../../navigation/types';
 
 type Props = {
@@ -297,7 +298,7 @@ export default function GroupProfileScreen({ navigation, route }: Props) {
         <View style={styles.header}>
           {group.avatar_url ? (
             <Image
-              source={{ uri: group.avatar_url }}
+              source={{ uri: getImageUrl(group.avatar_url, 'avatar') ?? group.avatar_url }}
               style={styles.groupAvatar}
               contentFit="cover"
             />
