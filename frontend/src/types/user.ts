@@ -17,6 +17,7 @@ export interface UserBrief {
   checkin_visible_following?: boolean;
   checkin_visible_orgs?: boolean;
   checkin_visible_gyms?: boolean;
+  push_notifications?: boolean;
 }
 
 export interface UserProfile extends UserBrief {

@@ -486,6 +486,26 @@ def create_announcement(user, org_id, content='', media_ids=None, poll_data=None
     announcement.refresh_from_db()
     _push_new_announcement(org.id, announcement)
 
+    # Push notification to all org members except the author
+    try:
+        from accounts.push import send_push_to_user
+        preview = (content or '')[:80] or '📎 Attachment'
+        members = OrgMember.objects.filter(org=org).exclude(user=user).select_related('user')
+        for membership in members:
+            send_push_to_user(
+                membership.user,
+                title=f'{org.name} (Announcement): @{user.username}',
+                body=preview,
+                data={
+                    'type': 'org_announcement',
+                    'org_id': str(org.id),
+                    'org_name': org.name,
+                    'org_avatar': org.avatar_url or '',
+                },
+            )
+    except Exception:
+        pass
+
     return announcement
 
 

@@ -62,7 +62,7 @@ type Props = {
   route: RouteProp<{ Profile: { username: string } }, 'Profile'>;
 };
 
-type ProfileTab = 'Posts' | 'Calendar' | 'Records';
+type ProfileTab = 'Posts' | 'CheckIns' | 'Records';
 
 type CalViewerDay = {
   year: number;
@@ -358,7 +358,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
   }, [username]);
 
   useEffect(() => {
-    if ((activeTab === 'Posts' || activeTab === 'Calendar') && !postsLoaded.current) {
+    if ((activeTab === 'Posts' || activeTab === 'CheckIns') && !postsLoaded.current) {
       postsLoaded.current = true;
       loadPosts();
     }
@@ -929,7 +929,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
 
         {/* ── Tab bar ──────────────────────────────────────────────────────────── */}
         <View style={styles.tabBar}>
-          {(['Posts', 'Calendar', 'Records'] as ProfileTab[]).map((tab) => (
+          {(['Posts', 'CheckIns', 'Records'] as ProfileTab[]).map((tab) => (
             <Pressable
               key={tab}
               style={[styles.tabBtn, activeTab === tab && styles.tabBtnActive]}
@@ -955,7 +955,7 @@ export default function ProfileScreen({ navigation, route }: Props) {
             />
           )}
 
-          {activeTab === 'Calendar' && (
+          {activeTab === 'CheckIns' && (
             <CalendarTab
               profileUsername={username}
               preloadedMonths={calPreloaded}

@@ -80,6 +80,7 @@ export default function ImmersivePostCard({
   const likeScale = useSharedValue(1);
   const [workoutDetailId, setWorkoutDetailId] = useState<string | null>(null);
   const [likersVisible, setLikersVisible] = useState(false);
+  const [captionExpanded, setCaptionExpanded] = useState(false);
   const hasPhoto = !!item.photo_url;
   const hasVideo = !!item.video_url;
   const activityLabel = item.workout_type ? (ACTIVITY_LABELS[item.workout_type] ?? item.workout_type) : null;
@@ -249,9 +250,14 @@ export default function ImmersivePostCard({
                   {item.user.display_name}
                 </Text>
                 {item.description !== '' && (
-                  <Text style={styles.captionPhoto} numberOfLines={2}>
-                    {item.description}
-                  </Text>
+                  <Pressable onPress={() => setCaptionExpanded(v => !v)}>
+                    <Text style={styles.captionPhoto} numberOfLines={captionExpanded ? undefined : 2}>
+                      {item.description}
+                    </Text>
+                    {!captionExpanded && item.description.length > 80 && (
+                      <Text style={styles.captionMore}>more</Text>
+                    )}
+                  </Pressable>
                 )}
               </View>
             </Pressable>
@@ -423,9 +429,14 @@ export default function ImmersivePostCard({
                   {item.user.display_name}
                 </Text>
                 {item.description !== '' && (
-                  <Text style={styles.captionPhoto} numberOfLines={2}>
-                    {item.description}
-                  </Text>
+                  <Pressable onPress={() => setCaptionExpanded(v => !v)}>
+                    <Text style={styles.captionPhoto} numberOfLines={captionExpanded ? undefined : 2}>
+                      {item.description}
+                    </Text>
+                    {!captionExpanded && item.description.length > 80 && (
+                      <Text style={styles.captionMore}>more</Text>
+                    )}
+                  </Pressable>
                 )}
               </View>
             </Pressable>
@@ -762,6 +773,11 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
+  },
+  captionMore: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.semibold,
+    color: 'rgba(255,255,255,0.6)',
   },
   metaRow: {
     flexDirection: 'row',

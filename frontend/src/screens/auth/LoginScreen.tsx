@@ -16,6 +16,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../navigation/types';
 import { useAuth } from '../../store/AuthContext';
 import { apiLogin, apiGoogleAuth } from '../../api/accounts';
+import { apiClient } from '../../api/client';
 import { useGoogleAuth, googleRedirectUri } from '../../hooks/useGoogleAuth';
 import { colors, spacing, typography } from '../../theme';
 
@@ -33,6 +34,12 @@ export default function LoginScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Warm up Django when the screen mounts so the first real login request
+  // doesn't hit a cold server. The 401 response is expected and ignored.
+  useEffect(() => {
+    apiClient.get('/accounts/api/me/').catch(() => {});
+  }, []);
 
   // Handle Google OAuth response (PKCE code flow)
   useEffect(() => {
