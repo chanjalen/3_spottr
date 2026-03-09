@@ -302,9 +302,6 @@ export default function CreateMenuSheet({ visible, onClose }: Props) {
 
               {/* Tooltip card above the sheet */}
               <View style={[styles.tutorialCard, { position: 'absolute', bottom: screenHeight - cY + 14, left: tooltipX, width: CARD_W }]}>
-                <View style={styles.tutorialTopRow}>
-                  <Text style={styles.tutorialStepLabel}>Step {tutorialStep + 1} of {tutorialTotal}</Text>
-                </View>
                 <Text style={styles.tutorialTitle}>Post & Check-In</Text>
                 <Text style={styles.tutorialBody}>
                   This is how you post and make check-ins. Tap Post to share content with the fitness community, or Check-In to log your gym visit and keep your streak alive.

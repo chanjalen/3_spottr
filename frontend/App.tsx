@@ -171,7 +171,7 @@ export default function App() {
                   <ActiveWorkoutBanner navigationRef={navigationRef} />
                 </UnreadCountProvider>
               </ActiveWorkoutProvider>
-              <TutorialOverlay />
+              <TutorialOverlay navigationRef={navigationRef} />
             </TutorialProvider>
           </AuthProvider>
         </SafeAreaProvider>

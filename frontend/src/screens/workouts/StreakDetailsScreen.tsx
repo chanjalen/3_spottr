@@ -282,7 +282,6 @@ export default function StreakDetailsScreen({ navigation }: Props) {
         <View style={tutStyles.overlay} pointerEvents="box-none">
           <View style={tutStyles.card}>
             <View style={tutStyles.topRow}>
-              <Text style={tutStyles.stepLabel}>Step 14 of {TUTORIAL_TOTAL_STEPS}</Text>
               <Pressable onPress={tutorialSkip} hitSlop={8}>
                 <Text style={tutStyles.skipText}>Skip tutorial</Text>
               </Pressable>

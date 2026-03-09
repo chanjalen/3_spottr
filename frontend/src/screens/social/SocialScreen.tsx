@@ -52,12 +52,20 @@ export default function SocialScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { dm, group, org, optimisticDecrement, optimisticIncrement } = useUnreadCount();
   const { user: me } = useAuth();
-  const { isActive: tutorialActive, step: tutorialStep, next: tutorialNext } = useTutorial();
+  const { isActive: tutorialActive, step: tutorialStep, next: tutorialNext, pendingTabRequest, clearTabRequest } = useTutorial();
   const [activeTab, setActiveTab] = useState<SocialTab>(route.params?.tab ?? 'Messages');
 
   useEffect(() => {
     if (route.params?.tab) setActiveTab(route.params.tab);
   }, [route.params?.tab]);
+
+  // Tutorial: switch to Orgs tab when requested via Next button
+  useEffect(() => {
+    if (pendingTabRequest === 'orgsTab') {
+      clearTabRequest();
+      setActiveTab('Orgs');
+    }
+  }, [pendingTabRequest]);
 
   // ── Messages state ────────────────────────────────────────────────────────
   const [dms, setDms] = useState<Conversation[]>([]);

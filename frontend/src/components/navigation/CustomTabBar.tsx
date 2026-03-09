@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -33,13 +33,21 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
   const [showCreateMenu, setShowCreateMenu] = useState(false);
   const { total: unreadTotal } = useUnreadCount();
 
-  const { isActive: tutorialActive, step: tutorialStep, next: tutorialNext } = useTutorial();
+  const { isActive: tutorialActive, step: tutorialStep, next: tutorialNext, fabOpenRequested, clearFABRequest } = useTutorial();
 
   const openCreateMenu = useCallback(() => {
     // Step index 3 = tutorial step 4 — tapping + advances to step 5 and opens the sheet
     if (tutorialActive && tutorialStep === 3) tutorialNext();
     setShowCreateMenu(true);
   }, [tutorialActive, tutorialStep, tutorialNext]);
+
+  // When tutorial Next is pressed on the FAB step, auto-open the sheet
+  useEffect(() => {
+    if (fabOpenRequested) {
+      clearFABRequest();
+      setShowCreateMenu(true);
+    }
+  }, [fabOpenRequested]);
 
   return (
     <>

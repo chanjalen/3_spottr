@@ -5,10 +5,16 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
 } from 'react-native-reanimated';
+import { CommonActions, NavigationContainerRef } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useTutorial, TUTORIAL_TOTAL_STEPS } from '../../store/TutorialContext';
 import { useAuth } from '../../store/AuthContext';
 import { colors, spacing, typography } from '../../theme';
+import { staleCache } from '../../utils/staleCache';
+import type { RootStackParamList } from '../../navigation/types';
+import type { GymListItem } from '../../types/gym';
+
+const staleCacheSync = <T,>(key: string): T | null => staleCache.getSync<T>(key);
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
 // target controls what area of the screen gets spotlit.
@@ -34,12 +40,18 @@ type TargetType =
   | 'profile_avatar'
   | 'add_friends_btn';
 
+/** Action to perform when the user presses Next on an interaction step */
+type NavTarget = 'postsTab' | 'openFAB' | 'gyms' | 'gymDetail' | 'social' | 'orgsTab' | 'ranks' | 'streakDetails' | 'profile' | 'findFriends';
+
 interface StepConfig {
   title: string;
   body: string;
   target: TargetType;
-  /** When true, hide the Next button — the user advances by interacting with the highlighted element */
+  /** When true, the primary way to advance is interacting with the highlighted element.
+   *  A Next button is still shown as an alternative — pressing it runs navTarget then advances. */
   hideNext?: boolean;
+  /** Where to navigate when Next is pressed on a hideNext step */
+  navTarget?: NavTarget;
   /** When true, show the Next button but keep it disabled until unlock() is called */
   requiresUnlock?: boolean;
 }
@@ -60,13 +72,14 @@ const STEPS: (StepConfig | null)[] = [
     title: 'Posts',
     body: 'See what the rest of the fitness community is up to. Browse posts, workouts, and updates from everyone on Spottr.',
     target: 'posts_tab',
-    requiresUnlock: true,
+    navTarget: 'postsTab',
   },
   {
     title: 'Post & Check-In',
     body: 'Tap + to get started. Choose Post to share with the fitness community, or Check-In to log your gym visit, update your streak, and share with friends.',
     target: 'fab',
     hideNext: true,
+    navTarget: 'openFAB',
   },
   null, // index 4 — step 5 is handled inside CreateMenuSheet
   {
@@ -74,23 +87,26 @@ const STEPS: (StepConfig | null)[] = [
     body: 'Browse gyms, see who is currently working out, view live busyness levels, and check in when you arrive.',
     target: 'tab_gyms',
     hideNext: true,
+    navTarget: 'gyms',
+  },
+  {
+    title: 'Gym Features',
+    body: 'Each gym shows live busyness, active check-ins, workout buddies, and more. Find gyms near you and see what\'s happening right now.',
+    target: 'gyms_content',
   },
   {
     title: 'Find Your Gym',
     body: 'Tap on a gym to explore it. See live busyness, connect with workout buddies, and post workout invites.',
     target: 'gym_list_item',
     hideNext: true,
-  },
-  {
-    title: 'Gym Features',
-    body: 'Live Activity shows how busy the gym is right now. Workout Buddies lets you find people to train with and post workout invites to set up a session together.',
-    target: 'gym_detail_features',
+    navTarget: 'gymDetail',
   },
   {
     title: 'Messages & Orgs',
     body: 'Tap the messages icon to connect with friends and organizations.',
     target: 'tab_social',
     hideNext: true,
+    navTarget: 'social',
   },
   {
     title: 'Messages',
@@ -102,18 +118,21 @@ const STEPS: (StepConfig | null)[] = [
     body: 'Tap Orgs to join and create organizations — teams, clubs, and communities to connect and share updates with.',
     target: 'social_orgs_tab',
     hideNext: true,
+    navTarget: 'orgsTab',
   },
   {
     title: 'Leaderboard',
     body: 'See how you stack up. Browse rankings for your gym and compare lifts with friends across the Spottr community.',
     target: 'tab_ranks',
     hideNext: true,
+    navTarget: 'ranks',
   },
   {
     title: 'Your Streak',
     body: 'Tap the streak counter to see your streak details.',
     target: 'streak_pill',
     hideNext: true,
+    navTarget: 'streakDetails',
   },
   null, // index 13 — streak page explanation handled inside StreakDetailsScreen
   {
@@ -121,6 +140,7 @@ const STEPS: (StepConfig | null)[] = [
     body: 'Tap your avatar to view your profile.',
     target: 'profile_avatar',
     hideNext: true,
+    navTarget: 'profile',
   },
   null, // index 15 — profile page explanation handled inside ProfileScreen
   {
@@ -128,6 +148,7 @@ const STEPS: (StepConfig | null)[] = [
     body: 'Tap the add friend button to find people you know, follow athletes, and join the Spottr community.',
     target: 'add_friends_btn',
     hideNext: true,
+    navTarget: 'findFriends',
   },
 ];
 
@@ -143,8 +164,12 @@ interface Spotlight {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function TutorialOverlay() {
-  const { isActive, step, totalSteps, nextUnlocked, next, skip } = useTutorial();
+interface Props {
+  navigationRef: NavigationContainerRef<RootStackParamList>;
+}
+
+export default function TutorialOverlay({ navigationRef }: Props) {
+  const { isActive, step, totalSteps, nextUnlocked, next, requestFABOpen, requestTab, skip } = useTutorial();
   const { user } = useAuth();
   const { width: W, height: H } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -289,6 +314,62 @@ export default function TutorialOverlay() {
   // Steps beyond this overlay's range are handled by other components (e.g. CreateMenuSheet)
   if (!stepData) return null;
   const spot = getSpotlight(stepData.target);
+
+  const handleNextPress = () => {
+    if (!stepData.navTarget) { next(); return; }
+    const nav = navigationRef;
+    switch (stepData.navTarget) {
+      case 'postsTab':
+        requestTab('postsTab');
+        next();
+        break;
+      case 'openFAB':
+        // Signal CustomTabBar to open the CreateMenuSheet, then advance to step 4
+        requestFABOpen();
+        next();
+        break;
+      case 'gyms':
+        nav.dispatch(CommonActions.navigate({ name: 'MainTabs', params: { screen: 'Gyms' } }));
+        next();
+        break;
+      case 'gymDetail': {
+        const gyms = staleCacheSync<GymListItem[]>('gyms');
+        const firstGym = gyms?.[0];
+        if (firstGym) {
+          nav.dispatch(CommonActions.navigate({ name: 'GymDetail', params: { gymId: firstGym.id, gymName: firstGym.name } }));
+        }
+        next();
+        break;
+      }
+      case 'social':
+        nav.dispatch(CommonActions.navigate({ name: 'MainTabs', params: { screen: 'Social' } }));
+        next();
+        break;
+      case 'orgsTab':
+        nav.dispatch(CommonActions.navigate({ name: 'MainTabs', params: { screen: 'Social' } }));
+        requestTab('orgsTab');
+        next();
+        break;
+      case 'ranks':
+        nav.dispatch(CommonActions.navigate({ name: 'MainTabs', params: { screen: 'Ranks' } }));
+        next();
+        break;
+      case 'streakDetails':
+        nav.dispatch(CommonActions.navigate({ name: 'StreakDetails' }));
+        next();
+        break;
+      case 'profile':
+        if (user?.username) {
+          nav.dispatch(CommonActions.navigate({ name: 'Profile', params: { username: user.username } }));
+        }
+        next();
+        break;
+      case 'findFriends':
+        nav.dispatch(CommonActions.navigate({ name: 'FindFriends' }));
+        next();
+        break;
+    }
+  };
   const spotCenterX = spot.x + spot.w / 2;
   const spotCenterY = spot.y + spot.h / 2;
 
@@ -337,7 +418,6 @@ export default function TutorialOverlay() {
         ]}
       >
         <View style={styles.topRow}>
-          <Text style={styles.stepLabel}>Step {step + 1} of {totalSteps}</Text>
           <Pressable onPress={skip} hitSlop={8}>
             <Text style={styles.skipText}>Skip tutorial</Text>
           </Pressable>
@@ -352,20 +432,18 @@ export default function TutorialOverlay() {
               <View key={i} style={[styles.dot, i === step && styles.dotActive]} />
             ))}
           </View>
-          {!stepData.hideNext && (
-            <Pressable
-              style={[
-                styles.nextBtn,
-                stepData.requiresUnlock && !nextUnlocked && styles.nextBtnLocked,
-              ]}
-              onPress={next}
-              disabled={stepData.requiresUnlock && !nextUnlocked}
-            >
-              <Text style={styles.nextBtnText}>
-                {step === totalSteps - 1 ? 'Done' : 'Next'}
-              </Text>
-            </Pressable>
-          )}
+          <Pressable
+            style={[
+              styles.nextBtn,
+              stepData.requiresUnlock && !nextUnlocked && styles.nextBtnLocked,
+            ]}
+            onPress={stepData.navTarget ? handleNextPress : next}
+            disabled={stepData.requiresUnlock && !nextUnlocked}
+          >
+            <Text style={styles.nextBtnText}>
+              {step === totalSteps - 1 ? 'Done' : 'Next'}
+            </Text>
+          </Pressable>
         </View>
       </Animated.View>
     </Animated.View>
@@ -394,11 +472,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: spacing.sm,
-  },
-  stepLabel: {
-    fontSize: typography.size.xs,
-    color: colors.textMuted,
-    fontWeight: '500',
   },
   skipText: {
     fontSize: typography.size.xs,

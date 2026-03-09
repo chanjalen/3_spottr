@@ -44,7 +44,8 @@ type RootNav = NativeStackNavigationProp<RootStackParamList>;
 export default function FeedScreen() {
   const navigation = useNavigation<RootNav>();
   const { user: currentUser } = useAuth();
-  const { isActive: tutorialActive, step: tutorialStep, unlock: tutorialUnlock } = useTutorial();
+  const { pendingTabRequest, clearTabRequest } = useTutorial();
+
   const {
     items,
     activeTab,
@@ -63,6 +64,14 @@ export default function FeedScreen() {
     handleSearchChange,
     clearSearch,
   } = useFeed();
+
+  // Tutorial: switch to Posts tab when requested via Next button
+  useEffect(() => {
+    if (pendingTabRequest === 'postsTab') {
+      clearTabRequest();
+      changeTab('main');
+    }
+  }, [pendingTabRequest]);
 
   const handleLike = useToggleLike(updateItem);
   const handlePollVote = usePollVote(updateItem);
@@ -280,7 +289,7 @@ export default function FeedScreen() {
           </View>
           <FeedTabs
             activeTab={activeTab}
-            onTabChange={(tab) => { setFilterDropdownOpen(false); changeTab(tab); if (tutorialActive && tutorialStep === 2 && tab === 'main') tutorialUnlock(); }}
+            onTabChange={(tab) => { setFilterDropdownOpen(false); changeTab(tab); }}
             onDropdownPress={() => setFilterDropdownOpen((o) => !o)}
             dark={!isSearchActive}
           />
@@ -450,7 +459,7 @@ export default function FeedScreen() {
 
         <FeedTabs
           activeTab={activeTab}
-          onTabChange={(tab) => { setFilterDropdownOpen(false); changeTab(tab); if (tutorialActive && tutorialStep === 2 && tab === 'main') tutorialUnlock(); }}
+          onTabChange={(tab) => { setFilterDropdownOpen(false); changeTab(tab); }}
           onDropdownPress={() => setFilterDropdownOpen((o) => !o)}
         />
       </LinearGradient>

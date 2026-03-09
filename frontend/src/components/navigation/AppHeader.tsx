@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { CommonActions } from '@react-navigation/native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Avatar from '../common/Avatar';
@@ -20,7 +21,7 @@ export default function AppHeader() {
   const insets = useSafeAreaInsets();
   const { user, token, currentStreak, setCurrentStreak, updateUser } = useAuth();
   const navigation = useNavigation<RootNav>();
-  const { isActive: tutorialActive, step: tutorialStep, next: tutorialNext } = useTutorial();
+  const { isActive: tutorialActive, step: tutorialStep, next: tutorialNext, restart: restartTutorial } = useTutorial();
   const [notificationCount, setNotificationCount] = useState(0);
 
   // Real-time: update badge instantly when a new notification arrives via WebSocket
@@ -80,11 +81,24 @@ export default function AppHeader() {
           </Pressable>
         </View>
 
-        {/* Center: Spottr logo text */}
-        <Text style={styles.logoText}>Spottr</Text>
+        {/* Center: Spottr logo text — absolutely centered so side zones don't affect it */}
+        <Text style={styles.logoText} pointerEvents="none">Spottr</Text>
 
-        {/* Right: streak pill + user avatar */}
+        {/* Right: info button + streak pill + user avatar */}
         <View style={styles.rightZone}>
+          {!tutorialActive && (
+            <Pressable
+              style={styles.infoBtn}
+              onPress={() => {
+                restartTutorial();
+                navigation.dispatch(CommonActions.navigate({ name: 'MainTabs', params: { screen: 'Feed' } }));
+              }}
+              accessibilityLabel="Start tutorial"
+              accessibilityRole="button"
+            >
+              <Text style={styles.infoBtnText}>i</Text>
+            </Pressable>
+          )}
           <Pressable
             style={styles.streakPill}
             onPress={() => {
@@ -159,6 +173,10 @@ const styles = StyleSheet.create({
     lineHeight: 12,
   },
   logoText: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    textAlign: 'center',
     fontSize: 19,
     fontWeight: '700',
     color: colors.textOnPrimary,
@@ -168,6 +186,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  infoBtn: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    borderWidth: 1.5,
+    borderColor: colors.textMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  infoBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textMuted,
+    lineHeight: 14,
   },
   streakPill: {
     flexDirection: 'row',

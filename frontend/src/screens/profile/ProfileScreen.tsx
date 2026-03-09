@@ -1413,7 +1413,6 @@ export default function ProfileScreen({ navigation, route }: Props) {
         <View style={profileTutStyles.overlay} pointerEvents="box-none">
           <View style={profileTutStyles.card}>
             <View style={profileTutStyles.topRow}>
-              <Text style={profileTutStyles.stepLabel}>Step 16 of {TUTORIAL_TOTAL_STEPS}</Text>
               <Pressable onPress={tutorialSkip} hitSlop={8}>
                 <Text style={profileTutStyles.skipText}>Skip tutorial</Text>
               </Pressable>
