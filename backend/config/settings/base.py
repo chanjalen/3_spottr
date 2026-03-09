@@ -258,8 +258,9 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', 'Spottr <onboarding@resend.
 
 # Google OAuth client IDs — the token's `aud` claim matches whichever platform
 # credential was used, so all three are needed for multi-platform support.
-GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')          # Web client ID
-GOOGLE_IOS_CLIENT_ID = os.getenv('GOOGLE_IOS_CLIENT_ID', '')  # iOS client ID
+GOOGLE_CLIENT_ID = os.getenv('GOOGLE_CLIENT_ID', '')              # Web client ID
+GOOGLE_IOS_CLIENT_ID = os.getenv('GOOGLE_IOS_CLIENT_ID', '')      # iOS production client ID
+GOOGLE_IOS_DEV_CLIENT_ID = os.getenv('GOOGLE_IOS_DEV_CLIENT_ID', '')  # iOS dev build client ID
 GOOGLE_ANDROID_CLIENT_ID = os.getenv('GOOGLE_ANDROID_CLIENT_ID', '')  # Android client ID
 
 # Logging

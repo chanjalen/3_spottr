@@ -15,7 +15,7 @@ export function useGoogleAuth() {
   // handlers can silently drop. Code flow puts the code in the query string (safe).
   const [request, response, promptAsync] = Google.useAuthRequest({
     clientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '',
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? '',
+    iosClientId: process.env.EXPO_PUBLIC_APP_VARIANT === 'development' ? (process.env.EXPO_PUBLIC_GOOGLE_IOS_DEV_CLIENT_ID ?? '') : (process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? ''),
     androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID ?? '',
     scopes: ['openid', 'email', 'profile'],
     redirectUri: googleRedirectUri,

@@ -278,6 +278,8 @@ export async function createCheckin(params: {
   // Camera capture always produces a photo or video
   photo?: { uri: string; name: string; type: string };
   video?: { uri: string; name: string; type: string };
+  // Multiple segments when camera was flipped during recording — backend stitches
+  videoSegments?: Array<{ uri: string; name: string; type: string }>;
   // Optional second camera shot (dual camera mode)
   frontCameraPhoto?: { uri: string; name: string; type: string };
   // Optional: ID of a logged workout to attach to this check-in
@@ -290,7 +292,11 @@ export async function createCheckin(params: {
   formData.append('activity', params.activity);
   if (params.description) formData.append('description', params.description);
   if (params.photo) formData.append('photo', params.photo as any);
-  if (params.video) formData.append('video', params.video as any);
+  if (params.videoSegments && params.videoSegments.length > 1) {
+    params.videoSegments.forEach((seg) => formData.append('video_segments[]', seg as any));
+  } else if (params.video) {
+    formData.append('video', params.video as any);
+  }
   if (params.frontCameraPhoto) formData.append('front_camera_photo', params.frontCameraPhoto as any);
   if (params.workoutId) formData.append('workout_id', params.workoutId);
   formData.append('is_front_camera', params.isFrontCamera ? 'true' : 'false');

@@ -16,9 +16,9 @@ export type ImagePreset = 'avatar' | 'thumbnail' | 'feed' | 'detail';
 
 const PRESETS: Record<ImagePreset, { width: number; quality: number }> = {
   avatar:    { width: 200, quality: 60 },
-  thumbnail: { width: 200, quality: 60 },
-  feed:      { width: 400, quality: 60 },
-  detail:    { width: 800, quality: 70 },
+  thumbnail: { width: 400, quality: 60 },
+  feed:      { width: 1080, quality: 75 },
+  detail:    { width: 1600, quality: 80 },
 };
 
 const OBJECT_SEGMENT = '/storage/v1/object/public/';
@@ -46,7 +46,9 @@ export function getImageUrl(
   }
 
   const { width, quality } = PRESETS[preset];
-  const params = `?width=${width}&quality=${quality}`;
+  // resize=contain: scale proportionally to fit within the width, never crop.
+  // Without this Supabase defaults to cover which can crop to an implied square.
+  const params = `?width=${width}&quality=${quality}&resize=contain`;
 
   // Already a render URL — strip existing query string and re-apply our params.
   if (url.includes(RENDER_SEGMENT)) {

@@ -47,7 +47,7 @@ export default function LoginScreen({ navigation }: Props) {
       }
 
       const clientId = Platform.OS === 'ios'
-        ? (process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? '')
+        ? (process.env.EXPO_PUBLIC_APP_VARIANT === 'development' ? (process.env.EXPO_PUBLIC_GOOGLE_IOS_DEV_CLIENT_ID ?? '') : (process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? ''))
         : (process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '');
 
       exchangeCodeAsync(
