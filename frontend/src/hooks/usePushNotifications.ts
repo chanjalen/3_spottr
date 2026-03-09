@@ -79,7 +79,6 @@ export function usePushNotifications(
       const { type } = data;
 
       if (type === 'dm' && data.sender_id) {
-        // DM notifications don't carry full partner info — navigate to AllDMs
         navigationRef.navigate('AllDMs');
       } else if (type === 'group_message' && data.group_id) {
         navigationRef.navigate('AllGroupChats');
@@ -87,6 +86,20 @@ export function usePushNotifications(
         navigationRef.navigate('PostDetail', { postId: data.post_id, itemType: 'post' });
       } else if (type === 'like_checkin' && data.checkin_id) {
         navigationRef.navigate('PostDetail', { postId: data.checkin_id, itemType: 'checkin' });
+      } else if (type === 'comment' && data.post_id) {
+        navigationRef.navigate('PostDetail', { postId: data.post_id, itemType: 'post' });
+      } else if (type === 'comment' && data.checkin_id) {
+        navigationRef.navigate('PostDetail', { postId: data.checkin_id, itemType: 'checkin' });
+      } else if (type === 'comment_reply' || type === 'like_comment') {
+        navigationRef.navigate('MainTabs', { screen: 'Notifications' });
+      } else if (type === 'friend_checkin' && data.username) {
+        navigationRef.navigate('Profile', { username: data.username });
+      } else if (type === 'follow' && data.username) {
+        navigationRef.navigate('Profile', { username: data.username });
+      } else if (type === 'mention') {
+        navigationRef.navigate('MainTabs', { screen: 'Notifications' });
+      } else if (type === 'workout_invite' || type === 'workout_join_request' || type === 'join_request') {
+        navigationRef.navigate('MainTabs', { screen: 'Notifications' });
       } else if (type === 'gym_reminder') {
         navigationRef.navigate('MainTabs', { screen: 'Feed' });
       }

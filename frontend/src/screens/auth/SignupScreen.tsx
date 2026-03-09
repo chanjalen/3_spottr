@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -11,13 +11,13 @@ import {
   ScrollView,
   Linking,
 } from 'react-native';
-import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { exchangeCodeAsync } from 'expo-auth-session';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../navigation/types';
 import { useAuth } from '../../store/AuthContext';
 import { apiSignup, apiGoogleAuth } from '../../api/accounts';
-import { useGoogleAuth } from '../../hooks/useGoogleAuth';
+import { useGoogleAuth, googleRedirectUri } from '../../hooks/useGoogleAuth';
 import { colors, spacing, typography } from '../../theme';
 
 type Props = {
@@ -50,15 +50,29 @@ function getPasswordStrength(password: string): { level: PasswordStrength; hint:
   return { level: 'strong', hint: 'Strong password!' };
 }
 
-function formatDate(d: Date): string {
+/** Parse "MM-DD-YYYY" text into a Date. Returns null if invalid. */
+function parseBirthdayText(text: string): Date | null {
+  const parts = text.split('-');
+  if (parts.length !== 3) return null;
+  const [m, d, y] = parts;
+  if (m.length !== 2 || d.length !== 2 || y.length !== 4) return null;
+  const month = parseInt(m, 10);
+  const day = parseInt(d, 10);
+  const year = parseInt(y, 10);
+  if (isNaN(month) || isNaN(day) || isNaN(year)) return null;
+  if (month < 1 || month > 12 || day < 1 || day > 31 || year < 1900) return null;
+  const date = new Date(year, month - 1, day);
+  // Catch invalid dates like Feb 30
+  if (date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+  return date;
+}
+
+/** Format a Date as YYYY-MM-DD for the backend. */
+function toISODate(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
-}
-
-function formatDisplayDate(d: Date): string {
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
 }
 
 export default function SignupScreen({ navigation }: Props) {
@@ -69,25 +83,51 @@ export default function SignupScreen({ navigation }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [birthday, setBirthday] = useState<Date | null>(null);
-  const [showPicker, setShowPicker] = useState(false);
+  const [birthdayText, setBirthdayText] = useState('');
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const submittingRef = useRef(false);
 
   useEffect(() => {
-    if (response?.type === 'success') {
-      const idToken = response.params?.id_token ?? (response as any).authentication?.idToken;
-      if (idToken) {
-        handleGoogleToken(idToken);
-      } else {
+    if (!response) return;
+
+    if (response.type === 'success') {
+      // Code flow (PKCE): exchange the auth code for tokens at Google's token endpoint.
+      const code = response.params?.code;
+      if (!code) {
         setError('Google sign-in failed. Please try again.');
         setGoogleLoading(false);
+        return;
       }
-    } else if (response?.type === 'error') {
+
+      const clientId = Platform.OS === 'ios'
+        ? (process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? '')
+        : (process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '');
+
+      exchangeCodeAsync(
+        {
+          code,
+          redirectUri: googleRedirectUri,
+          clientId,
+          extraParams: request?.codeVerifier ? { code_verifier: request.codeVerifier } : {},
+        },
+        { tokenEndpoint: 'https://oauth2.googleapis.com/token' },
+      ).then((tokenResult) => {
+        if (tokenResult.idToken) {
+          handleGoogleToken(tokenResult.idToken);
+        } else {
+          setError('Google sign-in failed. Please try again.');
+          setGoogleLoading(false);
+        }
+      }).catch(() => {
+        setError('Google sign-in failed. Please try again.');
+        setGoogleLoading(false);
+      });
+    } else if (response.type === 'error') {
       setError('Google sign-in was cancelled or failed.');
       setGoogleLoading(false);
-    } else if (response?.type === 'dismiss') {
+    } else if (response.type === 'dismiss') {
       setGoogleLoading(false);
     }
   }, [response]);
@@ -124,43 +164,66 @@ export default function SignupScreen({ navigation }: Props) {
     strength.level === 'fair' ? '66%' :
     password.length > 0 ? '33%' : '0%';
 
-  const handleDateChange = (event: DateTimePickerEvent, selected?: Date) => {
-    if (Platform.OS === 'android') setShowPicker(false);
-    if (event.type === 'dismissed') { setShowPicker(false); return; }
-    if (selected) setBirthday(selected);
+  /** Auto-format birthday text as MM-DD-YYYY while typing. */
+  const handleBirthdayChange = (text: string) => {
+    // Strip everything that isn't a digit
+    const digits = text.replace(/\D/g, '').slice(0, 8);
+    let formatted = digits;
+    if (digits.length > 4) {
+      formatted = `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4)}`;
+    } else if (digits.length > 2) {
+      formatted = `${digits.slice(0, 2)}-${digits.slice(2)}`;
+    }
+    setBirthdayText(formatted);
   };
 
   const handleSignup = async () => {
+    if (submittingRef.current) return;
+
     if (!email.trim()) { setError('Email is required.'); return; }
     if (!password) { setError('Password is required.'); return; }
     if (strength.level === 'weak') { setError('Please choose a stronger password.'); return; }
     if (password !== confirmPassword) { setError('Passwords do not match.'); return; }
-    if (!birthday) { setError('Birthday is required.'); return; }
 
+    const birthday = parseBirthdayText(birthdayText);
+    if (!birthday) { setError('Please enter a valid birthday (MM-DD-YYYY).'); return; }
+
+    const today = new Date();
+    const age = today.getFullYear() - birthday.getFullYear() -
+      (today < new Date(today.getFullYear(), birthday.getMonth(), birthday.getDate()) ? 1 : 0);
+    if (age < 13) { setError('You must be at least 13 years old to sign up.'); return; }
+    if (birthday > today) { setError('Birthday cannot be in the future.'); return; }
+
+    submittingRef.current = true;
     setLoading(true);
     setError(null);
     try {
-      const { token, user } = await apiSignup({
+      const payload = {
         email: email.trim().toLowerCase(),
         password,
-        birthday: formatDate(birthday),
-      });
-      // Do NOT call signIn yet — navigate to email verification with provisional token
+        birthday: toISODate(birthday),
+      };
+      let result: { token: string; user: any };
+      try {
+        result = await apiSignup(payload);
+      } catch (firstErr: any) {
+        // Retry once on pure network errors (request never reached server).
+        // If it did reach the server and returned a 4xx/5xx, don't retry.
+        if (firstErr?.response) throw firstErr;
+        result = await apiSignup(payload);
+      }
       navigation.navigate('EmailVerification', {
-        email: email.trim().toLowerCase(),
-        token,
+        email: payload.email,
+        token: result.token,
       });
     } catch (e: any) {
-      const msg = e?.response?.data?.error ?? 'Signup failed. Please try again.';
+      const msg = e?.response?.data?.error ?? e?.response?.data?.detail ?? 'Signup failed. Please try again.';
       setError(msg);
     } finally {
       setLoading(false);
+      submittingRef.current = false;
     }
   };
-
-
-  const maxBirthday = new Date();
-  maxBirthday.setFullYear(maxBirthday.getFullYear() - 13);
 
   return (
     <KeyboardAvoidingView
@@ -242,35 +305,18 @@ export default function SignupScreen({ navigation }: Props) {
             )}
           </View>
 
-          {/* Birthday */}
+          {/* Birthday — plain text input, auto-formats MM-DD-YYYY */}
           <View style={styles.field}>
             <Text style={styles.label}>Birthday</Text>
-            <Pressable
-              style={styles.dateButton}
-              onPress={() => setShowPicker(true)}
-            >
-              <Text style={birthday ? styles.dateText : styles.datePlaceholder}>
-                {birthday ? formatDisplayDate(birthday) : 'Select your birthday'}
-              </Text>
-            </Pressable>
-            {showPicker && (
-              <DateTimePicker
-                value={birthday ?? maxBirthday}
-                mode="date"
-                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                maximumDate={maxBirthday}
-                minimumDate={new Date(1900, 0, 1)}
-                onChange={handleDateChange}
-              />
-            )}
-            {showPicker && Platform.OS === 'ios' && (
-              <Pressable
-                style={styles.pickerDoneBtn}
-                onPress={() => setShowPicker(false)}
-              >
-                <Text style={styles.pickerDoneText}>Done</Text>
-              </Pressable>
-            )}
+            <TextInput
+              style={styles.input}
+              value={birthdayText}
+              onChangeText={handleBirthdayChange}
+              keyboardType="number-pad"
+              placeholder="MM-DD-YYYY"
+              placeholderTextColor={colors.textMuted}
+              maxLength={10}
+            />
           </View>
 
           <Pressable
@@ -411,32 +457,6 @@ const styles = StyleSheet.create({
   fieldError: {
     fontSize: typography.size.xs,
     color: colors.error,
-  },
-  dateButton: {
-    borderWidth: 1.5,
-    borderColor: colors.borderColor,
-    borderRadius: 12,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
-    backgroundColor: colors.background.elevated,
-  },
-  dateText: {
-    fontSize: typography.size.base,
-    color: colors.textPrimary,
-  },
-  datePlaceholder: {
-    fontSize: typography.size.base,
-    color: colors.textMuted,
-  },
-  pickerDoneBtn: {
-    alignSelf: 'flex-end',
-    paddingVertical: spacing.xs,
-    paddingHorizontal: spacing.md,
-  },
-  pickerDoneText: {
-    color: colors.primary,
-    fontWeight: '600',
-    fontSize: typography.size.base,
   },
   btn: {
     backgroundColor: colors.primary,

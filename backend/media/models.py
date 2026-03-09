@@ -80,6 +80,7 @@ class MediaLink(BaseModel):
         AVATAR = 'avatar', 'Avatar'
         COVER = 'cover', 'Cover'
         INLINE = 'inline', 'Inline'
+        FRONT_CAMERA = 'front_camera', 'Front Camera'
 
     asset = models.ForeignKey(
         MediaAsset,
@@ -92,7 +93,7 @@ class MediaLink(BaseModel):
         choices=DestinationType.choices,
     )
     destination_id = models.CharField(max_length=36)
-    type = models.CharField(max_length=10, choices=Type.choices)
+    type = models.CharField(max_length=15, choices=Type.choices)
     position = models.PositiveIntegerField(default=0)
 
     class Meta:

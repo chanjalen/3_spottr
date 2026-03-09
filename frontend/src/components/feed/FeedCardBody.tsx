@@ -40,7 +40,7 @@ export default function FeedCardBody({ item, onPollVote, onWorkoutPress, onMedia
               onDoubleTap={onDoubleTap}
             />
           : item.photo_urls.length === 1
-            ? <FeedCardImage uri={item.photo_urls[0]} onPress={onMediaPress ? () => onMediaPress(item.photo_urls[0], 'image') : undefined} onDoubleTap={onDoubleTap} />
+            ? <FeedCardImage uri={item.photo_urls[0]} frontCameraUri={item.front_camera_url} onPress={onMediaPress ? () => onMediaPress(item.photo_urls[0], 'image') : undefined} onDoubleTap={onDoubleTap} />
             : null}
 
       {hasPaddedContent && (
