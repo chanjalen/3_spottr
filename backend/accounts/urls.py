@@ -35,6 +35,7 @@ urlpatterns = [
     path('api/me/profile/', api_views.api_update_profile_view, name='api_update_profile'),
     path('api/me/preferences/', api_views.api_preferences_view, name='api_preferences'),
     path('api/me/privacy/', api_views.api_privacy_settings_view, name='api_privacy_settings'),
+    path('api/me/notifications/', api_views.api_notification_settings_view, name='api_notification_settings'),
     path('api/block-toggle/', api_views.api_block_toggle_view, name='api_block_toggle'),
     path('api/profile/<str:username>/', api_views.api_profile_view, name='api_profile'),
     path('api/user/<str:username>/post-thumbnails/', api_views.api_user_post_thumbnails_view, name='api_user_post_thumbnails'),

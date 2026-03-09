@@ -52,7 +52,7 @@ def _post_thumbnail(post):
 
 def _checkin_thumbnail(checkin):
     """Return a thumbnail URL for a check-in, or None."""
-    return get_media_url('checkin', str(checkin.id)) or None
+    return get_media_url('quick_workout', str(checkin.id)) or None
 
 
 def _build_notification_item(notif, actor):
@@ -63,6 +63,7 @@ def _build_notification_item(notif, actor):
         'target_type': notif.target_type,
         'target_id': notif.target_id,
         'context_id': notif.context_id,
+        'context_type': notif.context_type,
         'is_read': notif.read_at is not None,
         'time_ago': _time_ago(notif.created_at),
         'created_at': notif.created_at.isoformat(),
@@ -191,6 +192,8 @@ def notification_list(request):
                 'grouped': True,
                 'target_type': 'post',
                 'target_id': entry_data,
+                'context_id': '',
+                'context_type': '',
                 'is_read': is_read,
                 'time_ago': _time_ago(latest.created_at),
                 'created_at': latest.created_at.isoformat(),
@@ -239,6 +242,8 @@ def notification_list(request):
                 'grouped': True,
                 'target_type': 'quick_workout',
                 'target_id': entry_data,
+                'context_id': '',
+                'context_type': '',
                 'is_read': is_read,
                 'time_ago': _time_ago(latest.created_at),
                 'created_at': latest.created_at.isoformat(),
@@ -267,12 +272,12 @@ def notification_list(request):
                     except Comment.DoesNotExist:
                         pass
 
-                if notif.target_type == Notification.TargetType.COMMENT:
+                if notif.context_type == 'comment_reply' or notif.target_type == Notification.TargetType.COMMENT:
                     item['message'] = f"{actor_name} replied to your comment"
                 else:
                     item['message'] = f"{actor_name} commented: \"{comment_text}\"" if comment_text else f"{actor_name} commented on your post"
 
-                # Add thumbnail for post comments
+                # Add thumbnail for post/checkin comments and replies
                 if notif.target_type == Notification.TargetType.POST:
                     post = posts_by_id.get(notif.target_id)
                     if not post:
@@ -281,12 +286,26 @@ def notification_list(request):
                         except Post.DoesNotExist:
                             post = None
                     item['thumbnail'] = _post_thumbnail(post) if post else None
+                elif notif.target_type == Notification.TargetType.QUICK_WORKOUT:
+                    try:
+                        checkin = QuickWorkout.objects.get(id=notif.target_id)
+                        item['thumbnail'] = _checkin_thumbnail(checkin)
+                    except QuickWorkout.DoesNotExist:
+                        pass
 
             elif notif.type == Notification.Type.FOLLOW:
                 item['message'] = f"{actor_name} started following you"
 
             elif notif.type == Notification.Type.WORKOUT_INVITE:
                 item['message'] = f"{actor_name} invited you to work out"
+                if notif.target_id:
+                    from gyms.models import WorkoutInvite
+                    try:
+                        wi = WorkoutInvite.objects.select_related('gym').get(id=notif.target_id)
+                        item['gym_id'] = str(wi.gym_id)
+                        item['gym_name'] = wi.gym.name
+                    except WorkoutInvite.DoesNotExist:
+                        pass
 
             elif notif.type == Notification.Type.JOIN_REQUEST:
                 if notif.target_type == Notification.TargetType.GROUP:
@@ -300,9 +319,30 @@ def notification_list(request):
                 else:
                     item['message'] = f"{actor_name} requested to join your workout"
                     item['description'] = workout_jr_descriptions.get(notif.context_id, '')
+                    if notif.target_id:
+                        from gyms.models import WorkoutInvite
+                        try:
+                            wi = WorkoutInvite.objects.select_related('gym').get(id=notif.target_id)
+                            item['gym_id'] = str(wi.gym_id)
+                            item['gym_name'] = wi.gym.name
+                        except WorkoutInvite.DoesNotExist:
+                            pass
 
             elif notif.type == Notification.Type.LIKE_COMMENT:
                 item['message'] = f"{actor_name} liked your comment"
+                if notif.context_id and notif.context_type:
+                    if notif.context_type == Notification.TargetType.POST:
+                        try:
+                            post = Post.objects.get(id=notif.context_id)
+                            item['thumbnail'] = _post_thumbnail(post)
+                        except Post.DoesNotExist:
+                            pass
+                    elif notif.context_type == Notification.TargetType.QUICK_WORKOUT:
+                        try:
+                            checkin = QuickWorkout.objects.get(id=notif.context_id)
+                            item['thumbnail'] = _checkin_thumbnail(checkin)
+                        except QuickWorkout.DoesNotExist:
+                            pass
 
             elif notif.type == Notification.Type.MENTION:
                 if notif.target_type == Notification.TargetType.POST:
@@ -324,8 +364,26 @@ def notification_list(request):
                                 item['description'] = mention_comment.description
                         except Comment.DoesNotExist:
                             pass
+                    if notif.context_id and notif.context_type:
+                        if notif.context_type == Notification.TargetType.POST:
+                            try:
+                                post = Post.objects.get(id=notif.context_id)
+                                item['thumbnail'] = _post_thumbnail(post)
+                            except Post.DoesNotExist:
+                                pass
+                        elif notif.context_type == Notification.TargetType.QUICK_WORKOUT:
+                            try:
+                                checkin = QuickWorkout.objects.get(id=notif.context_id)
+                                item['thumbnail'] = _checkin_thumbnail(checkin)
+                            except QuickWorkout.DoesNotExist:
+                                pass
                 else:
                     item['message'] = f"{actor_name} mentioned you in a check-in"
+                    try:
+                        checkin = QuickWorkout.objects.get(id=notif.target_id)
+                        item['thumbnail'] = _checkin_thumbnail(checkin)
+                    except QuickWorkout.DoesNotExist:
+                        pass
 
             else:
                 item['message'] = f"{actor_name} sent you a notification"

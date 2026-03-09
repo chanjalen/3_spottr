@@ -468,16 +468,25 @@ export default function NotificationsScreen({ navigation }: Props) {
     }
 
     const actor = item.actors[0];
-    const { type, target_type, target_id } = item;
+    const { type, target_type, target_id, context_id, context_type } = item;
 
     if (type === 'like_post' && target_id) {
       navigation.navigate('PostDetail', { postId: target_id, itemType: 'post' });
     } else if (type === 'like_checkin' && target_id) {
       navigation.navigate('PostDetail', { postId: target_id, itemType: 'checkin' });
+    } else if (type === 'like_comment' && target_id && context_id) {
+      const itemType = context_type === 'post' ? 'post' : 'checkin';
+      navigation.navigate('PostDetail', { postId: context_id, itemType, commentId: target_id });
+    } else if (type === 'comment' && (context_type === 'comment_reply') && target_id) {
+      const itemType = target_type === 'post' ? 'post' : 'checkin';
+      navigation.navigate('PostDetail', { postId: target_id, itemType, commentId: context_id || undefined });
     } else if (type === 'comment' && target_type === 'post' && target_id) {
-      navigation.navigate('PostDetail', { postId: target_id, itemType: 'post', commentId: item.context_id || undefined });
+      navigation.navigate('PostDetail', { postId: target_id, itemType: 'post', commentId: context_id || undefined });
     } else if (type === 'comment' && target_type === 'quick_workout' && target_id) {
-      navigation.navigate('PostDetail', { postId: target_id, itemType: 'checkin', commentId: item.context_id || undefined });
+      navigation.navigate('PostDetail', { postId: target_id, itemType: 'checkin', commentId: context_id || undefined });
+    } else if (type === 'mention' && target_type === 'comment' && context_id) {
+      const itemType = context_type === 'post' ? 'post' : 'checkin';
+      navigation.navigate('PostDetail', { postId: context_id, itemType, commentId: target_id || undefined });
     } else if (type === 'mention' && target_type === 'post' && target_id) {
       navigation.navigate('PostDetail', { postId: target_id, itemType: 'post' });
     } else if (type === 'mention' && target_type === 'quick_workout' && target_id) {
@@ -488,9 +497,11 @@ export default function NotificationsScreen({ navigation }: Props) {
       navigation.navigate('Profile', { username: actor.username });
     } else if (type === 'join_request' && target_type === 'group' && target_id) {
       navigation.navigate('GroupProfile', { groupId: target_id });
+    } else if (type === 'workout_invite' && item.gym_id && item.gym_name) {
+      navigation.navigate('GymDetail', { gymId: item.gym_id, gymName: item.gym_name });
+    } else if (type === 'join_request' && target_type === 'workout_invite' && item.gym_id && item.gym_name) {
+      navigation.navigate('GymDetail', { gymId: item.gym_id, gymName: item.gym_name });
     } else if (actor) {
-      // Fallback for like_comment, comment replies, mention-in-comment, etc.
-      // where we don't have a direct post ID — go to the actor's profile
       navigation.navigate('Profile', { username: actor.username });
     }
   };

@@ -50,6 +50,7 @@ def _user_brief(user):
         'checkin_visible_following': user.checkin_visible_following,
         'checkin_visible_orgs': user.checkin_visible_orgs,
         'checkin_visible_gyms': user.checkin_visible_gyms,
+        'push_notifications': user.push_notifications,
     }
 
 
@@ -240,6 +241,26 @@ def api_signup_view(request):
             onboarding_step=0,
         )
     except IntegrityError:
+        # Race condition: the client timed out and retried, but our first request
+        # already committed the user between the filter() check above and this
+        # create_user() call.  Recover the same way as the "existing unverified
+        # user" path so the retry returns a token instead of an error.
+        race_user = User.objects.filter(email=email, is_email_verified=False).first()
+        if race_user:
+            code_expired = (
+                not race_user.email_verification_token
+                or not race_user.email_verification_token_expires
+                or timezone.now() > race_user.email_verification_token_expires
+            )
+            if code_expired:
+                code = _issue_verification_code(race_user)
+                _send_verification_email(race_user, code)
+            from rest_framework.authtoken.models import Token
+            token, _ = Token.objects.get_or_create(user=race_user)
+            return Response(
+                {'token': token.key, 'user': _user_brief(race_user)},
+                status=status.HTTP_200_OK,
+            )
         return Response(
             {'error': 'An account with this email already exists.'},
             status=status.HTTP_400_BAD_REQUEST,
@@ -531,6 +552,24 @@ def api_privacy_settings_view(request):
     if changed:
         user.save(update_fields=changed)
     return Response({f: getattr(user, f) for f in FIELDS})
+
+
+@api_view(['GET', 'PATCH'])
+@permission_classes([IsAuthenticated])
+def api_notification_settings_view(request):
+    """GET or PATCH push/email notification toggles."""
+    user = request.user
+    FIELDS = ['push_notifications']
+    if request.method == 'GET':
+        return Response({f: getattr(user, f) for f in FIELDS})
+    changed = []
+    for f in FIELDS:
+        if f in request.data:
+            setattr(user, f, bool(request.data[f]))
+            changed.append(f)
+    if changed:
+        user.save(update_fields=changed)
+    return Response(_user_brief(user))
 
 
 @api_view(['GET'])

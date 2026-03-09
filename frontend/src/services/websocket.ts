@@ -16,6 +16,7 @@ export type EventMap = {
   unread_update: UnreadCount;
   reaction_update: { message_id: string; reactions: Array<{ emoji: string; count: number; reactor_ids: string[] }> };
   announcement_reaction_update: { announcement_id: string; org_id: string; reactions: Array<{ emoji: string; count: number; reactor_ids: string[] }> };
+  notification_unread_update: { count: number };
   connected: null;
   disconnected: null;
   send_error: { code: string; detail: string; client_msg_id?: string };
@@ -95,6 +96,8 @@ class WebSocketManager extends SimpleEmitter {
           this.emit('reaction_update', data as EventMap['reaction_update']);
         } else if (data.type === 'announcement_reaction_update') {
           this.emit('announcement_reaction_update', data as EventMap['announcement_reaction_update']);
+        } else if (data.type === 'notification_unread_update') {
+          this.emit('notification_unread_update', { count: data.count as number });
         } else if (data.type === 'error') {
           this.emit('send_error', {
             code: data.code,

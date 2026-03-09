@@ -87,4 +87,5 @@ export type RootStackParamList = {
   CheckInReview: { mediaUri?: string; mediaType?: 'photo' | 'video'; workoutId?: string; isFrontCamera?: boolean; frontCameraUri?: string; videoSegments?: string[] };
   FindFriends: undefined;
   PostDetail: { postId: string; itemType: 'post' | 'workout' | 'checkin'; commentId?: string };
+  GymDetail: { gymId: string; gymName: string };
 };

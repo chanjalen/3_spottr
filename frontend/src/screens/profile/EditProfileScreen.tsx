@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,7 +10,9 @@ import {
   Platform,
   Alert,
   Image,
+  Linking,
 } from 'react-native';
+import * as Notifications from 'expo-notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
@@ -20,15 +22,15 @@ import { useAuth } from '../../store/AuthContext';
 import Avatar from '../../components/common/Avatar';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
-import { updateUserAvatar, apiDeleteAccount, apiUpdateProfile, apiUpdatePreferences, apiUpdatePrivacy } from '../../api/accounts';
+import { updateUserAvatar, apiDeleteAccount, apiUpdateProfile, apiUpdatePrivacy, apiUpdateNotifications } from '../../api/accounts';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'EditProfile'>;
   route: RouteProp<RootStackParamList, 'EditProfile'>;
 };
 
-type SideTab = 'Profile' | 'Account' | 'Preferences' | 'Privacy' | 'Notifications';
-const SIDE_TABS: SideTab[] = ['Profile', 'Account', 'Preferences', 'Privacy', 'Notifications'];
+type SideTab = 'Profile' | 'Account' | 'Privacy' | 'Notifications';
+const SIDE_TABS: SideTab[] = ['Profile', 'Account', 'Privacy', 'Notifications'];
 
 export default function EditProfileScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
@@ -83,19 +85,39 @@ export default function EditProfileScreen({ navigation, route }: Props) {
     }
   };
 
-  // Preferences — seeded from user account, saved on change
-  const [weightUnit, setWeightUnit] = useState<'lbs' | 'kg'>(user?.weight_unit ?? 'lbs');
-  const [distanceUnit, setDistanceUnit] = useState<'miles' | 'km'>(user?.distance_unit ?? 'miles');
-  const handlePrefChange = async (field: 'weight_unit' | 'distance_unit', value: string) => {
-    if (field === 'weight_unit') setWeightUnit(value as 'lbs' | 'kg');
-    else setDistanceUnit(value as 'miles' | 'km');
+  // Notifications — synced with iOS permission status + backend flag
+  const [pushNotifications, setPushNotifications] = useState(user?.push_notifications ?? true);
+  const [iosPermissionDenied, setIosPermissionDenied] = useState(false);
+
+  useEffect(() => {
+    Notifications.getPermissionsAsync().then(({ status }) => {
+      const denied = status === 'denied';
+      setIosPermissionDenied(denied);
+      // If iOS has denied permission, reflect that in the toggle
+      if (denied && pushNotifications) {
+        setPushNotifications(false);
+      }
+    });
+  }, []);
+
+  const handleNotificationToggle = async (value: boolean) => {
+    if (value && iosPermissionDenied) {
+      Alert.alert(
+        'Notifications Disabled',
+        'Push notifications are disabled in your device settings. Tap "Open Settings" to enable them.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ],
+      );
+      return;
+    }
+    setPushNotifications(value);
     try {
-      const updated = await apiUpdatePreferences({ [field]: value });
+      const updated = await apiUpdateNotifications({ push_notifications: value });
       await updateUser(updated);
     } catch {
-      // revert on failure
-      if (field === 'weight_unit') setWeightUnit(user?.weight_unit ?? 'lbs');
-      else setDistanceUnit(user?.distance_unit ?? 'miles');
+      setPushNotifications(!value);
     }
   };
 
@@ -248,26 +270,6 @@ export default function EditProfileScreen({ navigation, route }: Props) {
             </View>
           )}
 
-          {activeTab === 'Preferences' && (
-            <View style={styles.section}>
-              <Text style={styles.sectionHeading}>Units</Text>
-              <Text style={styles.sectionSubheading}>Used as defaults when logging workouts and PRs.</Text>
-              <ToggleRow
-                label="Weight Unit"
-                left="lbs"
-                right="kg"
-                value={weightUnit}
-                onChange={(v) => handlePrefChange('weight_unit', v)}
-              />
-              <ToggleRow
-                label="Distance Unit"
-                left="miles"
-                right="km"
-                value={distanceUnit}
-                onChange={(v) => handlePrefChange('distance_unit', v)}
-              />
-            </View>
-          )}
 
           {activeTab === 'Privacy' && (
             <View style={styles.section}>
@@ -297,7 +299,18 @@ export default function EditProfileScreen({ navigation, route }: Props) {
           {activeTab === 'Notifications' && (
             <View style={styles.section}>
               <Text style={styles.sectionHeading}>Notifications</Text>
-              <Text style={styles.sectionSubheading}>Push notifications are not yet enabled. These settings will take effect when notifications are activated.</Text>
+              <Text style={styles.sectionSubheading}>Choose how you want to be notified. Changes save instantly.</Text>
+              <SwitchRow
+                label="Push Notifications"
+                sublabel={
+                  iosPermissionDenied
+                    ? 'Disabled in device settings — tap to open Settings'
+                    : 'Likes, comments, follows, messages, and more'
+                }
+                value={pushNotifications}
+                onChange={handleNotificationToggle}
+                disabled={iosPermissionDenied}
+              />
             </View>
           )}
         </ScrollView>
@@ -340,56 +353,24 @@ function FieldInput({
   );
 }
 
-function SwitchRow({ label, sublabel, value, onChange }: { label: string; sublabel?: string; value: boolean; onChange: (v: boolean) => void }) {
+function SwitchRow({ label, sublabel, value, onChange, disabled }: { label: string; sublabel?: string; value: boolean; onChange: (v: boolean) => void; disabled?: boolean }) {
   return (
-    <View style={styles.switchRow}>
+    <Pressable style={styles.switchRow} onPress={disabled ? () => onChange(true) : undefined}>
       <View style={{ flex: 1 }}>
-        <Text style={styles.switchLabel}>{label}</Text>
+        <Text style={[styles.switchLabel, disabled && { color: colors.textMuted }]}>{label}</Text>
         {sublabel ? <Text style={styles.switchSublabel}>{sublabel}</Text> : null}
       </View>
       <Switch
         value={value}
         onValueChange={onChange}
+        disabled={disabled}
         trackColor={{ true: colors.primary, false: colors.borderColor }}
         thumbColor={Platform.OS === 'android' ? (value ? colors.primaryDark : '#f4f4f4') : undefined}
       />
-    </View>
+    </Pressable>
   );
 }
 
-function ToggleRow({
-  label,
-  left,
-  right,
-  value,
-  onChange,
-}: {
-  label: string;
-  left: string;
-  right: string;
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  return (
-    <View style={styles.switchRow}>
-      <Text style={styles.switchLabel}>{label}</Text>
-      <View style={styles.toggleWrap}>
-        <Pressable
-          style={[styles.toggleOption, value === left && styles.toggleOptionActive]}
-          onPress={() => onChange(left)}
-        >
-          <Text style={[styles.toggleOptionText, value === left && styles.toggleOptionTextActive]}>{left}</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.toggleOption, value === right && styles.toggleOptionActive]}
-          onPress={() => onChange(right)}
-        >
-          <Text style={[styles.toggleOptionText, value === right && styles.toggleOptionTextActive]}>{right}</Text>
-        </Pressable>
-      </View>
-    </View>
-  );
-}
 
 const styles = StyleSheet.create({
   headerBar: {
@@ -489,11 +470,7 @@ const styles = StyleSheet.create({
   switchLabel: { fontSize: typography.size.sm, color: colors.textPrimary },
   switchSublabel: { fontSize: typography.size.xs, color: colors.textMuted, marginTop: 2 },
   sectionSubheading: { fontSize: typography.size.sm, color: colors.textSecondary, marginBottom: spacing.xs },
-  toggleWrap: { flexDirection: 'row', borderRadius: 8, overflow: 'hidden', borderWidth: 1, borderColor: colors.borderColor },
-  toggleOption: { paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2 },
-  toggleOptionActive: { backgroundColor: colors.primary },
-  toggleOptionText: { fontSize: typography.size.sm, color: colors.textSecondary },
-  toggleOptionTextActive: { color: '#fff', fontWeight: '600' },
+
   dangerBtn: {
     flexDirection: 'row',
     alignItems: 'center',

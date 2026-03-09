@@ -4,6 +4,34 @@ from notifications.models import Notification
 from accounts.push import send_push_to_user
 
 
+def _push_notification_unread(user):
+    """Push the current unread notification count to the user's WS dm channel."""
+    try:
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        count = Notification.objects.filter(
+            recipient=user,
+            read_at__isnull=True,
+        ).count()
+        channel_layer = get_channel_layer()
+        if channel_layer:
+            async_to_sync(channel_layer.group_send)(
+                f"dm_{str(user.id).replace('-', '')}",
+                {'type': 'notification_unread_update', 'count': count},
+            )
+    except Exception:
+        pass
+
+
+def _resolve_comment_parent(comment):
+    """Return (parent_id_str, target_type) for the post/checkin a comment belongs to."""
+    if comment.post_id:
+        return str(comment.post_id), Notification.TargetType.POST
+    if comment.quick_workout_id:
+        return str(comment.quick_workout_id), Notification.TargetType.QUICK_WORKOUT
+    return None, None
+
+
 def notify_like_post(actor, post):
     """Create a DB notification and send push when someone likes a post."""
     if actor.id == post.user_id:
@@ -21,6 +49,7 @@ def notify_like_post(actor, post):
         body=f'@{actor.username} liked your post',
         data={'type': 'like_post', 'post_id': str(post.id)},
     )
+    _push_notification_unread(post.user)
 
 
 def notify_like_checkin(actor, checkin):
@@ -40,25 +69,35 @@ def notify_like_checkin(actor, checkin):
         body=f'@{actor.username} liked your check-in',
         data={'type': 'like_checkin', 'checkin_id': str(checkin.id)},
     )
+    _push_notification_unread(checkin.user)
 
 
 def notify_like_comment(actor, comment):
     """Create a DB notification and send push when someone likes a comment."""
     if actor.id == comment.user_id:
         return
+    parent_id, parent_type = _resolve_comment_parent(comment)
     Notification.objects.create(
         recipient=comment.user,
         triggered_by=actor,
         type=Notification.Type.LIKE_COMMENT,
         target_type=Notification.TargetType.COMMENT,
         target_id=str(comment.id),
+        context_type=parent_type or '',
+        context_id=parent_id or '',
     )
     send_push_to_user(
         comment.user,
         title='New like ❤️',
         body=f'@{actor.username} liked your comment',
-        data={'type': 'like_comment', 'comment_id': str(comment.id)},
+        data={
+            'type': 'like_comment',
+            'comment_id': str(comment.id),
+            'post_id': parent_id or '',
+            'item_type': 'post' if parent_type == Notification.TargetType.POST else 'checkin',
+        },
     )
+    _push_notification_unread(comment.user)
 
 
 def notify_comment(actor, post, comment):
@@ -78,8 +117,9 @@ def notify_comment(actor, post, comment):
         post.user,
         title='New comment 💬',
         body=f'@{actor.username} commented on your post',
-        data={'type': 'comment', 'post_id': str(post.id)},
+        data={'type': 'comment', 'post_id': str(post.id), 'comment_id': str(comment.id)},
     )
+    _push_notification_unread(post.user)
 
 
 def notify_comment_on_checkin(actor, checkin, comment):
@@ -99,29 +139,37 @@ def notify_comment_on_checkin(actor, checkin, comment):
         checkin.user,
         title='New comment 💬',
         body=f'@{actor.username} commented on your check-in',
-        data={'type': 'comment', 'checkin_id': str(checkin.id)},
+        data={'type': 'comment', 'checkin_id': str(checkin.id), 'comment_id': str(comment.id)},
     )
+    _push_notification_unread(checkin.user)
 
 
 def notify_comment_reply(actor, parent_comment, reply):
     """Create a DB notification and send push when someone replies to a comment."""
     if actor.id == parent_comment.user_id:
         return
+    parent_id, parent_type = _resolve_comment_parent(parent_comment)
     Notification.objects.create(
         recipient=parent_comment.user,
         triggered_by=actor,
         type=Notification.Type.COMMENT,
-        target_type=Notification.TargetType.COMMENT,
-        target_id=str(parent_comment.id),
-        context_type=Notification.TargetType.COMMENT,
+        target_type=parent_type or Notification.TargetType.COMMENT,
+        target_id=parent_id or str(parent_comment.id),
+        context_type='comment_reply',
         context_id=str(reply.id),
     )
     send_push_to_user(
         parent_comment.user,
         title='New reply 💬',
         body=f'@{actor.username} replied to your comment',
-        data={'type': 'comment_reply', 'comment_id': str(parent_comment.id)},
+        data={
+            'type': 'comment_reply',
+            'comment_id': str(reply.id),
+            'post_id': parent_id or '',
+            'item_type': 'post' if parent_type == Notification.TargetType.POST else 'checkin',
+        },
     )
+    _push_notification_unread(parent_comment.user)
 
 
 def notify_follow(actor, target_user):
@@ -141,6 +189,7 @@ def notify_follow(actor, target_user):
         body=f'@{actor.username} started following you',
         data={'type': 'follow', 'user_id': str(actor.id), 'username': actor.username},
     )
+    _push_notification_unread(target_user)
 
 
 def notify_workout_invite(actor, recipient, workout_invite):
@@ -158,8 +207,14 @@ def notify_workout_invite(actor, recipient, workout_invite):
         recipient,
         title='Workout invite 🏋️',
         body=f'@{actor.username} invited you to work out',
-        data={'type': 'workout_invite', 'invite_id': str(workout_invite.id)},
+        data={
+            'type': 'workout_invite',
+            'invite_id': str(workout_invite.id),
+            'gym_id': str(workout_invite.gym_id),
+            'gym_name': workout_invite.gym.name,
+        },
     )
+    _push_notification_unread(recipient)
 
 
 def notify_mention(actor, recipient, target_type, target_id, context_type=None, context_id=None):
@@ -180,12 +235,26 @@ def notify_mention(actor, recipient, target_type, target_id, context_type=None, 
         context_type=context_type or '',
         context_id=str(context_id) if context_id else '',
     )
+    if target_type == Notification.TargetType.POST:
+        push_data = {'type': 'mention', 'post_id': str(target_id), 'item_type': 'post'}
+    elif target_type == Notification.TargetType.QUICK_WORKOUT:
+        push_data = {'type': 'mention', 'post_id': str(target_id), 'item_type': 'checkin'}
+    elif target_type == Notification.TargetType.COMMENT:
+        push_data = {
+            'type': 'mention',
+            'comment_id': str(target_id),
+            'post_id': str(context_id) if context_id else '',
+            'item_type': 'post' if context_type == Notification.TargetType.POST else 'checkin',
+        }
+    else:
+        push_data = {'type': 'mention', 'post_id': str(target_id), 'item_type': 'post'}
     send_push_to_user(
         recipient,
         title='You were mentioned 📣',
         body=f'@{actor.username} mentioned you',
-        data={'type': 'mention', 'target_id': str(target_id)},
+        data=push_data,
     )
+    _push_notification_unread(recipient)
 
 
 def notify_group_join_request(actor, group, join_request):
@@ -212,6 +281,7 @@ def notify_group_join_request(actor, group, join_request):
                 body=f'@{actor.username} wants to join {group.name}',
                 data={'type': 'join_request', 'group_id': str(group.id)},
             )
+            _push_notification_unread(membership.user)
 
 
 def notify_workout_join_request(actor, workout_invite, join_request):
@@ -232,8 +302,14 @@ def notify_workout_join_request(actor, workout_invite, join_request):
         owner,
         title='Join request 🏋️',
         body=f'@{actor.username} wants to join your workout',
-        data={'type': 'workout_join_request', 'invite_id': str(workout_invite.id)},
+        data={
+            'type': 'workout_join_request',
+            'invite_id': str(workout_invite.id),
+            'gym_id': str(workout_invite.gym_id),
+            'gym_name': workout_invite.gym.name,
+        },
     )
+    _push_notification_unread(owner)
 
 
 def _friend_checkin_worker(checkin_user_id):
@@ -304,7 +380,7 @@ def _friend_checkin_worker(checkin_user_id):
             follower,
             title='Friends are working out 💪',
             body=body,
-            data={'type': 'friend_checkin', 'username': checkin_user.username},
+            data={'type': 'friend_checkin'},
         )
 
 
