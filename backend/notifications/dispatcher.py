@@ -369,6 +369,10 @@ def _friend_checkin_worker(checkin_user_id):
         friend_usernames.insert(0, checkin_user.username)
 
         count = len(friend_usernames)
+        # Only notify for the 1st, 2nd, and 3rd friend check-in of the day
+        if count > 3:
+            continue
+
         if count == 1:
             body = f'@{friend_usernames[0]} just checked in 💪'
         elif count == 2:
