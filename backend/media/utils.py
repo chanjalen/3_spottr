@@ -9,6 +9,13 @@ ALLOWED_VIDEO_TYPES = {'video/mp4', 'video/quicktime', 'video/webm'}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
 
+_EXT_TO_MIME = {
+    'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png',
+    'gif': 'image/gif', 'webp': 'image/webp', 'heic': 'image/heic', 'heif': 'image/heif',
+    'mp4': 'video/mp4', 'mov': 'video/quicktime', 'webm': 'video/webm',
+}
+
+
 def create_media_asset(user, file, storage_key, kind='image', already_saved=False):
     """
     Create a MediaAsset row and optionally save the file to S3.
@@ -19,7 +26,14 @@ def create_media_asset(user, file, storage_key, kind='image', already_saved=Fals
     Raises:
         ValidationError: If the file type or size is not allowed.
     """
-    content_type = getattr(file, 'content_type', '')
+    content_type = getattr(file, 'content_type', '') or ''
+
+    # If content_type is missing or blank (can happen with some React Native uploads),
+    # infer it from the filename extension before validating.
+    if not content_type:
+        filename = getattr(file, 'name', '') or storage_key or ''
+        ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+        content_type = _EXT_TO_MIME.get(ext, '')
 
     # Validate MIME type and size only for files not yet processed by Django's ImageField.
     # already_saved=True means the ImageField/Pillow already validated the content.

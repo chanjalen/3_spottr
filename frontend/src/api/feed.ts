@@ -295,10 +295,12 @@ export async function createCheckin(params: {
   if (params.workoutId) formData.append('workout_id', params.workoutId);
   formData.append('is_front_camera', params.isFrontCamera ? 'true' : 'false');
 
+  console.log('[createCheckin] sending front_camera_photo:', !!params.frontCameraPhoto, params.frontCameraPhoto?.uri ?? 'none');
   // Do NOT set Content-Type manually — React Native's XHR sets it automatically
   // with the correct multipart boundary when the body is FormData.
   const response = await apiClient.post(ENDPOINTS.createCheckin, formData, {
     headers: { 'Content-Type': undefined },
   });
+  console.log('[createCheckin] response:', JSON.stringify(response.data));
   return response.data;
 }

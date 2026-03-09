@@ -50,6 +50,8 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
   const [isDualCapturing, setIsDualCapturing] = useState(false);
   // Resolves when camera reports ready — used to await facing change during dual capture
   const cameraReadyResolverRef = useRef<(() => void) | null>(null);
+  // Ref mirrors isCameraReady state so async dual-capture code reads the live value
+  const isCameraReadyRef = useRef(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [isCameraReady, setIsCameraReady] = useState(false);
@@ -62,10 +64,12 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
   useFocusEffect(
     useCallback(() => {
       setIsFocused(true);
+      isCameraReadyRef.current = false;
       setIsCameraReady(false);
       return () => {
         if (isCapturingRef.current) return;
         setIsFocused(false);
+        isCameraReadyRef.current = false;
         setIsCameraReady(false);
       };
     }, []),
@@ -129,6 +133,7 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
   }, []);
 
   const handleCameraReady = useCallback(() => {
+    isCameraReadyRef.current = true;
     setIsCameraReady(true);
     // Unblock any in-progress dual capture waiting for camera to reinitialize
     cameraReadyResolverRef.current?.();
@@ -185,34 +190,44 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
       let frontUri: string | undefined;
 
       if (isDualCamera) {
-        // First capture is done — safe to do a full remount for the second camera.
-        // Key-bump forces onCameraReady to fire reliably (prop-only facing change does not).
         const oppositeFacing: CameraType = originalFacing === 'back' ? 'front' : 'back';
         setIsDualCapturing(true);
+        isCameraReadyRef.current = false;
         setIsCameraReady(false);
         setFacing(oppositeFacing);
-        setCameraKey((k) => k + 1); // remount with opposite facing
+        setCameraKey((k) => k + 1); // remount CameraView with opposite facing
 
-        // onCameraReady WILL fire after a key-based remount — wait for it
+        // Wait for onCameraReady to fire (up to 12 seconds for slow devices)
         await new Promise<void>((resolve) => {
           cameraReadyResolverRef.current = resolve;
-          setTimeout(resolve, 6000); // generous fallback
+          setTimeout(resolve, 12000);
         });
 
-        // Settle time after camera reports ready
-        await new Promise((r) => setTimeout(r, 600));
-
-        try {
-          if (cameraRef.current) {
-            const secondPhoto = await cameraRef.current.takePictureAsync({ quality: 0.85 });
-            frontUri = secondPhoto?.uri;
-            console.log('[DualCam] second photo captured:', frontUri ? 'ok' : 'null');
-          }
-        } catch (e) {
-          console.warn('[DualCam] second capture failed:', e);
+        // Extra settle: poll isCameraReadyRef until truly ready, max 3 more seconds
+        const settleStart = Date.now();
+        while (!isCameraReadyRef.current && Date.now() - settleStart < 3000) {
+          await new Promise((r) => setTimeout(r, 200));
         }
+        // Final settle after ready is confirmed
+        await new Promise((r) => setTimeout(r, 1500));
+
+        // Attempt the second shot up to 3 times
+        for (let attempt = 1; attempt <= 3; attempt++) {
+          try {
+            if (!cameraRef.current) break;
+            const secondPhoto = await cameraRef.current.takePictureAsync({ quality: 0.85 });
+            if (secondPhoto?.uri) {
+              frontUri = secondPhoto.uri;
+              console.log(`[DualCam] second photo captured on attempt ${attempt}`);
+              break;
+            }
+          } catch (e) {
+            console.warn(`[DualCam] attempt ${attempt} failed:`, e);
+            if (attempt < 3) await new Promise((r) => setTimeout(r, 500));
+          }
+        }
+        if (!frontUri) console.warn('[DualCam] all attempts failed — posting without front camera');
         setIsDualCapturing(false);
-        // No need to restore facing — we navigate away immediately
       }
 
       if (fromCheckinReview) {

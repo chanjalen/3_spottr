@@ -65,8 +65,10 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
     if (route.params?.mediaUri) { setLocalMediaUri(route.params.mediaUri); setIsVideoPlaying(false); }
     if (route.params?.mediaType) setLocalMediaType(route.params.mediaType);
     if (route.params?.isFrontCamera !== undefined) setIsFrontCamera(route.params.isFrontCamera);
-    if (route.params?.frontCameraUri !== undefined) setLocalFrontCameraUri(route.params.frontCameraUri ?? null);
-  }, [route.params?.mediaUri, route.params?.mediaType]);
+    // Always sync frontCameraUri — if not present in new params, clear it
+    // (handles retake without dual camera clearing the old PIP)
+    setLocalFrontCameraUri(route.params?.frontCameraUri ?? null);
+  }, [route.params?.mediaUri, route.params?.mediaType, route.params?.frontCameraUri, route.params?.isFrontCamera]);
 
   const [activity, setActivity] = useState('');
   const [description, setDescription] = useState('');

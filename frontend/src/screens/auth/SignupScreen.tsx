@@ -207,9 +207,14 @@ export default function SignupScreen({ navigation }: Props) {
       try {
         result = await apiSignup(payload);
       } catch (firstErr: any) {
-        // Retry once on pure network errors (request never reached server).
-        // If it did reach the server and returned a 4xx/5xx, don't retry.
+        // Only retry on network/timeout errors (no response received).
+        // If the server responded with a 4xx/5xx, surface that immediately.
+        // Retry is safe because the backend is idempotent for unverified accounts:
+        // if the first request reached the server, it returns the existing token
+        // without sending another email.
         if (firstErr?.response) throw firstErr;
+        // Small delay in case the server is still finishing the first request
+        await new Promise((r) => setTimeout(r, 1500));
         result = await apiSignup(payload);
       }
       navigation.navigate('EmailVerification', {

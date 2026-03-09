@@ -265,6 +265,7 @@ def create_checkin(request):
     photo = request.FILES.get('photo')
     video = request.FILES.get('video')
     front_camera_photo = request.FILES.get('front_camera_photo')
+    print(f'[checkin] photo={bool(photo)} video={bool(video)} front_camera_photo={bool(front_camera_photo)}')
 
     if not activity:
         return Response({'success': False, 'error': 'Activity type is required'}, status=400)
@@ -309,8 +310,8 @@ def create_checkin(request):
                 destination_id=str(checkin.id),
                 type='inline',
             )
-        except Exception:
-            pass
+        except Exception as e:
+            logger.exception('photo save failed for checkin %s: %s', checkin.id, e)
 
     if video:
         try:
@@ -329,9 +330,10 @@ def create_checkin(request):
         except Exception:
             pass
 
+    front_camera_url = None
     if front_camera_photo:
         try:
-            from media.utils import create_media_asset
+            from media.utils import create_media_asset, build_media_url
             from media.models import MediaLink
             path = f'checkins/{checkin.id}_front.jpg'
             asset = create_media_asset(request.user, front_camera_photo, path, 'image')
@@ -341,8 +343,11 @@ def create_checkin(request):
                 destination_id=str(checkin.id),
                 type='front_camera',
             )
+            front_camera_url = build_media_url(asset.storage_key)
+            print(f'[checkin] front_camera saved: {front_camera_url}')
             logger.info('front_camera saved for checkin %s', checkin.id)
         except Exception as e:
+            print(f'[checkin] front_camera FAILED for checkin {checkin.id}: {e}')
             logger.exception('front_camera save failed for checkin %s: %s', checkin.id, e)
 
     request.user.total_workouts = DjF('total_workouts') + 1
@@ -367,7 +372,7 @@ def create_checkin(request):
     except Exception:
         pass
 
-    return Response({'success': True, 'checkin_id': str(checkin.id)})
+    return Response({'success': True, 'checkin_id': str(checkin.id), 'front_camera_url': front_camera_url})
 
 
 @api_view(['POST'])
