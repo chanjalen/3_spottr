@@ -54,7 +54,7 @@ export default function LoginScreen({ navigation }: Props) {
       }
 
       const clientId = Platform.OS === 'ios'
-        ? (process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? '')
+        ? (process.env.EXPO_PUBLIC_APP_VARIANT === 'development' ? (process.env.EXPO_PUBLIC_GOOGLE_IOS_DEV_CLIENT_ID ?? '') : (process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? ''))
         : (process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '');
 
       exchangeCodeAsync(
@@ -193,28 +193,6 @@ export default function LoginScreen({ navigation }: Props) {
               <ActivityIndicator color={colors.textOnPrimary} />
             ) : (
               <Text style={styles.btnText}>Log In</Text>
-            )}
-          </Pressable>
-
-          <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.googleBtn,
-              pressed && styles.btnPressed,
-              !request && styles.btnDisabled,
-            ]}
-            onPress={handleGoogleSignIn}
-            disabled={!request || isLoading}
-          >
-            {googleLoading ? (
-              <ActivityIndicator color={colors.textPrimary} />
-            ) : (
-              <Text style={styles.googleBtnText}>Continue with Google</Text>
             )}
           </Pressable>
 

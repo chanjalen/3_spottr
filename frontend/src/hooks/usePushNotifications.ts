@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { NavigationContainerRef } from '@react-navigation/native';
-import apiClient from '../api/client';
+import { apiClient } from '../api/client';
 import { RootStackParamList } from '../navigation/types';
 
 const PROJECT_ID = 'a4ef3539-a6f7-405d-ac11-ef7a72dec022';

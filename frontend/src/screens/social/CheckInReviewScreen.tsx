@@ -51,7 +51,7 @@ const BUSY_COLORS: Record<number, string> = {
 
 export default function CheckInReviewScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { mediaUri: initialMediaUri, mediaType: initialMediaType, workoutId: incomingWorkoutId, isFrontCamera: initialIsFrontCamera, frontCameraUri: initialFrontCameraUri } = route.params;
+  const { mediaUri: initialMediaUri, mediaType: initialMediaType, workoutId: incomingWorkoutId, isFrontCamera: initialIsFrontCamera, frontCameraUri: initialFrontCameraUri, videoSegments: initialVideoSegments } = route.params;
   console.log('[CheckInReview] frontCameraUri from params:', initialFrontCameraUri ?? 'none');
 
   // Local media state — can be filled later by navigating to CameraCapture
@@ -59,16 +59,16 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
   const [localMediaType, setLocalMediaType] = useState<'photo' | 'video' | null>(initialMediaType ?? null);
   const [isFrontCamera, setIsFrontCamera] = useState(initialIsFrontCamera ?? false);
   const [localFrontCameraUri, setLocalFrontCameraUri] = useState<string | null>(initialFrontCameraUri ?? null);
+  const [videoSegments, setVideoSegments] = useState<string[] | undefined>(initialVideoSegments);
 
   // Sync when CameraCapture navigates back with new media params
   useEffect(() => {
     if (route.params?.mediaUri) { setLocalMediaUri(route.params.mediaUri); setIsVideoPlaying(false); }
     if (route.params?.mediaType) setLocalMediaType(route.params.mediaType);
     if (route.params?.isFrontCamera !== undefined) setIsFrontCamera(route.params.isFrontCamera);
-    // Always sync frontCameraUri — if not present in new params, clear it
-    // (handles retake without dual camera clearing the old PIP)
     setLocalFrontCameraUri(route.params?.frontCameraUri ?? null);
-  }, [route.params?.mediaUri, route.params?.mediaType, route.params?.frontCameraUri, route.params?.isFrontCamera]);
+    setVideoSegments(route.params?.videoSegments);
+  }, [route.params?.mediaUri, route.params?.mediaType, route.params?.frontCameraUri, route.params?.isFrontCamera, route.params?.videoSegments]);
 
   const [activity, setActivity] = useState('');
   const [description, setDescription] = useState('');
@@ -180,18 +180,29 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
         locationName: otherSelected ? customLocation.trim() : undefined,
         activity: activity.trim(),
         description: description.trim() || undefined,
-        [localMediaType === 'video' ? 'video' : 'photo']: {
-          uri: localMediaUri,
-          name: filename,
-          type: mimeType,
-        },
+        // Multi-segment video (camera flipped during recording) — backend stitches
+        ...(videoSegments && videoSegments.length > 1
+          ? {
+              videoSegments: videoSegments.map((uri, i) => ({
+                uri,
+                name: `segment_${i}.mp4`,
+                type: 'video/mp4',
+              })),
+            }
+          : {
+              [localMediaType === 'video' ? 'video' : 'photo']: {
+                uri: localMediaUri,
+                name: filename,
+                type: mimeType,
+              },
+            }),
         ...(localFrontCameraUri && localMediaType !== 'video' ? {
           frontCameraPhoto: {
             uri: localFrontCameraUri,
             name: localFrontCameraUri.split('/').pop() ?? 'front.jpg',
             type: 'image/jpeg',
           },
-        } : (console.log('[CheckInReview] no frontCameraUri — skipping dual upload'), {})),
+        } : {}),
         workoutId: attachedWorkout?.id,
         isFrontCamera,
       });

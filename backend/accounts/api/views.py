@@ -1345,6 +1345,7 @@ def api_google_auth_view(request):
         cid for cid in [
             getattr(settings, 'GOOGLE_CLIENT_ID', ''),
             getattr(settings, 'GOOGLE_IOS_CLIENT_ID', ''),
+            getattr(settings, 'GOOGLE_IOS_DEV_CLIENT_ID', ''),
             getattr(settings, 'GOOGLE_ANDROID_CLIENT_ID', ''),
         ] if cid
     ]

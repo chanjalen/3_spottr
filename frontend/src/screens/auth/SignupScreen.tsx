@@ -109,7 +109,7 @@ export default function SignupScreen({ navigation }: Props) {
       }
 
       const clientId = Platform.OS === 'ios'
-        ? (process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? '')
+        ? (process.env.EXPO_PUBLIC_APP_VARIANT === 'development' ? (process.env.EXPO_PUBLIC_GOOGLE_IOS_DEV_CLIENT_ID ?? '') : (process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID ?? ''))
         : (process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID ?? '');
 
       exchangeCodeAsync(
@@ -214,14 +214,12 @@ export default function SignupScreen({ navigation }: Props) {
       try {
         result = await apiSignup(payload);
       } catch (firstErr: any) {
-        // Only retry on network/timeout errors (no response received).
-        // If the server responded with a 4xx/5xx, surface that immediately.
-        // Retry is safe because the backend is idempotent for unverified accounts:
-        // if the first request reached the server, it returns the existing token
-        // without sending another email.
-        if (firstErr?.response) throw firstErr;
-        // Small delay in case the server is still finishing the first request
-        await new Promise((r) => setTimeout(r, 1500));
+        const status = firstErr?.response?.status;
+        // Retry on network/timeout (no response) OR cold-start server errors (5xx).
+        // Don't retry on 4xx — those mean bad input and will fail again.
+        // Retry is safe: the backend is idempotent for unverified accounts.
+        if (status && status < 500) throw firstErr;
+        await new Promise((r) => setTimeout(r, 2000));
         result = await apiSignup(payload);
       }
       navigation.navigate('EmailVerification', {
@@ -340,28 +338,6 @@ export default function SignupScreen({ navigation }: Props) {
               <ActivityIndicator color={colors.textOnPrimary} />
             ) : (
               <Text style={styles.btnText}>Continue</Text>
-            )}
-          </Pressable>
-
-          <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.dividerLine} />
-          </View>
-
-          <Pressable
-            style={({ pressed }) => [
-              styles.googleBtn,
-              pressed && styles.btnPressed,
-              !request && styles.btnDisabled,
-            ]}
-            onPress={handleGoogleSignUp}
-            disabled={!request || loading || googleLoading}
-          >
-            {googleLoading ? (
-              <ActivityIndicator color={colors.textPrimary} />
-            ) : (
-              <Text style={styles.googleBtnText}>Continue with Google</Text>
             )}
           </Pressable>
 

@@ -1,4 +1,7 @@
 import logging
+import os
+import subprocess
+import tempfile
 from rest_framework import status
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
 from rest_framework.permissions import IsAuthenticated
@@ -8,6 +11,87 @@ from django.db import models
 from django.shortcuts import get_object_or_404
 
 logger = logging.getLogger(__name__)
+
+
+def _stitch_video_segments(segments):
+    """Concatenate uploaded video segments using ffmpeg. Returns a file-like object
+    (Django InMemoryUploadedFile) on success, or None on failure."""
+    tmp_inputs = []
+    tmp_output = None
+    try:
+        # Write each uploaded segment to a temp file
+        for seg in segments:
+            f = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
+            for chunk in seg.chunks():
+                f.write(chunk)
+            f.flush()
+            tmp_inputs.append(f.name)
+            f.close()
+
+        # Write concat list
+        list_file = tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False)
+        for path in tmp_inputs:
+            list_file.write(f"file '{path}'\n")
+        list_file.flush()
+        list_file.close()
+
+        tmp_output = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
+        tmp_output.close()
+
+        cmd = [
+            'ffmpeg', '-y',
+            '-f', 'concat', '-safe', '0',
+            '-i', list_file.name,
+            '-c', 'copy',
+            tmp_output.name,
+        ]
+        result = subprocess.run(cmd, capture_output=True, timeout=120)
+
+        if result.returncode != 0:
+            # Retry with re-encoding (handles mismatched resolutions between cameras)
+            n = len(tmp_inputs)
+            inputs = []
+            for p in tmp_inputs:
+                inputs += ['-i', p]
+            filter_in = ''.join(f'[{i}:v:0][{i}:a:0]' for i in range(n))
+            cmd2 = [
+                'ffmpeg', '-y', *inputs,
+                '-filter_complex', f'{filter_in}concat=n={n}:v=1:a=1[outv][outa]',
+                '-map', '[outv]', '-map', '[outa]',
+                '-vcodec', 'libx264', '-preset', 'fast', '-crf', '23',
+                '-acodec', 'aac',
+                tmp_output.name,
+            ]
+            result2 = subprocess.run(cmd2, capture_output=True, timeout=180)
+            if result2.returncode != 0:
+                logger.error('ffmpeg stitch failed: %s', result2.stderr.decode())
+                return None
+
+        # Wrap the stitched file as a Django-compatible file object
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        with open(tmp_output.name, 'rb') as f:
+            data = f.read()
+        return SimpleUploadedFile('stitched.mp4', data, content_type='video/mp4')
+
+    except Exception as e:
+        logger.exception('_stitch_video_segments failed: %s', e)
+        return None
+    finally:
+        for p in tmp_inputs:
+            try:
+                os.unlink(p)
+            except Exception:
+                pass
+        if tmp_output:
+            try:
+                os.unlink(tmp_output.name)
+            except Exception:
+                pass
+        try:
+            os.unlink(list_file.name)
+        except Exception:
+            pass
+
 
 from social.models import Follow
 from common.throttles import SocialWriteRateThrottle
@@ -264,8 +348,9 @@ def create_checkin(request):
     is_front_camera = str(request.data.get('is_front_camera', 'false')).lower() in ('true', '1', 'yes')
     photo = request.FILES.get('photo')
     video = request.FILES.get('video')
+    video_segments = request.FILES.getlist('video_segments[]')
     front_camera_photo = request.FILES.get('front_camera_photo')
-    print(f'[checkin] photo={bool(photo)} video={bool(video)} front_camera_photo={bool(front_camera_photo)}')
+    print(f'[checkin] photo={bool(photo)} video={bool(video)} segments={len(video_segments)} front_camera_photo={bool(front_camera_photo)}')
 
     if not activity:
         return Response({'success': False, 'error': 'Activity type is required'}, status=400)
@@ -312,6 +397,10 @@ def create_checkin(request):
             )
         except Exception as e:
             logger.exception('photo save failed for checkin %s: %s', checkin.id, e)
+
+    if video_segments:
+        # Multiple segments from a camera-flip recording — stitch them server-side
+        video = _stitch_video_segments(video_segments) or video_segments[0]
 
     if video:
         try:
