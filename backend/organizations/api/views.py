@@ -623,8 +623,8 @@ def member_activity(request, org_id):
         return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
 
     membership = OrgMember.objects.filter(org_id=org_id, user=request.user).first()
-    if not membership or membership.role not in (OrgMember.Role.ADMIN, OrgMember.Role.CREATOR):
-        return Response({'error': 'You do not have admin permissions for this organization.'}, status=status.HTTP_403_FORBIDDEN)
+    if not membership:
+        return Response({'error': 'You are not a member of this organization.'}, status=status.HTTP_403_FORBIDDEN)
 
     start_date = request.query_params.get('start_date')
     end_date = request.query_params.get('end_date')
@@ -671,8 +671,8 @@ def member_logs(request, org_id):
         return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
 
     membership = OrgMember.objects.filter(org_id=org_id, user=request.user).first()
-    if not membership or membership.role not in (OrgMember.Role.ADMIN, OrgMember.Role.CREATOR):
-        return Response({'error': 'Admin permission required.'}, status=status.HTTP_403_FORBIDDEN)
+    if not membership:
+        return Response({'error': 'You are not a member of this organization.'}, status=status.HTTP_403_FORBIDDEN)
 
     member_ids = list(OrgMember.objects.filter(org_id=org_id).values_list('user_id', flat=True))
     limit = min(int(request.query_params.get('limit', 20)), 50)
@@ -796,8 +796,8 @@ def member_status(request, org_id):
         return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
 
     membership = OrgMember.objects.filter(org_id=org_id, user=request.user).first()
-    if not membership or membership.role not in (OrgMember.Role.ADMIN, OrgMember.Role.CREATOR):
-        return Response({'error': 'Admin permission required.'}, status=status.HTTP_403_FORBIDDEN)
+    if not membership:
+        return Response({'error': 'You are not a member of this organization.'}, status=status.HTTP_403_FORBIDDEN)
 
     today = timezone.now().date()
     members_qs = OrgMember.objects.filter(org_id=org_id).select_related('user')
