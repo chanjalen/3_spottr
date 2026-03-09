@@ -418,6 +418,7 @@ def send_group_zap(sender, group_id, target_user_id):
     _check_group_member(group, sender)
     target = _get_user(target_user_id)
     _check_group_member(group, target)
+    _check_recipient_not_checked_in(target)
 
     message = Message.objects.create(
         sender=sender,

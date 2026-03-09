@@ -33,7 +33,7 @@ import CommentsSheet from '../../components/comments/CommentsSheet';
 import { useAuth } from '../../store/AuthContext';
 import { fetchProfile, toggleFollow, fetchUserPRs, savePR, deletePR, fetchMutualFollowers, apiBlockToggle, apiRemoveFollower } from '../../api/accounts';
 import ShareSheet from '../../components/feed/ShareSheet';
-import { fetchExerciseCatalog, fetchUserAchievements } from '../../api/workouts';
+import { fetchExerciseCatalog, fetchUserAchievements, fetchCalendarPosts } from '../../api/workouts';
 import { fetchUserPostThumbnails, fetchUserPosts, fetchUserCheckins, toggleLikeCheckin, CheckinItem, deletePost } from '../../api/feed';
 import CheckinViewer from '../../components/profile/CheckinViewer';
 import { fetchMyGyms, fetchUserGyms } from '../../api/gyms';
@@ -2234,19 +2234,32 @@ function CalendarTab({
   const [checkins, setCheckins] = useState<CheckinItem[]>(
     () => preloadedMonths[`${now.getFullYear()}-${now.getMonth()}`] ?? []
   );
+  const [restDayNums, setRestDayNums] = useState<Set<number>>(new Set());
 
   // When pre-loaded map arrives (or month changes), sync in pre-loaded data or fetch
   useEffect(() => {
     const preloaded = preloadedMonths[currentKey];
     if (preloaded !== undefined) {
-      // Data already available — show immediately, no network call
       setCheckins(preloaded);
     } else {
-      // Not pre-loaded — fetch without clearing first so old dots stay visible
       fetchUserCheckins(profileUsername, undefined, month + 1, year)
         .then((res) => setCheckins(res.items))
         .catch(() => {});
     }
+    // Fetch rest days for the month
+    fetchCalendarPosts(year, month + 1, profileUsername)
+      .then((res) => {
+        const nums = new Set(
+          res.posts
+            .filter((p) => p.type === 'rest')
+            .map((p) => {
+              const parts = p.date.split('-');
+              return parseInt(parts[2], 10);
+            })
+        );
+        setRestDayNums(nums);
+      })
+      .catch(() => {});
   }, [year, month, profileUsername, preloadedMonths]);
 
   // Group check-ins by day number
@@ -2324,6 +2337,7 @@ function CalendarTab({
           {Array.from({ length: daysInMonth }).map((_, i) => {
             const day = i + 1;
             const hasCheckin = checkinDayNums.has(day);
+            const isRestDay = !hasCheckin && restDayNums.has(day);
             return (
               <Pressable
                 key={day}
@@ -2331,8 +2345,12 @@ function CalendarTab({
                 onPress={() => handleDayPress(day)}
                 disabled={!hasCheckin}
               >
-                <View style={[styles.calDayBubble, hasCheckin && styles.calDayBubbleWorkout]}>
-                  <Text style={[styles.calDayText, hasCheckin && styles.calDayTextWorkout]}>
+                <View style={[
+                  styles.calDayBubble,
+                  hasCheckin && styles.calDayBubbleWorkout,
+                  isRestDay && styles.calDayBubbleRest,
+                ]}>
+                  <Text style={[styles.calDayText, hasCheckin && styles.calDayTextWorkout, isRestDay && styles.calDayTextRest]}>
                     {day}
                   </Text>
                 </View>
@@ -2944,10 +2962,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(120,120,128,0.15)',
   },
   calDayBubbleWorkout: { backgroundColor: colors.primary },
-  calDayBubbleRest: { backgroundColor: '#F59E0B' },
+  calDayBubbleRest: { backgroundColor: colors.textMuted },
   calDayText: { fontSize: 14, fontWeight: '500', color: colors.textSecondary },
   calDayTextWorkout: { color: '#fff', fontWeight: '700' },
-  calDayTextRest: { color: '#fff', fontWeight: '700' },
+  calDayTextRest: { fontSize: 16, fontWeight: '700', color: '#fff' },
 
   calModalOverlay: {
     ...StyleSheet.absoluteFillObject,

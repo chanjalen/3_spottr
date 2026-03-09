@@ -256,7 +256,7 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
   const handleTabChange = (tab: ProfileTab) => {
     setActiveTab(tab);
     if (tab === 'Admin' && isAdmin) loadAdminData();
-    if (tab === 'Activity' && isAdmin) {
+    if (tab === 'Activity' && isMember) {
       setActivitySubTab('Logs');
       loadLogs(undefined, logTypeFilter, logStartDate, logEndDate);
     }
@@ -1117,7 +1117,7 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
     );
   }
 
-  const tabs: ProfileTab[] = isAdmin ? ['Info', 'Admin', 'Activity'] : ['Info'];
+  const tabs: ProfileTab[] = isMember ? (isAdmin ? ['Info', 'Admin', 'Activity'] : ['Info', 'Activity']) : ['Info'];
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background.base }}>

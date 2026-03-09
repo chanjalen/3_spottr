@@ -60,6 +60,7 @@ export default function CreatePostScreen({ navigation }: Props) {
   const workoutSheetRef = useRef<BottomSheet>(null);
   const [recentWorkouts, setRecentWorkouts] = useState<RecentWorkout[]>([]);
   const [workoutsLoading, setWorkoutsLoading] = useState(false);
+  const [workoutsLoaded, setWorkoutsLoaded] = useState(false);
 
   // PR
   const [showPR, setShowPR] = useState(false);
@@ -120,12 +121,15 @@ export default function CreatePostScreen({ navigation }: Props) {
   // ── Workout picker ────────────────────────────────────────────────────────────
 
   const openWorkoutPicker = () => {
-    if (recentWorkouts.length === 0) {
+    if (!workoutsLoaded) {
       setWorkoutsLoading(true);
       fetchRecentWorkouts()
         .then(setRecentWorkouts)
         .catch(() => {})
-        .finally(() => setWorkoutsLoading(false));
+        .finally(() => {
+          setWorkoutsLoading(false);
+          setWorkoutsLoaded(true);
+        });
     }
     workoutSheetRef.current?.expand();
   };
@@ -473,7 +477,8 @@ export default function CreatePostScreen({ navigation }: Props) {
         ) : recentWorkouts.length === 0 ? (
           <View style={styles.sheetCenter}>
             <Feather name="activity" size={32} color={colors.textMuted} />
-            <Text style={styles.sheetEmpty}>No past workouts found</Text>
+            <Text style={styles.sheetEmpty}>No workouts logged yet</Text>
+            <Text style={[styles.sheetEmpty, { fontSize: 13, marginTop: -4 }]}>Log a workout first to attach it to a post</Text>
           </View>
         ) : (
           <BottomSheetFlatList
