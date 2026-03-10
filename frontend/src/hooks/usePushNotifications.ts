@@ -103,25 +103,19 @@ export function usePushNotifications(
           orgName: data.org_name,
           orgAvatar: data.org_avatar || null,
         });
-      } else if (type === 'like_post' && data.post_id) {
-        navigationRef.navigate('PostDetail', { postId: data.post_id, itemType: 'post' });
-      } else if (type === 'like_checkin' && data.checkin_id) {
-        navigationRef.navigate('PostDetail', { postId: data.checkin_id, itemType: 'checkin' });
-      } else if (type === 'like_comment' && data.post_id && data.item_type) {
-        navigationRef.navigate('PostDetail', { postId: data.post_id, itemType: data.item_type as 'post' | 'checkin', commentId: data.comment_id });
-      } else if (type === 'comment' && data.post_id) {
-        navigationRef.navigate('PostDetail', { postId: data.post_id, itemType: 'post', commentId: data.comment_id });
-      } else if (type === 'comment' && data.checkin_id) {
-        navigationRef.navigate('PostDetail', { postId: data.checkin_id, itemType: 'checkin', commentId: data.comment_id });
-      } else if (type === 'comment_reply' && data.post_id && data.item_type) {
-        navigationRef.navigate('PostDetail', { postId: data.post_id, itemType: data.item_type as 'post' | 'checkin', commentId: data.comment_id });
-      } else if (type === 'mention' && data.post_id && data.item_type) {
-        navigationRef.navigate('PostDetail', { postId: data.post_id, itemType: data.item_type as 'post' | 'checkin', commentId: data.comment_id });
-      } else if (type === 'friend_checkin') {
-        navigationRef.navigate('MainTabs', { screen: 'Feed' });
-      } else if (type === 'follow' && data.username) {
-        navigationRef.navigate('Profile', { username: data.username });
-      } else if (type === 'workout_invite' || type === 'workout_join_request' || type === 'join_request') {
+      } else if (
+        type === 'like_post' ||
+        type === 'like_checkin' ||
+        type === 'like_comment' ||
+        type === 'comment' ||
+        type === 'comment_reply' ||
+        type === 'mention' ||
+        type === 'follow' ||
+        type === 'friend_checkin' ||
+        type === 'workout_invite' ||
+        type === 'workout_join_request' ||
+        type === 'join_request'
+      ) {
         navigationRef.navigate('Notifications');
       } else if (type === 'gym_reminder') {
         navigationRef.navigate('MainTabs', { screen: 'Feed' });

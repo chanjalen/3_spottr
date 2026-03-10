@@ -323,6 +323,25 @@ def send_zap(sender, recipient_id):
     # Push updated unread count to the recipient.
     _push_unread_update(recipient)
 
+    # Push notification to recipient.
+    try:
+        from accounts.push import send_push_to_user
+        if getattr(recipient, 'notify_zaps', True):
+            send_push_to_user(
+                recipient,
+                title=f'⚡ @{sender.username} zapped you!',
+                body='Time to hit the gym!',
+                data={
+                    'type': 'dm',
+                    'sender_id': str(sender.id),
+                    'partner_username': sender.username,
+                    'partner_name': sender.display_name or sender.username,
+                    'partner_avatar': sender.avatar_url or '',
+                },
+            )
+    except Exception:
+        pass
+
     return message
 
 
@@ -440,6 +459,34 @@ def send_group_zap(sender, group_id, target_user_id):
 
     from messaging.tasks import fanout_group_inbox
     fanout_group_inbox.delay(str(message.id), str(group.id), str(sender.id))
+
+    # Push notification to all group members except sender.
+    try:
+        from accounts.push import send_push_to_user
+        memberships = group.members.exclude(user_id=sender.id).select_related('user')
+        for membership in memberships:
+            member = membership.user
+            if not getattr(member, 'notify_zaps', True):
+                continue
+            if str(member.id) == str(target.id):
+                push_title = f'⚡ @{sender.username} zapped you!'
+                push_body = f'Get to the gym, {target.display_name or target.username}! 💪'
+            else:
+                push_title = f'{group.name}'
+                push_body = f'⚡ @{sender.username} zapped @{target.username}! Let\'s go!'
+            send_push_to_user(
+                member,
+                title=push_title,
+                body=push_body,
+                data={
+                    'type': 'group_message',
+                    'group_id': str(group.id),
+                    'group_name': group.name,
+                    'group_avatar': group.avatar_url or '',
+                },
+            )
+    except Exception:
+        pass
 
     return message
 
