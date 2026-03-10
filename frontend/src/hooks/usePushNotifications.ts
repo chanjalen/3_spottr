@@ -55,7 +55,8 @@ export function usePushNotifications(
         const { data: expoPushToken } = await Notifications.getExpoPushTokenAsync({
           projectId: PROJECT_ID,
         });
-        await apiClient.post('/accounts/api/push-token/', { token: expoPushToken });
+        const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        await apiClient.post('/accounts/api/push-token/', { token: expoPushToken, timezone });
         tokenSavedRef.current = true;
       } catch {
         // Non-critical — push setup failure shouldn't affect app
