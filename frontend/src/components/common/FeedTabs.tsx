@@ -117,27 +117,6 @@ export default function FeedTabs({
             </View>
           </Pressable>
 
-          {/* Right tab — Main */}
-          <Pressable
-            onPress={() => onTabChange('main')}
-            onLayout={handleTabLayout(1)}
-            style={styles.tab}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: activeTab === 'main' }}
-            accessibilityLabel="Posts"
-          >
-            <Text
-              style={[
-                styles.tabLabel,
-                activeTab === 'main'
-                  ? dark ? styles.tabLabelActiveDark : styles.tabLabelActive
-                  : dark ? styles.tabLabelInactiveDark : styles.tabLabelInactive,
-              ]}
-            >
-              Posts
-            </Text>
-          </Pressable>
-
           <Animated.View style={[styles.indicator, indicatorStyle]} />
         </View>
 
