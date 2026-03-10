@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { useAuth } from './AuthContext';
+import { apiMarkTutorialSeen } from '../api/accounts';
 
 export const TUTORIAL_TOTAL_STEPS = 17;
 
@@ -56,7 +57,7 @@ const TutorialContext = createContext<TutorialState>({
 });
 
 export function TutorialProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const [isActive, setIsActive] = useState(false);
   const [step, setStep] = useState(0);
   const [nextUnlocked, setNextUnlocked] = useState(false);
@@ -70,16 +71,35 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
       setStep(0);
       return;
     }
+    // Backend flag wins — if the server says they've seen it, never show again
+    // regardless of what's in local storage (covers new devices / reinstalls).
+    if (user.has_seen_tutorial) {
+      setIsActive(false);
+      setStep(0);
+      return;
+    }
+    // Fall back to local cache for users whose backend flag isn't set yet
     getItem(tutorialKey(String(user.id))).then((val) => {
+      if (!val) {
+        // Write immediately so closing mid-tutorial doesn't reset it on next launch
+        setItem(tutorialKey(String(user.id)), '1').catch(() => {});
+      }
       setIsActive(!val);
       setStep(0);
     });
-  }, [user?.id]);
+  }, [user?.id, user?.has_seen_tutorial]);
 
   const complete = async () => {
-    if (user?.id) await setItem(tutorialKey(String(user.id)), '1');
     setIsActive(false);
     setStep(0);
+    // Persist locally
+    if (user?.id) setItem(tutorialKey(String(user.id)), '1').catch(() => {});
+    // Persist to backend so new devices / reinstalls don't show the tutorial again
+    if (user) {
+      apiMarkTutorialSeen()
+        .then(() => updateUser({ ...user, has_seen_tutorial: true }))
+        .catch(() => {});
+    }
   };
 
   const next = () => {

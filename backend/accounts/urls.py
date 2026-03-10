@@ -45,5 +45,6 @@ urlpatterns = [
     path('api/user/<str:username>/mutual-followers/', api_views.api_mutual_followers_view, name='api_mutual_followers'),
     path('api/suggested-users/', api_views.api_suggested_users_view, name='api_suggested_users'),
     path('api/push-token/', api_views.api_save_push_token_view, name='api_save_push_token'),
+    path('api/tutorial-seen/', api_views.api_mark_tutorial_seen_view, name='api_tutorial_seen'),
     path('api/send-gym-reminders/', api_views.api_send_gym_reminders_view, name='api_send_gym_reminders'),
 ]

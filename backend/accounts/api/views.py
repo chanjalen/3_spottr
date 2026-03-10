@@ -51,6 +51,7 @@ def _user_brief(user):
         'checkin_visible_orgs': user.checkin_visible_orgs,
         'checkin_visible_gyms': user.checkin_visible_gyms,
         'push_notifications': user.push_notifications,
+        'has_seen_tutorial': user.has_seen_tutorial,
     }
 
 
@@ -1423,6 +1424,14 @@ def api_google_auth_view(request):
     from rest_framework.authtoken.models import Token
     token, _ = Token.objects.get_or_create(user=user)
     return Response({'token': token.key, 'user': _user_brief(user)})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def api_mark_tutorial_seen_view(request):
+    request.user.has_seen_tutorial = True
+    request.user.save(update_fields=['has_seen_tutorial'])
+    return Response({'ok': True})
 
 
 @api_view(['POST'])

@@ -47,6 +47,8 @@ class User(AbstractBaseUser, PermissionsMixin):
     google_id = models.CharField(max_length=128, unique=True, blank=True, null=True)
     # default=5 so all existing users skip the onboarding flow
     onboarding_step = models.IntegerField(default=5)
+    # False for new users (tutorial will show); migration sets True for all pre-existing users
+    has_seen_tutorial = models.BooleanField(default=False)
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
     bio = models.TextField(max_length=500, blank=True)
 
