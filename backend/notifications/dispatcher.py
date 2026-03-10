@@ -317,10 +317,16 @@ def _friend_checkin_worker(checkin_user_id):
     Background worker: push each follower of checkin_user showing how many
     of their friends have checked in today (cumulative count as day progresses).
     """
+    import logging
     import zoneinfo
+    from datetime import datetime, timedelta
+
     from social.models import Follow, QuickWorkout
     from django.utils import timezone as tz_util
+    from django.core.cache import cache
     from accounts.models import User
+
+    worker_logger = logging.getLogger(__name__)
 
     try:
         checkin_user = User.objects.get(id=checkin_user_id)
@@ -336,56 +342,74 @@ def _friend_checkin_worker(checkin_user_id):
         return
 
     for follow_rel in followers:
-        follower = follow_rel.follower
-        if not getattr(follower, 'push_notifications', True):
-            continue
-        if not getattr(follower, 'expo_push_token', ''):
-            continue
-
         try:
-            tz = zoneinfo.ZoneInfo(follower.timezone or 'UTC')
-        except Exception:
-            tz = zoneinfo.ZoneInfo('UTC')
-        local_today = now_utc.astimezone(tz).date()
+            follower = follow_rel.follower
+            if not getattr(follower, 'push_notifications', True):
+                continue
+            if not getattr(follower, 'expo_push_token', ''):
+                continue
 
-        # All users this follower follows who checked in today
-        friend_ids = Follow.objects.filter(
-            follower=follower,
-        ).values_list('following_id', flat=True)
+            try:
+                tz = zoneinfo.ZoneInfo(follower.timezone or 'UTC')
+            except Exception:
+                tz = zoneinfo.ZoneInfo('UTC')
+            local_today = now_utc.astimezone(tz).date()
 
-        friend_usernames = list(
-            QuickWorkout.objects.filter(
-                user_id__in=friend_ids,
-                created_at__date=local_today,
+            # All users this follower follows who checked in today (timezone-aware bounds)
+            day_start = datetime(local_today.year, local_today.month, local_today.day, tzinfo=tz)
+            day_end = day_start + timedelta(days=1)
+
+            friend_ids = Follow.objects.filter(
+                follower=follower,
+            ).values_list('following_id', flat=True)
+
+            friend_usernames = list(
+                QuickWorkout.objects.filter(
+                    user_id__in=friend_ids,
+                    created_at__gte=day_start,
+                    created_at__lt=day_end,
+                )
+                .order_by('created_at')
+                .values_list('user__username', flat=True)
+                .distinct()
             )
-            .order_by('created_at')
-            .values_list('user__username', flat=True)
-            .distinct()
-        )
 
-        # Ensure the person who just checked in is first
-        if checkin_user.username in friend_usernames:
-            friend_usernames.remove(checkin_user.username)
-        friend_usernames.insert(0, checkin_user.username)
+            # Ensure the person who just checked in is first
+            if checkin_user.username in friend_usernames:
+                friend_usernames.remove(checkin_user.username)
+            friend_usernames.insert(0, checkin_user.username)
 
-        count = len(friend_usernames)
-        # Only notify for the 1st, 2nd, and 3rd friend check-in of the day
-        if count > 3:
+            count = len(friend_usernames)
+            # Only notify for the 1st, 2nd, and 3rd friend check-in of the day
+            if count > 3:
+                continue
+
+            # Dedup: one push per follower per milestone per day
+            cache_key = f'friend_checkin:{follower.id}:{local_today}:{count}'
+            if cache.get(cache_key):
+                continue
+            cache.set(cache_key, True, timeout=60 * 60 * 25)
+
+            if count == 1:
+                body = f'@{friend_usernames[0]} just checked in 💪'
+            elif count == 2:
+                body = f'@{friend_usernames[0]} and @{friend_usernames[1]} checked in today 💪'
+            else:
+                body = f'@{friend_usernames[0]} and {count - 1} others checked in today 💪'
+
+            send_push_to_user(
+                follower,
+                title='Friends are working out 💪',
+                body=body,
+                data={'type': 'friend_checkin'},
+            )
+        except Exception as e:
+            worker_logger.warning(
+                '_friend_checkin_worker: error for follower %s: %s',
+                follow_rel.follower_id,
+                e,
+            )
             continue
-
-        if count == 1:
-            body = f'@{friend_usernames[0]} just checked in 💪'
-        elif count == 2:
-            body = f'@{friend_usernames[0]} and @{friend_usernames[1]} checked in today 💪'
-        else:
-            body = f'@{friend_usernames[0]} and {count - 1} others checked in today 💪'
-
-        send_push_to_user(
-            follower,
-            title='Friends are working out 💪',
-            body=body,
-            data={'type': 'friend_checkin'},
-        )
 
 
 def notify_friend_checkin(checkin_user):

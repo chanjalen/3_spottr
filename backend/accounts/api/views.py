@@ -1428,11 +1428,21 @@ def api_google_auth_view(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def api_save_push_token_view(request):
+    import zoneinfo
     token = (request.data.get('token') or '').strip()
     if not token:
         return Response({'error': 'token is required'}, status=400)
+    update_fields = ['expo_push_token']
     request.user.expo_push_token = token
-    request.user.save(update_fields=['expo_push_token'])
+    tz_name = (request.data.get('timezone') or '').strip()
+    if tz_name:
+        try:
+            zoneinfo.ZoneInfo(tz_name)  # validate it's a real IANA timezone
+            request.user.timezone = tz_name
+            update_fields.append('timezone')
+        except (zoneinfo.ZoneInfoNotFoundError, KeyError):
+            pass
+    request.user.save(update_fields=update_fields)
     return Response({'ok': True})
 
 
