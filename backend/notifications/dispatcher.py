@@ -312,6 +312,42 @@ def notify_workout_join_request(actor, workout_invite, join_request):
     _push_notification_unread(owner)
 
 
+def notify_workout_join_request_accepted(creator, requester, workout_invite):
+    """
+    Notify the requester that the workout invite owner accepted their join request.
+    context_type='dm' → context_id=creator user ID (1-on-1 invite)
+    context_type='group' → context_id=group chat ID (multi-person invite)
+    """
+    if workout_invite.total_spots == 1:
+        context_type = 'dm'
+        context_id = str(creator.id)
+    else:
+        context_type = 'group'
+        context_id = str(workout_invite.workout_chat_id) if workout_invite.workout_chat_id else str(creator.id)
+
+    Notification.objects.create(
+        recipient=requester,
+        triggered_by=creator,
+        type=Notification.Type.JOIN_ACCEPTED,
+        target_type=Notification.TargetType.WORKOUT_INVITE,
+        target_id=str(workout_invite.id),
+        context_type=context_type,
+        context_id=context_id,
+    )
+    send_push_to_user(
+        requester,
+        title='Request accepted! 🏋️',
+        body=f'@{creator.username} accepted your request to join the workout',
+        data={
+            'type': 'join_accepted',
+            'invite_id': str(workout_invite.id),
+            'context_type': context_type,
+            'context_id': context_id,
+        },
+    )
+    _push_notification_unread(requester)
+
+
 def _friend_checkin_worker(checkin_user_id):
     """
     Background worker: push each follower of checkin_user showing how many

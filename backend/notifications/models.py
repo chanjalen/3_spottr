@@ -20,6 +20,7 @@ class Notification(BaseModel):
         MENTION = 'mention', 'Mention'
         WORKOUT_INVITE = 'workout_invite', 'Workout Invite'
         JOIN_REQUEST = 'join_request', 'Join Request'
+        JOIN_ACCEPTED = 'join_accepted', 'Join Accepted'
 
     class TargetType(models.TextChoices):
         POST = 'post', 'Post'

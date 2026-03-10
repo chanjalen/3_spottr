@@ -497,6 +497,19 @@ export default function NotificationsScreen({ navigation }: Props) {
       navigation.navigate('Profile', { username: actor.username });
     } else if (type === 'join_request' && target_type === 'group' && target_id) {
       navigation.navigate('GroupProfile', { groupId: target_id });
+    } else if (type === 'join_accepted' && item.context_type === 'dm' && item.partner_id) {
+      navigation.navigate('Chat', {
+        partnerId: item.partner_id,
+        partnerName: item.partner_name ?? item.actors[0]?.display_name ?? '',
+        partnerUsername: item.partner_username ?? item.actors[0]?.username ?? '',
+        partnerAvatar: item.partner_avatar ?? item.actors[0]?.avatar_url ?? null,
+      });
+    } else if (type === 'join_accepted' && item.context_type === 'group' && item.group_id) {
+      navigation.navigate('GroupChat', {
+        groupId: item.group_id,
+        groupName: item.group_name ?? '',
+        groupAvatar: item.group_avatar ?? null,
+      });
     } else if (type === 'workout_invite' && item.gym_id && item.gym_name) {
       navigation.navigate('GymDetail', { gymId: item.gym_id, gymName: item.gym_name });
     } else if (type === 'join_request' && target_type === 'workout_invite' && item.gym_id && item.gym_name) {

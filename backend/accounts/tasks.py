@@ -60,10 +60,10 @@ def send_gym_reminders():
         if local_hour not in REMINDER_SLOTS:
             continue
 
-        # Dedup: skip if we already sent this slot for this user today
+        # Dedup: atomic add — only the first caller proceeds; concurrent runs skip
         local_today = local_now.date()
         cache_key = f'gym_reminder:{user.id}:{local_today}:{local_hour}'
-        if cache.get(cache_key):
+        if not cache.add(cache_key, True, timeout=60 * 60 * 25):
             continue
 
         # Check checkin using local-timezone-aware UTC bounds (fixes UTC date bug)
@@ -84,8 +84,6 @@ def send_gym_reminders():
                 body=msg['body'],
                 data={'type': 'gym_reminder'},
             )
-            # Mark slot as sent for 25 hours (clears well before same slot tomorrow)
-            cache.set(cache_key, True, timeout=60 * 60 * 25)
             sent += 1
 
     logger.info('send_gym_reminders: sent %d pushes', sent)

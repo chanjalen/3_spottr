@@ -348,20 +348,35 @@ def accept_join_request(user, request_id):
 
     if invite.total_spots == 1:
         # 1-on-1 invite → send a DM
-        from messaging.models import Message
+        from messaging.models import Message, MessageRead
+        from messaging.services import (
+            _update_inbox_dm, _serialize_for_ws, _broadcast,
+            _push_unread_update, _clean_id,
+        )
         msg_content = (
             f"{creator.display_name} and {requester.display_name} have a "
             f"{invite.workout_type} workout at {gym_name} - {scheduled}"
         )
-        Message.objects.create(
+        message = Message.objects.create(
             sender=creator,
             recipient=requester,
             content=msg_content,
+            is_system=True,
         )
+        MessageRead.objects.create(message=message, user=creator)
+        _update_inbox_dm(message, creator, requester)
+        payload = _serialize_for_ws(message, recipient_id=requester.id)
+        _broadcast(f"dm_{_clean_id(creator.id)}", payload)
+        _broadcast(f"dm_{_clean_id(requester.id)}", payload)
+        _push_unread_update(requester)
     else:
         # Multi-person invite → create or reuse a group chat
         from groups.models import Group, GroupMember
-        from messaging.models import Message
+        from messaging.models import Message, MessageRead
+        from messaging.services import (
+            _serialize_for_ws, _broadcast, _clean_id, _push_unread_update,
+        )
+        from messaging.tasks import fanout_group_inbox
 
         if invite.workout_chat is None:
             group = Group.objects.create(
@@ -388,11 +403,46 @@ def accept_join_request(user, request_id):
             f"{requester.display_name} joined! "
             f"{invite.workout_type} at {gym_name} - {scheduled}"
         )
-        Message.objects.create(
+        message = Message.objects.create(
             sender=creator,
             group=invite.workout_chat,
             content=msg_content,
+            is_system=True,
         )
+        MessageRead.objects.create(message=message, user=creator)
+
+        # Update both users' InboxEntry synchronously — do NOT rely on Celery
+        # for the two participants we know about right now.
+        from messaging.models import InboxEntry
+        InboxEntry.objects.update_or_create(
+            user=creator, conversation_type='group', group=invite.workout_chat,
+            defaults={
+                'latest_message': message,
+                'latest_message_at': message.created_at,
+                'unread_count': 0,
+            },
+        )
+        InboxEntry.objects.update_or_create(
+            user=requester, conversation_type='group', group=invite.workout_chat,
+            defaults={
+                'latest_message': message,
+                'latest_message_at': message.created_at,
+                'unread_count': 1,
+            },
+        )
+
+        payload = _serialize_for_ws(message, recipient_id=None)
+        _broadcast(f"group_{_clean_id(invite.workout_chat.id)}", payload)
+        _push_unread_update(requester)
+
+        # Best-effort fan-out to any other existing members (multi-acceptance reuse case)
+        try:
+            fanout_group_inbox.delay(str(message.id), str(invite.workout_chat.id), str(creator.id))
+        except Exception:
+            pass
+
+    from notifications.dispatcher import notify_workout_join_request_accepted
+    notify_workout_join_request_accepted(creator, requester, invite)
 
     return join_request
 

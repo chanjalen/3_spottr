@@ -7,7 +7,8 @@ export type NotificationType =
   | 'pr'
   | 'mention'
   | 'workout_invite'
-  | 'join_request';
+  | 'join_request'
+  | 'join_accepted';
 
 export interface NotificationActor {
   id: string;
@@ -36,4 +37,12 @@ export interface Notification {
   gym_id?: string;
   gym_name?: string;
   action_status?: 'pending' | 'accepted';
+  // join_accepted navigation fields
+  partner_id?: string;
+  partner_username?: string;
+  partner_name?: string;
+  partner_avatar?: string | null;
+  group_id?: string;
+  group_name?: string;
+  group_avatar?: string | null;
 }
