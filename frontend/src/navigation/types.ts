@@ -31,6 +31,13 @@ export type FeedStackParamList = {
   UserList: UserListParams;
 };
 
+// ─── Posts Stack ──────────────────────────────────────────────────────────────
+export type PostsStackParamList = {
+  PostsHome: undefined;
+  Profile: ProfileParams;
+  UserList: UserListParams;
+};
+
 // ─── Gyms Stack ───────────────────────────────────────────────────────────────
 export type GymsStackParamList = {
   GymList: undefined;
@@ -58,6 +65,7 @@ export type RanksStackParamList = {
 // ─── Main Tabs ────────────────────────────────────────────────────────────────
 export type MainTabParamList = {
   Feed: NavigatorScreenParams<FeedStackParamList>;
+  Posts: NavigatorScreenParams<PostsStackParamList>;
   Gyms: NavigatorScreenParams<GymsStackParamList>;
   Social: NavigatorScreenParams<SocialStackParamList>;
   Ranks: NavigatorScreenParams<RanksStackParamList>;

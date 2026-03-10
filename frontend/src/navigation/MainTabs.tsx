@@ -1,11 +1,12 @@
 import React, { useEffect } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { MainTabParamList, FeedStackParamList, GymsStackParamList, SocialStackParamList, RanksStackParamList, RootStackParamList } from './types';
+import { MainTabParamList, FeedStackParamList, PostsStackParamList, GymsStackParamList, SocialStackParamList, RanksStackParamList, RootStackParamList } from './types';
 import CustomTabBar from '../components/navigation/CustomTabBar';
 
 // Screens
 import FeedScreen from '../screens/FeedScreen';
+import PostsScreen from '../screens/PostsScreen';
 import GymListScreen from '../screens/gyms/GymListScreen';
 import GymDetailScreen from '../screens/gyms/GymDetailScreen';
 import GymLiveActivityScreen from '../screens/gyms/GymLiveActivityScreen';
@@ -48,6 +49,17 @@ function FeedStackNavigator() {
       <FeedStack.Screen name="Profile" component={ProfileScreen} />
       <FeedStack.Screen name="UserList" component={UserListScreen} />
     </FeedStack.Navigator>
+  );
+}
+
+const PostsStack = createNativeStackNavigator<PostsStackParamList>();
+function PostsStackNavigator() {
+  return (
+    <PostsStack.Navigator id="PostsStack" screenOptions={{ headerShown: false }}>
+      <PostsStack.Screen name="PostsHome" component={PostsScreen} />
+      <PostsStack.Screen name="Profile" component={ProfileScreen} />
+      <PostsStack.Screen name="UserList" component={UserListScreen} />
+    </PostsStack.Navigator>
   );
 }
 
@@ -112,6 +124,7 @@ function TabNavigator() {
       screenOptions={{ headerShown: false }}
     >
       <Tab.Screen name="Feed" component={FeedStackNavigator} />
+      <Tab.Screen name="Posts" component={PostsStackNavigator} />
       <Tab.Screen name="Gyms" component={GymsStackNavigator} />
       <Tab.Screen name="Social" component={SocialStackNavigator} />
       <Tab.Screen name="Ranks" component={RanksStackNavigator} />

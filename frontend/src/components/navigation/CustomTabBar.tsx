@@ -23,6 +23,7 @@ import { useTutorial } from '../../store/TutorialContext';
 
 const TAB_ICONS: Record<string, React.ComponentProps<typeof Feather>['name']> = {
   Feed: 'home',
+  Posts: 'grid',
   Gyms: 'map-pin',
   Social: 'message-circle',
   Ranks: 'award',

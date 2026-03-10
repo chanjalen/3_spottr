@@ -18,9 +18,9 @@ export interface FeedSearchResults {
 // Items loaded per page: 5 for immersive snap-scroll tabs, 10 for main card feed
 const PAGE_SIZE: Record<FeedTab, number> = { friends: 5, gym: 5, org: 5, main: 10 };
 
-export function useFeed() {
+export function useFeed(initialTab: FeedTab = 'friends') {
   const [items, setItems] = useState<FeedItem[]>(USE_SAMPLE_DATA ? SAMPLE_FEED : []);
-  const [activeTab, setActiveTab] = useState<FeedTab>('friends');
+  const [activeTab, setActiveTab] = useState<FeedTab>(initialTab);
   // Start true so the spinner is visible immediately on the first render
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -56,13 +56,13 @@ export function useFeed() {
     }
   }, []);
 
-  // Load initial feed on mount — Friends/Groups is the default tab
+  // Load initial feed on mount
   useEffect(() => {
-    loadFeed('friends');
+    loadFeed(initialTab);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Keep a ref to the current active tab so the event handler never has a stale value
-  const activeTabRef = useRef<FeedTab>('friends');
+  const activeTabRef = useRef<FeedTab>(initialTab);
   useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
 
   // Refresh the feed whenever a post is created (fired by CreatePostScreen).
