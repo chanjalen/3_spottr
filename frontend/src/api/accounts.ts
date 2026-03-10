@@ -204,6 +204,10 @@ export async function apiRemoveFollower(username: string): Promise<void> {
   await apiClient.post('/accounts/api/follow-toggle/', { username, action: 'remove_follower' });
 }
 
+export async function apiMarkTutorialSeen(): Promise<void> {
+  await apiClient.post('/accounts/api/tutorial-seen/');
+}
+
 export async function apiDeleteAccount(): Promise<void> {
   await apiClient.delete('/accounts/api/me/delete/');
 }
