@@ -918,6 +918,17 @@ def get_unread_count(user):
             unread_q |= Q(org_id=m['org_id'], created_at__gt=m['last_announcements_read_at'])
         org = Announcement.objects.filter(unread_q).exclude(author=user).count()
 
+    # Add pending join requests for orgs where user is admin/creator
+    from organizations.models import OrgMember as OM, OrgJoinRequest as JR
+    admin_org_ids = list(
+        OM.objects.filter(
+            user=user,
+            role__in=(OM.Role.ADMIN, OM.Role.CREATOR),
+        ).values_list('org_id', flat=True)
+    )
+    if admin_org_ids:
+        org += JR.objects.filter(org_id__in=admin_org_ids, status=JR.Status.PENDING).count()
+
     return {'dm': dm, 'group': group, 'org': org, 'total': dm + group + org}
 
 

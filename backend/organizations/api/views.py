@@ -177,9 +177,20 @@ def org_list_create(request):
                     'has_poll': ann.id in ann_with_poll,
                     'created_at': ann.created_at.isoformat(),
                 }
+        # Pending join-request counts per org (admins/creators only see non-zero)
+        from organizations.models import OrgJoinRequest as JoinReq
+        pending_map = {}
+        if org_ids:
+            for row in (
+                JoinReq.objects
+                .filter(org_id__in=org_ids, status=JoinReq.Status.PENDING)
+                .values('org_id')
+                .annotate(count=Count('id'))
+            ):
+                pending_map[str(row['org_id'])] = row['count']
         serializer = OrgListSerializer(
             orgs, many=True,
-            context={'request': request, 'unread_map': unread_map, 'latest_ann_map': latest_ann_map},
+            context={'request': request, 'unread_map': unread_map, 'latest_ann_map': latest_ann_map, 'pending_map': pending_map},
         )
         data = serializer.data
         cache.set(cache_key, data, ORG_LIST_TTL)
@@ -354,6 +365,25 @@ def member_kick(request, org_id, user_id):
     except CannotRemoveCreatorError as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def member_add(request, org_id):
+    user_id = request.data.get('user_id')
+    if not user_id:
+        return Response({'error': 'user_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        services.add_member(request.user, org_id, user_id)
+    except OrgNotFoundError as e:
+        return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
+    except NotOrgAdminError as e:
+        return Response({'error': str(e)}, status=status.HTTP_403_FORBIDDEN)
+    except AlreadyOrgMemberError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    except OrgFullError as e:
+        return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'added': True}, status=status.HTTP_201_CREATED)
 
 
 # ---------------------------------------------------------------------------

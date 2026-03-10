@@ -15,6 +15,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Avatar from '../../components/common/Avatar';
 import ConversationSkeleton from '../../components/common/ConversationSkeleton';
 import { listMyOrgs, OrgListItem, LatestAnnouncement } from '../../api/organizations';
+import { wsManager } from '../../services/websocket';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 import { useUnreadCount } from '../../store/UnreadCountContext';
@@ -62,6 +63,16 @@ export default function AllOrgsScreen({ navigation }: Props) {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    const handler = ({ org_id, pending_requests_count }: { org_id: string; org_name: string; pending_requests_count: number }) => {
+      setOrgs(prev => prev.map(o =>
+        o.id === org_id ? { ...o, pending_requests_count } : o,
+      ));
+    };
+    wsManager.on('org_join_request', handler);
+    return () => wsManager.off('org_join_request', handler);
+  }, []);
 
   const filtered = query.trim()
     ? orgs.filter(o => o.name.toLowerCase().includes(query.toLowerCase()))
@@ -119,6 +130,7 @@ export default function AllOrgsScreen({ navigation }: Props) {
           }
           renderItem={({ item }) => {
             const ann = item.latest_announcement;
+            const totalBadge = (item.unread_count ?? 0) + (item.pending_requests_count ?? 0);
             const roleBg = item.user_role === 'creator'
               ? 'rgba(234,179,8,0.15)'
               : item.user_role === 'admin'
@@ -165,9 +177,9 @@ export default function AllOrgsScreen({ navigation }: Props) {
                     <Text style={styles.rowLast} numberOfLines={1}>{item.description}</Text>
                   )}
                 </View>
-                {item.unread_count > 0 ? (
+                {totalBadge > 0 ? (
                   <View style={styles.badge}>
-                    <Text style={styles.badgeText}>{item.unread_count}</Text>
+                    <Text style={styles.badgeText}>{totalBadge}</Text>
                   </View>
                 ) : item.user_role ? (
                   <View style={[styles.roleBadge, { backgroundColor: roleBg }]}>
