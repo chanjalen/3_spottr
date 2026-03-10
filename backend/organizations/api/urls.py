@@ -16,6 +16,7 @@ urlpatterns = [
 
     # Membership
     path('<str:org_id>/members/', views.org_members, name='org-members'),
+    path('<str:org_id>/members/add/', views.member_add, name='member-add'),
     path('<str:org_id>/join/', views.org_join, name='org-join'),
     path('<str:org_id>/leave/', views.org_leave, name='org-leave'),
     path('<str:org_id>/members/<str:user_id>/promote/', views.member_promote, name='member-promote'),

@@ -172,27 +172,6 @@ export default function CreateMenuSheet({ visible, onClose }: Props) {
             {/* ── Page 1: Post / Check-In ── */}
             <View style={[styles.page1, { width: cardWidth, height: cardHeight }]}>
               <View style={styles.panelRow}>
-                {/* Post panel */}
-                <Pressable
-                  style={({ pressed }) => [styles.panel, pressed && styles.gridItemPressed]}
-                  onPress={handlePost}
-                >
-                  <LinearGradient
-                    colors={['#4FC3E0', '#2FA4C7']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.iconCircle}
-                  >
-                    <Feather name="edit-2" size={24} color="#fff" />
-                  </LinearGradient>
-                  <Text style={styles.itemLabel}>Post</Text>
-                  <Text style={styles.itemSublabel}>
-                    Share to Main feed. Post PRs, achievements, questions, polls & show off your workouts to the world.
-                  </Text>
-                </Pressable>
-
-                <View style={styles.panelDivider} />
-
                 {/* Check-In panel */}
                 <Pressable
                   style={({ pressed }) => [styles.panel, pressed && styles.gridItemPressed]}
@@ -209,6 +188,27 @@ export default function CreateMenuSheet({ visible, onClose }: Props) {
                   <Text style={styles.itemLabel}>Check-In</Text>
                   <Text style={styles.itemSublabel}>
                     Update your streak here! Log workouts, rest days & more — everything that keeps your streak alive.
+                  </Text>
+                </Pressable>
+
+                <View style={styles.panelDivider} />
+
+                {/* Post panel */}
+                <Pressable
+                  style={({ pressed }) => [styles.panel, pressed && styles.gridItemPressed]}
+                  onPress={handlePost}
+                >
+                  <LinearGradient
+                    colors={['#4FC3E0', '#2FA4C7']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.iconCircle}
+                  >
+                    <Feather name="edit-2" size={24} color="#fff" />
+                  </LinearGradient>
+                  <Text style={styles.itemLabel}>Post</Text>
+                  <Text style={styles.itemSublabel}>
+                    Share to Main feed. Post PRs, achievements, questions, polls & show off your workouts to the world.
                   </Text>
                 </Pressable>
               </View>

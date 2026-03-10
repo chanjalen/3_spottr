@@ -281,6 +281,17 @@ export default function SocialScreen({ navigation, route }: Props) {
     return () => wsManager.off('new_announcement', handler);
   }, [me?.id]);
 
+  // Live WS update when a join request arrives — bump pending_requests_count on the org row.
+  useEffect(() => {
+    const handler = ({ org_id, pending_requests_count }: { org_id: string; org_name: string; pending_requests_count: number }) => {
+      setMyOrgs(prev => prev.map(o =>
+        o.id === org_id ? { ...o, pending_requests_count } : o,
+      ));
+    };
+    wsManager.on('org_join_request', handler);
+    return () => wsManager.off('org_join_request', handler);
+  }, []);
+
   // Keep refs in sync with state so focus effects can read the latest values.
   orgsViewRef.current = orgsView;
   orgSearchQueryRef.current = orgSearchQuery;
@@ -572,6 +583,7 @@ export default function SocialScreen({ navigation, route }: Props) {
       ? 'rgba(79,195,224,0.15)'
       : 'rgba(0,0,0,0.06)';
     const ann = item.user_role ? item.latest_announcement : null;
+    const totalBadge = (item.unread_count ?? 0) + (item.pending_requests_count ?? 0);
     return (
       <Pressable
         style={({ pressed }) => [styles.discoverRow, pressed && styles.convoRowPressed]}
@@ -616,9 +628,9 @@ export default function SocialScreen({ navigation, route }: Props) {
           )}
         </View>
         {item.user_role ? (
-          item.unread_count > 0 ? (
+          totalBadge > 0 ? (
             <View style={styles.unreadBadge}>
-              <Text style={styles.unreadBadgeText}>{item.unread_count}</Text>
+              <Text style={styles.unreadBadgeText}>{totalBadge}</Text>
             </View>
           ) : (
             <View style={[styles.joinedBadge, { backgroundColor: roleBg }]}>

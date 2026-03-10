@@ -83,6 +83,13 @@ export function UnreadCountProvider({ children }: { children: React.ReactNode })
     return () => wsManager.off('new_announcement', handler);
   }, [token, user?.id]);
 
+  // Re-fetch accurate org count whenever a join request is created, accepted, or denied.
+  useEffect(() => {
+    if (!token) return;
+    wsManager.on('org_join_request', fetch);
+    return () => wsManager.off('org_join_request', fetch);
+  }, [token, fetch]);
+
   const optimisticDecrement = useCallback((amount: number, type: 'dm' | 'group' | 'org') => {
     if (type === 'dm') setDm(prev => Math.max(0, prev - amount));
     else if (type === 'group') setGroup(prev => Math.max(0, prev - amount));

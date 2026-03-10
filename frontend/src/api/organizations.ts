@@ -25,6 +25,7 @@ export interface OrgListItem {
   member_count: number;
   user_role: OrgRole | null;
   unread_count: number;
+  pending_requests_count: number;
   latest_announcement: LatestAnnouncement | null;
   pending_request: boolean;
   created_at: string;
@@ -266,6 +267,10 @@ export async function demoteMember(orgId: string, userId: string): Promise<void>
 
 export async function kickMember(orgId: string, userId: string): Promise<void> {
   await apiClient.delete(`/api/organizations/${orgId}/members/${userId}/kick/`);
+}
+
+export async function addOrgMember(orgId: string, userId: string): Promise<void> {
+  await apiClient.post(`/api/organizations/${orgId}/members/add/`, { user_id: userId });
 }
 
 // ---------------------------------------------------------------------------

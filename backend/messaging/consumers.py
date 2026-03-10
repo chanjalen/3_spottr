@@ -187,6 +187,15 @@ class MessagingConsumer(AsyncWebsocketConsumer):
             'count': event['count'],
         }))
 
+    async def org_join_request(self, event):
+        """Forward a new org join request event to admin/creator clients."""
+        await self.send(text_data=json.dumps({
+            'type': 'org_join_request',
+            'org_id': event['org_id'],
+            'org_name': event['org_name'],
+            'pending_requests_count': event['pending_requests_count'],
+        }))
+
     # ── DB helpers (must be async-safe) ──────────────────────────────────────
 
     @database_sync_to_async

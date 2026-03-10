@@ -809,6 +809,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
   const [userRole, setUserRole] = useState<'creator' | 'admin' | 'member' | null>(
     () => staleCache.getSync<CachedOrgAnn>(`org:ann:${orgId}`)?.userRole ?? null,
   );
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
 
   // ── Long-press context menu ──────────────────────────────────────────────
   const [contextItem, setContextItem] = useState<OptimisticAnnouncement | null>(null);
@@ -910,6 +911,7 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
       setHasMore(page.has_more);
       setOldestId(page.oldest_id);
       setUserRole(detail.user_role);
+      setPendingRequestsCount(detail.pending_requests_count ?? 0);
       // Scroll to newest message after layout completes.
       // Keep scrolling for 1.5s so images loading in don't push us back up.
       setTimeout(() => {
@@ -1268,7 +1270,12 @@ export default function OrgAnnouncementsScreen({ navigation, route }: Props) {
           >
             <Avatar uri={orgAvatar} name={orgName} size={34} />
             <View style={{ marginLeft: 10, flex: 1 }}>
-              <Text style={styles.headerTitle} numberOfLines={1}>{orgName}</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.headerTitle} numberOfLines={1}>{orgName}</Text>
+                {pendingRequestsCount > 0 && (
+                  <View style={styles.headerRequestDot} />
+                )}
+              </View>
               <Text style={styles.headerSubtitle}>Announcements</Text>
             </View>
           </Pressable>
@@ -1650,6 +1657,7 @@ const styles = StyleSheet.create({
   backBtn: { marginRight: spacing.sm, padding: 4 },
   headerTitle: { fontSize: typography.size.md, fontWeight: '700', color: colors.textPrimary },
   headerSubtitle: { fontSize: typography.size.xs, color: colors.textSecondary },
+  headerRequestDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#ef4444' },
   profileBtn: { padding: 6 },
 
   dividerRow: {

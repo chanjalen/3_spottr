@@ -329,7 +329,65 @@ def create_join_request(user, org_id, message=''):
     ).exists():
         raise DuplicateJoinRequestError("You already have a pending join request for this organization.")
 
-    return OrgJoinRequest.objects.create(org=org, user=user, message=message)
+    join_request = OrgJoinRequest.objects.create(org=org, user=user, message=message)
+
+    # WS push + cache bust for all admins/creators
+    _push_pending_requests_update(org)
+
+    # Push notification (fire-and-forget)
+    try:
+        from accounts.push import send_push_to_user
+        admins = OrgMember.objects.filter(
+            org=org,
+            role__in=(OrgMember.Role.ADMIN, OrgMember.Role.CREATOR),
+        ).select_related('user').exclude(user=user)
+        for admin_membership in admins:
+            send_push_to_user(
+                admin_membership.user,
+                title=org.name,
+                body=f'@{user.username} wants to join',
+                data={
+                    'type': 'org_join_request',
+                    'org_id': str(org.id),
+                    'org_name': org.name,
+                    'org_avatar': org.avatar_url or '',
+                },
+            )
+    except Exception:
+        pass
+
+    return join_request
+
+
+def _push_pending_requests_update(org):
+    """After any join-request status change, WS-push the new count to all admins/creators and bust their caches."""
+    try:
+        from channels.layers import get_channel_layer
+        from asgiref.sync import async_to_sync
+        from django.core.cache import cache
+
+        pending_count = OrgJoinRequest.objects.filter(
+            org=org, status=OrgJoinRequest.Status.PENDING
+        ).count()
+
+        channel_layer = get_channel_layer()
+        admins = OrgMember.objects.filter(
+            org=org,
+            role__in=(OrgMember.Role.ADMIN, OrgMember.Role.CREATOR),
+        ).select_related('user')
+
+        for admin_membership in admins:
+            cache.delete(f'org:list:{admin_membership.user.id}')
+            if channel_layer:
+                dm_group = f"dm_{str(admin_membership.user.id).replace('-', '')}"
+                async_to_sync(channel_layer.group_send)(dm_group, {
+                    'type': 'org_join_request',
+                    'org_id': str(org.id),
+                    'org_name': org.name,
+                    'pending_requests_count': pending_count,
+                })
+    except Exception:
+        pass
 
 
 def list_join_requests(admin_user, org_id):
@@ -355,6 +413,7 @@ def accept_join_request(admin_user, request_id):
         user=join_request.user,
         defaults={'role': OrgMember.Role.MEMBER},
     )
+    _push_pending_requests_update(join_request.org)
     return join_request
 
 
@@ -367,6 +426,7 @@ def deny_join_request(admin_user, request_id):
     _require_admin(join_request.org, admin_user)
     join_request.status = OrgJoinRequest.Status.DENIED
     join_request.save(update_fields=['status', 'updated_at'])
+    _push_pending_requests_update(join_request.org)
     return join_request
 
 

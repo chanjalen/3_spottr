@@ -76,7 +76,7 @@ export type RootStackParamList = {
   Chat: { partnerId: string; partnerName: string; partnerUsername: string; partnerAvatar: string | null };
   GroupChat: { groupId: string; groupName: string; groupAvatar: string | null };
   OrgAnnouncements: { orgId: string; orgName: string; orgAvatar: string | null };
-  OrgProfile: { orgId: string };
+  OrgProfile: { orgId: string; initialTab?: 'Info' | 'Requests' | 'Activity' };
   UserList: UserListParams;
   CreatePost: undefined;
   AllDMs: undefined;

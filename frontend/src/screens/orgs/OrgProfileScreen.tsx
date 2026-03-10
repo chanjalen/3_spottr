@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -30,6 +30,7 @@ import {
   promoteMember,
   demoteMember,
   kickMember,
+  addOrgMember,
   updateOrg,
   updateOrgAvatar,
   deleteOrg,
@@ -50,6 +51,9 @@ import {
   TodayCheckin,
   TodayWorkout,
 } from '../../api/organizations';
+import { fetchFriends } from '../../api/accounts';
+import { UserBrief } from '../../types/user';
+import { wsManager } from '../../services/websocket';
 import RangeCalendar from '../../components/common/RangeCalendar';
 import { useAuth } from '../../store/AuthContext';
 import { colors, spacing, typography } from '../../theme';
@@ -61,7 +65,7 @@ type Props = {
   route: RouteProp<RootStackParamList, 'OrgProfile'>;
 };
 
-type ProfileTab = 'Info' | 'Admin' | 'Activity';
+type ProfileTab = 'Info' | 'Requests' | 'Activity';
 type ActivitySubTab = 'Logs' | 'Users' | 'Stats';
 type SettingsTab = 'info' | 'danger';
 
@@ -89,13 +93,13 @@ function fmtRelativeTime(isoStr: string): string {
 export default function OrgProfileScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
   const { user: me } = useAuth();
-  const { orgId } = route.params;
+  const { orgId, initialTab } = route.params;
 
   const [loading, setLoading] = useState(true);
   const [org, setOrg] = useState<OrgDetail | null>(null);
   const [members, setMembers] = useState<OrgMember[]>([]);
   const [requests, setRequests] = useState<OrgJoinRequest[]>([]);
-  const [activeTab, setActiveTab] = useState<ProfileTab>('Info');
+  const [activeTab, setActiveTab] = useState<ProfileTab>(initialTab ?? 'Info');
   const [actingOn, setActingOn] = useState<string | null>(null);
 
   // ── Edit modal ───────────────────────────────────────────────────────────
@@ -161,6 +165,47 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
   const [joinCode, setJoinCode] = useState('');
   const [joiningCode, setJoiningCode] = useState(false);
 
+  // ── Add people modal ─────────────────────────────────────────────────────
+  const [addPeopleVisible, setAddPeopleVisible] = useState(false);
+  const [friends, setFriends] = useState<UserBrief[]>([]);
+  const [friendsLoading, setFriendsLoading] = useState(false);
+  const [addingUser, setAddingUser] = useState<string | null>(null);
+  const [addedUsers, setAddedUsers] = useState<Set<string>>(new Set());
+
+  const openAddPeople = async () => {
+    setAddPeopleVisible(true);
+    setFriendsLoading(true);
+    try {
+      const data = await fetchFriends();
+      const memberIds = new Set(members.map((m) => m.user_id));
+      setFriends(data.filter((f) => !memberIds.has(f.id)));
+    } catch {
+      Alert.alert('Error', 'Could not load friends.');
+    } finally {
+      setFriendsLoading(false);
+    }
+  };
+
+  const handleAddFriend = async (friend: UserBrief) => {
+    setAddingUser(friend.id);
+    try {
+      await addOrgMember(orgId, friend.id);
+      setAddedUsers((prev) => new Set(prev).add(friend.id));
+      setMembers((prev) => [...prev, {
+        user_id: friend.id,
+        username: friend.username,
+        display_name: friend.display_name,
+        avatar_url: friend.avatar_url,
+        role: 'member',
+        joined_at: new Date().toISOString(),
+      }]);
+    } catch (e: any) {
+      Alert.alert('Error', e?.response?.data?.error ?? 'Could not add member.');
+    } finally {
+      setAddingUser(null);
+    }
+  };
+
   const isAdmin = org?.user_role === 'creator' || org?.user_role === 'admin';
   const isCreator = org?.user_role === 'creator';
   const isMember = !!org?.user_role;
@@ -199,6 +244,17 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
   }, [orgId, isAdmin]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // Sync pending_requests_count live via WS (new requests in, or accept/deny by any admin)
+  useEffect(() => {
+    const handler = ({ org_id, pending_requests_count }: { org_id: string; org_name: string; pending_requests_count: number }) => {
+      if (org_id !== orgId) return;
+      setOrg(prev => prev ? { ...prev, pending_requests_count } : prev);
+      if (isAdmin) loadAdminData();
+    };
+    wsManager.on('org_join_request', handler);
+    return () => wsManager.off('org_join_request', handler);
+  }, [orgId, isAdmin, loadAdminData]);
 
   const loadActivityData = useCallback(async (start: Date | null, end: Date | null) => {
     setActivityLoading(true);
@@ -256,7 +312,7 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
   // Load admin data when switching to Admin/Activity tab
   const handleTabChange = (tab: ProfileTab) => {
     setActiveTab(tab);
-    if (tab === 'Admin' && isAdmin) loadAdminData();
+    if (tab === 'Requests' && isAdmin) loadAdminData();
     if (tab === 'Activity' && isMember) {
       setActivitySubTab('Logs');
       loadLogs(undefined, logTypeFilter, logStartDate, logEndDate);
@@ -272,12 +328,17 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
 
   // ── Join requests ────────────────────────────────────────────────────────
 
+  const decrementPendingCount = () => {
+    setOrg(prev => prev ? { ...prev, pending_requests_count: Math.max(0, (prev.pending_requests_count ?? 1) - 1) } : prev);
+  };
+
   const handleAccept = async (requestId: string) => {
     setActingOn(requestId);
     try {
       await acceptJoinRequest(requestId);
       setRequests(prev => prev.filter(r => r.id !== requestId));
-      load(); // refresh member count
+      decrementPendingCount();
+      load(); // refresh member list
     } catch {
       Alert.alert('Error', 'Failed to accept request.');
     } finally {
@@ -290,6 +351,7 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
     try {
       await denyJoinRequest(requestId);
       setRequests(prev => prev.filter(r => r.id !== requestId));
+      decrementPendingCount();
     } catch {
       Alert.alert('Error', 'Failed to deny request.');
     } finally {
@@ -532,6 +594,12 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
             <Feather name="user" size={16} color={colors.textMuted} />
             <Text style={styles.infoText}>Created by @{org?.created_by_username}</Text>
           </View>
+          {isAdmin && (
+            <Pressable style={({ pressed }) => [styles.addPeopleBtn, pressed && { opacity: 0.7 }]} onPress={openAddPeople}>
+              <Feather name="user-plus" size={14} color={colors.primary} />
+              <Text style={styles.addPeopleBtnText}>Add People</Text>
+            </Pressable>
+          )}
         </View>
         {isMember && org?.invite_code && (
           <View style={styles.inviteCodeCard}>
@@ -1118,7 +1186,7 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
     );
   }
 
-  const tabs: ProfileTab[] = isMember ? (isAdmin ? ['Info', 'Admin', 'Activity'] : ['Info', 'Activity']) : ['Info'];
+  const tabs: ProfileTab[] = isMember ? (isAdmin ? ['Info', 'Requests', 'Activity'] : ['Info', 'Activity']) : ['Info'];
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background.base }}>
@@ -1185,25 +1253,88 @@ export default function OrgProfileScreen({ navigation, route }: Props) {
       {/* Tabs */}
       {tabs.length > 1 && (
         <View style={styles.tabRow}>
-          {tabs.map((tab) => (
-            <Pressable
-              key={tab}
-              style={styles.tab}
-              onPress={() => handleTabChange(tab)}
-            >
-              <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
-                {tab}
-              </Text>
-              {activeTab === tab && <View style={styles.tabIndicator} />}
-            </Pressable>
-          ))}
+          {tabs.map((tab) => {
+            const pendingCount = org?.pending_requests_count ?? 0;
+            const showBadge = tab === 'Requests' && pendingCount > 0;
+            return (
+              <Pressable
+                key={tab}
+                style={styles.tab}
+                onPress={() => handleTabChange(tab)}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                  <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
+                    {tab}
+                  </Text>
+                  {showBadge && (
+                    <View style={styles.tabBadge}>
+                      <Text style={styles.tabBadgeText}>{pendingCount}</Text>
+                    </View>
+                  )}
+                </View>
+                {activeTab === tab && <View style={styles.tabIndicator} />}
+              </Pressable>
+            );
+          })}
         </View>
       )}
 
       {/* Tab content */}
       {activeTab === 'Info' && renderInfoTab()}
-      {activeTab === 'Admin' && renderAdminTab()}
+      {activeTab === 'Requests' && renderAdminTab()}
       {activeTab === 'Activity' && renderActivityTab()}
+
+      {/* Add People Modal */}
+      <Modal visible={addPeopleVisible} transparent animationType="slide" onRequestClose={() => setAddPeopleVisible(false)}>
+        <View style={styles.settingsOverlay}>
+          <View style={[styles.settingsCard, { padding: spacing.base, maxHeight: '75%' }]}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: spacing.md }}>
+              <Text style={styles.settingsTitle}>Add People</Text>
+              <Pressable onPress={() => setAddPeopleVisible(false)} hitSlop={12}>
+                <Feather name="x" size={20} color={colors.textPrimary} />
+              </Pressable>
+            </View>
+            {friendsLoading ? (
+              <ActivityIndicator color={colors.primary} style={{ marginVertical: spacing.xl }} />
+            ) : friends.length === 0 ? (
+              <Text style={{ color: colors.textMuted, textAlign: 'center', marginVertical: spacing.xl }}>
+                No friends to add — they're either already members or you have no mutual follows.
+              </Text>
+            ) : (
+              <FlatList
+                data={friends}
+                keyExtractor={(f) => f.id}
+                renderItem={({ item: friend }) => {
+                  const added = addedUsers.has(friend.id);
+                  const loading = addingUser === friend.id;
+                  return (
+                    <View style={styles.memberRow}>
+                      <Avatar uri={friend.avatar_url} name={friend.display_name} size={40} />
+                      <View style={styles.memberInfo}>
+                        <Text style={styles.memberName}>{friend.display_name}</Text>
+                        <Text style={styles.memberUsername}>@{friend.username}</Text>
+                      </View>
+                      <Pressable
+                        style={[styles.addFriendBtn, added && styles.addFriendBtnAdded]}
+                        onPress={() => !added && !loading && handleAddFriend(friend)}
+                        disabled={added || loading}
+                      >
+                        {loading ? (
+                          <ActivityIndicator size="small" color={colors.primary} />
+                        ) : (
+                          <Text style={[styles.addFriendBtnText, added && styles.addFriendBtnTextAdded]}>
+                            {added ? 'Added' : 'Add'}
+                          </Text>
+                        )}
+                      </Pressable>
+                    </View>
+                  );
+                }}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Organization Settings Modal */}
       <Modal
@@ -1479,6 +1610,12 @@ const styles = StyleSheet.create({
   tab: { flex: 1, alignItems: 'center', paddingVertical: spacing.md },
   tabText: { fontSize: typography.size.sm, fontWeight: '500', color: colors.textSecondary },
   tabTextActive: { fontWeight: '700', color: colors.textPrimary },
+  tabBadge: {
+    minWidth: 18, height: 18, borderRadius: 9,
+    backgroundColor: '#ef4444',
+    alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4,
+  },
+  tabBadgeText: { fontSize: 10, fontWeight: '700', color: '#fff' },
   tabIndicator: {
     position: 'absolute',
     bottom: 0,
@@ -1761,6 +1898,46 @@ const styles = StyleSheet.create({
   },
   saveBtnDisabled: { opacity: 0.5 },
   saveBtnText: { color: '#fff', fontWeight: '700', fontSize: typography.size.sm },
+
+  // ── Add People ────────────────────────────────────────────────────────────
+  addPeopleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+    alignSelf: 'flex-start',
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.primary,
+  },
+  addPeopleBtnText: {
+    fontSize: typography.size.base,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  addFriendBtn: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    minWidth: 60,
+    alignItems: 'center',
+  },
+  addFriendBtnAdded: {
+    borderColor: colors.border.subtle,
+    backgroundColor: colors.background.elevated,
+  },
+  addFriendBtnText: {
+    fontSize: typography.size.sm,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  addFriendBtnTextAdded: {
+    color: colors.textMuted,
+  },
 
   // ── Organization Settings Modal (centered) ────────────────────────────────
   settingsOverlay: {

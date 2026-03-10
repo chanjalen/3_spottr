@@ -91,6 +91,11 @@ export function usePushNotifications(
           groupName: data.group_name,
           groupAvatar: data.group_avatar || null,
         });
+      } else if (type === 'org_join_request' && data.org_id) {
+        navigationRef.navigate('OrgProfile', {
+          orgId: data.org_id,
+          initialTab: 'Requests',
+        });
       } else if (type === 'org_announcement' && data.org_id && data.org_name) {
         navigationRef.navigate('OrgAnnouncements', {
           orgId: data.org_id,

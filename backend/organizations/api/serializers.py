@@ -58,10 +58,11 @@ class OrgListSerializer(serializers.ModelSerializer):
     unread_count = serializers.SerializerMethodField()
     latest_announcement = serializers.SerializerMethodField()
     pending_request = serializers.SerializerMethodField()
+    pending_requests_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Organization
-        fields = ['id', 'name', 'description', 'privacy', 'avatar_url', 'member_count', 'user_role', 'unread_count', 'latest_announcement', 'pending_request', 'created_at']
+        fields = ['id', 'name', 'description', 'privacy', 'avatar_url', 'member_count', 'user_role', 'unread_count', 'latest_announcement', 'pending_request', 'pending_requests_count', 'created_at']
 
     def get_avatar_url(self, obj):
         return obj.avatar_url
@@ -89,6 +90,23 @@ class OrgListSerializer(serializers.ModelSerializer):
         if request and request.user.is_authenticated:
             return OrgJoinRequest.objects.filter(org=obj, user=request.user, status='pending').exists()
         return False
+
+    def get_pending_requests_count(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return 0
+        # Use pre-built map from view if available (avoids N+1)
+        pending_map = self.context.get('pending_map')
+        if pending_map is not None:
+            member = OrgMember.objects.filter(org=obj, user=request.user).first()
+            if not member or member.role not in (OrgMember.Role.ADMIN, OrgMember.Role.CREATOR):
+                return 0
+            return pending_map.get(str(obj.id), 0)
+        # Fallback for detail view — direct count
+        member = OrgMember.objects.filter(org=obj, user=request.user).first()
+        if not member or member.role not in (OrgMember.Role.ADMIN, OrgMember.Role.CREATOR):
+            return 0
+        return OrgJoinRequest.objects.filter(org=obj, status=OrgJoinRequest.Status.PENDING).count()
 
 
 class OrgDetailSerializer(OrgListSerializer):
