@@ -7,7 +7,7 @@ import {
   Platform,
 } from 'react-native';
 import { BottomTabBarProps } from '@react-navigation/bottom-tabs';
-import { Feather } from '@expo/vector-icons';
+import { Feather, Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useSharedValue,
@@ -26,7 +26,6 @@ const TAB_ICONS: Record<string, React.ComponentProps<typeof Feather>['name']> = 
   Posts: 'grid',
   Gyms: 'map-pin',
   Social: 'message-circle',
-  Ranks: 'award',
 };
 
 export default function CustomTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
@@ -82,6 +81,7 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
             return (
               <NavItem
                 key={route.key}
+                routeName={route.name}
                 iconName={iconName}
                 isActive={isFocused}
                 onPress={onPress}
@@ -104,6 +104,7 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
 // ─── Nav Item ────────────────────────────────────────────────────────────────
 
 interface NavItemProps {
+  routeName: string;
   iconName: React.ComponentProps<typeof Feather>['name'];
   isActive: boolean;
   onPress: () => void;
@@ -111,7 +112,7 @@ interface NavItemProps {
   badgeCount?: number;
 }
 
-function NavItem({ iconName, isActive, onPress, accessibilityLabel, badgeCount = 0 }: NavItemProps) {
+function NavItem({ routeName, iconName, isActive, onPress, accessibilityLabel, badgeCount = 0 }: NavItemProps) {
   const scale = useSharedValue(1);
   const animStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
@@ -137,11 +138,19 @@ function NavItem({ iconName, isActive, onPress, accessibilityLabel, badgeCount =
     >
       <Animated.View style={[styles.navItemInner, animStyle]}>
         <View>
-          <Feather
-            name={iconName}
-            size={24}
-            color={isActive ? colors.iconActive : colors.iconInactive}
-          />
+          {routeName === 'Ranks' ? (
+            <Ionicons
+              name="flame"
+              size={24}
+              color={isActive ? colors.iconActive : colors.iconInactive}
+            />
+          ) : (
+            <Feather
+              name={iconName}
+              size={24}
+              color={isActive ? colors.iconActive : colors.iconInactive}
+            />
+          )}
           {badgeCount > 0 && (
             <View style={styles.badge}>
               <Text style={styles.badgeText}>{badgeCount > 99 ? '99+' : badgeCount}</Text>
