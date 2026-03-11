@@ -638,6 +638,8 @@ export default function ProfileScreen({ navigation, route }: Props) {
       const grouped: Record<string, CalViewerDay> = {};
       items.forEach((ci) => {
         const d = new Date(ci.created_at);
+        // 3AM rule: activities before 3AM count for the previous day
+        if (d.getHours() < 3) d.setDate(d.getDate() - 1);
         const k = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
         if (!grouped[k]) grouped[k] = { year: d.getFullYear(), month: d.getMonth(), day: d.getDate(), checkins: [] };
         grouped[k].checkins.push(ci);
@@ -2267,6 +2269,8 @@ function CalendarTab({
     const map = new Map<number, CheckinItem[]>();
     for (const c of checkins) {
       const d = new Date(c.created_at);
+      // 3AM rule: activities before 3AM count for the previous day
+      if (d.getHours() < 3) d.setDate(d.getDate() - 1);
       if (d.getFullYear() === year && d.getMonth() === month) {
         const day = d.getDate();
         if (!map.has(day)) map.set(day, []);
