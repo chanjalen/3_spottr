@@ -239,7 +239,7 @@ export default function GymDetailScreen({ navigation, route }: Props) {
     setInviteLoading(true);
     try {
       const scheduled = inviteTime.toISOString();
-      const expires = new Date(inviteTime.getTime() + 24 * 60 * 60 * 1000).toISOString();
+      const expires = inviteTime.toISOString();
       const newInvite = await createWorkoutInvite({
         gym_id: gymId,
         workout_type: inviteWorkoutType.trim(),

@@ -344,6 +344,26 @@ def notification_list(request):
                         except QuickWorkout.DoesNotExist:
                             pass
 
+            elif notif.type == Notification.Type.JOIN_ACCEPTED:
+                item['message'] = f"{actor_name} accepted your request to join the workout"
+                if notif.context_type == 'dm':
+                    # context_id = creator's user ID → navigate to Chat
+                    item['partner_id'] = notif.context_id
+                    if actor:
+                        item['partner_username'] = actor.username
+                        item['partner_name'] = actor.display_name or actor.username
+                        item['partner_avatar'] = _user_avatar(actor)
+                elif notif.context_type == 'group':
+                    # context_id = group chat ID → navigate to GroupChat
+                    item['group_id'] = notif.context_id
+                    from groups.models import Group as GroupModel
+                    try:
+                        grp = GroupModel.objects.get(id=notif.context_id)
+                        item['group_name'] = grp.name
+                        item['group_avatar'] = grp.avatar_url
+                    except GroupModel.DoesNotExist:
+                        pass
+
             elif notif.type == Notification.Type.MENTION:
                 if notif.target_type == Notification.TargetType.POST:
                     item['message'] = f"{actor_name} mentioned you in a post"
