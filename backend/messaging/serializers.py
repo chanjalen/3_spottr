@@ -17,6 +17,7 @@ class SharedPostSerializer(serializers.Serializer):
     description = serializers.CharField(allow_blank=True, allow_null=True, required=False)
     photo_url = serializers.SerializerMethodField()
     video_url = serializers.SerializerMethodField()
+    media_items = serializers.SerializerMethodField()
     like_count = serializers.SerializerMethodField()
     comment_count = serializers.SerializerMethodField()
     workout = serializers.SerializerMethodField()
@@ -51,6 +52,14 @@ class SharedPostSerializer(serializers.Serializer):
             from media.utils import build_media_url
             return build_media_url(obj.video.name)
         return None
+
+    def get_media_items(self, obj):
+        from media.utils import build_media_url
+        items = []
+        for pm in obj.media_items.order_by('order'):
+            if pm.file:
+                items.append({'url': build_media_url(pm.file.name), 'kind': pm.kind})
+        return items
 
     def get_like_count(self, obj):
         from social.models import Reaction

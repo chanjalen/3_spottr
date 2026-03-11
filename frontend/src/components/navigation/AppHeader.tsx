@@ -81,24 +81,23 @@ export default function AppHeader() {
           </Pressable>
         </View>
 
-        {/* Center: Spottr logo text — absolutely centered so side zones don't affect it */}
-        <Text style={styles.logoText} pointerEvents="none">Spottr</Text>
+        {/* Center: Spottr logo — tapping restarts the tutorial */}
+        <Pressable
+          style={styles.logoBtn}
+          onPress={() => {
+            if (!tutorialActive) {
+              restartTutorial();
+              navigation.dispatch(CommonActions.navigate({ name: 'MainTabs', params: { screen: 'Feed' } }));
+            }
+          }}
+          accessibilityLabel="Spottr — tap to start tutorial"
+          accessibilityRole="button"
+        >
+          <Text style={styles.logoText}>Spottr</Text>
+        </Pressable>
 
-        {/* Right: info button + streak pill + user avatar */}
+        {/* Right: streak pill + user avatar */}
         <View style={styles.rightZone}>
-          {!tutorialActive && (
-            <Pressable
-              style={styles.infoBtn}
-              onPress={() => {
-                restartTutorial();
-                navigation.dispatch(CommonActions.navigate({ name: 'MainTabs', params: { screen: 'Feed' } }));
-              }}
-              accessibilityLabel="Start tutorial"
-              accessibilityRole="button"
-            >
-              <Text style={styles.infoBtnText}>i</Text>
-            </Pressable>
-          )}
           <Pressable
             style={styles.streakPill}
             onPress={() => {
@@ -172,11 +171,13 @@ const styles = StyleSheet.create({
     color: colors.textOnPrimary,
     lineHeight: 12,
   },
-  logoText: {
+  logoBtn: {
     position: 'absolute',
     left: 0,
     right: 0,
-    textAlign: 'center',
+    alignItems: 'center',
+  },
+  logoText: {
     fontSize: 19,
     fontWeight: '700',
     color: colors.textOnPrimary,
@@ -186,21 +187,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-  },
-  infoBtn: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 1.5,
-    borderColor: colors.textMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  infoBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: colors.textMuted,
-    lineHeight: 14,
   },
   streakPill: {
     flexDirection: 'row',

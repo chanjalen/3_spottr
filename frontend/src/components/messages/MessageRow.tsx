@@ -99,16 +99,37 @@ export function SharedPostCard({ post, onPress }: Omit<SharedPostCardProps, 'isO
       if (w.duration) subtitleParts.push(w.duration);
     }
 
+    const firstMedia = post.media_items?.[0];
+    const immersivePhotoUrl = firstMedia?.kind === 'photo' ? firstMedia.url : post.photo_url;
+    const immersiveVideoUrl = firstMedia?.kind === 'video' ? firstMedia.url : post.video_url;
+    const immersiveMediaCount = post.media_items?.length ?? 0;
+
     return (
       <Pressable onPress={onPress} style={styles.sharedImmersiveCard} disabled={!onPress}>
-        {post.photo_url ? (
-          <Image source={{ uri: getImageUrl(post.photo_url, 'feed') ?? post.photo_url }} style={[styles.sharedImmersiveThumb, post.item_type === 'checkin' && post.is_front_camera && { transform: [{ scaleX: -1 }] }]} contentFit="cover" />
-        ) : post.video_url ? (
-          <VideoThumbnail
-            videoUrl={post.video_url}
-            style={[styles.sharedImmersiveThumb, post.item_type === 'checkin' && { transform: [{ scaleX: -1 }] }]}
-            iconSize={32}
-          />
+        {immersivePhotoUrl ? (
+          <View style={styles.sharedImmersiveThumb}>
+            <Image source={{ uri: getImageUrl(immersivePhotoUrl, 'feed') ?? immersivePhotoUrl }} style={[StyleSheet.absoluteFill, post.item_type === 'checkin' && post.is_front_camera && { transform: [{ scaleX: -1 }] }]} contentFit="cover" />
+            {immersiveMediaCount > 1 && (
+              <View style={styles.mediaCountBadge}>
+                <Feather name="copy" size={10} color="#fff" />
+                <Text style={styles.mediaCountText}>{immersiveMediaCount}</Text>
+              </View>
+            )}
+          </View>
+        ) : immersiveVideoUrl ? (
+          <View style={styles.sharedImmersiveThumb}>
+            <VideoThumbnail
+              videoUrl={immersiveVideoUrl}
+              style={[StyleSheet.absoluteFill, post.item_type === 'checkin' && { transform: [{ scaleX: -1 }] }]}
+              iconSize={32}
+            />
+            {immersiveMediaCount > 1 && (
+              <View style={styles.mediaCountBadge}>
+                <Feather name="copy" size={10} color="#fff" />
+                <Text style={styles.mediaCountText}>{immersiveMediaCount}</Text>
+              </View>
+            )}
+          </View>
         ) : (
           <View style={[styles.sharedImmersiveThumb, styles.sharedImmersivePlaceholder]}>
             <Feather name={post.item_type === 'checkin' ? 'map-pin' : 'activity'} size={30} color={colors.textMuted} />
@@ -149,13 +170,34 @@ export function SharedPostCard({ post, onPress }: Omit<SharedPostCardProps, 'isO
   }
 
   // Regular main-feed post — mini FeedCard style (photo on top, content below)
+  const firstMedia = post.media_items?.[0];
+  const compactPhotoUrl = firstMedia?.kind === 'photo' ? firstMedia.url : post.photo_url;
+  const compactVideoUrl = firstMedia?.kind === 'video' ? firstMedia.url : post.video_url;
+  const compactMediaCount = post.media_items?.length ?? 0;
+
   return (
     <Pressable onPress={onPress} style={styles.sharedPostCard} disabled={!onPress}>
       {/* Photo/video — full width, only shown when present */}
-      {post.photo_url ? (
-        <Image source={{ uri: getImageUrl(post.photo_url, 'feed') ?? post.photo_url }} style={styles.sharedPostThumb} contentFit="cover" />
-      ) : post.video_url ? (
-        <VideoThumbnail videoUrl={post.video_url} style={styles.sharedPostThumb} />
+      {compactPhotoUrl ? (
+        <View style={styles.sharedPostThumb}>
+          <Image source={{ uri: getImageUrl(compactPhotoUrl, 'feed') ?? compactPhotoUrl }} style={StyleSheet.absoluteFill} contentFit="cover" />
+          {compactMediaCount > 1 && (
+            <View style={styles.mediaCountBadge}>
+              <Feather name="copy" size={10} color="#fff" />
+              <Text style={styles.mediaCountText}>{compactMediaCount}</Text>
+            </View>
+          )}
+        </View>
+      ) : compactVideoUrl ? (
+        <View style={styles.sharedPostThumb}>
+          <VideoThumbnail videoUrl={compactVideoUrl} style={StyleSheet.absoluteFill} />
+          {compactMediaCount > 1 && (
+            <View style={styles.mediaCountBadge}>
+              <Feather name="copy" size={10} color="#fff" />
+              <Text style={styles.mediaCountText}>{compactMediaCount}</Text>
+            </View>
+          )}
+        </View>
       ) : null}
 
       {/* Body */}
@@ -573,6 +615,7 @@ const styles = StyleSheet.create({
   sharedImmersiveThumb: {
     width: '100%',
     height: 150,
+    overflow: 'hidden',
   },
   sharedImmersivePlaceholder: {
     backgroundColor: colors.background.base,
@@ -691,6 +734,24 @@ const styles = StyleSheet.create({
   sharedPostThumb: {
     width: '100%',
     height: 130,
+    overflow: 'hidden',
+  },
+  mediaCountBadge: {
+    position: 'absolute',
+    top: 7,
+    right: 7,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+  },
+  mediaCountText: {
+    fontSize: 10,
+    fontFamily: typography.family.semibold,
+    color: '#fff',
   },
   sharedPostBodyInner: {
     paddingHorizontal: spacing.sm,

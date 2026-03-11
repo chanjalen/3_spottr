@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { View, StyleSheet, Pressable } from 'react-native';
 import { VideoView, useVideoPlayer } from 'expo-video';
+import { Image } from 'expo-image';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 import { Feather } from '@expo/vector-icons';
 import { useIsFocused } from '@react-navigation/native';
 import { colors, spacing } from '../../theme';
@@ -12,12 +14,21 @@ interface FeedCardVideoProps {
 
 export default function FeedCardVideo({ uri, onExpand }: FeedCardVideoProps) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [thumbUri, setThumbUri] = useState<string | null>(null);
   const isFocused = useIsFocused();
 
   const player = useVideoPlayer(uri, (p) => {
     p.loop = true;
     p.muted = false;
   });
+
+  useEffect(() => {
+    let cancelled = false;
+    VideoThumbnails.getThumbnailAsync(uri, { time: 0 })
+      .then(({ uri: u }) => { if (!cancelled) setThumbUri(u); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [uri]);
 
   useEffect(() => {
     if (!isFocused && isPlaying) {
@@ -44,6 +55,9 @@ export default function FeedCardVideo({ uri, onExpand }: FeedCardVideoProps) {
         contentFit="contain"
         nativeControls={false}
       />
+      {!isPlaying && thumbUri && (
+        <Image source={{ uri: thumbUri }} style={StyleSheet.absoluteFill} contentFit="cover" />
+      )}
       <Pressable
         style={styles.overlay}
         onPress={togglePlay}

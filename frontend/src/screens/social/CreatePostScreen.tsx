@@ -49,7 +49,7 @@ export default function CreatePostScreen({ navigation }: Props) {
   const [text, setText] = useState('');
 
   // Media — unified ordered list of photos and/or videos
-  type MediaItem = { uri: string; name: string; type: string; kind: 'image' | 'video' };
+  type MediaItem = { uri: string; name: string; type: string; kind: 'image' | 'video'; thumbnailUri?: string };
   const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [previewViewerIndex, setPreviewViewerIndex] = useState<number | null>(null);
   const MAX_MEDIA = 10;
@@ -102,7 +102,7 @@ export default function CreatePostScreen({ navigation }: Props) {
       const remaining = MAX_MEDIA - prev.length;
       const newItems = picked
         .slice(0, remaining)
-        .map(a => ({ uri: a.uri, name: a.filename, type: a.mimeType, kind: a.kind }));
+        .map(a => ({ uri: a.uri, name: a.filename, type: a.mimeType, kind: a.kind, thumbnailUri: a.thumbnailUri }));
       return [...prev, ...newItems];
     });
   };
@@ -279,10 +279,19 @@ export default function CreatePostScreen({ navigation }: Props) {
                   </Pressable>
                 ) : (
                   <Pressable style={styles.mediaTileInner} onPress={() => setPreviewViewerIndex(i)}>
-                    <View style={styles.videoTileBg}>
-                      <Feather name="video" size={22} color="#fff" />
-                      <Text style={styles.videoTileLabel}>Video</Text>
-                    </View>
+                    {m.thumbnailUri ? (
+                      <>
+                        <Image source={{ uri: m.thumbnailUri }} style={styles.mediaTileImg} resizeMode="cover" />
+                        <View style={styles.videoTileOverlay}>
+                          <Feather name="play-circle" size={26} color="#fff" />
+                        </View>
+                      </>
+                    ) : (
+                      <View style={styles.videoTileBg}>
+                        <Feather name="video" size={22} color="#fff" />
+                        <Text style={styles.videoTileLabel}>Video</Text>
+                      </View>
+                    )}
                   </Pressable>
                 )}
                 <Pressable
@@ -620,6 +629,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 4,
+  },
+  videoTileOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0,0,0,0.25)',
   },
   videoTileLabel: {
     fontSize: 10,

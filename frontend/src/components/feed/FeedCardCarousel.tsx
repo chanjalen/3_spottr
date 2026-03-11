@@ -1,8 +1,10 @@
-import React, { useRef, useState } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { ScrollView, View, StyleSheet, Pressable, useWindowDimensions, Text } from 'react-native';
 import { Image, ImageLoadEventData } from 'expo-image';
 import { VideoView, useVideoPlayer } from 'expo-video';
+import * as VideoThumbnails from 'expo-video-thumbnails';
 import { Feather } from '@expo/vector-icons';
+import { useIsFocused } from '@react-navigation/native';
 import { colors, spacing } from '../../theme';
 import { getImageUrl } from '../../utils/imageUrl';
 import { MediaItem } from '../../types/feed';
@@ -52,6 +54,7 @@ export default function FeedCardCarousel({ media, onPress, onDoubleTap }: FeedCa
                 uri={item.url}
                 width={width}
                 height={imageHeight}
+                isActive={currentIndex === i}
                 onPress={() => onPress(i)}
               />
             : <Pressable
@@ -89,9 +92,26 @@ export default function FeedCardCarousel({ media, onPress, onDoubleTap }: FeedCa
 
 // ─── Video slide ─────────────────────────────────────────────────────────────
 
-function VideoSlide({ uri, width, height, onPress }: { uri: string; width: number; height: number; onPress: () => void }) {
+function VideoSlide({ uri, width, height, isActive, onPress }: { uri: string; width: number; height: number; isActive: boolean; onPress: () => void }) {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [thumbUri, setThumbUri] = useState<string | null>(null);
+  const isFocused = useIsFocused();
   const player = useVideoPlayer(uri, p => { p.loop = true; p.muted = false; });
+
+  useEffect(() => {
+    let cancelled = false;
+    VideoThumbnails.getThumbnailAsync(uri, { time: 0 })
+      .then(({ uri: u }) => { if (!cancelled) setThumbUri(u); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [uri]);
+
+  useEffect(() => {
+    if (!isActive || !isFocused) {
+      player.pause();
+      setIsPlaying(false);
+    }
+  }, [isActive, isFocused]);
 
   const togglePlay = () => {
     if (isPlaying) { player.pause(); setIsPlaying(false); }
@@ -106,6 +126,9 @@ function VideoSlide({ uri, width, height, onPress }: { uri: string; width: numbe
         contentFit="contain"
         nativeControls={false}
       />
+      {!isPlaying && thumbUri && (
+        <Image source={{ uri: thumbUri }} style={StyleSheet.absoluteFill} contentFit="cover" />
+      )}
       <Pressable style={StyleSheet.absoluteFill} onPress={togglePlay}>
         {!isPlaying && (
           <View style={styles.playOverlay}>
