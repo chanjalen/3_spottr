@@ -880,6 +880,16 @@ def post_detail(request, post_id):
                 extra_photo_urls = []
             all_photo_urls = ([photo_url] if photo_url else []) + extra_photo_urls
 
+            try:
+                from media.utils import build_media_url as _bmu2
+                media_items_data = [
+                    {'url': _bmu2(pm.file.name), 'kind': pm.kind}
+                    for pm in post.media_items.order_by('order')
+                    if pm.file
+                ]
+            except Exception:
+                media_items_data = []
+
             poll_data = None
             try:
                 poll = post.poll
@@ -929,6 +939,7 @@ def post_detail(request, post_id):
                 'photo_url': photo_url,
                 'photo_urls': all_photo_urls,
                 'video_url': video_url,
+                'media_items': media_items_data,
                 'link_url': getattr(post, 'link_url', None),
                 'like_count': like_count,
                 'comment_count': comment_count,

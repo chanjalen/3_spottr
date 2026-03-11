@@ -224,6 +224,15 @@ function DayViewer({
   onClose: () => void;
 }) {
   const listRef = useRef<FlatList>(null);
+  const [activeDayIdx, setActiveDayIdx] = useState(initialIdx);
+
+  const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
+    if (viewableItems.length > 0) {
+      setActiveDayIdx(viewableItems[0].index ?? 0);
+    }
+  }).current;
+
+  const viewabilityConfig = useRef({ itemVisiblePercentThreshold: 50 }).current;
 
   return (
     <FlatList
@@ -235,13 +244,16 @@ function DayViewer({
       decelerationRate="fast"
       initialScrollIndex={initialIdx > 0 ? initialIdx : undefined}
       getItemLayout={(_, index) => ({ length: SH, offset: SH * index, index })}
-      renderItem={({ item }) => (
+      onViewableItemsChanged={onViewableItemsChanged}
+      viewabilityConfig={viewabilityConfig}
+      renderItem={({ item, index }) => (
         <View style={{ width: SW, height: SH, alignItems: 'center', justifyContent: 'center' }}>
           <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
           <CheckinCard
             day={item}
             year={year}
             month={month}
+            isActive={index === activeDayIdx}
             onClose={onClose}
           />
         </View>
@@ -253,11 +265,12 @@ function DayViewer({
 // ─── Single checkin card — identical layout to profile's CalCheckinCard ───────
 
 function CheckinCard({
-  day, year, month, onClose,
+  day, year, month, isActive, onClose,
 }: {
   day: DayCheckins;
   year: number;
   month: number;
+  isActive: boolean;
   onClose: () => void;
 }) {
   const [checkinIdx, setCheckinIdx] = useState(0);
@@ -272,7 +285,7 @@ function CheckinCard({
         month={month}
         idx={0}
         total={1}
-        isActive
+        isActive={isActive}
         onClose={onClose}
       />
     );
@@ -301,7 +314,7 @@ function CheckinCard({
             month={month}
             idx={index}
             total={total}
-            isActive={index === checkinIdx}
+            isActive={isActive && index === checkinIdx}
             onClose={onClose}
           />
         )}

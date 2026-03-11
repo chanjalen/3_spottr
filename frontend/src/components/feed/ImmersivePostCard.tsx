@@ -17,7 +17,7 @@ import Animated, {
   withTiming,
   withSpring,
 } from 'react-native-reanimated';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useIsFocused } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import * as Haptics from 'expo-haptics';
 import Avatar from '../common/Avatar';
@@ -76,6 +76,7 @@ export default function ImmersivePostCard({
   onPollVote,
 }: ImmersivePostCardProps) {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const isFocused = useIsFocused();
   const goToProfile = () => navigation.navigate('Profile', { username: item.user.username });
 
   const likeScale = useSharedValue(1);
@@ -100,16 +101,16 @@ export default function ImmersivePostCard({
 
   useEffect(() => {
     if (!hasVideo) return;
-    if (isActive) {
+    if (isActive && isFocused) {
       videoPlayer.play();
       setIsVideoPlaying(true);
       setUserPaused(false);
     } else {
       videoPlayer.pause();
       setIsVideoPlaying(false);
-      setUserPaused(false);
+      if (!isActive) setUserPaused(false);
     }
-  }, [isActive, hasVideo]);
+  }, [isActive, isFocused, hasVideo]);
 
   const lastVideoTapRef = useRef(0);
   const videoTapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);

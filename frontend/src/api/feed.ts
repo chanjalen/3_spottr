@@ -190,6 +190,7 @@ export async function createPost(params: {
   }
   const response = await apiClient.post(ENDPOINTS.createPost, formData, {
     headers: { 'Content-Type': undefined },
+    timeout: 120000, // 2 min — video uploads need more time than the default 15s
   });
   return response.data;
 }

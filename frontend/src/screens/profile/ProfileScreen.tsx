@@ -3230,13 +3230,16 @@ type CalViewerFlatListProps = {
 };
 
 function CalViewerFlatList({ days, initialDayIdx, likeState, onClose, onDayChange, onLike, onComment }: CalViewerFlatListProps) {
+  const [activeDayIdx, setActiveDayIdx] = useState(initialDayIdx);
   const onDayChangeRef = useRef(onDayChange);
   useEffect(() => { onDayChangeRef.current = onDayChange; }, [onDayChange]);
 
   // Must be stable — React Native warns if onViewableItemsChanged changes after mount
   const onViewableItemsChanged = useRef(({ viewableItems }: any) => {
     if (viewableItems.length > 0) {
-      onDayChangeRef.current(viewableItems[0].index ?? 0);
+      const idx = viewableItems[0].index ?? 0;
+      setActiveDayIdx(idx);
+      onDayChangeRef.current(idx);
     }
   }).current;
 
@@ -3254,9 +3257,10 @@ function CalViewerFlatList({ days, initialDayIdx, likeState, onClose, onDayChang
       maintainVisibleContentPosition={{ minIndexForVisible: 0 }}
       onViewableItemsChanged={onViewableItemsChanged}
       viewabilityConfig={viewabilityConfig}
-      renderItem={({ item: day }) => (
+      renderItem={({ item: day, index }) => (
         <CalDayPage
           day={day}
+          isActive={index === activeDayIdx}
           likeState={likeState}
           onClose={onClose}
           onLike={onLike}
@@ -3269,8 +3273,9 @@ function CalViewerFlatList({ days, initialDayIdx, likeState, onClose, onDayChang
 
 // One full-screen page per day. If the day has multiple check-ins, an inner
 // horizontal FlatList lets the user swipe between them.
-function CalDayPage({ day, likeState, onClose, onLike, onComment }: {
+function CalDayPage({ day, isActive, likeState, onClose, onLike, onComment }: {
   day: CalViewerDay;
+  isActive: boolean;
   likeState: Record<string, { liked: boolean; count: number }>;
   onClose: () => void;
   onLike: (c: CheckinItem) => void;
@@ -3287,7 +3292,7 @@ function CalDayPage({ day, likeState, onClose, onLike, onComment }: {
           day={day}
           checkinIdx={0}
           totalCheckins={1}
-          isActive
+          isActive={isActive}
           likeState={likeState}
           onClose={onClose}
           onLike={onLike}
@@ -3319,7 +3324,7 @@ function CalDayPage({ day, likeState, onClose, onLike, onComment }: {
               day={day}
               checkinIdx={index}
               totalCheckins={day.checkins.length}
-              isActive={index === activeCheckinIdx}
+              isActive={isActive && index === activeCheckinIdx}
               likeState={likeState}
               onClose={onClose}
               onLike={onLike}
