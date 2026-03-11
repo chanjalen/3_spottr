@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -25,16 +25,17 @@ type RootNav = NativeStackNavigationProp<RootStackParamList>;
 interface Props {
   visible: boolean;
   onClose: () => void;
+  initialPage?: number;
 }
 
-export default function CreateMenuSheet({ visible, onClose }: Props) {
+export default function CreateMenuSheet({ visible, onClose, initialPage = 0 }: Props) {
   const navigation = useNavigation<RootNav>();
   const { width, height: screenHeight } = useWindowDimensions();
   const { isActive: tutorialActive, step: tutorialStep, totalSteps: tutorialTotal, next: tutorialNext } = useTutorial();
   // Step index 4 (0-based) = tutorial step 5 — activates when user opens this sheet
   const showTutorialOverlay = tutorialActive && tutorialStep === 4;
   const pagerRef = useRef<ScrollView>(null);
-  const [page, setPage] = useState(0);
+  const [page, setPage] = useState(initialPage);
   const [restDaysRemaining, setRestDaysRemaining] = useState<number | null>(null);
   const [hasActivityToday, setHasActivityToday] = useState(false);
   const [hasRestToday, setHasRestToday] = useState(false);
@@ -44,10 +45,30 @@ export default function CreateMenuSheet({ visible, onClose }: Props) {
   const cardWidth = width - 48; // 24px margin each side
   const cardHeight = 320;
 
+  // When modal opens on page 2 directly, snap there and load streak info
+  useEffect(() => {
+    if (visible && initialPage === 1) {
+      const t = setTimeout(() => {
+        pagerRef.current?.scrollTo({ x: cardWidth, animated: false });
+        setPage(1);
+      }, 0);
+      setRestLoading(true);
+      fetchStreakInfo()
+        .then(info => {
+          setRestDaysRemaining(info.rest_info?.rest_days_remaining ?? 0);
+          setHasActivityToday(info.has_activity_today ?? false);
+          setHasRestToday(info.has_rest_today ?? false);
+        })
+        .catch(() => setRestDaysRemaining(null))
+        .finally(() => setRestLoading(false));
+      return () => clearTimeout(t);
+    }
+  }, [visible]);
+
   const resetPages = useCallback(() => {
-    setPage(0);
-    pagerRef.current?.scrollTo({ x: 0, animated: false });
-  }, []);
+    setPage(initialPage);
+    pagerRef.current?.scrollTo({ x: initialPage === 1 ? cardWidth : 0, animated: false });
+  }, [initialPage, cardWidth]);
 
   const handleClose = useCallback(() => {
     onClose();
@@ -217,9 +238,13 @@ export default function CreateMenuSheet({ visible, onClose }: Props) {
             {/* ── Page 2: Check-In (big) / Rest Day (small) ── */}
             <View style={[styles.page, { width: cardWidth }]}>
               <View style={styles.page2Header}>
-                <Pressable onPress={goToPage1} style={styles.backBtn} hitSlop={12}>
-                  <Feather name="chevron-left" size={22} color={colors.textPrimary} />
-                </Pressable>
+                {initialPage === 0 ? (
+                  <Pressable onPress={goToPage1} style={styles.backBtn} hitSlop={12}>
+                    <Feather name="chevron-left" size={22} color={colors.textPrimary} />
+                  </Pressable>
+                ) : (
+                  <View style={{ width: 36 }} />
+                )}
                 <Text style={styles.page2Title}>Check-In</Text>
                 <View style={{ width: 36 }} />
               </View>

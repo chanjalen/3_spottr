@@ -27,6 +27,9 @@ function adaptFeedItem(raw: any): FeedItem {
         ? [raw.photo_url]
         : [],
     video_url: raw.video_url ?? null,
+    media_items: Array.isArray(raw.media_items)
+      ? raw.media_items.map((m: any) => ({ url: m.url ?? '', kind: m.kind === 'video' ? 'video' : 'photo' }))
+      : [],
     is_front_camera: raw.is_front_camera ?? false,
     front_camera_url: raw.front_camera_url ?? null,
     link_url: raw.link_url ?? null,
@@ -160,12 +163,10 @@ export async function createPost(params: {
   linkUrl?: string;
   visibility?: 'main' | 'friends';
   replyRestriction?: 'everyone' | 'friends' | 'mentions';
-  /** Multiple photos — first becomes primary, rest go to PostPhoto table */
-  photos?: Array<{ uri: string; name: string; type: string }>;
-  video?: { uri: string; name: string; type: string };
+  /** Ordered media items — photos and/or videos mixed together */
+  media?: Array<{ uri: string; name: string; type: string }>;
   poll?: { question: string; options: string[]; duration: number };
   pr?: { exerciseName: string; value: string; unit: string };
-  // Optional: ID of an existing workout to attach (reference only, no duplication)
   workoutId?: string;
 }): Promise<{ post_id: string }> {
   const formData = new FormData();
@@ -173,10 +174,9 @@ export async function createPost(params: {
   if (params.linkUrl) formData.append('link_url', params.linkUrl);
   formData.append('visibility', params.visibility ?? 'main');
   formData.append('reply_restriction', params.replyRestriction ?? 'everyone');
-  if (params.photos) {
-    params.photos.forEach(p => formData.append('photos[]', p as any));
+  if (params.media) {
+    params.media.forEach(m => formData.append('media[]', m as any));
   }
-  if (params.video) formData.append('video', params.video as any);
   if (params.workoutId) formData.append('workout_id', params.workoutId);
   if (params.poll) {
     formData.append('poll_question', params.poll.question);

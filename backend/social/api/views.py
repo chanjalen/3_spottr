@@ -208,11 +208,19 @@ def create_post(request):
     pr_exercise_name = (request.data.get('pr_exercise_name') or '').strip()
     pr_value = (request.data.get('pr_value') or '').strip()
     pr_unit = (request.data.get('pr_unit') or 'lbs').strip()
-    # Accept photos[] array (new multi-photo) or legacy single photo field
+    # Accept unified media[] (mixed photos+videos in order) or legacy photos[]/video fields
+    media_list = request.FILES.getlist('media[]') if hasattr(request.FILES, 'getlist') else []
     photos_list = request.FILES.getlist('photos[]') if hasattr(request.FILES, 'getlist') else []
-    photo = photos_list[0] if photos_list else request.FILES.get('photo')
-    extra_photos = photos_list[1:] if len(photos_list) > 1 else []
-    video = request.FILES.get('video')
+    # Derive primary photo/video for backward compat
+    if media_list:
+        _first_photo = next((f for f in media_list if not (f.content_type or '').startswith('video/')), None)
+        _first_video = next((f for f in media_list if (f.content_type or '').startswith('video/')), None)
+        photo = _first_photo
+        video = _first_video
+    else:
+        photo = photos_list[0] if photos_list else request.FILES.get('photo')
+        video = request.FILES.get('video')
+    extra_photos = photos_list[1:] if not media_list and len(photos_list) > 1 else []
 
     # Poll fields
     poll_question = (request.data.get('poll_question') or '').strip()
@@ -260,7 +268,19 @@ def create_post(request):
         except Exception:
             pass
 
-    if extra_photos:
+    # Save all media items to PostMedia (supports mixed photos+videos)
+    if media_list:
+        try:
+            from social.models import PostMedia
+            for idx, f in enumerate(media_list):
+                kind = 'video' if (f.content_type or '').startswith('video/') else 'photo'
+                pm = PostMedia(post=post, order=idx, kind=kind)
+                pm.file = f
+                pm.save()
+        except Exception:
+            pass
+    elif extra_photos:
+        # Legacy: photos[] only path — save extras to PostPhoto
         try:
             from social.models import PostPhoto
             for idx, extra_file in enumerate(extra_photos):
