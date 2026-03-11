@@ -26,6 +26,7 @@ import Avatar from '../components/common/Avatar';
 import { useFeed } from '../hooks/useFeed';
 import { useToggleLike } from '../hooks/useToggleLike';
 import { usePollVote } from '../hooks/usePollVote';
+import { useAuth } from '../store/AuthContext';
 import { colors, spacing, typography } from '../theme';
 import { RootStackParamList } from '../navigation/types';
 
@@ -33,6 +34,7 @@ type RootNav = NativeStackNavigationProp<RootStackParamList>;
 
 export default function PostsScreen() {
   const navigation = useNavigation<RootNav>();
+  const { user } = useAuth();
 
   const {
     items,
@@ -159,6 +161,12 @@ export default function PostsScreen() {
               { paddingBottom: bottomNavHeight + 16 },
               items.length === 0 && styles.emptyList,
             ]}
+            ListHeaderComponent={
+              <StartPostBar
+                user={user}
+                onPress={() => navigation.navigate('CreatePost')}
+              />
+            }
             ListEmptyComponent={<EmptyState tab="main" />}
             ListFooterComponent={renderFooter}
             onEndReached={handleEndReached}
@@ -245,6 +253,50 @@ export default function PostsScreen() {
       />
       <ShareSheet item={shareItem} onClose={() => setShareItem(null)} />
     </View>
+  );
+}
+
+// ─── Start Post Bar ───────────────────────────────────────────────────────────
+
+interface StartPostBarProps {
+  user: { avatar_url?: string | null; display_name?: string } | null;
+  onPress: () => void;
+}
+
+function StartPostBar({ user: authUser, onPress }: StartPostBarProps) {
+  return (
+    <Pressable
+      style={({ pressed }) => [styles.startPostCard, pressed && { opacity: 0.85 }]}
+      onPress={onPress}
+    >
+      <View style={styles.startPostTop}>
+        <Avatar
+          uri={authUser?.avatar_url ?? null}
+          name={authUser?.display_name ?? 'Me'}
+          size={40}
+        />
+        <View style={styles.startPostPill}>
+          <Text style={styles.startPostPlaceholder}>Start a post...</Text>
+        </View>
+      </View>
+      <View style={styles.startPostDivider} />
+      <View style={styles.startPostActions}>
+        <View style={styles.startPostAction}>
+          <Feather name="image" size={18} color={colors.primary} />
+          <Text style={styles.startPostActionText}>Media</Text>
+        </View>
+        <View style={styles.startPostActionSep} />
+        <View style={styles.startPostAction}>
+          <Feather name="bar-chart-2" size={18} color="#8B5CF6" />
+          <Text style={styles.startPostActionText}>Poll</Text>
+        </View>
+        <View style={styles.startPostActionSep} />
+        <View style={styles.startPostAction}>
+          <Feather name="award" size={18} color="#F59E0B" />
+          <Text style={styles.startPostActionText}>PR</Text>
+        </View>
+      </View>
+    </Pressable>
   );
 }
 
@@ -360,6 +412,72 @@ const styles = StyleSheet.create({
     fontFamily: typography.family.regular,
     color: colors.textMuted,
   },
+  // Start post bar
+  startPostCard: {
+    backgroundColor: colors.surface,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.md,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: colors.border.subtle,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+      },
+      android: { elevation: 2 },
+    }),
+  },
+  startPostTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    padding: spacing.md,
+  },
+  startPostPill: {
+    flex: 1,
+    borderWidth: 1.5,
+    borderColor: colors.border.default,
+    borderRadius: 9999,
+    paddingHorizontal: spacing.md,
+    paddingVertical: Platform.OS === 'ios' ? 8 : 6,
+  },
+  startPostPlaceholder: {
+    fontSize: typography.size.sm,
+    color: colors.textMuted,
+  },
+  startPostDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.border.subtle,
+    marginHorizontal: spacing.md,
+  },
+  startPostActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+  },
+  startPostAction: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+  },
+  startPostActionText: {
+    fontSize: typography.size.xs,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  startPostActionSep: {
+    width: 1,
+    height: 16,
+    backgroundColor: colors.border.subtle,
+  },
+
   dropdownSectionLabel: {
     fontSize: typography.size.xs,
     fontFamily: typography.family.semibold,

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { FeedItem } from '../../types/feed';
+import { FeedItem, MediaItem } from '../../types/feed';
 import FeedCardImage from './FeedCardImage';
 import FeedCardVideo from './FeedCardVideo';
 import FeedCardCarousel from './FeedCardCarousel';
@@ -31,17 +31,32 @@ export default function FeedCardBody({ item, onPollVote, onWorkoutPress, onMedia
         <Text style={styles.description}>{item.description}</Text>
       )}
 
-      {item.video_url
-        ? <FeedCardVideo uri={item.video_url} onExpand={onMediaPress ? () => onMediaPress(item.video_url!, 'video') : undefined} />
-        : item.photo_urls.length > 1
-          ? <FeedCardCarousel
-              uris={item.photo_urls}
-              onPress={(i) => onMediaPress?.(item.photo_urls[i], 'image', item.photo_urls, i)}
-              onDoubleTap={onDoubleTap}
-            />
-          : item.photo_urls.length === 1
-            ? <FeedCardImage uri={item.photo_urls[0]} frontCameraUri={item.front_camera_url} onPress={onMediaPress ? () => onMediaPress(item.photo_urls[0], 'image') : undefined} onDoubleTap={onDoubleTap} />
-            : null}
+      {(() => {
+        // Use unified media_items if present (new posts), fall back to legacy fields
+        const media: MediaItem[] = item.media_items?.length
+          ? item.media_items
+          : item.video_url
+            ? [{ url: item.video_url, kind: 'video' }]
+            : item.photo_urls.map(u => ({ url: u, kind: 'photo' as const }));
+
+        if (media.length === 0) return null;
+        if (media.length === 1) {
+          const m = media[0];
+          return m.kind === 'video'
+            ? <FeedCardVideo uri={m.url} onExpand={onMediaPress ? () => onMediaPress(m.url, 'video') : undefined} />
+            : <FeedCardImage uri={m.url} frontCameraUri={item.front_camera_url} onPress={onMediaPress ? () => onMediaPress(m.url, 'image') : undefined} onDoubleTap={onDoubleTap} />;
+        }
+        return (
+          <FeedCardCarousel
+            media={media}
+            onPress={(i) => {
+              const m = media[i];
+              onMediaPress?.(m.url, m.kind === 'video' ? 'video' : 'image', media.filter(x => x.kind === 'photo').map(x => x.url), i);
+            }}
+            onDoubleTap={onDoubleTap}
+          />
+        );
+      })()}
 
       {hasPaddedContent && (
         <View style={styles.paddedContent}>

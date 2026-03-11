@@ -83,6 +83,31 @@ class Post(BaseModel):
         return re.findall(r'#(\w+)', self.description)
 
 
+class PostMedia(BaseModel):
+    """
+    Ordered media items (photos or videos) attached to a post.
+    Supports mixed photo+video carousels.
+    """
+    post = models.ForeignKey(
+        'Post',
+        on_delete=models.CASCADE,
+        related_name='media_items',
+    )
+    file = models.FileField(upload_to='posts/media/')
+    kind = models.CharField(
+        max_length=10,
+        choices=[('photo', 'Photo'), ('video', 'Video')],
+        default='photo',
+    )
+    order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ['order']
+
+    def __str__(self):
+        return f"{self.kind} #{self.order} for post {self.post_id}"
+
+
 class PostPhoto(BaseModel):
     """
     Additional photos attached to a post (index 1+).

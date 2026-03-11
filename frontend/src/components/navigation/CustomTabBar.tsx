@@ -96,7 +96,7 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
         <FabButton onPress={openCreateMenu} />
       </View>
 
-      <CreateMenuSheet visible={showCreateMenu} onClose={() => setShowCreateMenu(false)} />
+      <CreateMenuSheet visible={showCreateMenu} onClose={() => setShowCreateMenu(false)} initialPage={1} />
     </>
   );
 }
