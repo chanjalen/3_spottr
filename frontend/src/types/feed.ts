@@ -66,6 +66,11 @@ export interface Poll {
   ends_at: string;
 }
 
+export interface MediaItem {
+  url: string;
+  kind: 'photo' | 'video';
+}
+
 export interface FeedItem {
   id: string;
   type: FeedItemType;
@@ -77,6 +82,8 @@ export interface FeedItem {
   photo_url: string | null;
   photo_urls: string[];
   video_url?: string | null;
+  /** Unified ordered media list (photos + videos). Present on new posts. */
+  media_items: MediaItem[];
   is_front_camera?: boolean;
   front_camera_url?: string | null;
   link_url: string | null;

@@ -78,6 +78,8 @@ export default function CheckinCalendarCard({ username }: Props) {
     const map = new Map<number, CheckinItem[]>();
     for (const c of checkins) {
       const d = new Date(c.created_at);
+      // 3AM rule: activities before 3AM count for the previous day
+      if (d.getHours() < 3) d.setDate(d.getDate() - 1);
       if (d.getFullYear() === year && d.getMonth() === month) {
         const day = d.getDate();
         if (!map.has(day)) map.set(day, []);

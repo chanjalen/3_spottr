@@ -48,12 +48,11 @@ export default function CreatePostScreen({ navigation }: Props) {
   // Text
   const [text, setText] = useState('');
 
-  // Media — photos array (up to 10) and optional single video (mutually exclusive)
-  type PhotoItem = { uri: string; name: string; type: string };
-  const [photos, setPhotos] = useState<PhotoItem[]>([]);
-  const [video, setVideo] = useState<PhotoItem | null>(null);
+  // Media — unified ordered list of photos and/or videos
+  type MediaItem = { uri: string; name: string; type: string; kind: 'image' | 'video' };
+  const [mediaItems, setMediaItems] = useState<MediaItem[]>([]);
   const [previewViewerIndex, setPreviewViewerIndex] = useState<number | null>(null);
-  const MAX_PHOTOS = 10;
+  const MAX_MEDIA = 10;
 
   // Workout
   const [attachedWorkout, setAttachedWorkout] = useState<RecentWorkout | null>(null);
@@ -85,8 +84,7 @@ export default function CreatePostScreen({ navigation }: Props) {
   const hasPoll = showPoll && pollQuestion.trim().length > 0 && validPollOptions.length >= 2;
   const hasContent =
     text.trim().length > 0 ||
-    photos.length > 0 ||
-    !!video ||
+    mediaItems.length > 0 ||
     !!attachedWorkout ||
     (showPR && prExercise.trim() && prValue.trim()) ||
     hasPoll;
@@ -94,28 +92,19 @@ export default function CreatePostScreen({ navigation }: Props) {
   // ── Media picker ─────────────────────────────────────────────────────────────
 
   const handlePickMedia = async () => {
-    // If we already have photos and there's room, only allow picking more photos (no video)
-    const addingToExisting = photos.length > 0;
-
     const picked = await pickMedia({
-      allowsMultiple: false,
-      mediaTypes: addingToExisting ? ['images'] : ['images', 'videos'],
+      allowsMultiple: true,
+      mediaTypes: ['images', 'videos'],
     });
     if (!picked) return;
 
-    const asset = picked[0];
-    if (asset.kind === 'video') {
-      // Video clears any existing photos
-      setPhotos([]);
-      setVideo({ uri: asset.uri, name: asset.filename, type: asset.mimeType });
-    } else {
-      // Photo — clear video, add to photos array (up to MAX_PHOTOS)
-      setVideo(null);
-      setPhotos(prev => {
-        if (prev.length >= MAX_PHOTOS) return prev;
-        return [...prev, { uri: asset.uri, name: asset.filename, type: asset.mimeType }];
-      });
-    }
+    setMediaItems(prev => {
+      const remaining = MAX_MEDIA - prev.length;
+      const newItems = picked
+        .slice(0, remaining)
+        .map(a => ({ uri: a.uri, name: a.filename, type: a.mimeType, kind: a.kind }));
+      return [...prev, ...newItems];
+    });
   };
 
   // ── Workout picker ────────────────────────────────────────────────────────────
@@ -173,8 +162,7 @@ export default function CreatePostScreen({ navigation }: Props) {
     // omit the incomplete poll (hasPoll will be false → poll: undefined is sent).
     const hasNonPollContent =
       text.trim().length > 0 ||
-      photos.length > 0 ||
-      !!video ||
+      mediaItems.length > 0 ||
       !!attachedWorkout ||
       (showPR && prExercise.trim() && prValue.trim());
     if (showPoll && pollQuestion.trim() && validPollOptions.length < 2 && !hasNonPollContent) {
@@ -185,8 +173,7 @@ export default function CreatePostScreen({ navigation }: Props) {
     try {
       await createPost({
         text: text.trim() || undefined,
-        photos: photos.length > 0 ? photos : undefined,
-        video: video ?? undefined,
+        media: mediaItems.length > 0 ? mediaItems : undefined,
         workoutId: attachedWorkout?.id,
         pr: showPR && prExercise.trim() && prValue.trim()
           ? { exerciseName: prExercise.trim(), value: prValue.trim(), unit: prUnit }
@@ -277,41 +264,36 @@ export default function CreatePostScreen({ navigation }: Props) {
         )}
 
         {/* ── Media preview strip ────────────────────────────────────── */}
-        {(photos.length > 0 || video) && (
+        {mediaItems.length > 0 && (
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             style={styles.mediaStrip}
             contentContainerStyle={styles.mediaStripContent}
           >
-            {photos.map((p, i) => (
-              <View key={p.uri + i} style={styles.mediaTile}>
-                <Pressable onPress={() => setPreviewViewerIndex(i)}>
-                  <Image source={{ uri: p.uri }} style={styles.mediaTileImg} resizeMode="cover" />
-                </Pressable>
+            {mediaItems.map((m, i) => (
+              <View key={m.uri + i} style={styles.mediaTile}>
+                {m.kind === 'image' ? (
+                  <Pressable onPress={() => setPreviewViewerIndex(i)}>
+                    <Image source={{ uri: m.uri }} style={styles.mediaTileImg} resizeMode="cover" />
+                  </Pressable>
+                ) : (
+                  <Pressable style={styles.mediaTileInner} onPress={() => setPreviewViewerIndex(i)}>
+                    <View style={styles.videoTileBg}>
+                      <Feather name="video" size={22} color="#fff" />
+                      <Text style={styles.videoTileLabel}>Video</Text>
+                    </View>
+                  </Pressable>
+                )}
                 <Pressable
                   style={styles.mediaTileRemove}
-                  onPress={() => setPhotos(prev => prev.filter((_, idx) => idx !== i))}
+                  onPress={() => setMediaItems(prev => prev.filter((_, idx) => idx !== i))}
                 >
                   <Feather name="x" size={11} color="#fff" />
                 </Pressable>
               </View>
             ))}
-            {video && (
-              <View style={styles.mediaTile}>
-                <Pressable style={styles.mediaTileInner} onPress={() => setPreviewViewerIndex(-1)}>
-                  <View style={styles.videoTileBg}>
-                    <Feather name="video" size={22} color="#fff" />
-                    <Text style={styles.videoTileLabel}>Video</Text>
-                  </View>
-                </Pressable>
-                <Pressable style={styles.mediaTileRemove} onPress={() => setVideo(null)}>
-                  <Feather name="x" size={11} color="#fff" />
-                </Pressable>
-              </View>
-            )}
-            {/* Add more photos button */}
-            {photos.length > 0 && photos.length < MAX_PHOTOS && (
+            {mediaItems.length < MAX_MEDIA && (
               <Pressable style={styles.mediaTileAdd} onPress={handlePickMedia}>
                 <Feather name="plus" size={22} color={colors.textMuted} />
               </Pressable>
@@ -422,7 +404,7 @@ export default function CreatePostScreen({ navigation }: Props) {
           <ToolbarBtn
             icon="image"
             label="Media"
-            active={photos.length > 0 || !!video}
+            active={mediaItems.length > 0}
             onPress={handlePickMedia}
           />
           <ToolbarBtn
@@ -447,13 +429,13 @@ export default function CreatePostScreen({ navigation }: Props) {
       </ScrollView>
 
       {/* Fullscreen preview of picked media */}
-      {previewViewerIndex !== null && (
+      {previewViewerIndex !== null && mediaItems[previewViewerIndex] && (
         <MediaViewerModal
-          uri={previewViewerIndex === -1 ? (video?.uri ?? null) : (photos[previewViewerIndex]?.uri ?? null)}
-          kind={previewViewerIndex === -1 ? 'video' : 'image'}
+          uri={mediaItems[previewViewerIndex].uri}
+          kind={mediaItems[previewViewerIndex].kind === 'video' ? 'video' : 'image'}
           onClose={() => setPreviewViewerIndex(null)}
-          uris={previewViewerIndex >= 0 ? photos.map(p => p.uri) : undefined}
-          initialIndex={previewViewerIndex >= 0 ? previewViewerIndex : 0}
+          uris={mediaItems.filter(m => m.kind === 'image').map(m => m.uri)}
+          initialIndex={mediaItems.slice(0, previewViewerIndex).filter(m => m.kind === 'image').length}
         />
       )}
 

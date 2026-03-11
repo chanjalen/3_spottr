@@ -19,8 +19,8 @@ export default function FeedCardImage({ uri, frontCameraUri, onPress, onDoubleTa
   const handleLoad = (e: ImageLoadEventData) => {
     const { width, height } = e.source;
     if (width && height) {
-      // Allow portrait down to ~9:16 and landscape up to ~1.91:1 (Instagram-style caps).
-      setAspectRatio(Math.max(0.5, Math.min(1.91, width / height)));
+      // Cap portrait at 4:5 (0.8) and landscape at 1.91:1 — compact, LinkedIn/Instagram-style.
+      setAspectRatio(Math.max(0.8, Math.min(1.91, width / height)));
     }
   };
 
@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
   image: {
     width: '100%',
     marginBottom: spacing.md,
-    backgroundColor: '#000',
+    backgroundColor: '#F2F2F2',
   },
   pipContainer: {
     position: 'absolute',
