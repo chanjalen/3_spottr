@@ -248,9 +248,14 @@ export default function ImmersivePostCard({
             <Pressable style={styles.userRow} onPress={goToProfile}>
               <Avatar uri={item.user.avatar_url} name={item.user.display_name} size={36} />
               <View style={styles.userText}>
-                <Text style={styles.displayNamePhoto} numberOfLines={1}>
-                  {item.user.display_name}
-                </Text>
+                <View style={styles.nameStreakRow}>
+                  <Text style={styles.displayNamePhoto} numberOfLines={1}>
+                    {item.user.display_name}
+                  </Text>
+                  {!!item.user.streak && item.user.streak > 0 && (
+                    <Text style={styles.streakPhoto}>🔥{item.user.streak}</Text>
+                  )}
+                </View>
                 {item.description !== '' && (
                   <Pressable onPress={() => setCaptionExpanded(v => !v)}>
                     <Text style={styles.captionPhoto} numberOfLines={captionExpanded ? undefined : 2}>
@@ -427,9 +432,14 @@ export default function ImmersivePostCard({
             <Pressable style={styles.userRow} onPress={goToProfile}>
               <Avatar uri={item.user.avatar_url} name={item.user.display_name} size={36} />
               <View style={styles.userText}>
-                <Text style={styles.displayNamePhoto} numberOfLines={1}>
-                  {item.user.display_name}
-                </Text>
+                <View style={styles.nameStreakRow}>
+                  <Text style={styles.displayNamePhoto} numberOfLines={1}>
+                    {item.user.display_name}
+                  </Text>
+                  {!!item.user.streak && item.user.streak > 0 && (
+                    <Text style={styles.streakPhoto}>🔥{item.user.streak}</Text>
+                  )}
+                </View>
                 {item.description !== '' && (
                   <Pressable onPress={() => setCaptionExpanded(v => !v)}>
                     <Text style={styles.captionPhoto} numberOfLines={captionExpanded ? undefined : 2}>
@@ -592,6 +602,9 @@ export default function ImmersivePostCard({
               <Text style={styles.displayNameLight} numberOfLines={1}>
                 {item.user.display_name}
               </Text>
+              {!!item.user.streak && item.user.streak > 0 && (
+                <Text style={styles.streakLight}>🔥{item.user.streak}</Text>
+              )}
             </Pressable>
             <View style={styles.metaLightRow}>
               {(gymName || activityLabel) && (
@@ -759,6 +772,11 @@ const styles = StyleSheet.create({
     flex: 1,
     gap: 3,
   },
+  nameStreakRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
   displayNamePhoto: {
     fontSize: typography.size.base,
     fontFamily: typography.family.semibold,
@@ -766,6 +784,14 @@ const styles = StyleSheet.create({
     textShadowColor: 'rgba(0,0,0,0.5)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,
+  },
+  streakPhoto: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.semibold,
+    color: '#fb923c',
+    textShadowColor: 'rgba(0,0,0,0.5)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   captionPhoto: {
     fontSize: typography.size.sm,
@@ -858,6 +884,11 @@ const styles = StyleSheet.create({
     fontSize: typography.size.md,
     fontFamily: typography.family.semibold,
     color: colors.textPrimary,
+  },
+  streakLight: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.semibold,
+    color: '#fb923c',
   },
   metaLightRow: {
     flexDirection: 'row',

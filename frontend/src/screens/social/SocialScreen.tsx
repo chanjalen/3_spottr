@@ -680,7 +680,12 @@ export default function SocialScreen({ navigation, route }: Props) {
       <Avatar uri={item.partner_avatar_url} name={item.partner_display_name} size={48} />
       <View style={styles.convoInfo}>
         <View style={styles.convoTopRow}>
-          <Text style={styles.convoName} numberOfLines={1}>{item.partner_display_name}</Text>
+          <View style={styles.convoNameRow}>
+            <Text style={styles.convoName} numberOfLines={1}>{item.partner_display_name}</Text>
+            {item.partner_current_streak > 0 && (
+              <Text style={styles.convoStreak}>🔥{item.partner_current_streak}</Text>
+            )}
+          </View>
           {!!item.latest_message?.created_at && (
             <Text style={styles.convoTime}>{timeAgo(item.latest_message.created_at)}</Text>
           )}
@@ -1513,6 +1518,8 @@ const styles = StyleSheet.create({
   convoTime: { fontSize: typography.size.xs, color: colors.textMuted },
   convoLast: { fontSize: typography.size.sm, color: colors.textSecondary },
   nameStreakRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, flexShrink: 1 },
+  convoNameRow: { flexDirection: 'row', alignItems: 'center', gap: 5, flexShrink: 1 },
+  convoStreak: { fontSize: typography.size.xs, fontFamily: typography.family.semibold, color: '#fb923c' },
   streakBadge: {
     backgroundColor: 'rgba(249,115,22,0.1)',
     borderRadius: 8,

@@ -469,7 +469,12 @@ export default function GymDetailScreen({ navigation, route }: Props) {
                 >
                   <Avatar uri={entry.avatar_url} name={entry.display_name} size={36} />
                   <View>
-                    <Text style={styles.leaderName} numberOfLines={1}>{entry.display_name}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                      <Text style={styles.leaderName} numberOfLines={1}>{entry.display_name}</Text>
+                      {entry.current_streak > 0 && (
+                        <Text style={styles.leaderStreak}>🔥{entry.current_streak}</Text>
+                      )}
+                    </View>
                     <Text style={styles.leaderUsername}>@{entry.username}</Text>
                   </View>
                 </Pressable>
@@ -872,6 +877,7 @@ const styles = StyleSheet.create({
   leaderUser: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   leaderName: { fontSize: typography.size.sm, fontFamily: typography.family.semibold, color: colors.textPrimary },
   leaderUsername: { fontSize: typography.size.xs, color: colors.textMuted },
+  leaderStreak: { fontSize: typography.size.xs, fontFamily: typography.family.semibold, color: '#fb923c' },
   leaderValue: { fontSize: typography.size.sm, fontFamily: typography.family.bold, color: '#F59E0B' },
 
   // ── Lift dropdown ──

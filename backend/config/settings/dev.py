@@ -6,6 +6,14 @@ These settings are for local development only.
 
 from .base import *
 
+# Use Redis for cache in dev so cache.add() dedup works across the beat and worker processes
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': os.environ.get('REDIS_URL', 'redis://127.0.0.1:6379') + '/3',
+    }
+}
+
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 

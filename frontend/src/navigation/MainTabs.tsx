@@ -154,7 +154,7 @@ export default function MainTabs() {
       <Root.Screen name="AllOrgs" component={AllOrgsScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="CheckInSelection" component={CheckInSelectionScreen} options={{ presentation: 'modal', gestureEnabled: true }} />
       <Root.Screen name="CameraCapture" component={CameraCaptureScreen} options={{ presentation: 'card', gestureEnabled: false }} />
-      <Root.Screen name="CheckInReview" component={CheckInReviewScreen} options={{ presentation: 'card', gestureEnabled: true }} />
+      <Root.Screen name="CheckInReview" component={CheckInReviewScreen} options={{ presentation: 'card', gestureEnabled: false }} />
       <Root.Screen name="FindFriends" component={FindFriendsScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="PostDetail" component={PostDetailScreen} options={{ presentation: 'card' }} />
       <Root.Screen name="GymDetail" component={GymDetailScreen} options={{ presentation: 'card' }} />

@@ -153,5 +153,6 @@ class TopLifterSerializer(serializers.Serializer):
     username = serializers.CharField()
     display_name = serializers.CharField()
     avatar_url = serializers.CharField(allow_null=True)
+    current_streak = serializers.IntegerField()
     value = serializers.FloatField()
     unit = serializers.CharField()

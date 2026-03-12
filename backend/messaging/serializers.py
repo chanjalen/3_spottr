@@ -426,6 +426,7 @@ class ConversationSerializer(serializers.Serializer):
     partner_username = serializers.CharField()
     partner_display_name = serializers.CharField()
     partner_avatar_url = serializers.CharField(allow_null=True)
+    partner_current_streak = serializers.IntegerField()
     latest_message = MessageListSerializer()
     unread_count = serializers.IntegerField()
     partner_has_activity_today = serializers.BooleanField()

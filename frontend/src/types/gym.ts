@@ -34,6 +34,7 @@ export interface TopLifter {
   username: string;
   display_name: string;
   avatar_url: string | null;
+  current_streak: number;
   value: number;
   unit: string;
 }

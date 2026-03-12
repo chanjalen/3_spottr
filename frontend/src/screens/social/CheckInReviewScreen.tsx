@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RouteProp } from '@react-navigation/native';
+import { RouteProp, CommonActions } from '@react-navigation/native';
 import { RootStackParamList } from '../../navigation/types';
 import { colors, spacing, typography } from '../../theme';
 import { createCheckin } from '../../api/feed';
@@ -209,7 +209,7 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
       if (selectedGymId) {
         setShowBusyModal(true);
       } else {
-        navigation.navigate('MainTabs');
+        navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'MainTabs' }] }));
       }
     } catch (err: any) {
       const msg = err?.response?.data?.error ?? 'Could not post check-in.';
@@ -229,13 +229,13 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
     } finally {
       setSubmittingBusy(false);
       setShowBusyModal(false);
-      navigation.navigate('MainTabs');
+      navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'MainTabs' }] }));
     }
   };
 
   const handleBusySkip = () => {
     setShowBusyModal(false);
-    navigation.navigate('MainTabs');
+    navigation.dispatch(CommonActions.reset({ index: 0, routes: [{ name: 'MainTabs' }] }));
   };
 
   return (
@@ -309,7 +309,7 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
               )}
               <Pressable
                 style={styles.retakeBtn}
-                onPress={() => navigation.navigate('CameraCapture', { fromCheckinReview: true })}
+                onPress={() => navigation.push('CameraCapture', { fromCheckinReview: true })}
               >
                 <Feather name="camera" size={13} color="#fff" />
                 <Text style={styles.retakeBtnText}>Retake</Text>
@@ -318,7 +318,7 @@ export default function CheckInReviewScreen({ navigation, route }: Props) {
           ) : (
             <Pressable
               style={styles.mediaPlaceholder}
-              onPress={() => navigation.navigate('CameraCapture', { fromCheckinReview: true })}
+              onPress={() => navigation.push('CameraCapture', { fromCheckinReview: true })}
             >
               <Feather name="camera" size={36} color={colors.textMuted} />
               <Text style={styles.mediaPlaceholderTitle}>Add a Photo or Video</Text>

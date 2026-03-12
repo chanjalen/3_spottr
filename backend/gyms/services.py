@@ -509,6 +509,7 @@ def get_top_lifters(gym_id, lift='bench'):
                     'username': pr.user.username,
                     'display_name': pr.user.display_name or pr.user.username,
                     'avatar_url': pr.user.avatar_url,
+                    'current_streak': pr.user.current_streak,
                     'value': val,
                     'unit': pr.unit,
                 }
@@ -543,6 +544,7 @@ def get_top_lifters(gym_id, lift='bench'):
                     'username': user.username,
                     'display_name': user.display_name or user.username,
                     'avatar_url': user.avatar_url,
+                    'current_streak': user.current_streak,
                     'value': total,
                     'unit': unit or 'lbs',
                 })
