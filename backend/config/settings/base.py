@@ -240,14 +240,17 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'UTC'
 CELERY_TASK_TRACK_STARTED = True
 # Set CELERY_TASK_ALWAYS_EAGER = True in test settings to run tasks inline
+from celery.schedules import crontab  # noqa: E402
+
 CELERY_BEAT_SCHEDULE = {
+    # Anchored to :00 of every hour — avoids drift from interval-based scheduling
     'reset-broken-streaks-hourly': {
         'task': 'workouts.tasks.reset_broken_streaks',
-        'schedule': 3600,  # every hour (UTC) — catches each user's 3 AM window
+        'schedule': crontab(minute=0),
     },
     'send-gym-reminders-hourly': {
         'task': 'accounts.tasks.send_gym_reminders',
-        'schedule': 3600,  # runs every hour; internally fires at 9am/12pm/6pm per user's local time
+        'schedule': crontab(minute=0),
     },
 }
 

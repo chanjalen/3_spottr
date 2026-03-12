@@ -44,6 +44,7 @@ def send_gym_reminders():
 
     users = User.objects.filter(
         push_notifications=True,
+        notify_workout_reminders=True,
         expo_push_token__gt='',
     )
 

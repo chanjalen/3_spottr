@@ -292,6 +292,7 @@ def dm_conversations(request):
             'partner_username': entry.partner.username,
             'partner_display_name': entry.partner.display_name or entry.partner.username,
             'partner_avatar_url': entry.partner.avatar_url or None,
+            'partner_current_streak': entry.partner.current_streak,
             'latest_message': entry.latest_message,
             'unread_count': entry.unread_count,
             'partner_has_activity_today': activity_map.get(str(entry.partner_id), False),

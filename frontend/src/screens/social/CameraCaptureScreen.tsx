@@ -28,7 +28,7 @@ import {
   useMicrophonePermissions,
 } from 'expo-camera';
 
-import { RouteProp, useFocusEffect } from '@react-navigation/native';
+import { RouteProp, useFocusEffect, CommonActions } from '@react-navigation/native';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'CameraCapture'>;
@@ -239,7 +239,13 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
       }
 
       if (fromCheckinReview) {
-        navigation.navigate('CheckInReview', getCheckinParams(photo.uri, 'photo', frontUri));
+        const params = getCheckinParams(photo.uri, 'photo', frontUri);
+        const state = navigation.getState();
+        const prevRoute = state.routes[state.index - 1];
+        if (prevRoute?.name === 'CheckInReview') {
+          navigation.dispatch({ ...CommonActions.setParams(params), source: prevRoute.key });
+        }
+        navigation.goBack();
       } else {
         navigation.replace('CheckInReview', {
           mediaUri: photo.uri,
@@ -288,7 +294,13 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
     }
 
     if (fromCheckinReview) {
-      navigation.navigate('CheckInReview', getCheckinParams(videoUri, 'video'));
+      const params = getCheckinParams(videoUri, 'video');
+      const state = navigation.getState();
+      const prevRoute = state.routes[state.index - 1];
+      if (prevRoute?.name === 'CheckInReview') {
+        navigation.dispatch({ ...CommonActions.setParams(params), source: prevRoute.key });
+      }
+      navigation.goBack();
     } else {
       navigation.replace('CheckInReview', {
         mediaUri: videoUri,
@@ -397,7 +409,7 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
               {String(recordingSeconds % 60).padStart(2, '0')}
             </Text>
           </View>
-        ) : !fromCheckinReview ? (
+        ) : (
           <Pressable
             style={({ pressed }) => [styles.logWorkoutBtn, pressed && styles.logWorkoutBtnPressed]}
             onPress={handleLogWorkout}
@@ -413,8 +425,6 @@ export default function CameraCaptureScreen({ navigation, route }: Props) {
               <Feather name="chevron-right" size={16} color="rgba(255,255,255,0.75)" />
             </LinearGradient>
           </Pressable>
-        ) : (
-          <View style={{ width: 44 }} />
         )}
 
         {/* Right column: flip + dual camera toggle */}

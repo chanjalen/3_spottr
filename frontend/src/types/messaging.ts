@@ -96,6 +96,7 @@ export interface Conversation {
   partner_username: string;
   partner_display_name: string;
   partner_avatar_url: string | null;
+  partner_current_streak: number;
   latest_message: Message;
   unread_count: number;
   partner_has_activity_today: boolean;

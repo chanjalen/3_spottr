@@ -50,9 +50,14 @@ export default function FeedCardHeader({
         disabled={!onPressUser}
         style={styles.nameBlock}
       >
-        <Text style={styles.displayName} numberOfLines={1}>
-          {user.display_name}
-        </Text>
+        <View style={styles.nameRow}>
+          <Text style={styles.displayName} numberOfLines={1}>
+            {user.display_name}
+          </Text>
+          {!!user.streak && user.streak > 0 && (
+            <Text style={styles.streak}>🔥{user.streak}</Text>
+          )}
+        </View>
         <View style={styles.subLine}>
           <Text style={styles.handle} numberOfLines={1}>
             @{user.username}
@@ -118,6 +123,16 @@ const styles = StyleSheet.create({
     flexDirection: 'column',
     justifyContent: 'center',
     minWidth: 0,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  streak: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.semibold,
+    color: '#fb923c',
   },
   subLine: {
     flexDirection: 'row',

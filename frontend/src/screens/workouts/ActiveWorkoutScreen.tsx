@@ -268,21 +268,23 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
       setShowFinish(false);
       endWorkout();
       if (fromCheckin) {
-        if (checkinMediaUri) {
-          // Has media: stack is [..., CheckInReview, WorkoutLog, ActiveWorkout] — pop back to CheckInReview
-          navigation.pop(2);
-        } else {
-          // No media: came from CameraCapture directly — navigate to CheckInReview with workout attached
-          navigation.dispatch(
-            CommonActions.reset({
-              index: 1,
-              routes: [
-                { name: 'MainTabs' },
-                { name: 'CheckInReview', params: { workoutId } },
-              ],
-            }),
-          );
-        }
+        // Always reset to CheckInReview so the stack is correct regardless of how the workout was started or resumed
+        navigation.dispatch(
+          CommonActions.reset({
+            index: 1,
+            routes: [
+              { name: 'MainTabs' },
+              {
+                name: 'CheckInReview',
+                params: {
+                  mediaUri: checkinMediaUri,
+                  mediaType: checkinMediaType,
+                  workoutId,
+                },
+              },
+            ],
+          }),
+        );
       } else {
         navigation.goBack();
       }

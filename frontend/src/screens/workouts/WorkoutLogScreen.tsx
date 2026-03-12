@@ -24,6 +24,7 @@ import {
 import { Workout, WorkoutLogStats, WorkoutTemplate } from '../../types/workout';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
+import { useActiveWorkout } from '../../store/ActiveWorkoutContext';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'WorkoutLog'>;
@@ -34,6 +35,7 @@ export default function WorkoutLogScreen({ navigation, route }: Props) {
   const fromCheckin = route.params?.fromCheckin ?? false;
   const checkinMediaUri = route.params?.checkinMediaUri;
   const checkinMediaType = route.params?.checkinMediaType;
+  const { fromCheckin: contextFromCheckin, checkinMedia } = useActiveWorkout();
   const insets = useSafeAreaInsets();
   const [stats, setStats] = useState<WorkoutLogStats | null>(null);
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
@@ -140,7 +142,12 @@ export default function WorkoutLogScreen({ navigation, route }: Props) {
           {activeWorkout && (
             <Pressable
               style={styles.resumeCard}
-              onPress={() => navigation.navigate('ActiveWorkout', { workoutId: activeWorkout.id })}
+              onPress={() => navigation.navigate('ActiveWorkout', {
+                workoutId: activeWorkout.id,
+                fromCheckin: contextFromCheckin,
+                checkinMediaUri: checkinMedia?.uri ?? checkinMediaUri,
+                checkinMediaType: checkinMedia?.type ?? checkinMediaType,
+              })}
             >
               <View style={styles.resumeLeft}>
                 <Feather name="activity" size={20} color={colors.primary} />
