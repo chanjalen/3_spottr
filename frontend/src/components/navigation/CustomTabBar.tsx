@@ -36,8 +36,8 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
   const { isActive: tutorialActive, step: tutorialStep, next: tutorialNext, fabOpenRequested, clearFABRequest } = useTutorial();
 
   const openCreateMenu = useCallback(() => {
-    // Step index 3 = tutorial step 4 — tapping + advances to step 5 and opens the sheet
-    if (tutorialActive && tutorialStep === 3) tutorialNext();
+    // Step index 2 = FAB step — tapping + advances to step 3 (CreateMenuSheet) and opens the sheet
+    if (tutorialActive && tutorialStep === 2) tutorialNext();
     setShowCreateMenu(true);
   }, [tutorialActive, tutorialStep, tutorialNext]);
 
@@ -73,9 +73,10 @@ export default function CustomTabBar({ state, descriptors, navigation }: BottomT
                 navigation.navigate(route.name);
               }
               // Tutorial: tap interactions that advance the tutorial
-              if (tutorialActive && tutorialStep === 5 && route.name === 'Gyms') tutorialNext();
-              if (tutorialActive && tutorialStep === 8 && route.name === 'Social') tutorialNext();
-              if (tutorialActive && tutorialStep === 11 && route.name === 'Ranks') tutorialNext();
+              if (tutorialActive && tutorialStep === 4 && route.name === 'Posts') tutorialNext();
+              if (tutorialActive && tutorialStep === 6 && route.name === 'Gyms') tutorialNext();
+              if (tutorialActive && tutorialStep === 9 && route.name === 'Social') tutorialNext();
+              if (tutorialActive && tutorialStep === 12 && route.name === 'Ranks') tutorialNext();
             };
 
             return (
