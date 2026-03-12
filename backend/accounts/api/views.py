@@ -13,7 +13,7 @@ from django.core.validators import validate_email
 from django.db import IntegrityError
 from django.utils import timezone
 from rest_framework.decorators import api_view, permission_classes, throttle_classes
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated, IsAdminUser
 from rest_framework.response import Response
 from rest_framework import status
 
@@ -1456,7 +1456,7 @@ def api_save_push_token_view(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAuthenticated])
+@permission_classes([IsAdminUser])
 def api_send_gym_reminders_view(request):
     """
     POST /accounts/api/send-gym-reminders/
