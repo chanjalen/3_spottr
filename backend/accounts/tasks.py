@@ -1,6 +1,5 @@
 import logging
 import zoneinfo
-from datetime import datetime, timedelta
 
 from config.celery import app
 from django.core.cache import cache
@@ -12,15 +11,15 @@ logger = logging.getLogger(__name__)
 REMINDER_SLOTS = {
     9: {
         'title': "Get your day started! 🌅",
-        'body': "Haven't logged a workout yet — crush it this morning! 💪",
+        'body': "Haven't logged a check-in yet — crush it this morning! 💪",
     },
     12: {
         'title': "Let's go! 🔥",
-        'body': "Midday check — still no workout logged. Make it happen! 🏃",
+        'body': "Midday check — still no check-in logged. Make it happen! 🏃",
     },
     18: {
         'title': "Last chance today 🌆",
-        'body': "Final reminder — get your workout in before the day ends! 💪",
+        'body': "Post your check-in or log a rest day before the day ends — don't lose your streak! 🔥",
     },
 }
 
@@ -37,8 +36,8 @@ def send_gym_reminders():
     """
     from accounts.models import User
     from accounts.push import send_push
-    from social.models import QuickWorkout
-    from workouts.models import RestDay
+    from workouts.models import RestDay, Streak
+    from workouts.services.streak_service import _get_local_now, get_streak_date
 
     now_utc = tz_util.now()
 
@@ -66,15 +65,11 @@ def send_gym_reminders():
         if not cache.add(cache_key, True, timeout=60 * 60 * 25):
             continue
 
-        # Check checkin using local-timezone-aware UTC bounds (fixes UTC date bug)
-        day_start = datetime(local_today.year, local_today.month, local_today.day, tzinfo=tz)
-        day_end = day_start + timedelta(days=1)
-        has_checkin = QuickWorkout.objects.filter(
-            user=user,
-            created_at__gte=day_start,
-            created_at__lt=day_end,
-        ).exists()
-        has_rest_day = RestDay.objects.filter(user=user, streak_date=local_today).exists()
+        # Use same check as zap guard — respects the midnight-3AM grace window
+        today_streak = get_streak_date(_get_local_now(user))
+        streak_obj = Streak.objects.filter(user=user).first()
+        has_checkin = streak_obj is not None and streak_obj.last_streak_date == today_streak
+        has_rest_day = RestDay.objects.filter(user=user, streak_date=today_streak).exists()
 
         if not has_checkin and not has_rest_day:
             msg = REMINDER_SLOTS[local_hour]
