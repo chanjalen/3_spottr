@@ -54,7 +54,7 @@ def _serialize_workout(workout):
         'notes': workout.notes or '',
         'exercises': exercises_data,
         'exercise_count': len(exercises_data),
-        'total_sets': sum(len(e['sets']) for e in exercises_data),
+        'total_sets': sum(sum(1 for s in e['sets'] if s['completed']) for e in exercises_data),
         'is_active': is_active,
     }
 
@@ -80,7 +80,7 @@ def log_workout_view(request):
     workouts_count = len(week_workouts)
     total_time = sum((w.duration.total_seconds() for w in week_workouts if w.duration), 0)
     total_sets = sum(
-        ExerciseSet.objects.filter(exercise__workout=w).count()
+        ExerciseSet.objects.filter(exercise__workout=w, completed=True).count()
         for w in week_workouts
     )
 
@@ -103,7 +103,7 @@ def log_workout_view(request):
             m = (dur_secs % 3600) // 60
             dur_str = f"{h}h {m}m" if h > 0 else f"{m}m"
             ex_count = Exercise.objects.filter(workout=w).count()
-            s_count = ExerciseSet.objects.filter(exercise__workout=w).count()
+            s_count = ExerciseSet.objects.filter(exercise__workout=w, completed=True).count()
             recent_list.append({
                 'id': str(w.id),
                 'name': w.name,
@@ -248,15 +248,39 @@ def add_exercise_view(request, workout_id):
         order=next_order,
     )
 
-    # Create default sets based on catalog
-    for i in range(1, catalog_exercise.default_sets + 1):
-        ExerciseSet.objects.create(
-            exercise=exercise,
-            set_number=i,
-            reps=0,
-            weight=0,
-            completed=False,
-        )
+    # Pre-populate sets from the user's most recent workout containing this exercise.
+    # Fall back to blank sets if no history exists.
+    last_exercise = (
+        Exercise.objects
+        .filter(workout__user=request.user, name__iexact=catalog_exercise.name)
+        .exclude(workout=workout)
+        .order_by('-workout__start_time')
+        .prefetch_related('exercise_sets')
+        .first()
+    )
+
+    if last_exercise:
+        last_sets = last_exercise.exercise_sets.order_by('set_number')
+        if last_sets.exists():
+            for s in last_sets:
+                ExerciseSet.objects.create(
+                    exercise=exercise,
+                    set_number=s.set_number,
+                    reps=s.reps,
+                    weight=s.weight,
+                    completed=False,
+                )
+        else:
+            # Exercise existed but had no sets — create blanks
+            for i in range(1, catalog_exercise.default_sets + 1):
+                ExerciseSet.objects.create(
+                    exercise=exercise, set_number=i, reps=0, weight=0, completed=False,
+                )
+    else:
+        for i in range(1, catalog_exercise.default_sets + 1):
+            ExerciseSet.objects.create(
+                exercise=exercise, set_number=i, reps=0, weight=0, completed=False,
+            )
 
     return JsonResponse({
         'success': True,
@@ -498,7 +522,7 @@ def finish_workout_view(request, workout_id):
     # Calculate stats
     exercises = Exercise.objects.filter(workout=workout).order_by('order')
     exercise_count = exercises.count()
-    total_sets = ExerciseSet.objects.filter(exercise__workout=workout).count()
+    total_sets = ExerciseSet.objects.filter(exercise__workout=workout, completed=True).count()
 
     # Format duration for display
     total_seconds = int(workout.duration.total_seconds())
@@ -519,21 +543,25 @@ def finish_workout_view(request, workout_id):
             visibility='private',
         )
 
-        # Create template exercises from workout exercises
+        # Create template exercises from workout exercises (only completed sets)
         for idx, exercise in enumerate(exercises):
-            # Get the sets for this exercise to determine default values
-            exercise_sets = exercise.exercise_sets.all()
+            exercise_sets = exercise.exercise_sets.filter(completed=True).order_by('set_number')
 
-            # Use actual values from the first set (most representative)
             if exercise_sets.exists():
                 first_set = exercise_sets.first()
                 default_reps = first_set.reps if first_set.reps > 0 else 10
                 default_weight = float(first_set.weight) if first_set.weight else 0
                 sets_count = exercise_sets.count()
+                # Store every set individually so templates are exact replicas
+                sets_data = [
+                    {'reps': s.reps, 'weight': float(s.weight)}
+                    for s in exercise_sets
+                ]
             else:
                 default_reps = 10
                 default_weight = 0
                 sets_count = 3
+                sets_data = []
 
             TemplateExercise.objects.create(
                 template=template,
@@ -544,6 +572,7 @@ def finish_workout_view(request, workout_id):
                 weight=default_weight,
                 unit=exercise.unit or 'lbs',
                 order_index=idx,
+                sets_data=sets_data,
             )
 
     # Create a post if posting to feed
@@ -693,15 +722,26 @@ def start_from_template_view(request, template_id):
             order=template_exercise.order_index,
         )
 
-        # Create sets based on template
-        for i in range(1, template_exercise.sets + 1):
-            ExerciseSet.objects.create(
-                exercise=exercise,
-                set_number=i,
-                reps=template_exercise.reps,
-                weight=template_exercise.weight,
-                completed=False,
-            )
+        # Create sets — use per-set data if available (new templates),
+        # fall back to scalar reps/weight for older templates.
+        if template_exercise.sets_data:
+            for i, set_data in enumerate(template_exercise.sets_data, 1):
+                ExerciseSet.objects.create(
+                    exercise=exercise,
+                    set_number=i,
+                    reps=set_data.get('reps', 0),
+                    weight=set_data.get('weight', 0),
+                    completed=False,
+                )
+        else:
+            for i in range(1, template_exercise.sets + 1):
+                ExerciseSet.objects.create(
+                    exercise=exercise,
+                    set_number=i,
+                    reps=template_exercise.reps,
+                    weight=template_exercise.weight,
+                    completed=False,
+                )
 
     return JsonResponse({
         'success': True,
@@ -722,6 +762,78 @@ def delete_template_view(request, template_id):
     return JsonResponse({'success': True})
 
 
+@api_view(['GET'])
+def get_template_detail_view(request, template_id):
+    """
+    Return full template detail including all exercises and their per-set data.
+    """
+    from .models import WorkoutTemplate
+
+    template = get_object_or_404(WorkoutTemplate, id=template_id, user=request.user)
+    exercises = template.exercises.all().order_by('order_index')
+
+    exercises_data = []
+    for ex in exercises:
+        if ex.sets_data:
+            sets = ex.sets_data  # [{reps, weight}, ...]
+        else:
+            sets = [{'reps': ex.reps, 'weight': float(ex.weight)} for _ in range(ex.sets)]
+        exercises_data.append({
+            'name': ex.name,
+            'category': ex.category,
+            'sets': sets,
+        })
+
+    return JsonResponse({
+        'success': True,
+        'template': {
+            'id': str(template.id),
+            'name': template.name,
+            'description': template.description,
+            'exercise_count': exercises.count(),
+            'exercises': exercises_data,
+        },
+    })
+
+
+@api_view(['POST'])
+def update_template_from_workout_view(request, template_id):
+    """
+    Update a template's exercises with completed sets from a finished workout.
+    """
+    from .models import WorkoutTemplate
+
+    template = get_object_or_404(WorkoutTemplate, id=template_id, user=request.user)
+    workout_id = request.data.get('workout_id')
+    if not workout_id:
+        return DRFResponse({'error': 'workout_id required'}, status=400)
+
+    workout = get_object_or_404(Workout, id=workout_id, user=request.user)
+    exercises = Exercise.objects.filter(workout=workout).order_by('order')
+
+    template.exercises.all().delete()
+
+    for idx, exercise in enumerate(exercises):
+        exercise_sets = exercise.exercise_sets.filter(completed=True).order_by('set_number')
+        if not exercise_sets.exists():
+            continue
+        first_set = exercise_sets.first()
+        sets_data = [{'reps': s.reps, 'weight': float(s.weight)} for s in exercise_sets]
+        TemplateExercise.objects.create(
+            template=template,
+            name=exercise.name,
+            category=exercise.category or 'other',
+            sets=exercise_sets.count(),
+            reps=first_set.reps,
+            weight=float(first_set.weight),
+            unit=exercise.unit or 'lbs',
+            order_index=idx,
+            sets_data=sets_data,
+        )
+
+    return DRFResponse({'success': True})
+
+
 @login_required
 def view_workout_view(request, workout_id):
     """
@@ -732,8 +844,8 @@ def view_workout_view(request, workout_id):
 
     exercises = Exercise.objects.filter(workout=workout).prefetch_related('exercise_sets').order_by('order')
 
-    # Calculate stats
-    total_sets = ExerciseSet.objects.filter(exercise__workout=workout).count()
+    # Calculate stats (only completed sets count)
+    total_sets = ExerciseSet.objects.filter(exercise__workout=workout, completed=True).count()
 
     # Format duration
     if workout.duration:

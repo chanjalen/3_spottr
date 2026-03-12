@@ -14,6 +14,8 @@ import {
   FlatList,
   Switch,
   KeyboardAvoidingView,
+  AppState,
+  type AppStateStatus,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -30,6 +32,7 @@ import {
   updateSet,
   deleteSet,
   fetchExerciseCatalog,
+  updateTemplateFromWorkout,
 } from '../../api/workouts';
 import { Workout, WorkoutExercise, ExerciseSet, ExerciseCatalogItem, NewPR } from '../../types/workout';
 import { colors, spacing, typography } from '../../theme';
@@ -53,12 +56,13 @@ function isBigLift(exerciseName: string): boolean {
 
 export default function ActiveWorkoutScreen({ navigation, route }: Props) {
   const insets = useSafeAreaInsets();
-  const { workoutId, fromCheckin = false, checkinMediaUri, checkinMediaType } = route.params;
+  const { workoutId, fromCheckin = false, checkinMediaUri, checkinMediaType, templateId } = route.params;
 
   const [workout, setWorkout] = useState<Workout | null>(null);
   const [loading, setLoading] = useState(true);
   const [seconds, setSeconds] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const startedAtRef = useRef<number | null>(null);
 
   // Catalog modal state
   const [showCatalog, setShowCatalog] = useState(false);
@@ -98,12 +102,13 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
         setWorkout(w);
         setWorkoutName(w.name || 'Workout');
         if (w.started_at) {
-          const elapsed = Math.floor((Date.now() - new Date(w.started_at).getTime()) / 1000);
-          setSeconds(Math.max(0, elapsed));
+          const ts = new Date(w.started_at).getTime();
+          startedAtRef.current = ts;
+          setSeconds(Math.max(0, Math.floor((Date.now() - ts) / 1000)));
           const media = checkinMediaUri && checkinMediaType
             ? { uri: checkinMediaUri, type: checkinMediaType }
             : undefined;
-          beginWorkout(workoutId, new Date(w.started_at).getTime(), fromCheckin, media);
+          beginWorkout(workoutId, ts, fromCheckin, media);
         }
       })
       .finally(() => setLoading(false));
@@ -112,8 +117,23 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
   // ─── Timer ───────────────────────────────────────────────────────────────────
 
   useEffect(() => {
-    timerRef.current = setInterval(() => setSeconds((s) => s + 1), 1000);
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    const tick = () => {
+      if (startedAtRef.current !== null) {
+        setSeconds(Math.floor((Date.now() - startedAtRef.current) / 1000));
+      }
+    };
+    timerRef.current = setInterval(tick, 1000);
+
+    // Immediately resync when the app comes back to the foreground
+    const handleAppState = (state: AppStateStatus) => {
+      if (state === 'active') tick();
+    };
+    const sub = AppState.addEventListener('change', handleAppState);
+
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+      sub.remove();
+    };
   }, []);
 
   const formatTime = (s: number) => {
@@ -240,9 +260,43 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
     [],
   );
 
+  // Atomically save reps + weight + completed in one API call
+  const handleCompleteSet = useCallback(
+    async (exerciseId: string, setId: string, reps: number, weight: number, completed: boolean) => {
+      setWorkout((w) => {
+        if (!w) return w;
+        return {
+          ...w,
+          exercises: w.exercises.map((e) =>
+            e.id === exerciseId
+              ? { ...e, sets: e.sets.map((s) => s.id === setId ? { ...s, reps, weight, completed } : s) }
+              : e,
+          ),
+        };
+      });
+      try {
+        const result = await updateSet(setId, { reps, weight, completed });
+        if (completed && result.is_new_pr && result.pr_exercise && isBigLift(result.pr_exercise)) {
+          const pr: NewPR = {
+            exercise_name: result.pr_exercise,
+            value: result.pr_value ?? '',
+            unit: result.pr_unit ?? 'lbs',
+          };
+          setPendingPRs((prev) => {
+            const without = prev.filter((p) => p.exercise_name !== pr.exercise_name);
+            return [...without, pr];
+          });
+        }
+      } catch {
+        // silent — server is source of truth on next fetch
+      }
+    },
+    [],
+  );
+
   // ─── Finish ───────────────────────────────────────────────────────────────────
 
-  const openFinishDialog = () => {
+  const openFinishModal = () => {
     setWorkoutName(workout?.name || 'Workout');
     setNotes('');
     setPostToFeed(true);
@@ -252,13 +306,70 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
     setShowFinish(true);
   };
 
+  const openFinishDialog = () => {
+    const incompleteSets = workout?.exercises.flatMap((e) => e.sets.filter((s) => !s.completed)) ?? [];
+    if (incompleteSets.length > 0) {
+      Alert.alert(
+        'Incomplete Sets',
+        `You have ${incompleteSets.length} uncompleted set${incompleteSets.length > 1 ? 's' : ''}. What would you like to do?`,
+        [
+          { text: 'Go Back', style: 'cancel' },
+          {
+            text: 'Leave Incomplete',
+            onPress: openFinishModal,
+          },
+          {
+            text: 'Auto-Complete All',
+            onPress: async () => {
+              const toComplete = workout?.exercises.flatMap((e) =>
+                e.sets
+                  .filter((s) => !s.completed)
+                  .map((s) => ({ exerciseId: e.id, set: s }))
+              ) ?? [];
+              await Promise.all(
+                toComplete.map(({ exerciseId, set }) =>
+                  handleCompleteSet(exerciseId, set.id, set.reps ?? 0, Number(set.weight) ?? 0, true)
+                )
+              );
+              openFinishModal();
+            },
+          },
+        ],
+      );
+      return;
+    }
+    openFinishModal();
+  };
+
+  const doNavigateAfterFinish = () => {
+    if (fromCheckin) {
+      navigation.dispatch(
+        CommonActions.reset({
+          index: 1,
+          routes: [
+            { name: 'MainTabs' },
+            {
+              name: 'CheckInReview',
+              params: {
+                mediaUri: checkinMediaUri,
+                mediaType: checkinMediaType,
+                workoutId,
+              },
+            },
+          ],
+        }),
+      );
+    } else {
+      navigation.goBack();
+    }
+  };
+
   const handleFinish = async () => {
     setFinishLoading(true);
     try {
       await finishWorkout(workoutId, {
         name: workoutName.trim() || 'Workout',
         notes,
-        // Never auto-post to feed when coming from a check-in — the check-in handles posting
         post_to_feed: fromCheckin ? false : postToFeed,
         visibility: feedVisibility,
         save_template: saveAsTemplate,
@@ -267,26 +378,28 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
       });
       setShowFinish(false);
       endWorkout();
-      if (fromCheckin) {
-        // Always reset to CheckInReview so the stack is correct regardless of how the workout was started or resumed
-        navigation.dispatch(
-          CommonActions.reset({
-            index: 1,
-            routes: [
-              { name: 'MainTabs' },
-              {
-                name: 'CheckInReview',
-                params: {
-                  mediaUri: checkinMediaUri,
-                  mediaType: checkinMediaType,
-                  workoutId,
-                },
+
+      if (templateId) {
+        Alert.alert(
+          'Update Template?',
+          'Do you want to update your template with today\'s sets?',
+          [
+            {
+              text: 'No',
+              style: 'cancel',
+              onPress: doNavigateAfterFinish,
+            },
+            {
+              text: 'Yes, Update',
+              onPress: async () => {
+                await updateTemplateFromWorkout(templateId, workoutId).catch(() => {});
+                doNavigateAfterFinish();
               },
-            ],
-          }),
+            },
+          ],
         );
       } else {
-        navigation.goBack();
+        doNavigateAfterFinish();
       }
     } catch {
       Alert.alert('Error', 'Could not finish workout.');
@@ -381,6 +494,7 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
             onAddSet={() => handleAddSet(exercise.id)}
             onDeleteSet={(setId) => handleDeleteSet(exercise.id, setId)}
             onUpdateSet={(setId, field, value) => handleUpdateSet(exercise.id, setId, field, value)}
+            onCompleteSet={(setId, reps, weight, completed) => handleCompleteSet(exercise.id, setId, reps, weight, completed)}
             onDeleteExercise={() => handleDeleteExercise(exercise.id)}
           />
         ))}
@@ -577,30 +691,34 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
                 </View>
               )}
 
-              {/* Save as template toggle */}
-              <View style={styles.toggleRow}>
-                <View>
-                  <Text style={styles.toggleLabel}>Save as Template</Text>
-                  <Text style={styles.toggleSub}>Reuse this workout later</Text>
-                </View>
-                <Switch
-                  value={saveAsTemplate}
-                  onValueChange={setSaveAsTemplate}
-                  trackColor={{ true: colors.primary }}
-                />
-              </View>
+              {/* Save as template — hidden when this workout was already started from a template */}
+              {!templateId && (
+                <>
+                  <View style={styles.toggleRow}>
+                    <View>
+                      <Text style={styles.toggleLabel}>Save as Template</Text>
+                      <Text style={styles.toggleSub}>Reuse this workout later</Text>
+                    </View>
+                    <Switch
+                      value={saveAsTemplate}
+                      onValueChange={setSaveAsTemplate}
+                      trackColor={{ true: colors.primary }}
+                    />
+                  </View>
 
-              {saveAsTemplate && (
-                <View style={styles.field}>
-                  <Text style={styles.fieldLabel}>Template Name</Text>
-                  <TextInput
-                    style={styles.fieldInput}
-                    value={templateName}
-                    onChangeText={setTemplateName}
-                    placeholder="My Template"
-                    placeholderTextColor={colors.textMuted}
-                  />
-                </View>
+                  {saveAsTemplate && (
+                    <View style={styles.field}>
+                      <Text style={styles.fieldLabel}>Template Name</Text>
+                      <TextInput
+                        style={styles.fieldInput}
+                        value={templateName}
+                        onChangeText={setTemplateName}
+                        placeholder="My Template"
+                        placeholderTextColor={colors.textMuted}
+                      />
+                    </View>
+                  )}
+                </>
               )}
 
               {/* PR summary */}
@@ -642,10 +760,22 @@ interface ExerciseCardProps {
   onAddSet: () => void;
   onDeleteSet: (setId: string) => void;
   onUpdateSet: (setId: string, field: 'reps' | 'weight' | 'completed', value: any) => void;
+  onCompleteSet: (setId: string, reps: number, weight: number, completed: boolean) => void;
   onDeleteExercise: () => void;
 }
 
-function ExerciseCard({ exercise, onAddSet, onDeleteSet, onUpdateSet, onDeleteExercise }: ExerciseCardProps) {
+function ExerciseCard({ exercise, onAddSet, onDeleteSet, onUpdateSet, onCompleteSet, onDeleteExercise }: ExerciseCardProps) {
+  // Find the last completed set before `setIndex` that has real values — used for suggestions
+  const getLastCompletedValues = (setIndex: number): { reps: number; weight: number } | null => {
+    for (let i = setIndex - 1; i >= 0; i--) {
+      const s = exercise.sets[i];
+      if (s.completed && s.reps > 0 && Number(s.weight) > 0) {
+        return { reps: s.reps, weight: Number(s.weight) };
+      }
+    }
+    return null;
+  };
+
   return (
     <View style={styles.exCard}>
       <View style={styles.exHeader}>
@@ -675,15 +805,23 @@ function ExerciseCard({ exercise, onAddSet, onDeleteSet, onUpdateSet, onDeleteEx
         <View style={{ width: 32 + 24 }} />
       </View>
 
-      {exercise.sets.map((set, i) => (
-        <SetRow
-          key={set.id}
-          set={set}
-          index={i}
-          onUpdate={(field, value) => onUpdateSet(set.id, field, value)}
-          onDelete={() => onDeleteSet(set.id)}
-        />
-      ))}
+      {exercise.sets.map((set, i) => {
+        // Only suggest if the set is incomplete and currently blank/zero
+        const isBlank = !set.completed && (set.reps === 0 || set.reps == null) && (Number(set.weight) === 0 || set.weight == null);
+        const suggestion = isBlank ? getLastCompletedValues(i) : null;
+        return (
+          <SetRow
+            key={set.id}
+            set={set}
+            index={i}
+            suggestedReps={suggestion?.reps}
+            suggestedWeight={suggestion?.weight}
+            onUpdate={(field, value) => onUpdateSet(set.id, field, value)}
+            onCompleteSet={(reps, weight, completed) => onCompleteSet(set.id, reps, weight, completed)}
+            onDelete={() => onDeleteSet(set.id)}
+          />
+        );
+      })}
 
       <Pressable style={styles.addSetBtn} onPress={onAddSet}>
         <Feather name="plus" size={14} color={colors.primary} />
@@ -696,44 +834,74 @@ function ExerciseCard({ exercise, onAddSet, onDeleteSet, onUpdateSet, onDeleteEx
 interface SetRowProps {
   set: ExerciseSet;
   index: number;
+  suggestedReps?: number;
+  suggestedWeight?: number;
   onUpdate: (field: 'reps' | 'weight' | 'completed', value: any) => void;
+  onCompleteSet: (reps: number, weight: number, completed: boolean) => void;
   onDelete: () => void;
 }
 
-function SetRow({ set, index, onUpdate, onDelete }: SetRowProps) {
+function SetRow({ set, index, suggestedReps, suggestedWeight, onUpdate, onCompleteSet, onDelete }: SetRowProps) {
   const [localReps, setLocalReps] = useState(() =>
     set.reps != null && set.reps !== 0 ? String(set.reps) : ''
   );
   const [localWeight, setLocalWeight] = useState(() =>
-    set.weight != null && set.weight !== 0 ? String(set.weight) : ''
+    set.weight != null && Number(set.weight) !== 0 ? String(set.weight) : ''
   );
+
+  // Sync local state when the set gets completed (optimistic update applied new values)
+  useEffect(() => {
+    if (set.completed) {
+      setLocalReps(set.reps != null && set.reps !== 0 ? String(set.reps) : '');
+      setLocalWeight(set.weight != null && Number(set.weight) !== 0 ? String(set.weight) : '');
+    }
+  }, [set.completed, set.reps, set.weight]);
+
+  const handleCheck = () => {
+    if (!set.completed) {
+      // Use typed value; fall back to suggestion if blank
+      const finalReps = localReps ? parseInt(localReps, 10) : (suggestedReps ?? 0);
+      const finalWeight = localWeight ? parseFloat(localWeight) : (suggestedWeight ?? 0);
+      // Update local display so locked inputs show the applied values
+      if (!localReps && suggestedReps) setLocalReps(String(suggestedReps));
+      if (!localWeight && suggestedWeight) setLocalWeight(String(suggestedWeight));
+      onCompleteSet(finalReps, finalWeight, true);
+    } else {
+      // Uncheck: keep stored values, just mark incomplete
+      onCompleteSet(set.reps ?? 0, Number(set.weight) ?? 0, false);
+    }
+  };
+
+  const isLocked = set.completed;
 
   return (
     <View style={[styles.setRow, set.completed && styles.setRowCompleted]}>
       <Text style={[styles.setNum, { width: 32 }]}>{index + 1}</Text>
       <TextInput
-        style={[styles.setInput, { flex: 1 }]}
+        style={[styles.setInput, { flex: 1 }, isLocked && styles.setInputLocked]}
         value={localReps}
         onChangeText={setLocalReps}
-        onEndEditing={() => onUpdate('reps', localReps ? parseInt(localReps, 10) : 0)}
+        onEndEditing={() => { if (!isLocked) onUpdate('reps', localReps ? parseInt(localReps, 10) : 0); }}
         keyboardType="number-pad"
-        placeholder="—"
-        placeholderTextColor={colors.textMuted}
+        placeholder={suggestedReps ? String(suggestedReps) : '—'}
+        placeholderTextColor={suggestedReps ? colors.textSecondary : colors.textMuted}
         selectTextOnFocus
+        editable={!isLocked}
       />
       <TextInput
-        style={[styles.setInput, { flex: 1.2 }]}
+        style={[styles.setInput, { flex: 1.2 }, isLocked && styles.setInputLocked]}
         value={localWeight}
         onChangeText={setLocalWeight}
-        onEndEditing={() => onUpdate('weight', localWeight ? parseFloat(localWeight) : 0)}
+        onEndEditing={() => { if (!isLocked) onUpdate('weight', localWeight ? parseFloat(localWeight) : 0); }}
         keyboardType="decimal-pad"
-        placeholder="—"
-        placeholderTextColor={colors.textMuted}
+        placeholder={suggestedWeight ? String(suggestedWeight) : '—'}
+        placeholderTextColor={suggestedWeight ? colors.textSecondary : colors.textMuted}
         selectTextOnFocus
+        editable={!isLocked}
       />
       <Pressable
         style={[styles.checkBox, set.completed && styles.checkBoxDone]}
-        onPress={() => onUpdate('completed', !set.completed)}
+        onPress={handleCheck}
       >
         {set.completed && <Feather name="check" size={14} color="#fff" />}
       </Pressable>
@@ -925,6 +1093,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkBoxDone: { backgroundColor: colors.success, borderColor: colors.success },
+  setInputLocked: {
+    borderColor: 'transparent',
+    backgroundColor: 'transparent',
+    color: colors.textSecondary,
+    opacity: 0.75,
+  },
   setDeleteBtn: {
     width: 24,
     height: 24,
