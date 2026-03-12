@@ -32,8 +32,8 @@ export default function CreateMenuSheet({ visible, onClose, initialPage = 0 }: P
   const navigation = useNavigation<RootNav>();
   const { width, height: screenHeight } = useWindowDimensions();
   const { isActive: tutorialActive, step: tutorialStep, totalSteps: tutorialTotal, next: tutorialNext } = useTutorial();
-  // Step index 4 (0-based) = tutorial step 5 — activates when user opens this sheet
-  const showTutorialOverlay = tutorialActive && tutorialStep === 4;
+  // Step index 3 (0-based) — activates when user opens this sheet after the FAB step
+  const showTutorialOverlay = tutorialActive && tutorialStep === 3;
   const pagerRef = useRef<ScrollView>(null);
   const [page, setPage] = useState(initialPage);
   const [restDaysRemaining, setRestDaysRemaining] = useState<number | null>(null);
@@ -327,9 +327,9 @@ export default function CreateMenuSheet({ visible, onClose, initialPage = 0 }: P
 
               {/* Tooltip card above the sheet */}
               <View style={[styles.tutorialCard, { position: 'absolute', bottom: screenHeight - cY + 14, left: tooltipX, width: CARD_W }]}>
-                <Text style={styles.tutorialTitle}>Post & Check-In</Text>
+                <Text style={styles.tutorialTitle}>Check-Ins</Text>
                 <Text style={styles.tutorialBody}>
-                  This is how you post and make check-ins. Tap Post to share content with the fitness community, or Check-In to log your gym visit and keep your streak alive.
+                  This is how you make a check-in. Snap a picture, log a workout, and update your friends — everything you need to keep your streak alive.
                 </Text>
                 <View style={styles.tutorialFooter}>
                   <View style={styles.tutorialDots}>

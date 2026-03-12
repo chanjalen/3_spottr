@@ -24,11 +24,14 @@ type TargetType =
   | 'tab_feed'
   | 'checkin_tab'
   | 'filter_area'
+  | 'tab_posts'
   | 'posts_tab'
+  | 'posts_create_bar'
   | 'feed_content'
   | 'fab'
   | 'tab_gyms'
   | 'gyms_content'
+  | 'ranks_content'
   | 'tab_social'
   | 'social_content'
   | 'tab_ranks'
@@ -41,7 +44,7 @@ type TargetType =
   | 'add_friends_btn';
 
 /** Action to perform when the user presses Next on an interaction step */
-type NavTarget = 'postsTab' | 'openFAB' | 'gyms' | 'gymDetail' | 'social' | 'orgsTab' | 'ranks' | 'streakDetails' | 'profile' | 'findFriends';
+type NavTarget = 'postsTab' | 'postsPage' | 'openFAB' | 'gyms' | 'gymDetail' | 'social' | 'orgsTab' | 'ranks' | 'streakDetails' | 'profile' | 'findFriends';
 
 interface StepConfig {
   title: string;
@@ -56,32 +59,44 @@ interface StepConfig {
   requiresUnlock?: boolean;
 }
 
-// null entries are steps handled by other components (e.g. CreateMenuSheet for step 5)
+// null entries are steps handled by other components (e.g. CreateMenuSheet for step 4)
 const STEPS: (StepConfig | null)[] = [
+  // index 0 — Check-In Feed tab
   {
-    title: 'Your Feed',
-    body: 'Your home for gym activity. See everything happening with the people you follow.',
+    title: 'Check-In Feed',
+    body: 'Your home for seeing your friends and peers gym activity.',
     target: 'tab_feed',
   },
+  // index 1 — CheckIn filter dropdown
   {
     title: 'Check-Ins',
     body: 'Tap here to browse check-ins. Switch between Friends & Groups, your Gym, or Organizations to filter whose check-ins appear.',
     target: 'filter_area',
   },
+  // index 2 — FAB (check-in only)
   {
-    title: 'Posts',
-    body: 'See what the rest of the fitness community is up to. Browse posts, workouts, and updates from everyone on Spottr.',
-    target: 'posts_tab',
-    navTarget: 'postsTab',
-  },
-  {
-    title: 'Post & Check-In',
-    body: 'Tap + to get started. Choose Post to share with the fitness community, or Check-In to log your gym visit, update your streak, and share with friends.',
+    title: 'Make a Check-In',
+    body: 'Tap + to make a check-in. Log your gym visit, snap a photo, and keep your streak alive.',
     target: 'fab',
     hideNext: true,
     navTarget: 'openFAB',
   },
-  null, // index 4 — step 5 is handled inside CreateMenuSheet
+  null, // index 3 — check-in sheet explanation handled inside CreateMenuSheet
+  // index 4 — Posts grid tab
+  {
+    title: 'Posts',
+    body: 'Tap the grid icon to browse the posts feed. Discover workouts, PRs, and updates from the Spottr community.',
+    target: 'tab_posts',
+    hideNext: true,
+    navTarget: 'postsPage',
+  },
+  // index 5 — Share a post bar on PostsScreen
+  {
+    title: 'Share a Post',
+    body: 'Tap here to share a post with the fitness community. Show off your workouts, PRs, and more.',
+    target: 'posts_create_bar',
+  },
+  // index 6 — Gyms tab
   {
     title: 'Gyms',
     body: 'Browse gyms, see who is currently working out, view live busyness levels, and check in when you arrive.',
@@ -89,11 +104,13 @@ const STEPS: (StepConfig | null)[] = [
     hideNext: true,
     navTarget: 'gyms',
   },
+  // index 7 — Gym list content
   {
     title: 'Gym Features',
     body: 'Each gym shows live busyness, active check-ins, workout buddies, and more. Find gyms near you and see what\'s happening right now.',
     target: 'gyms_content',
   },
+  // index 8 — tap a gym card
   {
     title: 'Find Your Gym',
     body: 'Tap on a gym to explore it. See live busyness, connect with workout buddies, and post workout invites.',
@@ -101,6 +118,7 @@ const STEPS: (StepConfig | null)[] = [
     hideNext: true,
     navTarget: 'gymDetail',
   },
+  // index 9 — Social tab
   {
     title: 'Messages & Orgs',
     body: 'Tap the messages icon to connect with friends and organizations.',
@@ -108,11 +126,13 @@ const STEPS: (StepConfig | null)[] = [
     hideNext: true,
     navTarget: 'social',
   },
+  // index 10 — Messages content
   {
     title: 'Messages',
     body: 'Send direct messages and create group chats to talk to friends and plan workouts together.',
     target: 'social_messages',
   },
+  // index 11 — Orgs tab
   {
     title: 'Organizations',
     body: 'Tap Orgs to join and create organizations — teams, clubs, and communities to connect and share updates with.',
@@ -120,21 +140,21 @@ const STEPS: (StepConfig | null)[] = [
     hideNext: true,
     navTarget: 'orgsTab',
   },
+  // index 12 — Ranks/Streaks fire tab
   {
-    title: 'Leaderboard',
-    body: 'See how you stack up. Browse rankings for your gym and compare lifts with friends across the Spottr community.',
+    title: 'Leaderboards & Streaks',
+    body: 'Tap the flame icon to see leaderboards and your streak stats.',
     target: 'tab_ranks',
     hideNext: true,
     navTarget: 'ranks',
   },
+  // index 13 — Leaderboards & Streaks page explanation
   {
-    title: 'Your Streak',
-    body: 'Tap the streak counter to see your streak details.',
-    target: 'streak_pill',
-    hideNext: true,
-    navTarget: 'streakDetails',
+    title: 'Leaderboards & Streaks',
+    body: 'Track your consistency with daily streaks and see how you rank against friends and the Spottr community. Keep checking in to climb the boards.',
+    target: 'ranks_content',
   },
-  null, // index 13 — streak page explanation handled inside StreakDetailsScreen
+  // index 14 — Profile avatar
   {
     title: 'Your Profile',
     body: 'Tap your avatar to view your profile.',
@@ -143,6 +163,7 @@ const STEPS: (StepConfig | null)[] = [
     navTarget: 'profile',
   },
   null, // index 15 — profile page explanation handled inside ProfileScreen
+  // index 16 — Add friends
   {
     title: 'Add Friends',
     body: 'Tap the add friend button to find people you know, follow athletes, and join the Spottr community.',
@@ -221,9 +242,10 @@ export default function TutorialOverlay({ navigationRef }: Props) {
   // Pill: left 16, right 16, paddingHorizontal 16, gap 8, FAB 50px
   // navBar (flex:1) width = W - 16 - 16 - 16 - 16 - 8 - 50 = W - 122
   // navBar starts at x = 16 (pill left) + 16 (pill padding) = 32
+  // 5 tabs: Feed, Posts, Gyms, Social, Ranks — space-around distributes evenly
   const navBarWidth = W - 122;
   const navBarStartX = 32;
-  const slotW = navBarWidth / 4;
+  const slotW = navBarWidth / 5;
 
   const getSpotlight = (target: TargetType): Spotlight => {
     // Content area reused by several targets
@@ -235,40 +257,46 @@ export default function TutorialOverlay({ navigationRef }: Props) {
     const feedTabsY = insets.top + 50 + 39; // ≈ insets.top + 89
 
     switch (target) {
+      // Tab bar slots (5 tabs: Feed=0, Posts=1, Gyms=2, Social=3, Ranks=4)
       case 'tab_feed':
         return { x: navBarStartX + slotW * 0.5 - 27, y: tabBarCenterY - 27, w: 54, h: 54, r: 14 };
+      case 'tab_posts':
+        return { x: navBarStartX + slotW * 1.5 - 27, y: tabBarCenterY - 27, w: 54, h: 54, r: 14 };
+      case 'tab_gyms':
+        return { x: navBarStartX + slotW * 2.5 - 27, y: tabBarCenterY - 27, w: 54, h: 54, r: 14 };
+      case 'tab_social':
+        return { x: navBarStartX + slotW * 3.5 - 27, y: tabBarCenterY - 27, w: 54, h: 54, r: 14 };
+      case 'tab_ranks':
+        return { x: navBarStartX + slotW * 4.5 - 27, y: tabBarCenterY - 27, w: 54, h: 54, r: 14 };
 
       // The "CheckIn (Friends/Groups)" left tab button in the feed header
       case 'checkin_tab':
         return { x: 18, y: feedTabsY + 2, w: 180, h: 34, r: 10 };
 
-      // The filter area: covers the CheckIn tab + dropdown below it.
-      // Width capped at ~230px so the Posts tab on the right stays outside the spotlight.
-      // Height 200px covers the tab row (~36px) + gap + full 3-option dropdown (~150px).
+      // The filter area: CheckIn tab is now centered in FeedTabs (justifyContent: 'center').
+      // Center the spotlight around W/2. Height 200px covers the tab row + full dropdown.
       case 'filter_area':
-        return { x: 32, y: feedTabsY - 2, w: 230, h: 200, r: 14 };
+        return { x: W / 2 - 115, y: feedTabsY - 2, w: 230, h: 200, r: 14 };
 
-      // The "Posts" right tab in FeedTabs.
-      // The tab row is centered (justifyContent: 'center') within paddingHorizontal: 24.
-      // tabRow width ≈ 239px, centered in 342px available → offset ≈ 75px from left edge.
-      // Posts tab starts at: 75 + CheckIn(~190) + gap(16) = ~281px
+      // Legacy — Posts tab within old FeedTabs (no longer used in tutorial flow)
       case 'posts_tab':
         return { x: 260, y: feedTabsY + 2, w: 70, h: 34, r: 10 };
+
+      // "Start a post..." bar at the top of PostsScreen (FlatList header).
+      // AppHeader (~50px) + searchRow (~49px) + FlatList paddingTop(16) = ~115px below insets.top.
+      case 'posts_create_bar':
+        return { x: 12, y: insets.top + 115, w: W - 24, h: 130, r: 16 };
 
       case 'feed_content':
         return { x: 12, y: contentTop, w: W - 24, h: contentH, r: 16 };
       case 'fab':
         return { x: W - 57 - 32, y: tabBarCenterY - 32, w: 64, h: 64, r: 32 };
-      case 'tab_gyms':
-        return { x: navBarStartX + slotW * 1.5 - 27, y: tabBarCenterY - 27, w: 54, h: 54, r: 14 };
       case 'gyms_content':
         return { x: 12, y: contentTop, w: W - 24, h: contentH, r: 16 };
-      case 'tab_social':
-        return { x: navBarStartX + slotW * 2.5 - 27, y: tabBarCenterY - 27, w: 54, h: 54, r: 14 };
+      case 'ranks_content':
+        return { x: 12, y: contentTop, w: W - 24, h: contentH, r: 16 };
       case 'social_content':
         return { x: 12, y: contentTop, w: W - 24, h: contentH, r: 16 };
-      case 'tab_ranks':
-        return { x: navBarStartX + slotW * 3.5 - 27, y: tabBarCenterY - 27, w: 54, h: 54, r: 14 };
 
       // GymListScreen: spotlight the first gym card in the list.
       // Header = insets.top + AppHeader(58) + searchBar(52) = insets.top + 110.
@@ -323,8 +351,12 @@ export default function TutorialOverlay({ navigationRef }: Props) {
         requestTab('postsTab');
         next();
         break;
+      case 'postsPage':
+        nav.dispatch(CommonActions.navigate({ name: 'MainTabs', params: { screen: 'Posts' } }));
+        next();
+        break;
       case 'openFAB':
-        // Signal CustomTabBar to open the CreateMenuSheet, then advance to step 4
+        // Signal CustomTabBar to open the CreateMenuSheet, then advance to step 3
         requestFABOpen();
         next();
         break;
