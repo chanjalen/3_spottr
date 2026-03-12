@@ -34,6 +34,7 @@ import OnboardingStep1Screen from './src/screens/onboarding/OnboardingStep1Scree
 import OnboardingStep2Screen from './src/screens/onboarding/OnboardingStep2Screen';
 import OnboardingStep3Screen from './src/screens/onboarding/OnboardingStep3Screen';
 import OnboardingStep4Screen from './src/screens/onboarding/OnboardingStep4Screen';
+import OnboardingStep5Screen from './src/screens/onboarding/OnboardingStep5Screen';
 import OnboardingCompleteScreen from './src/screens/onboarding/OnboardingCompleteScreen';
 import { colors } from './src/theme';
 import { AuthStackParamList, OnboardingStackParamList, RootStackParamList } from './src/navigation/types';
@@ -97,6 +98,7 @@ function OnboardingNavigator() {
       <OnboardingStack.Screen name="OnboardingStep2" component={OnboardingStep2Screen} />
       <OnboardingStack.Screen name="OnboardingStep3" component={OnboardingStep3Screen} />
       <OnboardingStack.Screen name="OnboardingStep4" component={OnboardingStep4Screen} />
+      <OnboardingStack.Screen name="OnboardingStep5" component={OnboardingStep5Screen} />
       <OnboardingStack.Screen name="OnboardingComplete" component={OnboardingCompleteScreen} />
     </OnboardingStack.Navigator>
   );

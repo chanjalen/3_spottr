@@ -255,22 +255,43 @@ def _compute_preview_text(entry, user):
 def _get_activity_map(partner_ids):
     """
     Batch lookup: returns a dict mapping str(user_id) → bool (has activity today).
-    Fires exactly 2 queries regardless of how many partners there are.
+    Respects each partner's timezone and the 3am rule (3 queries total).
     """
-    from workouts.services.streak_service import get_streak_date
+    from workouts.services.streak_service import get_streak_date, _get_local_now
     from workouts.models import Streak, RestDay
-    today = get_streak_date()
-    active = set(
-        Streak.objects
-        .filter(user_id__in=partner_ids, last_streak_date=today)
-        .values_list('user_id', flat=True)
-    )
-    rested = set(
-        RestDay.objects
-        .filter(user_id__in=partner_ids, streak_date=today)
-        .values_list('user_id', flat=True)
-    )
-    return {str(pid): (pid in active or pid in rested) for pid in partner_ids}
+    from accounts.models import User
+    from datetime import date, timedelta
+
+    if not partner_ids:
+        return {}
+
+    # Compute each partner's local "today" respecting their timezone + 3am rule
+    partners = User.objects.filter(id__in=partner_ids).only('id', 'timezone')
+    today_map = {str(u.id): get_streak_date(_get_local_now(u)) for u in partners}
+
+    # Batch fetch last streak date per user
+    streak_dates = {
+        str(row['user_id']): row['last_streak_date']
+        for row in Streak.objects.filter(user_id__in=partner_ids).values('user_id', 'last_streak_date')
+    }
+
+    # Batch fetch rest days within a 2-day window (covers any timezone's "today")
+    cutoff = date.today() - timedelta(days=1)
+    rest_set = {
+        (str(row['user_id']), row['streak_date'])
+        for row in RestDay.objects.filter(
+            user_id__in=partner_ids, streak_date__gte=cutoff
+        ).values('user_id', 'streak_date')
+    }
+
+    result = {}
+    for pid in partner_ids:
+        pid_str = str(pid)
+        today = today_map.get(pid_str)
+        active = streak_dates.get(pid_str) == today
+        rested = (pid_str, today) in rest_set
+        result[pid_str] = active or rested
+    return result
 
 
 @api_view(['GET'])

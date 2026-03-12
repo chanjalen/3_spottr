@@ -11,6 +11,7 @@ import {
   Alert,
   Image,
   Linking,
+  Modal,
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,6 +24,7 @@ import Avatar from '../../components/common/Avatar';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 import { updateUserAvatar, apiDeleteAccount, apiUpdateProfile, apiUpdatePrivacy, apiUpdateNotifications } from '../../api/accounts';
+import { fetchStreakInfo, updateWorkoutGoal } from '../../api/workouts';
 
 type Props = {
   navigation: NativeStackNavigationProp<RootStackParamList, 'EditProfile'>;
@@ -43,6 +45,8 @@ export default function EditProfileScreen({ navigation, route }: Props) {
   const [avatarUri, setAvatarUri] = useState<string | null>(null);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [currentGoal, setCurrentGoal] = useState<number | null>(null);
+  const [showGoalPicker, setShowGoalPicker] = useState(false);
 
   const handlePickAvatar = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -83,6 +87,16 @@ export default function EditProfileScreen({ navigation, route }: Props) {
     } finally {
       setSaving(false);
     }
+  };
+
+  useEffect(() => {
+    fetchStreakInfo().then((data) => setCurrentGoal(data.weekly_workout_goal)).catch(() => {});
+  }, []);
+
+  const handleGoalSelect = async (n: number) => {
+    setShowGoalPicker(false);
+    setCurrentGoal(n);
+    await updateWorkoutGoal(n).catch(() => {});
   };
 
   // Notifications — synced with iOS permission status + backend flag
@@ -251,6 +265,20 @@ export default function EditProfileScreen({ navigation, route }: Props) {
                 />
                 <Text style={styles.charCount}>{bio.length}/150</Text>
               </View>
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Weekly Workout Goal</Text>
+                <Pressable
+                  style={({ pressed }) => [styles.goalRow, pressed && { opacity: 0.7 }]}
+                  onPress={() => setShowGoalPicker(true)}
+                >
+                  <Text style={styles.goalRowValue}>
+                    {currentGoal !== null
+                      ? `${currentGoal} day${currentGoal !== 1 ? 's' : ''} per week`
+                      : 'Loading…'}
+                  </Text>
+                  <Feather name="chevron-right" size={16} color={colors.textMuted} />
+                </Pressable>
+              </View>
             </View>
           )}
 
@@ -315,6 +343,31 @@ export default function EditProfileScreen({ navigation, route }: Props) {
           )}
         </ScrollView>
       </View>
+
+      {/* Goal picker modal — same pattern as StreakDetailsScreen */}
+      <Modal visible={showGoalPicker} transparent animationType="fade" onRequestClose={() => setShowGoalPicker(false)}>
+        <Pressable style={styles.modalOverlay} onPress={() => setShowGoalPicker(false)}>
+          <Pressable style={styles.goalModal} onPress={() => {}}>
+            <View style={styles.goalModalHeader}>
+              <Text style={styles.goalModalTitle}>Weekly Goal</Text>
+              <Pressable onPress={() => setShowGoalPicker(false)} hitSlop={8}>
+                <Feather name="x" size={20} color={colors.textMuted} />
+              </Pressable>
+            </View>
+            <Text style={styles.goalModalSubtitle}>How many days per week do you want to work out?</Text>
+            {[1, 2, 3, 4, 5, 6, 7].map((n) => (
+              <Pressable
+                key={n}
+                style={({ pressed }) => [styles.goalOption, pressed && { opacity: 0.6 }]}
+                onPress={() => handleGoalSelect(n)}
+              >
+                <Text style={styles.goalOptionText}>{n} day{n > 1 ? 's' : ''}</Text>
+                {currentGoal === n && <Feather name="check" size={16} color={colors.primary} />}
+              </Pressable>
+            ))}
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -483,4 +536,46 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   dangerBtnText: { fontSize: typography.size.sm, color: colors.error, fontWeight: '600' },
+
+  // Goal row
+  goalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1.5,
+    borderColor: colors.borderColor,
+    borderRadius: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.background.elevated,
+  },
+  goalRowValue: { fontSize: typography.size.sm, color: colors.textPrimary },
+
+  // Goal picker modal
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+  },
+  goalModal: {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    padding: spacing.xl,
+    width: '100%',
+    gap: spacing.md,
+  },
+  goalModalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  goalModalTitle: { fontSize: typography.size.lg, fontWeight: '700', color: colors.textPrimary },
+  goalModalSubtitle: { fontSize: typography.size.sm, color: colors.textSecondary },
+  goalOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.subtle,
+  },
+  goalOptionText: { fontSize: typography.size.base, color: colors.textPrimary, fontWeight: '500' },
 });
