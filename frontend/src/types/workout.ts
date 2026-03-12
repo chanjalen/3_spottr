@@ -63,6 +63,18 @@ export interface WorkoutTemplate {
   created_at: string;
 }
 
+export interface TemplateDetail {
+  id: string;
+  name: string;
+  description?: string;
+  exercise_count: number;
+  exercises: Array<{
+    name: string;
+    category: string;
+    sets: Array<{ reps: number; weight: number }>;
+  }>;
+}
+
 export interface StreakWeekDay {
   label: 'S' | 'M' | 'T' | 'W' | 'Th' | 'F';
   active: boolean;

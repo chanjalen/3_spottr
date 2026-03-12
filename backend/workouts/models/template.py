@@ -51,6 +51,9 @@ class TemplateExercise(BaseModel):
     weight = models.DecimalField(max_digits=6, decimal_places=2)
     unit = models.CharField(max_length=10)
     order_index = models.PositiveIntegerField()
+    # Per-set data: [{"reps": 6, "weight": 200.0}, ...]. Takes priority over
+    # the scalar reps/weight fields (kept for backwards compat with old templates).
+    sets_data = models.JSONField(default=list, blank=True)
 
     class Meta:
         ordering = ['order_index']

@@ -78,7 +78,7 @@ export type RootStackParamList = {
   Profile: ProfileParams;
   Notifications: undefined;
   WorkoutLog: { fromCheckin?: boolean; checkinMediaUri?: string; checkinMediaType?: 'photo' | 'video' } | undefined;
-  ActiveWorkout: { workoutId: string; fromCheckin?: boolean; checkinMediaUri?: string; checkinMediaType?: 'photo' | 'video' };
+  ActiveWorkout: { workoutId: string; fromCheckin?: boolean; checkinMediaUri?: string; checkinMediaType?: 'photo' | 'video'; templateId?: string };
   StreakDetails: undefined;
   EditProfile: { bio?: string; display_name?: string } | undefined;
   GroupProfile: { groupId: string };

@@ -27,7 +27,7 @@ const deleteToken = async () => {
 };
 
 export const API_BASE_URL = __DEV__
-  ? Platform.OS === 'web' ? 'http://localhost:8000' : 'http://10.0.0.33'
+  ? Platform.OS === 'web' ? 'http://localhost:8000' : 'http://100.70.65.32'
   : 'https://api.spottrgym.app';
 
 export const apiClient = axios.create({

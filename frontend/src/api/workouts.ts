@@ -4,6 +4,7 @@ import {
   WorkoutExercise,
   ExerciseCatalogItem,
   WorkoutTemplate,
+  TemplateDetail,
   StreakInfo,
   WorkoutLogStats,
   CalendarPost,
@@ -173,6 +174,15 @@ export async function startFromTemplate(templateId: string): Promise<Workout> {
 
 export async function deleteTemplate(templateId: string): Promise<void> {
   await apiClient.post(`/workouts/templates/${templateId}/delete/`);
+}
+
+export async function fetchTemplateDetail(templateId: string): Promise<TemplateDetail> {
+  const res = await apiClient.get(`/workouts/api/templates/${templateId}/`);
+  return res.data.template;
+}
+
+export async function updateTemplateFromWorkout(templateId: string, workoutId: string): Promise<void> {
+  await apiClient.post(`/workouts/templates/${templateId}/update-from-workout/`, { workout_id: workoutId });
 }
 
 export async function saveWorkoutAsTemplate(workoutId: string): Promise<{ template_id: string; template_name: string }> {

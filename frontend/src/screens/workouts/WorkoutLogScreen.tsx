@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -9,6 +10,7 @@ import {
   RefreshControl,
   Platform,
   Alert,
+  Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -20,8 +22,9 @@ import {
   fetchTemplates,
   startFromTemplate,
   deleteTemplate,
+  fetchTemplateDetail,
 } from '../../api/workouts';
-import { Workout, WorkoutLogStats, WorkoutTemplate } from '../../types/workout';
+import { Workout, WorkoutLogStats, WorkoutTemplate, TemplateDetail } from '../../types/workout';
 import { colors, spacing, typography } from '../../theme';
 import { RootStackParamList } from '../../navigation/types';
 import { useActiveWorkout } from '../../store/ActiveWorkoutContext';
@@ -35,7 +38,7 @@ export default function WorkoutLogScreen({ navigation, route }: Props) {
   const fromCheckin = route.params?.fromCheckin ?? false;
   const checkinMediaUri = route.params?.checkinMediaUri;
   const checkinMediaType = route.params?.checkinMediaType;
-  const { fromCheckin: contextFromCheckin, checkinMedia } = useActiveWorkout();
+  const { fromCheckin: contextFromCheckin, checkinMedia, staleWorkoutCleared, clearStaleNotice } = useActiveWorkout();
   const insets = useSafeAreaInsets();
   const [stats, setStats] = useState<WorkoutLogStats | null>(null);
   const [activeWorkout, setActiveWorkout] = useState<Workout | null>(null);
@@ -43,6 +46,9 @@ export default function WorkoutLogScreen({ navigation, route }: Props) {
   const [loading, setLoading] = useState(true);
   const [startLoading, setStartLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [previewTemplate, setPreviewTemplate] = useState<WorkoutTemplate | null>(null);
+  const [previewDetail, setPreviewDetail] = useState<TemplateDetail | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -60,7 +66,19 @@ export default function WorkoutLogScreen({ navigation, route }: Props) {
     }
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  // Reload every time this screen comes into focus (handles navigate-back after discard)
+  useFocusEffect(useCallback(() => { load(); }, [load]));
+
+  // Show notice if a stale workout was auto-cleared in the background
+  useEffect(() => {
+    if (staleWorkoutCleared) {
+      Alert.alert(
+        'Workout Cleared',
+        'Your previous workout was automatically cleared after 2 hours of inactivity.',
+        [{ text: 'OK', onPress: clearStaleNotice }],
+      );
+    }
+  }, [staleWorkoutCleared, clearStaleNotice]);
 
   const handleStart = async () => {
     setStartLoading(true);
@@ -75,11 +93,27 @@ export default function WorkoutLogScreen({ navigation, route }: Props) {
   };
 
   const handleStartTemplate = async (template: WorkoutTemplate) => {
+    setPreviewTemplate(null);
+    setPreviewDetail(null);
     try {
       const workout = await startFromTemplate(template.id);
-      navigation.navigate('ActiveWorkout', { workoutId: workout.id, fromCheckin, checkinMediaUri, checkinMediaType });
+      navigation.navigate('ActiveWorkout', { workoutId: workout.id, fromCheckin, checkinMediaUri, checkinMediaType, templateId: template.id });
     } catch {
       Alert.alert('Error', 'Could not start workout from template.');
+    }
+  };
+
+  const handlePreviewTemplate = async (template: WorkoutTemplate) => {
+    setPreviewTemplate(template);
+    setPreviewDetail(null);
+    setPreviewLoading(true);
+    try {
+      const detail = await fetchTemplateDetail(template.id);
+      setPreviewDetail(detail);
+    } catch {
+      // silently fail — modal still shows with basic info
+    } finally {
+      setPreviewLoading(false);
     }
   };
 
@@ -144,7 +178,7 @@ export default function WorkoutLogScreen({ navigation, route }: Props) {
               style={styles.resumeCard}
               onPress={() => navigation.navigate('ActiveWorkout', {
                 workoutId: activeWorkout.id,
-                fromCheckin: contextFromCheckin,
+                fromCheckin: contextFromCheckin || fromCheckin,
                 checkinMediaUri: checkinMedia?.uri ?? checkinMediaUri,
                 checkinMediaType: checkinMedia?.type ?? checkinMediaType,
               })}
@@ -194,6 +228,7 @@ export default function WorkoutLogScreen({ navigation, route }: Props) {
               <TemplateCard
                 key={tmpl.id}
                 template={tmpl}
+                onPreview={() => handlePreviewTemplate(tmpl)}
                 onStart={() => handleStartTemplate(tmpl)}
                 onDelete={() => handleDeleteTemplate(tmpl)}
               />
@@ -223,6 +258,70 @@ export default function WorkoutLogScreen({ navigation, route }: Props) {
           )}
         </ScrollView>
       )}
+
+      {/* ── Template Preview Modal ───────────────────────────────────── */}
+      <Modal
+        visible={!!previewTemplate}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => { setPreviewTemplate(null); setPreviewDetail(null); }}
+      >
+        <View style={[styles.previewWrap, { paddingTop: insets.top }]}>
+          {/* Header */}
+          <View style={styles.previewHeader}>
+            <Pressable onPress={() => { setPreviewTemplate(null); setPreviewDetail(null); }}>
+              <Feather name="x" size={22} color={colors.textPrimary} />
+            </Pressable>
+            <Text style={styles.previewTitle} numberOfLines={1}>{previewTemplate?.name}</Text>
+            <View style={{ width: 22 }} />
+          </View>
+
+          {/* Exercise list */}
+          <ScrollView
+            contentContainerStyle={{ padding: spacing.base, gap: spacing.md, paddingBottom: insets.bottom + 100 }}
+          >
+            {previewLoading ? (
+              <View style={styles.previewCenter}>
+                <ActivityIndicator color={colors.primary} />
+              </View>
+            ) : previewDetail ? (
+              previewDetail.exercises.map((ex, ei) => (
+                <View key={ei} style={styles.previewExCard}>
+                  <Text style={styles.previewExName}>{ex.name}</Text>
+                  {ex.category ? <Text style={styles.previewExCategory}>{ex.category}</Text> : null}
+                  <View style={styles.previewSetHeader}>
+                    <Text style={[styles.previewSetHeaderText, { width: 32 }]}>Set</Text>
+                    <Text style={[styles.previewSetHeaderText, { flex: 1 }]}>Reps</Text>
+                    <Text style={[styles.previewSetHeaderText, { flex: 1 }]}>Weight (lbs)</Text>
+                  </View>
+                  {ex.sets.map((s, si) => (
+                    <View key={si} style={styles.previewSetRow}>
+                      <Text style={[styles.previewSetNum, { width: 32 }]}>{si + 1}</Text>
+                      <Text style={[styles.previewSetVal, { flex: 1 }]}>{s.reps || '—'}</Text>
+                      <Text style={[styles.previewSetVal, { flex: 1 }]}>{s.weight || '—'}</Text>
+                    </View>
+                  ))}
+                </View>
+              ))
+            ) : (
+              <View style={styles.previewCenter}>
+                <Text style={styles.previewEmptyText}>Could not load details.</Text>
+              </View>
+            )}
+          </ScrollView>
+
+          {/* Start button */}
+          <View style={[styles.previewFooter, { paddingBottom: insets.bottom + 16 }]}>
+            <Pressable
+              style={styles.previewStartBtn}
+              onPress={() => previewTemplate && handleStartTemplate(previewTemplate)}
+            >
+              <Feather name="play" size={18} color="#fff" />
+              <Text style={styles.previewStartText}>Start Workout</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -251,15 +350,17 @@ function StatTile({
 
 function TemplateCard({
   template,
+  onPreview,
   onStart,
   onDelete,
 }: {
   template: WorkoutTemplate;
+  onPreview: () => void;
   onStart: () => void;
   onDelete: () => void;
 }) {
   return (
-    <View style={styles.templateCard}>
+    <Pressable style={styles.templateCard} onPress={onPreview}>
       <View style={styles.templateLeft}>
         <Text style={styles.templateName}>{template.name}</Text>
         <Text style={styles.templateMeta}>
@@ -279,7 +380,7 @@ function TemplateCard({
           <Text style={styles.templateStartText}>Start</Text>
         </Pressable>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
@@ -433,6 +534,104 @@ const styles = StyleSheet.create({
   templateStartText: {
     fontSize: typography.size.sm,
     fontFamily: typography.family.semibold,
+    color: '#fff',
+  },
+
+  // Template preview modal
+  previewWrap: { flex: 1, backgroundColor: colors.background.base },
+  previewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.base,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.subtle,
+  },
+  previewTitle: {
+    flex: 1,
+    textAlign: 'center',
+    fontSize: typography.size.lg,
+    fontFamily: typography.family.bold,
+    color: colors.textPrimary,
+    marginHorizontal: spacing.sm,
+  },
+  previewCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
+  previewEmptyText: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+  },
+  previewExCard: {
+    backgroundColor: colors.surface,
+    borderRadius: 14,
+    padding: spacing.md,
+    gap: spacing.xs,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6 },
+      android: { elevation: 2 },
+    }),
+  },
+  previewExName: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.bold,
+    color: colors.textPrimary,
+  },
+  previewExCategory: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.regular,
+    color: colors.textMuted,
+    textTransform: 'capitalize',
+    marginBottom: 4,
+  },
+  previewSetHeader: { flexDirection: 'row', paddingHorizontal: 2, marginTop: 4 },
+  previewSetHeaderText: {
+    fontSize: typography.size.xs,
+    fontFamily: typography.family.semibold,
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
+  previewSetRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 3,
+    paddingHorizontal: 2,
+  },
+  previewSetNum: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.semibold,
+    color: colors.textMuted,
+    textAlign: 'center',
+  },
+  previewSetVal: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.regular,
+    color: colors.textPrimary,
+    textAlign: 'center',
+  },
+  previewFooter: {
+    paddingHorizontal: spacing.base,
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.subtle,
+    backgroundColor: colors.background.base,
+  },
+  previewStartBtn: {
+    backgroundColor: colors.primary,
+    borderRadius: 14,
+    paddingVertical: spacing.base,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    ...Platform.select({
+      ios: { shadowColor: 'rgba(79,195,224,0.4)', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 1, shadowRadius: 12 },
+      android: { elevation: 4 },
+    }),
+  },
+  previewStartText: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.bold,
     color: '#fff',
   },
 

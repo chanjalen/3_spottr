@@ -31,8 +31,10 @@ urlpatterns = [
 
     # Templates
     path('api/templates/', views.get_templates_view, name='get_templates'),
+    path('api/templates/<str:template_id>/', views.get_template_detail_view, name='get_template_detail'),
     path('templates/<str:template_id>/start/', views.start_from_template_view, name='start_from_template'),
     path('templates/<str:template_id>/delete/', views.delete_template_view, name='delete_template'),
+    path('templates/<str:template_id>/update-from-workout/', views.update_template_from_workout_view, name='update_template_from_workout'),
 
     # Add exercise to workout
     path('<str:workout_id>/add-exercise/', views.add_exercise_view, name='add_exercise'),
