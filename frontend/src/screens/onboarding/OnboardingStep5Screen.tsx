@@ -112,9 +112,9 @@ export default function OnboardingStep5Screen({ navigation, route }: Props) {
       <View style={styles.header}>
         <Text style={styles.logo}>Spottr</Text>
         <ProgressDots current={5} total={5} />
-        <Text style={styles.heading}>Join a gym</Text>
+        <Text style={styles.heading}>Would you like to join a gym?</Text>
         <Text style={styles.subheading}>
-          Enroll in one or more gyms to connect with members and track check-ins.
+          Enroll in any gyms you're a member of, or skip this step — you can always join later.
         </Text>
       </View>
 
