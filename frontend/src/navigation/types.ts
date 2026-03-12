@@ -21,6 +21,7 @@ export type OnboardingStackParamList = {
   OnboardingStep2: undefined;
   OnboardingStep3: undefined;
   OnboardingStep4: undefined;
+  OnboardingStep5: { finalUser: UserBrief };
   OnboardingComplete: { finalUser: UserBrief };
 };
 

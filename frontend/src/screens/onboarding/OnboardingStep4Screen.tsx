@@ -60,8 +60,7 @@ export default function OnboardingStep4Screen({ navigation }: Props) {
     setError(null);
     try {
       const { user } = await apiUpdateOnboarding({ workout_frequency: frequency });
-      // Navigate to Complete screen WITHOUT calling updateUser yet — Complete handles the transition
-      navigation.navigate('OnboardingComplete', { finalUser: user });
+      navigation.navigate('OnboardingStep5', { finalUser: user });
     } catch (e: any) {
       const msg = e?.response?.data?.error ?? 'Something went wrong. Please try again.';
       setError(msg);
@@ -83,7 +82,7 @@ export default function OnboardingStep4Screen({ navigation }: Props) {
         keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.logo}>Spottr</Text>
-        <ProgressDots current={4} total={4} />
+        <ProgressDots current={4} total={5} />
 
         <Text style={styles.heading}>How often do you work out?</Text>
         <Text style={styles.subheading}>
@@ -136,7 +135,7 @@ export default function OnboardingStep4Screen({ navigation }: Props) {
           {loading ? (
             <ActivityIndicator color={colors.textOnPrimary} />
           ) : (
-            <Text style={styles.btnText}>Finish Setup</Text>
+            <Text style={styles.btnText}>Next</Text>
           )}
         </Pressable>
       </ScrollView>
