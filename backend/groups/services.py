@@ -606,21 +606,30 @@ def get_group_streak_details(group_id, requesting_user):
     # Use Streak.last_streak_date as source of truth for has_activity_today
     # (same as _try_advance_group_streak — avoids stale last_checkin_date reads)
     # Also count rest days — a member who logged a rest day counts as active today.
+    # Respect each member's timezone + 3am rule.
+    from workouts.services.streak_service import _get_local_now
     from workouts.models import Streak, RestDay
+    from datetime import date as _date, timedelta as _td
     member_user_ids = [m.user_id for m in members_qs]
-    checked_in_today = set(
-        Streak.objects.filter(
-            user_id__in=member_user_ids,
-            last_streak_date=today,
-        ).values_list('user_id', flat=True)
-    )
-    rested_today = set(
-        RestDay.objects.filter(
-            user_id__in=member_user_ids,
-            streak_date=today,
-        ).values_list('user_id', flat=True)
-    )
-    active_today = checked_in_today | rested_today
+
+    # Per-member local "today" (already have user objects via select_related)
+    member_today_map = {str(m.user_id): get_streak_date(_get_local_now(m.user)) for m in members_qs}
+
+    streak_dates = {
+        str(row['user_id']): row['last_streak_date']
+        for row in Streak.objects.filter(user_id__in=member_user_ids).values('user_id', 'last_streak_date')
+    }
+    cutoff = _date.today() - _td(days=1)
+    rest_set = {
+        (str(row['user_id']), row['streak_date'])
+        for row in RestDay.objects.filter(
+            user_id__in=member_user_ids, streak_date__gte=cutoff
+        ).values('user_id', 'streak_date')
+    }
+    active_today = {
+        uid for uid, member_today in member_today_map.items()
+        if streak_dates.get(uid) == member_today or (uid, member_today) in rest_set
+    }
 
     members_data = []
     for m in members_qs:
