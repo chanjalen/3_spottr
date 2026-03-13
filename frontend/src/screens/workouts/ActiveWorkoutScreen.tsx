@@ -392,7 +392,11 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
             {
               text: 'Yes, Update',
               onPress: async () => {
-                await updateTemplateFromWorkout(templateId, workoutId).catch(() => {});
+                try {
+                  await updateTemplateFromWorkout(templateId, workoutId);
+                } catch {
+                  Alert.alert('Update Failed', 'Could not update the template. Your workout was still saved.');
+                }
                 doNavigateAfterFinish();
               },
             },
@@ -415,7 +419,13 @@ export default function ActiveWorkoutScreen({ navigation, route }: Props) {
         text: 'Discard',
         style: 'destructive',
         onPress: async () => {
-          await deleteWorkout(workoutId).catch(() => {});
+          try {
+            await deleteWorkout(workoutId);
+          } catch {
+            // Delete failed — still clear local state so the user isn't stuck,
+            // but warn them so they know it may still appear until the server syncs.
+            Alert.alert('Could not delete workout', 'The workout may reappear. Please try discarding again.');
+          }
           endWorkout();
           navigation.goBack();
         },

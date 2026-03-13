@@ -68,13 +68,14 @@ def log_workout_view(request):
     """
     user = request.user
 
-    # Get this week's stats
+    # Get this week's stats — only count fully completed workouts (duration > 1s placeholder)
     today = timezone.now().date()
     week_start = today - timedelta(days=today.weekday())
 
     week_workouts = list(Workout.objects.filter(
         user=user,
-        start_time__date__gte=week_start
+        start_time__date__gte=week_start,
+        duration__gt=timedelta(seconds=1),
     ))
 
     workouts_count = len(week_workouts)
@@ -84,7 +85,7 @@ def log_workout_view(request):
         for w in week_workouts
     )
 
-    # Get recent workouts (exclude active placeholder workouts from the history list)
+    # Get recent workouts (all, including in-progress — frontend uses is_active flag to show Resume)
     recent_workouts = list(Workout.objects.filter(
         user=user,
     ).order_by('-start_time')[:10])
@@ -137,7 +138,11 @@ def start_workout_view(request):
     """
     Start a new empty workout session.
     Creates a workout with start_time set to now.
+    Any orphaned placeholder workouts (never finished) are deleted first.
     """
+    # Clean up any orphaned placeholder workouts before creating a new one
+    Workout.objects.filter(user=request.user, duration__lte=timedelta(seconds=1)).delete()
+
     now = timezone.now()
     workout = Workout.objects.create(
         user=request.user,
@@ -474,14 +479,19 @@ def delete_exercise_view(request, exercise_id):
 def delete_workout_view(request, workout_id):
     """
     Delete an incomplete workout (clear/cancel workout).
+    Also cleans up any other orphaned placeholder workouts for this user.
     """
     workout = get_object_or_404(Workout, id=workout_id, user=request.user)
     workout.delete()
+
+    # Nuke any other orphaned placeholder workouts so Resume card never reappears
+    Workout.objects.filter(user=request.user, duration__lte=timedelta(seconds=1)).delete()
 
     return JsonResponse({'success': True})
 
 
 @api_view(['POST'])
+@permission_classes([IsAuthenticated])
 def finish_workout_view(request, workout_id):
     """
     Finish the workout, calculate duration, and optionally post to feed.
@@ -640,6 +650,9 @@ def finish_workout_view(request, workout_id):
                         achieved_date=timezone.now().date(),
                     )
 
+    from workouts.services.streak_service import update_streak
+    update_streak(request.user, activity_type='workout')
+
     return JsonResponse({
         'success': True,
         'workout': {
@@ -696,6 +709,9 @@ def start_from_template_view(request, template_id):
     from .models import WorkoutTemplate
 
     template = get_object_or_404(WorkoutTemplate, id=template_id, user=request.user)
+
+    # Clean up any orphaned placeholder workouts before creating a new one
+    Workout.objects.filter(user=request.user, duration__lte=timedelta(seconds=1)).delete()
 
     # Create the workout
     now = timezone.now()
@@ -801,7 +817,8 @@ def update_template_from_workout_view(request, template_id):
     """
     Update a template's exercises with completed sets from a finished workout.
     """
-    from .models import WorkoutTemplate
+    from .models import WorkoutTemplate, TemplateExercise
+    from django.db import transaction
 
     template = get_object_or_404(WorkoutTemplate, id=template_id, user=request.user)
     workout_id = request.data.get('workout_id')
@@ -809,27 +826,49 @@ def update_template_from_workout_view(request, template_id):
         return DRFResponse({'error': 'workout_id required'}, status=400)
 
     workout = get_object_or_404(Workout, id=workout_id, user=request.user)
-    exercises = Exercise.objects.filter(workout=workout).order_by('order')
+    # Evaluate to a list immediately so we know what we have before touching the template
+    exercises = list(Exercise.objects.filter(workout=workout).prefetch_related('exercise_sets').order_by('order'))
 
-    template.exercises.all().delete()
+    if not exercises:
+        return DRFResponse({'success': True, 'message': 'No exercises in workout; template unchanged'})
 
-    for idx, exercise in enumerate(exercises):
-        exercise_sets = exercise.exercise_sets.filter(completed=True).order_by('set_number')
-        if not exercise_sets.exists():
-            continue
-        first_set = exercise_sets.first()
-        sets_data = [{'reps': s.reps, 'weight': float(s.weight)} for s in exercise_sets]
-        TemplateExercise.objects.create(
-            template=template,
-            name=exercise.name,
-            category=exercise.category or 'other',
-            sets=exercise_sets.count(),
-            reps=first_set.reps,
-            weight=float(first_set.weight),
-            unit=exercise.unit or 'lbs',
-            order_index=idx,
-            sets_data=sets_data,
-        )
+    with transaction.atomic():
+        template.exercises.all().delete()
+
+        for idx, exercise in enumerate(exercises):
+            exercise_sets = exercise.exercise_sets.filter(completed=True).order_by('set_number')
+            if exercise_sets.exists():
+                first_set = exercise_sets.first()
+                default_reps = first_set.reps if first_set.reps > 0 else 10
+                default_weight = float(first_set.weight) if first_set.weight else 0
+                sets_count = exercise_sets.count()
+                sets_data = [{'reps': s.reps, 'weight': float(s.weight)} for s in exercise_sets]
+            else:
+                # No completed sets — fall back to all sets so the exercise isn't dropped
+                all_sets = exercise.exercise_sets.order_by('set_number')
+                if all_sets.exists():
+                    first_set = all_sets.first()
+                    default_reps = first_set.reps if first_set.reps > 0 else 10
+                    default_weight = float(first_set.weight) if first_set.weight else 0
+                    sets_count = all_sets.count()
+                    sets_data = [{'reps': s.reps, 'weight': float(s.weight)} for s in all_sets]
+                else:
+                    default_reps = 10
+                    default_weight = 0
+                    sets_count = 3
+                    sets_data = []
+
+            TemplateExercise.objects.create(
+                template=template,
+                name=exercise.name,
+                category=exercise.category or 'other',
+                sets=sets_count,
+                reps=default_reps,
+                weight=default_weight,
+                unit=exercise.unit or 'lbs',
+                order_index=idx,
+                sets_data=sets_data,
+            )
 
     return DRFResponse({'success': True})
 
@@ -896,18 +935,19 @@ def add_workout_to_templates_view(request, workout_id):
     exercises = Exercise.objects.filter(workout=workout).order_by('order')
 
     for idx, exercise in enumerate(exercises):
-        exercise_sets = exercise.exercise_sets.all()
+        exercise_sets = exercise.exercise_sets.order_by('set_number')
 
-        # Get actual values from the first set, or defaults
         if exercise_sets.exists():
             first_set = exercise_sets.first()
             reps = first_set.reps or 10
             weight = float(first_set.weight) if first_set.weight else 0
             sets_count = exercise_sets.count()
+            sets_data = [{'reps': s.reps, 'weight': float(s.weight)} for s in exercise_sets]
         else:
             reps = 10
             weight = 0
             sets_count = 3
+            sets_data = []
 
         TemplateExercise.objects.create(
             template=template,
@@ -918,6 +958,7 @@ def add_workout_to_templates_view(request, workout_id):
             weight=weight,
             unit=exercise.unit or 'lbs',
             order_index=idx,
+            sets_data=sets_data,
         )
 
     return JsonResponse({
@@ -1248,7 +1289,7 @@ def recent_workouts_view(request):
     """Return recent completed workouts for the logged-in user (for sharing in posts)."""
     from django.db.models import Count
     workouts = (
-        Workout.objects.filter(user=request.user)
+        Workout.objects.filter(user=request.user, duration__gt=timedelta(seconds=1))
         .annotate(ex_count=Count('exercises', distinct=True))
         .order_by('-start_time')[:20]
     )

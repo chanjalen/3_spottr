@@ -185,8 +185,8 @@ export async function updateTemplateFromWorkout(templateId: string, workoutId: s
   await apiClient.post(`/workouts/templates/${templateId}/update-from-workout/`, { workout_id: workoutId });
 }
 
-export async function saveWorkoutAsTemplate(workoutId: string): Promise<{ template_id: string; template_name: string }> {
-  const res = await apiClient.post(`/workouts/${workoutId}/add-to-templates/`);
+export async function saveWorkoutAsTemplate(workoutId: string, name?: string): Promise<{ template_id: string; template_name: string }> {
+  const res = await apiClient.post(`/workouts/${workoutId}/add-to-templates/`, name ? { name } : {});
   return res.data;
 }
 

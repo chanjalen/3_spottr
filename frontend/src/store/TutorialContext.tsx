@@ -34,7 +34,6 @@ interface TutorialState {
   clearFABRequest: () => void;
   requestTab: (tab: TabRequest) => void;
   clearTabRequest: () => void;
-  restart: () => void;
   skip: () => void;
 }
 
@@ -52,7 +51,6 @@ const TutorialContext = createContext<TutorialState>({
   clearFABRequest: () => {},
   requestTab: () => {},
   clearTabRequest: () => {},
-  restart: () => {},
   skip: () => {},
 });
 
@@ -124,18 +122,10 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
   const requestTab = (tab: TabRequest) => setPendingTabRequest(tab);
   const clearTabRequest = () => setPendingTabRequest(null);
 
-  const restart = () => {
-    setStep(0);
-    setIsActive(true);
-    setNextUnlocked(false);
-    setFabOpenRequested(false);
-    setPendingTabRequest(null);
-  };
-
   const skip = () => complete();
 
   return (
-    <TutorialContext.Provider value={{ isActive, step, totalSteps: TUTORIAL_TOTAL_STEPS, nextUnlocked, fabOpenRequested, pendingTabRequest, next, jumpTo, unlock, requestFABOpen, clearFABRequest, requestTab, clearTabRequest, restart, skip }}>
+    <TutorialContext.Provider value={{ isActive, step, totalSteps: TUTORIAL_TOTAL_STEPS, nextUnlocked, fabOpenRequested, pendingTabRequest, next, jumpTo, unlock, requestFABOpen, clearFABRequest, requestTab, clearTabRequest, skip }}>
       {children}
     </TutorialContext.Provider>
   );

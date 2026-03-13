@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, Pressable, StyleSheet, Platform } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { CommonActions } from '@react-navigation/native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Avatar from '../common/Avatar';
@@ -21,7 +20,7 @@ export default function AppHeader() {
   const insets = useSafeAreaInsets();
   const { user, token, currentStreak, setCurrentStreak, updateUser } = useAuth();
   const navigation = useNavigation<RootNav>();
-  const { isActive: tutorialActive, step: tutorialStep, next: tutorialNext, restart: restartTutorial } = useTutorial();
+  const { isActive: tutorialActive, step: tutorialStep, next: tutorialNext } = useTutorial();
   const [notificationCount, setNotificationCount] = useState(0);
 
   // Real-time: update badge instantly when a new notification arrives via WebSocket
@@ -50,6 +49,11 @@ export default function AppHeader() {
   return (
     <View style={{ paddingTop: insets.top }}>
       <View style={styles.headerRow}>
+        {/* Center: Spottr logo */}
+        <View style={styles.logoBtn} pointerEvents="none">
+          <Text style={styles.logoText}>Spottr</Text>
+        </View>
+
         {/* Left: bell + add-friend icon buttons */}
         <View style={styles.leftIcons}>
           <Pressable
@@ -80,21 +84,6 @@ export default function AppHeader() {
             <Feather name="user-plus" size={17} color={colors.textPrimary} />
           </Pressable>
         </View>
-
-        {/* Center: Spottr logo — tapping restarts the tutorial */}
-        <Pressable
-          style={styles.logoBtn}
-          onPress={() => {
-            if (!tutorialActive) {
-              restartTutorial();
-              navigation.dispatch(CommonActions.navigate({ name: 'MainTabs', params: { screen: 'Feed' } }));
-            }
-          }}
-          accessibilityLabel="Spottr — tap to start tutorial"
-          accessibilityRole="button"
-        >
-          <Text style={styles.logoText}>Spottr</Text>
-        </Pressable>
 
         {/* Right: streak pill + user avatar */}
         <View style={styles.rightZone}>
