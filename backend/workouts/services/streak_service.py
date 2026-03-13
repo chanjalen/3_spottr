@@ -118,9 +118,9 @@ def _rest_day_within_budget(user, check_date):
     if allowed <= 0:
         return False
 
-    # Get ISO week boundaries
-    iso_year, iso_week, _ = check_date.isocalendar()
-    week_start = date.fromisocalendar(iso_year, iso_week, 1)
+    # Get Sun-Sat week boundaries (matches the "My Week" display)
+    days_since_sunday = (check_date.weekday() + 1) % 7
+    week_start = check_date - timedelta(days=days_since_sunday)
     week_end = week_start + timedelta(days=6)
 
     rest_count = RestDay.objects.filter(
@@ -179,11 +179,11 @@ def record_rest_day(user):
 
 def get_weekly_rest_day_info(user):
     """
-    Get rest day usage info for the current ISO week.
+    Get rest day usage info for the current Sun-Sat week (matches the "My Week" display).
     """
     today = get_streak_date(_get_local_now(user))
-    iso_year, iso_week, _ = today.isocalendar()
-    week_start = date.fromisocalendar(iso_year, iso_week, 1)
+    days_since_sunday = (today.weekday() + 1) % 7
+    week_start = today - timedelta(days=days_since_sunday)
     week_end = week_start + timedelta(days=6)
 
     rest_days_used = RestDay.objects.filter(
@@ -247,11 +247,14 @@ def get_streak_details(user):
         return get_streak_date(aware_dt.astimezone(user_tz))
 
     # Unique dates with at least one workout or check-in (no double-counting).
+    # Exclude placeholder workouts (duration=1s) created by start_workout_view
+    # that were never finished — only count genuinely completed workouts.
     workout_dates = {
         d for dt in Workout.objects.filter(
             user=user,
             start_time__gte=week_start_dt,
             start_time__lte=week_end_dt,
+            duration__gt=timedelta(seconds=1),
         ).values_list('start_time', flat=True)
         for d in [_to_streak_date_local(dt)]
         if week_start <= d <= week_end

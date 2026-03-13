@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Modal,
   View,
@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  TextInput,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather } from '@expo/vector-icons';
@@ -29,11 +31,17 @@ export default function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetail
   const [error, setError] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
+  // Name-confirm modal state
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const nameInputRef = useRef<TextInput>(null);
+
   useEffect(() => {
     if (!workoutId) {
       setDetail(null);
       setError(false);
       setSaveStatus('idle');
+      setShowNameModal(false);
       return;
     }
     setLoading(true);
@@ -44,12 +52,25 @@ export default function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetail
       .finally(() => setLoading(false));
   }, [workoutId]);
 
-  const handleSaveTemplate = async () => {
+  const handleSavePress = () => {
     if (!workoutId || saveStatus !== 'idle') return;
+    setTemplateName(detail?.name ?? 'Workout');
+    setShowNameModal(true);
+    setTimeout(() => nameInputRef.current?.focus(), 100);
+  };
+
+  const handleConfirmSave = async () => {
+    if (!workoutId) return;
+    const name = templateName.trim() || detail?.name || 'Workout';
+    setShowNameModal(false);
     setSaveStatus('saving');
     try {
-      await saveWorkoutAsTemplate(workoutId);
+      await saveWorkoutAsTemplate(workoutId, name);
       setSaveStatus('saved');
+      Alert.alert(
+        'Template Saved',
+        `"${name}" has been saved to your templates. You can view and start it from the Log Workout page.`,
+      );
     } catch {
       setSaveStatus('idle');
       Alert.alert('Error', 'Could not save template. Try again.');
@@ -116,7 +137,7 @@ export default function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetail
                   saveStatus === 'saved' && styles.templateBtnSaved,
                   saveStatus === 'saving' && styles.templateBtnDisabled,
                 ]}
-                onPress={handleSaveTemplate}
+                onPress={handleSavePress}
                 disabled={saveStatus !== 'idle'}
               >
                 {saveStatus === 'saving' ? (
@@ -136,6 +157,45 @@ export default function WorkoutDetailModal({ workoutId, onClose }: WorkoutDetail
               </Pressable>
             </View>
           </>
+        )}
+
+        {/* Name-confirm overlay — rendered inside the modal to avoid stacked Modal issue on iOS */}
+        {showNameModal && (
+          <KeyboardAvoidingView
+            style={styles.nameModalBackdrop}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+            pointerEvents="box-none"
+          >
+            <View style={styles.nameModalCard}>
+              <Text style={styles.nameModalTitle}>Save as Template</Text>
+              <Text style={styles.nameModalLabel}>Template name</Text>
+              <TextInput
+                ref={nameInputRef}
+                style={styles.nameModalInput}
+                value={templateName}
+                onChangeText={setTemplateName}
+                placeholder="Template name"
+                placeholderTextColor={colors.textMuted}
+                maxLength={80}
+                returnKeyType="done"
+                onSubmitEditing={handleConfirmSave}
+              />
+              <View style={styles.nameModalActions}>
+                <Pressable
+                  style={[styles.nameModalBtn, styles.nameModalBtnCancel]}
+                  onPress={() => setShowNameModal(false)}
+                >
+                  <Text style={styles.nameModalBtnCancelText}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.nameModalBtn, styles.nameModalBtnSave]}
+                  onPress={handleConfirmSave}
+                >
+                  <Text style={styles.nameModalBtnSaveText}>Save</Text>
+                </Pressable>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
         )}
       </View>
     </Modal>
@@ -379,12 +439,88 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.md,
   },
   templateBtnSaved: {
-    backgroundColor: colors.semantic.share, // green (#10B981)
+    backgroundColor: colors.semantic.share,
   },
   templateBtnDisabled: {
     opacity: 0.6,
   },
   templateBtnText: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.semibold,
+    color: '#fff',
+  },
+
+  // ─── Name-confirm modal ───────────────────────────────────────────────────────
+  nameModalBackdrop: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.xl,
+  },
+  nameModalCard: {
+    width: '100%',
+    backgroundColor: colors.background.base,
+    borderRadius: 20,
+    padding: spacing.lg,
+    gap: spacing.sm,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.18, shadowRadius: 24 },
+      android: { elevation: 10 },
+    }),
+  },
+  nameModalTitle: {
+    fontSize: typography.size.lg,
+    fontFamily: typography.family.bold,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  nameModalLabel: {
+    fontSize: typography.size.sm,
+    fontFamily: typography.family.medium,
+    color: colors.textSecondary,
+  },
+  nameModalInput: {
+    backgroundColor: colors.surface,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    fontSize: typography.size.base,
+    fontFamily: typography.family.regular,
+    color: colors.textPrimary,
+    marginBottom: spacing.xs,
+  },
+  nameModalActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  nameModalBtn: {
+    flex: 1,
+    borderRadius: 10,
+    paddingVertical: spacing.md,
+    alignItems: 'center',
+  },
+  nameModalBtnCancel: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border.default,
+  },
+  nameModalBtnSave: {
+    backgroundColor: colors.primary,
+  },
+  nameModalBtnCancelText: {
+    fontSize: typography.size.base,
+    fontFamily: typography.family.semibold,
+    color: colors.textSecondary,
+  },
+  nameModalBtnSaveText: {
     fontSize: typography.size.base,
     fontFamily: typography.family.semibold,
     color: '#fff',
